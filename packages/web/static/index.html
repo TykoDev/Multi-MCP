@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" class="wa-dark" data-theme="dark">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!--
+			frame-ancestors is deliberately NOT here (F5): browsers ignore that directive
+			when it is delivered by meta tag, and Chromium logs an error saying so on every
+			load. It is served as a response header by `packages/gateway/src/static.ts`,
+			which is the only place it can actually be enforced.
+
+			media-src (D-111) admits the A2UI Video and AudioPlayer sources: inline data: URLs,
+			and blob: URLs the SPA makes from share files it read with its own credential.
+		-->
+		<meta http-equiv="Content-Security-Policy"
+			content="default-src 'self'; img-src 'self' blob: data:; media-src 'self' data: blob:; connect-src 'self' ws: wss:; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+		<meta name="color-scheme" content="dark light">
+		<title>Multi-MCP — Control Plane</title>
+		<link rel="stylesheet" href="/assets/app.css">
+		<!-- ERRATUM(E-117): the raster Multi-MCP mark replaces the generated favicon.svg. -->
+		<link rel="icon" href="/assets/brand/favicon-32.png" sizes="32x32" type="image/png">
+		<link rel="icon" href="/assets/brand/icon-192.png" sizes="192x192" type="image/png">
+		<link rel="apple-touch-icon" href="/assets/brand/icon-192.png">
+	</head>
+	<body>
+		<div id="app" aria-live="polite"></div>
+		<script type="module" src="/assets/app.js"></script>
+	</body>
+</html>

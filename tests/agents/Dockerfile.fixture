@@ -1,0 +1,8 @@
+# ERRATUM(E-112), review R3-4: the runner image is named by tests/agents/verify_compose.ts (tykotech-agent-runner:<tag>,
+# built from this tree). No default, so the fixture is never layered over the deployed runner image.
+ARG RUNNER_IMAGE
+FROM ${RUNNER_IMAGE}
+USER root
+COPY --chown=deno:deno tests/agents/acp_fixture.ts /app/tests/agents/acp_fixture.ts
+RUN printf '#!/bin/sh\nsleep 300 &\nexec /usr/bin/deno run --no-config --allow-net=tykotech-mcp:8787 /app/tests/agents/acp_fixture.ts\n' > /opt/agents/agent && chmod 755 /opt/agents/agent
+USER deno

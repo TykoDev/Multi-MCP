@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Element-Level Scroll Container</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+#scroller{width:420px;height:180px;overflow-y:scroll;border:1px solid #333}
+#scroller .row{height:70px;border-bottom:1px solid #ddd;padding:4px}
+#auto-scroller{width:420px;height:120px;overflow:auto;border:1px dashed #666;margin-top:12px}
+#hidden-overflow{width:420px;height:80px;overflow:hidden;border:1px dotted #999;margin-top:12px}
+#hidden-overflow .row{height:60px}
+</style>
+</head>
+<body>
+<main>
+<h1>Element-level scroll containers</h1>
+
+<div id="scroller" role="region" aria-label="Vertical scroll region">
+  <div class="row"><button type="button" id="s-b1">Scroller row 1</button></div>
+  <div class="row"><button type="button" id="s-b2">Scroller row 2</button></div>
+  <div class="row"><button type="button" id="s-b3">Scroller row 3</button></div>
+  <div class="row"><button type="button" id="s-b4">Scroller row 4</button></div>
+  <div class="row"><button type="button" id="s-b5">Scroller row 5</button></div>
+  <div class="row"><button type="button" id="s-b6">Scroller row 6</button></div>
+  <div class="row"><button type="button" id="s-b7">Scroller row 7</button></div>
+</div>
+
+<div id="auto-scroller">
+  <p>overflow:auto container</p>
+  <div style="height:300px"><button type="button" id="a-b1">Auto row deep</button></div>
+</div>
+
+<div id="hidden-overflow">
+  <div class="row"><button type="button" id="h-b1">Clipped row 1</button></div>
+  <div class="row"><button type="button" id="h-b2">Clipped row 2</button></div>
+</div>
+</main>
+</body>
+</html>

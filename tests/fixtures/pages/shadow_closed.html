@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Closed Shadow Root</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>Closed shadow root</h1>
+<button id="light-button" type="button">Light DOM button</button>
+<div id="closed-host"></div>
+<div id="mixed-host"></div>
+<p>Trailing light DOM text.</p>
+</main>
+<script>
+(function () {
+  var c = document.getElementById('closed-host');
+  var rc = c.attachShadow({ mode: 'closed' });
+  rc.innerHTML = '<style>:host{display:block;padding:6px;border:1px solid #a00}</style>' +
+    '<p>Inside closed shadow</p>' +
+    '<button id="closed-shadow-button" type="button">Closed shadow button</button>' +
+    '<input id="closed-shadow-input" type="email" name="closedmail" placeholder="closed shadow email">';
+
+  var m = document.getElementById('mixed-host');
+  var rm = m.attachShadow({ mode: 'closed' });
+  rm.innerHTML = '<p>Closed shadow hosting an open child host</p><div id="inner-open-host"></div>';
+  var inner = rm.querySelector('#inner-open-host');
+  var ri = inner.attachShadow({ mode: 'open' });
+  ri.innerHTML = '<button id="open-in-closed-button" type="button">Open inside closed</button>';
+})();
+</script>
+</body>
+</html>

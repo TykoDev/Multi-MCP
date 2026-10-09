@@ -1,0 +1,4613 @@
+{
+	"rootSessionId": "88DC1F826FFE86D2ED720E7B9574A961",
+	"sessions": [
+		{
+			"targetId": "CB0B6FF2E4C68195C73BD16C1AD40EEA",
+			"sessionId": "88DC1F826FFE86D2ED720E7B9574A961",
+			"frameId": "CB0B6FF2E4C68195C73BD16C1AD40EEA",
+			"url": "http://127.0.0.1:38111/visibility_edge_cases.html",
+			"devicePixelRatio": 1,
+			"layoutMetrics": {
+				"scrollX": 0,
+				"scrollY": 0,
+				"viewportWidth": 1265,
+				"viewportHeight": 900,
+				"contentWidth": 1265,
+				"contentHeight": 12021
+			},
+			"document": {
+				"nodeId": 1,
+				"backendNodeId": 2,
+				"nodeType": 9,
+				"nodeName": "#document",
+				"localName": "",
+				"nodeValue": "",
+				"childNodeCount": 2,
+				"children": [
+					{
+						"nodeId": 2,
+						"parentId": 1,
+						"backendNodeId": 3,
+						"nodeType": 10,
+						"nodeName": "html",
+						"localName": "",
+						"nodeValue": "",
+						"publicId": "",
+						"systemId": ""
+					},
+					{
+						"nodeId": 3,
+						"parentId": 1,
+						"backendNodeId": 4,
+						"nodeType": 1,
+						"nodeName": "HTML",
+						"localName": "html",
+						"nodeValue": "",
+						"childNodeCount": 2,
+						"children": [
+							{
+								"nodeId": 4,
+								"parentId": 3,
+								"backendNodeId": 5,
+								"nodeType": 1,
+								"nodeName": "HEAD",
+								"localName": "head",
+								"nodeValue": "",
+								"childNodeCount": 3,
+								"children": [
+									{
+										"nodeId": 5,
+										"parentId": 4,
+										"backendNodeId": 6,
+										"nodeType": 1,
+										"nodeName": "META",
+										"localName": "meta",
+										"nodeValue": "",
+										"childNodeCount": 0,
+										"children": [],
+										"attributes": [
+											"charset",
+											"utf-8"
+										]
+									},
+									{
+										"nodeId": 6,
+										"parentId": 4,
+										"backendNodeId": 7,
+										"nodeType": 1,
+										"nodeName": "TITLE",
+										"localName": "title",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 7,
+												"parentId": 6,
+												"backendNodeId": 8,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "Visibility Edge Cases"
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 8,
+										"parentId": 4,
+										"backendNodeId": 9,
+										"nodeType": 1,
+										"nodeName": "STYLE",
+										"localName": "style",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 9,
+												"parentId": 8,
+												"backendNodeId": 10,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n.hidden-display{display:none}\n.hidden-visibility{visibility:hidden}\n.zero-opacity{opacity:0}\n.zero-size{width:0;height:0;overflow:hidden;padding:0;border:0}\n.offscreen-left{position:absolute;left:-9999px;top:20px}\n.offscreen-above{position:absolute;top:-5000px;left:20px}\n.offscreen-below{position:absolute;top:12000px;left:20px}\n.clipped{position:absolute;clip-path:inset(100%);width:1px;height:1px;overflow:hidden}\n.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							},
+							{
+								"nodeId": 10,
+								"parentId": 3,
+								"backendNodeId": 11,
+								"nodeType": 1,
+								"nodeName": "BODY",
+								"localName": "body",
+								"nodeValue": "",
+								"childNodeCount": 1,
+								"children": [
+									{
+										"nodeId": 11,
+										"parentId": 10,
+										"backendNodeId": 12,
+										"nodeType": 1,
+										"nodeName": "MAIN",
+										"localName": "main",
+										"nodeValue": "",
+										"childNodeCount": 16,
+										"children": [
+											{
+												"nodeId": 12,
+												"parentId": 11,
+												"backendNodeId": 13,
+												"nodeType": 1,
+												"nodeName": "H1",
+												"localName": "h1",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 13,
+														"parentId": 12,
+														"backendNodeId": 14,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Visibility edge cases"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 14,
+												"parentId": 11,
+												"backendNodeId": 15,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 15,
+														"parentId": 14,
+														"backendNodeId": 16,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Plainly visible button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-visible"
+												]
+											},
+											{
+												"nodeId": 16,
+												"parentId": 11,
+												"backendNodeId": 17,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 17,
+														"parentId": 16,
+														"backendNodeId": 18,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 18,
+																"parentId": 17,
+																"backendNodeId": 19,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "display none button"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"v-display-none"
+														]
+													},
+													{
+														"nodeId": 19,
+														"parentId": 16,
+														"backendNodeId": 20,
+														"nodeType": 1,
+														"nodeName": "SPAN",
+														"localName": "span",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 20,
+																"parentId": 19,
+																"backendNodeId": 21,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "display none text"
+															}
+														],
+														"attributes": []
+													}
+												],
+												"attributes": [
+													"class",
+													"hidden-display"
+												]
+											},
+											{
+												"nodeId": 21,
+												"parentId": 11,
+												"backendNodeId": 22,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 22,
+														"parentId": 21,
+														"backendNodeId": 23,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 23,
+																"parentId": 22,
+																"backendNodeId": 24,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "visibility hidden button"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"v-visibility-hidden"
+														]
+													},
+													{
+														"nodeId": 24,
+														"parentId": 21,
+														"backendNodeId": 25,
+														"nodeType": 1,
+														"nodeName": "SPAN",
+														"localName": "span",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 25,
+																"parentId": 24,
+																"backendNodeId": 26,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "visibility hidden text"
+															}
+														],
+														"attributes": []
+													}
+												],
+												"attributes": [
+													"class",
+													"hidden-visibility"
+												]
+											},
+											{
+												"nodeId": 26,
+												"parentId": 11,
+												"backendNodeId": 27,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 27,
+														"parentId": 26,
+														"backendNodeId": 28,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 28,
+																"parentId": 27,
+																"backendNodeId": 29,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "opacity zero button"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"v-opacity-zero"
+														]
+													},
+													{
+														"nodeId": 29,
+														"parentId": 26,
+														"backendNodeId": 30,
+														"nodeType": 1,
+														"nodeName": "SPAN",
+														"localName": "span",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 30,
+																"parentId": 29,
+																"backendNodeId": 31,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "opacity zero text"
+															}
+														],
+														"attributes": []
+													}
+												],
+												"attributes": [
+													"class",
+													"zero-opacity"
+												]
+											},
+											{
+												"nodeId": 31,
+												"parentId": 11,
+												"backendNodeId": 32,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 32,
+														"parentId": 31,
+														"backendNodeId": 33,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "zero size button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-zero-size",
+													"class",
+													"zero-size"
+												]
+											},
+											{
+												"nodeId": 33,
+												"parentId": 11,
+												"backendNodeId": 34,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 34,
+														"parentId": 33,
+														"backendNodeId": 35,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "offscreen left button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-offscreen-left",
+													"class",
+													"offscreen-left"
+												]
+											},
+											{
+												"nodeId": 35,
+												"parentId": 11,
+												"backendNodeId": 36,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 36,
+														"parentId": 35,
+														"backendNodeId": 37,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "offscreen above button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-offscreen-above",
+													"class",
+													"offscreen-above"
+												]
+											},
+											{
+												"nodeId": 37,
+												"parentId": 11,
+												"backendNodeId": 38,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 38,
+														"parentId": 37,
+														"backendNodeId": 39,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "offscreen below button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-offscreen-below",
+													"class",
+													"offscreen-below"
+												]
+											},
+											{
+												"nodeId": 39,
+												"parentId": 11,
+												"backendNodeId": 40,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 40,
+														"parentId": 39,
+														"backendNodeId": 41,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "clip-path hidden button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-clipped",
+													"class",
+													"clipped"
+												]
+											},
+											{
+												"nodeId": 41,
+												"parentId": 11,
+												"backendNodeId": 42,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 42,
+														"parentId": 41,
+														"backendNodeId": 43,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "screen reader only button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-sr-only",
+													"class",
+													"sr-only"
+												]
+											},
+											{
+												"nodeId": 43,
+												"parentId": 11,
+												"backendNodeId": 44,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 44,
+														"parentId": 43,
+														"backendNodeId": 45,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "aria-hidden button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-aria-hidden",
+													"aria-hidden",
+													"true"
+												]
+											},
+											{
+												"nodeId": 45,
+												"parentId": 11,
+												"backendNodeId": 46,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 46,
+														"parentId": 45,
+														"backendNodeId": 47,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "hidden attribute button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-hidden-attr",
+													"hidden",
+													""
+												]
+											},
+											{
+												"nodeId": 47,
+												"parentId": 11,
+												"backendNodeId": 48,
+												"nodeType": 1,
+												"nodeName": "INPUT",
+												"localName": "input",
+												"nodeValue": "",
+												"childNodeCount": 0,
+												"children": [],
+												"attributes": [
+													"type",
+													"hidden",
+													"id",
+													"v-input-hidden",
+													"name",
+													"hiddenfield",
+													"value",
+													"hidden-input-value"
+												]
+											},
+											{
+												"nodeId": 48,
+												"parentId": 11,
+												"backendNodeId": 49,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 49,
+														"parentId": 48,
+														"backendNodeId": 50,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "disabled button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-disabled",
+													"disabled",
+													""
+												]
+											},
+											{
+												"nodeId": 50,
+												"parentId": 11,
+												"backendNodeId": 51,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 51,
+														"parentId": 50,
+														"backendNodeId": 52,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Tail visible button"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"v-visible-tail"
+												]
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							}
+						],
+						"attributes": [
+							"lang",
+							"en"
+						],
+						"frameId": "CB0B6FF2E4C68195C73BD16C1AD40EEA"
+					}
+				],
+				"documentURL": "http://127.0.0.1:38111/visibility_edge_cases.html",
+				"baseURL": "http://127.0.0.1:38111/visibility_edge_cases.html",
+				"xmlVersion": "",
+				"compatibilityMode": "NoQuirksMode",
+				"isScrollable": true
+			},
+			"snapshot": {
+				"documents": [
+					{
+						"documentURL": 0,
+						"title": 1,
+						"baseURL": 0,
+						"contentLanguage": -1,
+						"encodingName": 2,
+						"publicId": -1,
+						"systemId": -1,
+						"frameId": 3,
+						"nodes": {
+							"parentIndex": [
+								-1,
+								0,
+								0,
+								2,
+								3,
+								3,
+								3,
+								3,
+								7,
+								3,
+								3,
+								10,
+								3,
+								2,
+								2,
+								14,
+								14,
+								16,
+								16,
+								18,
+								16,
+								16,
+								21,
+								16,
+								16,
+								24,
+								25,
+								24,
+								27,
+								16,
+								16,
+								30,
+								31,
+								30,
+								33,
+								16,
+								16,
+								36,
+								37,
+								36,
+								39,
+								16,
+								16,
+								42,
+								16,
+								16,
+								45,
+								16,
+								16,
+								48,
+								16,
+								16,
+								51,
+								16,
+								16,
+								54,
+								16,
+								16,
+								57,
+								16,
+								16,
+								60,
+								16,
+								16,
+								63,
+								16,
+								16,
+								16,
+								16,
+								68,
+								16,
+								16,
+								71,
+								16,
+								14
+							],
+							"nodeType": [
+								9,
+								10,
+								1,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3
+							],
+							"shadowRootType": {
+								"index": [],
+								"value": []
+							},
+							"nodeName": [
+								4,
+								5,
+								6,
+								15,
+								16,
+								18,
+								16,
+								21,
+								16,
+								16,
+								22,
+								16,
+								16,
+								16,
+								24,
+								16,
+								25,
+								16,
+								27,
+								16,
+								16,
+								30,
+								16,
+								16,
+								39,
+								30,
+								16,
+								44,
+								16,
+								16,
+								39,
+								30,
+								16,
+								44,
+								16,
+								16,
+								39,
+								30,
+								16,
+								44,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								82,
+								16,
+								30,
+								16,
+								16,
+								30,
+								16,
+								16,
+								16
+							],
+							"nodeValue": [
+								-1,
+								-1,
+								-1,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								1,
+								17,
+								-1,
+								23,
+								17,
+								17,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								28,
+								29,
+								-1,
+								38,
+								29,
+								-1,
+								-1,
+								43,
+								-1,
+								45,
+								29,
+								-1,
+								-1,
+								49,
+								-1,
+								51,
+								29,
+								-1,
+								-1,
+								55,
+								-1,
+								56,
+								29,
+								-1,
+								59,
+								29,
+								-1,
+								63,
+								29,
+								-1,
+								66,
+								29,
+								-1,
+								69,
+								29,
+								-1,
+								72,
+								29,
+								-1,
+								75,
+								29,
+								-1,
+								79,
+								29,
+								-1,
+								81,
+								29,
+								-1,
+								29,
+								-1,
+								91,
+								29,
+								-1,
+								93,
+								17,
+								94
+							],
+							"backendNodeId": [
+								2,
+								3,
+								4,
+								5,
+								53,
+								6,
+								54,
+								7,
+								8,
+								55,
+								9,
+								10,
+								56,
+								57,
+								11,
+								58,
+								12,
+								59,
+								13,
+								14,
+								60,
+								15,
+								16,
+								61,
+								17,
+								18,
+								19,
+								20,
+								21,
+								62,
+								22,
+								23,
+								24,
+								25,
+								26,
+								63,
+								27,
+								28,
+								29,
+								30,
+								31,
+								64,
+								32,
+								33,
+								65,
+								34,
+								35,
+								66,
+								36,
+								37,
+								67,
+								38,
+								39,
+								68,
+								40,
+								41,
+								69,
+								42,
+								43,
+								70,
+								44,
+								45,
+								71,
+								46,
+								47,
+								72,
+								48,
+								73,
+								49,
+								50,
+								74,
+								51,
+								52,
+								75,
+								76
+							],
+							"attributes": [
+								[],
+								[],
+								[
+									7,
+									8
+								],
+								[],
+								[],
+								[
+									19,
+									20
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									34
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									31,
+									32,
+									33,
+									42
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									40,
+									46
+								],
+								[
+									31,
+									32,
+									33,
+									48
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									40,
+									52
+								],
+								[
+									31,
+									32,
+									33,
+									54
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									57,
+									40,
+									58
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									60,
+									40,
+									61
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									64,
+									40,
+									65
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									67,
+									40,
+									68
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									70,
+									40,
+									71
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									73,
+									40,
+									74
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									76,
+									77,
+									78
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									80,
+									47,
+									-1
+								],
+								[],
+								[],
+								[
+									31,
+									47,
+									33,
+									83,
+									84,
+									85,
+									86,
+									87
+								],
+								[],
+								[
+									31,
+									32,
+									33,
+									88,
+									89,
+									-1
+								],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									92
+								],
+								[],
+								[],
+								[]
+							],
+							"textValue": {
+								"index": [],
+								"value": []
+							},
+							"inputValue": {
+								"index": [
+									66
+								],
+								"value": [
+									87
+								]
+							},
+							"inputChecked": {
+								"index": []
+							},
+							"optionSelected": {
+								"index": []
+							},
+							"contentDocumentIndex": {
+								"index": [],
+								"value": []
+							},
+							"pseudoType": {
+								"index": [],
+								"value": []
+							},
+							"pseudoIdentifier": {
+								"index": [],
+								"value": []
+							},
+							"isClickable": {
+								"index": [
+									66
+								]
+							},
+							"currentSourceURL": {
+								"index": [],
+								"value": []
+							},
+							"originURL": {
+								"index": [],
+								"value": []
+							}
+						},
+						"layout": {
+							"nodeIndex": [
+								0,
+								2,
+								14,
+								16,
+								18,
+								19,
+								21,
+								22,
+								23,
+								30,
+								31,
+								32,
+								33,
+								34,
+								36,
+								37,
+								38,
+								39,
+								40,
+								42,
+								43,
+								44,
+								45,
+								46,
+								48,
+								49,
+								51,
+								52,
+								54,
+								55,
+								57,
+								58,
+								60,
+								61,
+								62,
+								68,
+								69,
+								70,
+								71,
+								72,
+								73
+							],
+							"styles": [
+								[],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									47,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									35,
+									47,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									35,
+									47,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									50,
+									47,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									50,
+									47,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									53,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									50,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									50,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									35,
+									10,
+									11,
+									47,
+									47,
+									47,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									35,
+									10,
+									11,
+									47,
+									47,
+									47,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									47,
+									47,
+									47,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									47,
+									47,
+									47,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									47,
+									47,
+									47,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									47,
+									47,
+									47,
+									36,
+									12,
+									62,
+									37
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									90
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									90
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									35,
+									10,
+									11,
+									10,
+									10,
+									10,
+									36,
+									12,
+									13,
+									37
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								]
+							],
+							"bounds": [
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1265,
+									184.6875
+								],
+								[
+									0,
+									0,
+									1265,
+									184.6875
+								],
+								[
+									0,
+									0,
+									1265,
+									184.6875
+								],
+								[
+									12,
+									30.75,
+									1241,
+									39.1875
+								],
+								[
+									12,
+									33.75,
+									323.296875,
+									33
+								],
+								[
+									12,
+									88.6875,
+									136.78125,
+									21
+								],
+								[
+									20,
+									91.6875,
+									120.78125,
+									15
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									109.6875,
+									1241,
+									21
+								],
+								[
+									12,
+									109.6875,
+									146.421875,
+									21
+								],
+								[
+									20,
+									112.6875,
+									130.421875,
+									15
+								],
+								[
+									158.421875,
+									111.6875,
+									169.34375,
+									17
+								],
+								[
+									158.421875,
+									111.6875,
+									169.34375,
+									17
+								],
+								[
+									12,
+									130.6875,
+									1241,
+									21
+								],
+								[
+									12,
+									130.6875,
+									128.640625,
+									21
+								],
+								[
+									20,
+									133.6875,
+									112.640625,
+									15
+								],
+								[
+									140.640625,
+									132.6875,
+									130.859375,
+									17
+								],
+								[
+									140.640625,
+									132.6875,
+									130.859375,
+									17
+								],
+								[
+									12,
+									166.6875,
+									0,
+									0
+								],
+								[
+									12,
+									166.6875,
+									37.0625,
+									45
+								],
+								[
+									12,
+									153.6875,
+									7.703125,
+									17
+								],
+								[
+									-9999,
+									20,
+									132.84375,
+									21
+								],
+								[
+									-9991,
+									23,
+									116.84375,
+									15
+								],
+								[
+									20,
+									-5000,
+									151.390625,
+									21
+								],
+								[
+									28,
+									-4997,
+									135.390625,
+									15
+								],
+								[
+									20,
+									12000,
+									149.890625,
+									21
+								],
+								[
+									28,
+									12003,
+									133.890625,
+									15
+								],
+								[
+									19.703125,
+									151.6875,
+									16,
+									6
+								],
+								[
+									27.703125,
+									154.6875,
+									40.03125,
+									60
+								],
+								[
+									18.703125,
+									150.6875,
+									1,
+									1
+								],
+								[
+									18.703125,
+									150.6875,
+									151.171875,
+									15
+								],
+								[
+									19.703125,
+									151.6875,
+									123.46875,
+									21
+								],
+								[
+									27.703125,
+									154.6875,
+									107.46875,
+									15
+								],
+								[
+									143.171875,
+									153.6875,
+									7.703125,
+									17
+								],
+								[
+									150.875,
+									151.6875,
+									106.421875,
+									21
+								],
+								[
+									158.875,
+									154.6875,
+									90.421875,
+									15
+								],
+								[
+									257.296875,
+									153.6875,
+									7.703125,
+									17
+								],
+								[
+									265,
+									151.6875,
+									117.515625,
+									21
+								],
+								[
+									273,
+									154.6875,
+									101.515625,
+									15
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								]
+							],
+							"text": [
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								28,
+								-1,
+								38,
+								29,
+								-1,
+								-1,
+								49,
+								-1,
+								51,
+								-1,
+								-1,
+								55,
+								-1,
+								56,
+								-1,
+								59,
+								29,
+								-1,
+								63,
+								-1,
+								66,
+								-1,
+								69,
+								-1,
+								72,
+								-1,
+								75,
+								-1,
+								79,
+								29,
+								-1,
+								91,
+								29,
+								-1,
+								93,
+								17
+							],
+							"stackingContexts": {
+								"index": [
+									0,
+									1,
+									14,
+									28,
+									29
+								]
+							},
+							"paintOrders": [
+								0,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								3,
+								3,
+								3,
+								3,
+								3,
+								2,
+								2,
+								1,
+								4,
+								4,
+								5,
+								5,
+								6,
+								6,
+								7,
+								7,
+								8,
+								8,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1
+							],
+							"offsetRects": [
+								[],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									12,
+									31,
+									1241,
+									39
+								],
+								[],
+								[
+									12,
+									89,
+									137,
+									21
+								],
+								[],
+								[],
+								[
+									12,
+									110,
+									1241,
+									21
+								],
+								[
+									12,
+									110,
+									146,
+									21
+								],
+								[],
+								[
+									158,
+									112,
+									169,
+									17
+								],
+								[],
+								[
+									12,
+									131,
+									1241,
+									21
+								],
+								[
+									12,
+									131,
+									129,
+									21
+								],
+								[],
+								[
+									141,
+									133,
+									131,
+									17
+								],
+								[],
+								[
+									12,
+									167,
+									0,
+									0
+								],
+								[],
+								[],
+								[
+									-9999,
+									20,
+									133,
+									21
+								],
+								[],
+								[
+									20,
+									-5000,
+									151,
+									21
+								],
+								[],
+								[
+									20,
+									12000,
+									150,
+									21
+								],
+								[],
+								[
+									20,
+									152,
+									16,
+									6
+								],
+								[],
+								[
+									19,
+									151,
+									1,
+									1
+								],
+								[],
+								[
+									20,
+									152,
+									123,
+									21
+								],
+								[],
+								[],
+								[
+									151,
+									152,
+									106,
+									21
+								],
+								[],
+								[],
+								[
+									265,
+									152,
+									118,
+									21
+								],
+								[],
+								[]
+							],
+							"scrollRects": [
+								[],
+								[
+									0,
+									0,
+									1265,
+									12021
+								],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									0,
+									0,
+									1241,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									133,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									1241,
+									21
+								],
+								[
+									0,
+									0,
+									142,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									21
+								],
+								[
+									0,
+									0,
+									125,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									37,
+									45
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									129,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									147,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									146,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									52,
+									62
+								],
+								[],
+								[
+									0,
+									0,
+									151,
+									15
+								],
+								[],
+								[
+									0,
+									0,
+									119,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									102,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									114,
+									17
+								],
+								[],
+								[]
+							],
+							"clientRects": [
+								[],
+								[
+									0,
+									0,
+									1265,
+									900
+								],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									0,
+									0,
+									1265,
+									185
+								],
+								[
+									0,
+									0,
+									1241,
+									39
+								],
+								[],
+								[
+									2,
+									2,
+									133,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									1241,
+									21
+								],
+								[
+									2,
+									2,
+									142,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									21
+								],
+								[
+									2,
+									2,
+									125,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[],
+								[
+									2,
+									2,
+									129,
+									17
+								],
+								[],
+								[
+									2,
+									2,
+									147,
+									17
+								],
+								[],
+								[
+									2,
+									2,
+									146,
+									17
+								],
+								[],
+								[
+									2,
+									2,
+									12,
+									2
+								],
+								[],
+								[
+									0,
+									0,
+									1,
+									1
+								],
+								[],
+								[
+									2,
+									2,
+									119,
+									17
+								],
+								[],
+								[],
+								[
+									2,
+									2,
+									102,
+									17
+								],
+								[],
+								[],
+								[
+									2,
+									2,
+									114,
+									17
+								],
+								[],
+								[]
+							]
+						},
+						"textBoxes": {
+							"layoutIndex": [
+								5,
+								7,
+								11,
+								13,
+								16,
+								18,
+								20,
+								20,
+								20,
+								21,
+								23,
+								25,
+								27,
+								29,
+								29,
+								29,
+								29,
+								31,
+								33,
+								34,
+								36,
+								37,
+								39
+							],
+							"bounds": [
+								[
+									12,
+									33.75,
+									323.296875,
+									33
+								],
+								[
+									20,
+									91.6875,
+									120.78125,
+									15
+								],
+								[
+									20,
+									112.6875,
+									130.421875,
+									15
+								],
+								[
+									158.421875,
+									111.6875,
+									169.34375,
+									17
+								],
+								[
+									20,
+									133.6875,
+									112.640625,
+									15
+								],
+								[
+									140.640625,
+									132.6875,
+									130.859375,
+									17
+								],
+								[
+									12,
+									166.6875,
+									25.9375,
+									15
+								],
+								[
+									12,
+									181.6875,
+									23.71875,
+									15
+								],
+								[
+									12,
+									196.6875,
+									37.0625,
+									15
+								],
+								[
+									12,
+									153.6875,
+									7.703125,
+									17
+								],
+								[
+									-9991,
+									23,
+									116.84375,
+									15
+								],
+								[
+									28,
+									-4997,
+									135.390625,
+									15
+								],
+								[
+									28,
+									12003,
+									133.890625,
+									15
+								],
+								[
+									27.703125,
+									154.6875,
+									24.453125,
+									15
+								],
+								[
+									27.703125,
+									169.6875,
+									25.953125,
+									15
+								],
+								[
+									27.703125,
+									184.6875,
+									40.03125,
+									15
+								],
+								[
+									27.703125,
+									199.6875,
+									37.0625,
+									15
+								],
+								[
+									18.703125,
+									150.6875,
+									151.171875,
+									15
+								],
+								[
+									27.703125,
+									154.6875,
+									107.46875,
+									15
+								],
+								[
+									143.171875,
+									153.6875,
+									7.703125,
+									17
+								],
+								[
+									158.875,
+									154.6875,
+									90.421875,
+									15
+								],
+								[
+									257.296875,
+									153.6875,
+									7.703125,
+									17
+								],
+								[
+									273,
+									154.6875,
+									101.515625,
+									15
+								]
+							],
+							"start": [
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								5,
+								10,
+								0,
+								0,
+								0,
+								0,
+								0,
+								5,
+								10,
+								17,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0
+							],
+							"length": [
+								21,
+								22,
+								24,
+								22,
+								19,
+								17,
+								4,
+								4,
+								6,
+								1,
+								21,
+								22,
+								22,
+								5,
+								4,
+								6,
+								6,
+								25,
+								18,
+								1,
+								15,
+								1,
+								19
+							]
+						},
+						"scrollOffsetX": 0,
+						"scrollOffsetY": 0,
+						"contentWidth": 1265,
+						"contentHeight": 12021
+					}
+				],
+				"strings": [
+					"http://127.0.0.1:38111/visibility_edge_cases.html",
+					"Visibility Edge Cases",
+					"UTF-8",
+					"CB0B6FF2E4C68195C73BD16C1AD40EEA",
+					"#document",
+					"html",
+					"HTML",
+					"lang",
+					"en",
+					"block",
+					"visible",
+					"1",
+					"auto",
+					"static",
+					"rgb(255, 255, 255)",
+					"HEAD",
+					"#text",
+					"\n",
+					"META",
+					"charset",
+					"utf-8",
+					"TITLE",
+					"STYLE",
+					"\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n.hidden-display{display:none}\n.hidden-visibility{visibility:hidden}\n.zero-opacity{opacity:0}\n.zero-size{width:0;height:0;overflow:hidden;padding:0;border:0}\n.offscreen-left{position:absolute;left:-9999px;top:20px}\n.offscreen-above{position:absolute;top:-5000px;left:20px}\n.offscreen-below{position:absolute;top:12000px;left:20px}\n.clipped{position:absolute;clip-path:inset(100%);width:1px;height:1px;overflow:hidden}\n.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}\n",
+					"BODY",
+					"MAIN",
+					"rgba(0, 0, 0, 0)",
+					"H1",
+					"Visibility edge cases",
+					"\n\n",
+					"BUTTON",
+					"type",
+					"button",
+					"id",
+					"v-visible",
+					"inline-block",
+					"default",
+					"rgb(240, 240, 240)",
+					"Plainly visible button",
+					"DIV",
+					"class",
+					"hidden-display",
+					"v-display-none",
+					"display none button",
+					"SPAN",
+					"display none text",
+					"hidden-visibility",
+					"hidden",
+					"v-visibility-hidden",
+					"visibility hidden button",
+					"inline",
+					"visibility hidden text",
+					"zero-opacity",
+					"0",
+					"v-opacity-zero",
+					"opacity zero button",
+					"opacity zero text",
+					"v-zero-size",
+					"zero-size",
+					"zero size button",
+					"v-offscreen-left",
+					"offscreen-left",
+					"absolute",
+					"offscreen left button",
+					"v-offscreen-above",
+					"offscreen-above",
+					"offscreen above button",
+					"v-offscreen-below",
+					"offscreen-below",
+					"offscreen below button",
+					"v-clipped",
+					"clipped",
+					"clip-path hidden button",
+					"v-sr-only",
+					"sr-only",
+					"screen reader only button",
+					"v-aria-hidden",
+					"aria-hidden",
+					"true",
+					"aria-hidden button",
+					"v-hidden-attr",
+					"hidden attribute button",
+					"INPUT",
+					"v-input-hidden",
+					"name",
+					"hiddenfield",
+					"value",
+					"hidden-input-value",
+					"v-disabled",
+					"disabled",
+					"rgba(239, 239, 239, 0.3)",
+					"disabled button",
+					"v-visible-tail",
+					"Tail visible button",
+					"\n\n\n"
+				]
+			},
+			"axNodes": [
+				{
+					"nodeId": "2",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "RootWebArea"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 144
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Visibility Edge Cases",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label",
+								"superseded": true
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Visibility Edge Cases"
+								},
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/visibility_edge_cases.html"
+							}
+						}
+					],
+					"childIds": [
+						"4"
+					],
+					"backendDOMNodeId": 2,
+					"frameId": "CB0B6FF2E4C68195C73BD16C1AD40EEA"
+				},
+				{
+					"nodeId": "4",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "2",
+					"childIds": [
+						"11"
+					],
+					"backendDOMNodeId": 4
+				},
+				{
+					"nodeId": "11",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "4",
+					"childIds": [
+						"12"
+					],
+					"backendDOMNodeId": 11
+				},
+				{
+					"nodeId": "12",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "main"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 118
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "11",
+					"childIds": [
+						"13",
+						"15",
+						"27",
+						"32",
+						"34",
+						"36",
+						"38",
+						"40",
+						"42",
+						"44",
+						"49",
+						"51"
+					],
+					"backendDOMNodeId": 12
+				},
+				{
+					"nodeId": "13",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Visibility edge cases",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Visibility edge cases"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 1
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"14"
+					],
+					"backendDOMNodeId": 13
+				},
+				{
+					"nodeId": "15",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Plainly visible button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Plainly visible button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"16"
+					],
+					"backendDOMNodeId": 15
+				},
+				{
+					"nodeId": "27",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"28",
+						"31"
+					],
+					"backendDOMNodeId": 27
+				},
+				{
+					"nodeId": "32",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "zero size button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "zero size button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"33"
+					],
+					"backendDOMNodeId": 32
+				},
+				{
+					"nodeId": "34",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen left button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "offscreen left button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"35"
+					],
+					"backendDOMNodeId": 34
+				},
+				{
+					"nodeId": "36",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen above button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "offscreen above button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"37"
+					],
+					"backendDOMNodeId": 36
+				},
+				{
+					"nodeId": "38",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen below button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "offscreen below button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"39"
+					],
+					"backendDOMNodeId": 38
+				},
+				{
+					"nodeId": "40",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "clip-path hidden button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "clip-path hidden button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"41"
+					],
+					"backendDOMNodeId": 40
+				},
+				{
+					"nodeId": "42",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "screen reader only button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "screen reader only button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"43"
+					],
+					"backendDOMNodeId": 42
+				},
+				{
+					"nodeId": "44",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "ariaHiddenElement",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "12",
+					"childIds": [
+						"45"
+					],
+					"backendDOMNodeId": 44
+				},
+				{
+					"nodeId": "45",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "ariaHiddenSubtree",
+							"value": {
+								"type": "idref",
+								"relatedNodes": [
+									{
+										"backendDOMNodeId": 44,
+										"idref": "v-aria-hidden"
+									}
+								]
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "44",
+					"childIds": [],
+					"backendDOMNodeId": 45
+				},
+				{
+					"nodeId": "49",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "disabled button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "disabled button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "disabled",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						},
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"50"
+					],
+					"backendDOMNodeId": 49
+				},
+				{
+					"nodeId": "51",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Tail visible button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Tail visible button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"52"
+					],
+					"backendDOMNodeId": 51
+				},
+				{
+					"nodeId": "14",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Visibility edge cases",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Visibility edge cases"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "13",
+					"childIds": [
+						"-1000000002"
+					],
+					"backendDOMNodeId": 14
+				},
+				{
+					"nodeId": "16",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Plainly visible button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Plainly visible button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"-1000000003"
+					],
+					"backendDOMNodeId": 16
+				},
+				{
+					"nodeId": "28",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "opacity zero button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "opacity zero button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "27",
+					"childIds": [
+						"29"
+					],
+					"backendDOMNodeId": 28
+				},
+				{
+					"nodeId": "31",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "opacity zero text",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "opacity zero text"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "27",
+					"childIds": [
+						"-1000000005"
+					],
+					"backendDOMNodeId": 31
+				},
+				{
+					"nodeId": "33",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "zero size button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "zero size button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "32",
+					"childIds": [
+						"-1000000006",
+						"-1000000007",
+						"-1000000008"
+					],
+					"backendDOMNodeId": 33
+				},
+				{
+					"nodeId": "35",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen left button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "offscreen left button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "34",
+					"childIds": [
+						"-1000000009"
+					],
+					"backendDOMNodeId": 35
+				},
+				{
+					"nodeId": "37",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen above button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "offscreen above button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "36",
+					"childIds": [
+						"-1000000010"
+					],
+					"backendDOMNodeId": 37
+				},
+				{
+					"nodeId": "39",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen below button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "offscreen below button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "38",
+					"childIds": [
+						"-1000000011"
+					],
+					"backendDOMNodeId": 39
+				},
+				{
+					"nodeId": "41",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "clip-path hidden button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "clip-path hidden button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "40",
+					"childIds": [
+						"-1000000012",
+						"-1000000013",
+						"-1000000014",
+						"-1000000015"
+					],
+					"backendDOMNodeId": 41
+				},
+				{
+					"nodeId": "43",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "screen reader only button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "screen reader only button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "42",
+					"childIds": [
+						"-1000000016"
+					],
+					"backendDOMNodeId": 43
+				},
+				{
+					"nodeId": "50",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "disabled button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "disabled button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "49",
+					"childIds": [
+						"-1000000017"
+					],
+					"backendDOMNodeId": 50
+				},
+				{
+					"nodeId": "52",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Tail visible button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Tail visible button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "51",
+					"childIds": [
+						"-1000000018"
+					],
+					"backendDOMNodeId": 52
+				},
+				{
+					"nodeId": "-1000000002",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Visibility edge cases"
+					},
+					"properties": [],
+					"parentId": "14",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000003",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Plainly visible button"
+					},
+					"properties": [],
+					"parentId": "16",
+					"childIds": []
+				},
+				{
+					"nodeId": "29",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "opacity zero button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "opacity zero button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "28",
+					"childIds": [
+						"-1000000004"
+					],
+					"backendDOMNodeId": 29
+				},
+				{
+					"nodeId": "-1000000005",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "opacity zero text"
+					},
+					"properties": [],
+					"parentId": "31",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000006",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "zero "
+					},
+					"properties": [],
+					"parentId": "33",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000007",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "size "
+					},
+					"properties": [],
+					"parentId": "33",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000008",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "button"
+					},
+					"properties": [],
+					"parentId": "33",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000009",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen left button"
+					},
+					"properties": [],
+					"parentId": "35",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000010",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen above button"
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000011",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "offscreen below button"
+					},
+					"properties": [],
+					"parentId": "39",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000012",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "clip-"
+					},
+					"properties": [],
+					"parentId": "41",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000013",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "path "
+					},
+					"properties": [],
+					"parentId": "41",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000014",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "hidden "
+					},
+					"properties": [],
+					"parentId": "41",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000015",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "button"
+					},
+					"properties": [],
+					"parentId": "41",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000016",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "screen reader only button"
+					},
+					"properties": [],
+					"parentId": "43",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000017",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "disabled button"
+					},
+					"properties": [],
+					"parentId": "50",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000018",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Tail visible button"
+					},
+					"properties": [],
+					"parentId": "52",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000004",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "opacity zero button"
+					},
+					"properties": [],
+					"parentId": "29",
+					"childIds": []
+				}
+			],
+			"listeners": {
+				"frames": [
+					{
+						"frame": "",
+						"total": 29,
+						"scanned": 29,
+						"hits": []
+					}
+				],
+				"truncated": false
+			}
+		}
+	],
+	"warnings": []
+}

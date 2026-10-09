@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overlapping Stacking Contexts</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+.ctx{position:relative;width:520px;height:260px;border:1px solid #333}
+.layer{position:absolute;width:220px;height:90px;padding:6px}
+#l-base{left:10px;top:10px;background:#eee;z-index:1}
+#l-mid{left:80px;top:50px;background:#ddf;z-index:5;transform:translateZ(0)}
+#l-top{left:150px;top:90px;background:#fdd;z-index:9;isolation:isolate}
+#l-neg{left:220px;top:130px;background:#dfd;z-index:-1}
+#l-filter{left:20px;top:150px;background:#ffd;filter:blur(0px)}
+#l-opacity{left:260px;top:20px;background:#dff;opacity:0.99}
+</style>
+</head>
+<body>
+<main>
+<h1>Overlapping stacking contexts</h1>
+<div class="ctx">
+  <div class="layer" id="l-base"><button type="button" id="sc-base">z-index 1 base</button></div>
+  <div class="layer" id="l-mid"><button type="button" id="sc-mid">z-index 5 + translateZ</button></div>
+  <div class="layer" id="l-top"><button type="button" id="sc-top">z-index 9 isolated</button></div>
+  <div class="layer" id="l-neg"><button type="button" id="sc-neg">z-index -1 behind</button></div>
+  <div class="layer" id="l-filter"><button type="button" id="sc-filter">filter context</button></div>
+  <div class="layer" id="l-opacity"><button type="button" id="sc-opacity">opacity context</button></div>
+</div>
+<p>After the stacking stage.</p>
+</main>
+</body>
+</html>

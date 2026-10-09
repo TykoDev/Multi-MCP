@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>React-Style Controlled Inputs</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+label{display:block;margin:6px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Controlled inputs (React value-tracker pattern, no framework)</h1>
+
+<label for="ctrl-text">Controlled text</label>
+<input id="ctrl-text" name="ctrlText" type="text" value="initial-state" placeholder="controlled text">
+
+<label for="ctrl-textarea">Controlled textarea</label>
+<textarea id="ctrl-textarea" name="ctrlArea" rows="3" cols="30" placeholder="controlled area">area-state</textarea>
+
+<label for="ctrl-checkbox">Controlled checkbox</label>
+<input id="ctrl-checkbox" name="ctrlCheck" type="checkbox" checked>
+
+<label for="ctrl-select">Controlled select</label>
+<select id="ctrl-select" name="ctrlSelect">
+  <option value="one">One</option>
+  <option value="two" selected>Two</option>
+  <option value="three">Three</option>
+</select>
+
+<p id="mirror">mirror: initial-state</p>
+</main>
+<script>
+(function () {
+  // Emulate React's value tracker: the DOM value setter is shadowed by an own
+  // property descriptor, so naive `el.value = x` assignments are swallowed and
+  // only native-setter + input-event writes take effect.
+  function installTracker(el, prop) {
+    var proto = Object.getPrototypeOf(el);
+    var desc = Object.getOwnPropertyDescriptor(proto, prop);
+    var current = el[prop];
+    Object.defineProperty(el, prop, {
+      configurable: true,
+      enumerable: false,
+      get: function () { return current; },
+      set: function (v) {
+        // Swallow direct writes that do not come through the native setter,
+        // exactly like a controlled component re-rendering from state.
+        current = current;
+        desc.set.call(el, current);
+      }
+    });
+    el.__setControlled = function (v) {
+      current = v;
+      desc.set.call(el, v);
+    };
+    el.addEventListener('input', function () {
+      current = desc.get.call(el);
+      var m = document.getElementById('mirror');
+      if (m && el.id === 'ctrl-text') { m.textContent = 'mirror: ' + current; }
+    });
+  }
+
+  installTracker(document.getElementById('ctrl-text'), 'value');
+  installTracker(document.getElementById('ctrl-textarea'), 'value');
+  installTracker(document.getElementById('ctrl-checkbox'), 'checked');
+  installTracker(document.getElementById('ctrl-select'), 'value');
+})();
+</script>
+</body>
+</html>

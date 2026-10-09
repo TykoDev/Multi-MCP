@@ -1,0 +1,1046 @@
+/* Shared primitives (ui.ts) on the kit: buttons, tooltips, confirm popover, toasts, tiles, cards, empty states,
+ * chips, avatars, dialogs, code. Screen-specific rules live in screens/*.css. */
+
+/* --- buttons: native <button> with the kit's native classes, plus spacing for a glyph --- */
+
+button.ttk-btn {
+	gap: 0.5em;
+	border-radius: 10px;
+	--wa-form-control-height: 34px;
+	font-weight: 600;
+}
+button.ttk-btn.sm {
+	--wa-form-control-height: 28px;
+	padding-inline: 10px;
+	border-radius: 8px;
+}
+button.ttk-btn.icon-only {
+	width: var(--wa-form-control-height);
+	padding: 0;
+}
+button.ttk-btn.block {
+	width: 100%;
+	--wa-form-control-height: 40px;
+}
+button.ttk-btn.wa-brand:not(.wa-filled):not(.wa-plain):not(.wa-outlined) {
+	background: var(--ttk-gradient);
+	box-shadow: var(--ttk-glow);
+}
+button.ttk-btn.wa-brand:not(.wa-filled):not(.wa-plain):not(.wa-outlined):hover:not(:disabled) {
+	filter: brightness(1.08);
+}
+button.ttk-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+button.ttk-btn .btn-spinner {
+	font-size: 14px;
+	--track-width: 2px;
+}
+button.ttk-btn.on {
+	color: var(--ttk-brand);
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+}
+button.ttk-btn.live {
+	color: var(--ttk-live);
+}
+button.ttk-btn.live .icon {
+	animation: pulse-op 1.2s ease-in-out infinite;
+}
+button.ttk-btn.driving {
+	color: var(--ttk-live);
+	background: color-mix(in oklab, var(--ttk-live) 16%, transparent);
+	border-color: color-mix(in oklab, var(--ttk-live) 55%, transparent);
+}
+@keyframes pulse-op {
+	50% {
+		opacity: 0.45;
+	}
+}
+/* Destructive actions are quiet until reached for (D-092); the confirm popover is the safeguard. */
+button.ttk-btn.destructive:hover:not(:disabled),
+button.ttk-btn.destructive:focus-visible {
+	color: var(--ttk-danger);
+	background: color-mix(in oklab, var(--ttk-danger) 14%, transparent);
+}
+
+/* Segmented groups of icon buttons (view toggles, filters). */
+.segmented {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 12px;
+	background: var(--ttk-sunken);
+}
+.segmented button.ttk-btn {
+	--wa-form-control-height: 28px;
+	border-radius: 9px;
+}
+.segmented button.ttk-btn[aria-pressed='true'] {
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	box-shadow: var(--ttk-shadow);
+}
+
+/* --- tooltip and confirm popover --- */
+
+.ttk-tip {
+	--max-width: 280px;
+}
+.ttk-tip::part(body) {
+	padding: 6px 10px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 550;
+}
+
+.ttk-confirm::part(body) {
+	padding: 12px;
+	border-radius: var(--ttk-radius);
+}
+.confirm-body {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: 10px 12px;
+}
+.confirm-glyph {
+	width: 32px;
+	height: 32px;
+	display: grid;
+	place-items: center;
+	border-radius: 10px;
+	background: color-mix(in oklab, var(--ttk-danger) 16%, transparent);
+	color: var(--ttk-danger);
+}
+.confirm-text {
+	font-weight: 600;
+}
+.confirm-actions {
+	grid-column: 1 / -1;
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+/* --- toasts --- */
+
+.toast-stack {
+	position: fixed;
+	right: 20px;
+	bottom: 20px;
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-width: min(420px, calc(100vw - 40px));
+}
+.ttk-toast {
+	box-shadow: var(--ttk-shadow-pop);
+	animation: toast-in 0.32s var(--ttk-spring) both;
+}
+.ttk-toast::part(message) {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.ttk-toast .toast-text {
+	flex: 1;
+}
+.ttk-toast.leaving {
+	animation: toast-out 0.24s var(--ttk-ease) forwards;
+}
+@keyframes toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(12px) scale(0.96);
+	}
+}
+@keyframes toast-out {
+	to {
+		opacity: 0;
+		transform: translateX(24px);
+	}
+}
+
+/* --- stat strip (D-092): one compact glass bar of metrics, sized to its content, not a row of cards --- */
+
+.tiles {
+	align-self: flex-start;
+	max-width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: stretch;
+	padding: 4px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 16px;
+	background:
+		linear-gradient(135deg, color-mix(in oklab, var(--ttk-brand) 7%, transparent), transparent 55%),
+		var(--ttk-glass);
+	backdrop-filter: blur(14px) saturate(1.3);
+	box-shadow: var(--ttk-shadow);
+}
+.tiles[hidden] {
+	display: none;
+}
+.tile {
+	--tone: var(--wa-color-text-quiet);
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 5px 16px 5px 5px;
+	border-radius: 12px;
+	transition: background 0.2s;
+}
+/* A hairline between metrics, inset so it reads as one bar. */
+.tile + .tile::before {
+	content: '';
+	position: absolute;
+	left: -0.5px;
+	top: 12px;
+	bottom: 12px;
+	width: 1px;
+	background: var(--ttk-hairline);
+}
+.tile:hover {
+	background: color-mix(in oklab, var(--tone) 9%, transparent);
+}
+.tile-glyph {
+	width: 30px;
+	height: 30px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	background: linear-gradient(
+		140deg,
+		color-mix(in oklab, var(--tone) 30%, transparent),
+		color-mix(in oklab, var(--tone) 8%, transparent)
+	);
+	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone) 28%, transparent);
+	color: var(--tone);
+}
+.tile-glyph .icon {
+	width: 16px;
+	height: 16px;
+}
+.tile.accent {
+	--tone: var(--ttk-brand);
+}
+.tile.ok,
+.tile.live {
+	--tone: var(--ttk-live);
+}
+.tile.warn,
+.tile.locked {
+	--tone: var(--ttk-locked);
+}
+.tile.danger {
+	--tone: var(--ttk-danger);
+}
+.tile.agent {
+	--tone: var(--ttk-agent);
+}
+.tile.info {
+	--tone: var(--ttk-info);
+}
+/* A zero is a fact, not news: it recedes. */
+.tile.zero {
+	--tone: var(--wa-color-text-quiet);
+}
+.tile.zero .tile-value {
+	color: var(--wa-color-text-quiet);
+}
+.tile-body {
+	min-width: 0;
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+}
+.tile-value {
+	font-size: 17px;
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.tile-value.bump {
+	animation: bump 0.45s var(--ttk-spring);
+}
+.tile-label {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 550;
+	white-space: nowrap;
+}
+@media (max-width: 720px) {
+	.tiles {
+		align-self: stretch;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.tile + .tile::before {
+		display: none;
+	}
+}
+@keyframes bump {
+	40% {
+		transform: scale(1.12);
+		color: var(--ttk-brand);
+	}
+}
+
+/* --- cards --- */
+
+wa-card.panel {
+	--border-radius: var(--ttk-radius);
+	--spacing: 16px;
+	box-shadow: var(--ttk-shadow);
+}
+wa-card.panel::part(base) {
+	border-color: var(--ttk-hairline);
+	background: var(--ttk-card);
+}
+wa-card.panel::part(header) {
+	padding-block: 12px;
+	border-bottom-color: var(--ttk-hairline);
+}
+.panel-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+.panel-glyph {
+	width: 28px;
+	height: 28px;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+	color: var(--ttk-brand);
+}
+.panel-head h2 {
+	font-size: 14px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.panel-actions {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.panel-body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* --- illustration and empty states --- */
+
+.illustration {
+	--tone: var(--ttk-brand);
+	position: relative;
+	width: 112px;
+	height: 112px;
+	display: grid;
+	place-items: center;
+}
+.illustration .ring {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	border: 1px dashed color-mix(in oklab, var(--tone) 40%, transparent);
+	animation: orbit 18s linear infinite;
+}
+.illustration .ring.r2 {
+	inset: 16px;
+	border-style: solid;
+	border-color: color-mix(in oklab, var(--tone) 22%, transparent);
+	animation-duration: 12s;
+	animation-direction: reverse;
+}
+.illustration .ring::after {
+	content: '';
+	position: absolute;
+	top: -4px;
+	left: calc(50% - 4px);
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--tone);
+	box-shadow: 0 0 12px var(--tone);
+}
+.illustration .orb {
+	position: relative;
+	width: 52px;
+	height: 52px;
+	display: grid;
+	place-items: center;
+	border-radius: 18px;
+	background: var(--ttk-gradient);
+	color: white;
+	box-shadow: var(--ttk-glow);
+}
+.illustration .orb .icon {
+	width: 26px;
+	height: 26px;
+}
+/* The brand variant: the logo is its own tile, so it stands without the gradient square, a little larger, lit by a
+ * soft brand glow. */
+.illustration .orb-logo {
+	position: relative;
+	width: 62px;
+	height: 64px;
+	object-fit: contain;
+	filter: drop-shadow(0 6px 18px color-mix(in oklab, var(--tone) 45%, transparent));
+}
+/* The brand illustration (the Sessions screen's empty state) is 40% larger than the glyph ones, rings and logo alike. */
+.illustration.brand {
+	width: 157px;
+	height: 157px;
+}
+.illustration.brand .ring.r2 {
+	inset: 22px;
+}
+.illustration.brand .orb-logo {
+	width: 87px;
+	height: 90px;
+}
+.illustration.ok {
+	--tone: var(--ttk-live);
+}
+.illustration.warn {
+	--tone: var(--ttk-locked);
+}
+.illustration.danger {
+	--tone: var(--ttk-danger);
+}
+.illustration.agent {
+	--tone: var(--ttk-agent);
+}
+@keyframes orbit {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 14px;
+	padding: 48px 16px;
+	text-align: center;
+}
+.empty-title {
+	font-size: 15px;
+	font-weight: 650;
+	color: var(--wa-color-text-normal);
+}
+.empty-action {
+	margin-top: 2px;
+}
+
+/* --- chips, dots, flags, scopes, avatars --- */
+
+wa-badge.badge {
+	font-size: 11px;
+	font-weight: 600;
+}
+wa-tag.chip {
+	font-weight: 550;
+}
+wa-tag.chip .icon {
+	width: 13px;
+	height: 13px;
+	margin-right: 4px;
+}
+
+.dot {
+	display: inline-block;
+	width: 9px;
+	height: 9px;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background: var(--wa-color-text-quiet);
+}
+.dot.ok,
+.dot.live {
+	background: var(--ttk-live);
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--ttk-live) 22%, transparent);
+}
+.dot.warn,
+.dot.locked {
+	background: var(--ttk-locked);
+}
+.dot.danger,
+.dot.error,
+.dot.dead {
+	background: var(--ttk-danger);
+}
+.dot.accent,
+.dot.info {
+	background: var(--ttk-brand);
+}
+
+.flag {
+	display: inline-grid;
+	place-items: center;
+	color: var(--wa-color-text-quiet);
+}
+.flag.on {
+	color: var(--ttk-live);
+}
+.flag .icon {
+	width: 18px;
+	height: 18px;
+}
+
+.scope-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.scope {
+	width: 30px;
+	height: 30px;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	border: 1px solid var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+}
+.scope.held {
+	border-color: color-mix(in oklab, var(--ttk-brand) 40%, transparent);
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+	color: var(--ttk-brand);
+}
+.scope.explicit {
+	border-color: color-mix(in oklab, var(--ttk-locked) 50%, transparent);
+	background: color-mix(in oklab, var(--ttk-locked) 14%, transparent);
+	color: var(--ttk-locked);
+}
+.scope.not-held {
+	opacity: 0.35;
+	border-style: dashed;
+}
+.scope .icon {
+	width: 15px;
+	height: 15px;
+}
+
+wa-avatar.ttk-avatar {
+	--size: 36px;
+	--hue: var(--wa-color-blue-50);
+	font-weight: 700;
+}
+/* The avatar styles its host (it has no base part), so the host is painted directly. */
+wa-avatar.ttk-avatar {
+	background: linear-gradient(135deg, var(--hue), color-mix(in oklab, var(--hue), var(--wa-color-purple-50) 45%));
+	color: white;
+	border-radius: 50%;
+}
+wa-avatar.ttk-avatar.sm {
+	--size: 30px;
+	font-size: 12px;
+}
+wa-avatar.ttk-avatar.lg {
+	--size: 48px;
+	font-size: 17px;
+}
+wa-avatar.ttk-avatar.hue-1 {
+	--hue: var(--wa-color-indigo-50);
+}
+wa-avatar.ttk-avatar.hue-2 {
+	--hue: var(--wa-color-purple-50);
+}
+wa-avatar.ttk-avatar.hue-3 {
+	--hue: var(--wa-color-cyan-50);
+}
+wa-avatar.ttk-avatar.hue-4 {
+	--hue: var(--wa-color-pink-50);
+}
+wa-avatar.ttk-avatar.hue-5 {
+	--hue: var(--wa-color-green-50);
+}
+
+/* --- kv rows --- */
+
+.kv {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.kv:last-child {
+	border-bottom: 0;
+}
+.kv > .icon {
+	color: var(--wa-color-text-quiet);
+}
+.kv-key {
+	color: var(--wa-color-text-quiet);
+}
+.kv-val {
+	margin-left: auto;
+	font-family: var(--wa-font-family-code);
+	font-size: 12.5px;
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
+/* --- dialogs --- */
+
+wa-dialog.modal {
+	--width: min(520px, 94vw);
+}
+wa-dialog.modal.wide {
+	--width: min(1100px, 96vw);
+}
+wa-dialog.modal::part(dialog) {
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(22px) saturate(1.3);
+	box-shadow: var(--ttk-shadow-pop);
+}
+wa-dialog.modal::part(body) {
+	overflow-x: hidden;
+}
+.modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+.modal-body .shot {
+	max-width: 100%;
+	border-radius: var(--ttk-radius-s);
+}
+
+/* --- skeletons and code --- */
+
+.skeleton-group {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+wa-skeleton.skeleton {
+	height: 54px;
+	--border-radius: var(--ttk-radius);
+}
+
+pre.code {
+	margin: 0;
+	padding: 12px 14px;
+	max-height: 520px;
+	overflow: auto;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-normal);
+	font: 12.5px/1.55 var(--wa-font-family-code);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.code .j-k {
+	color: var(--wa-color-blue-70);
+}
+.code .j-s {
+	color: var(--wa-color-green-70);
+}
+.code .j-n {
+	color: var(--wa-color-orange-70);
+}
+.code .j-b {
+	color: var(--wa-color-purple-70);
+}
+.wa-light .code .j-k {
+	color: var(--wa-color-blue-40);
+}
+.wa-light .code .j-s {
+	color: var(--wa-color-green-40);
+}
+.wa-light .code .j-n {
+	color: var(--wa-color-orange-40);
+}
+.wa-light .code .j-b {
+	color: var(--wa-color-purple-40);
+}
+
+/* --- shared layout helpers --- */
+
+.grow {
+	flex: 1;
+	min-width: 0;
+}
+.mono {
+	font-family: var(--wa-font-family-code);
+}
+.muted {
+	color: var(--wa-color-text-quiet);
+}
+.strong {
+	font-weight: 650;
+}
+.row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+.row.end {
+	justify-content: flex-end;
+}
+/* The selection-copy fallback in copyText(): present for the copy command, never seen. */
+.offscreen {
+	position: fixed;
+	left: -9999px;
+	top: 0;
+	opacity: 0;
+}
+img.shot {
+	display: block;
+	max-width: 100%;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+}
+
+/* --- meter ring (meterRing) --- */
+
+.meter-ring {
+	--ring: var(--ttk-brand);
+	position: relative;
+	width: 40px;
+	height: 40px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	color: var(--ring);
+}
+.meter-ring-svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	transform: rotate(-90deg);
+}
+.meter-ring-track,
+.meter-ring-arc {
+	fill: none;
+	stroke-width: 4;
+}
+.meter-ring-track {
+	stroke: color-mix(in oklab, var(--ring) 18%, transparent);
+}
+.meter-ring-arc {
+	stroke: var(--ring);
+	stroke-linecap: round;
+	transition: stroke-dashoffset 0.8s var(--ttk-ease);
+}
+
+/* --- segmented switch with words (segmented): a role=tablist; the active tab reads as a raised card --- */
+
+.segmented[role='tablist'] button.ttk-btn {
+	color: var(--wa-color-text-quiet);
+}
+.segmented[role='tablist'] button.ttk-btn[aria-selected='true'] {
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	box-shadow: var(--ttk-shadow);
+}
+.segmented.worded button.ttk-btn {
+	padding-inline: 12px;
+	font-weight: 600;
+}
+.segmented.worded button.ttk-btn[aria-selected='true'] {
+	color: var(--ttk-brand);
+}
+.segmented.worded button.ttk-btn .icon {
+	width: 14px;
+	height: 14px;
+}
+@media (max-width: 720px) {
+	.segmented.worded {
+		display: flex;
+	}
+	.segmented.worded button.ttk-btn {
+		flex: 1;
+		padding-inline: 8px;
+	}
+}
+
+/* --- fact groups (factGroup, jsonFacts): key · value in mono · tags, under a section label --- */
+
+.json-facts {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+.fact-group {
+	min-width: 0;
+}
+.fact-title {
+	margin: 0 0 2px;
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--wa-color-text-quiet);
+}
+.facts {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.fact {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	min-width: 0;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.fact:last-child {
+	border-bottom: 0;
+}
+.fact-key {
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+	font-weight: 550;
+	border-radius: 4px;
+}
+/* An explained key hints at its tooltip and is a tab stop (RV-13). */
+.fact-key[data-tip] {
+	cursor: help;
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
+}
+.fact-key:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 2px;
+}
+.fact-val {
+	margin-left: auto;
+	min-width: 0;
+	font-size: 12.5px;
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+.fact-chips,
+.fact-tags {
+	display: inline-flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 4px;
+}
+/* A nested object: a collapsible group whose summary already names it, so its own heading stays for assistive
+ * technology only. */
+.facts-details {
+	--spacing: 0;
+	border-top: 1px solid var(--ttk-hairline);
+}
+.facts-details::part(header) {
+	padding: 8px 0;
+	font-size: 13px;
+	font-weight: 600;
+}
+.facts-details::part(content) {
+	padding: 0 0 6px 12px;
+	border-left: 1px solid var(--ttk-hairline);
+}
+.facts-details > .fact-group > .fact-title {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+}
+.facts-scroll {
+	max-width: 100%;
+	overflow-x: auto;
+}
+.facts-table,
+.diff-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+}
+.facts-table th,
+.diff-table th {
+	padding: 6px 10px;
+	text-align: left;
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	color: var(--wa-color-text-quiet);
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.facts-table td,
+.diff-table td {
+	padding: 6px 10px;
+	vertical-align: top;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.facts-table td {
+	overflow-wrap: anywhere;
+}
+/* A diff key is an identifier and never breaks mid-word; values may, so a long list does not force the table
+ * wider than it must be. The table itself grows to its keys and scrolls inside `.diff` (F-02). */
+.diff-table td.diff-key {
+	width: max-content;
+	white-space: nowrap;
+}
+.diff-table td.diff-before,
+.diff-table td.diff-after {
+	overflow-wrap: anywhere;
+}
+.facts-table tbody tr:last-child td,
+.diff-table tbody tr:last-child td {
+	border-bottom: 0;
+}
+.facts-table tbody tr:hover td {
+	background: color-mix(in oklab, var(--ttk-brand) 6%, transparent);
+}
+
+/* --- meter bar (meterBar): label · track · words; the fill is `--fill` on the bar, a CSSOM write --- */
+
+.meter-bar {
+	--tone: var(--ttk-brand);
+	display: grid;
+	grid-template-columns: minmax(72px, auto) 1fr auto;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 0;
+	font-size: 12.5px;
+}
+.meter-bar.high {
+	--tone: var(--ttk-locked);
+}
+.meter-label {
+	color: var(--wa-color-text-quiet);
+	font-weight: 550;
+}
+.meter-track {
+	position: relative;
+	height: 6px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--tone) 18%, transparent);
+}
+.meter-fill {
+	--fill: 0;
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: var(--tone);
+	transform-origin: left center;
+	transform: scaleX(var(--fill));
+	transition: transform 0.8s var(--ttk-ease);
+}
+.meter-words {
+	font-family: var(--wa-font-family-code);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+@media (max-width: 720px) {
+	.meter-bar {
+		grid-template-columns: 1fr auto;
+	}
+	.meter-track {
+		grid-column: 1 / -1;
+	}
+}
+
+/* --- diff (diffView): before in the danger tint, after in the live tint, under a live summary --- */
+
+.diff {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.diff-summary {
+	margin: 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--wa-color-text-quiet);
+}
+.diff-before {
+	color: var(--ttk-danger);
+	background: color-mix(in oklab, var(--ttk-danger) 8%, transparent);
+}
+.diff-before.none {
+	color: var(--wa-color-text-quiet);
+	background: transparent;
+}
+.diff-after {
+	color: var(--ttk-live);
+	background: color-mix(in oklab, var(--ttk-live) 9%, transparent);
+}
+.wa-light .diff-before {
+	background: color-mix(in oklab, var(--ttk-danger) 11%, transparent);
+}
+.wa-light .diff-after {
+	background: color-mix(in oklab, var(--ttk-live) 12%, transparent);
+}
+.diff-tags {
+	white-space: nowrap;
+}
+
+/* --- menu popover (menuButton): a glass list of worded ghost buttons under one primary --- */
+
+button.ttk-btn.menu-trigger .menu-caret {
+	width: 14px;
+	height: 14px;
+	margin-left: -2px;
+	opacity: 0.8;
+}
+.menu-pop {
+	--max-width: 320px;
+}
+.menu-pop::part(body) {
+	padding: 6px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(22px) saturate(1.3);
+	box-shadow: var(--ttk-shadow-pop);
+}
+.menu-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 200px;
+}
+.menu-list button.ttk-btn,
+.menu-item-gate {
+	width: 100%;
+}
+.menu-list button.ttk-btn {
+	justify-content: flex-start;
+	border-radius: 9px;
+	font-weight: 550;
+}
+.menu-list button.ttk-btn:hover:not(:disabled),
+.menu-list button.ttk-btn:focus-visible {
+	background: color-mix(in oklab, var(--ttk-brand) 12%, transparent);
+}
+.menu-item-gate {
+	display: block;
+}

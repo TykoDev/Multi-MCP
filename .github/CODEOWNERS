@@ -1,0 +1,18 @@
+# CODEOWNERS — reviewers requested automatically on matching paths.
+# Syntax: <path pattern>  <owner>
+# Owner identifiers must be GitHub usernames/teams or account-associated emails.
+# Replace the email with a GitHub @handle or team if you adopt one.
+
+# Default owner for everything in the repository.
+*                       stoffe@tykotech.eu
+
+# Documentation.
+/docs/                  stoffe@tykotech.eu
+
+# Security-sensitive surfaces.
+/packages/gateway/      stoffe@tykotech.eu
+/packages/mcp/          stoffe@tykotech.eu
+/Dockerfile             stoffe@tykotech.eu
+/Dockerfile.slim        stoffe@tykotech.eu
+/docker/                stoffe@tykotech.eu
+/SECURITY.md            stoffe@tykotech.eu

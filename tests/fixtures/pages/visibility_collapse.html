@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visibility Collapse</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+table{border-collapse:collapse;margin:8px 0}
+td,th{border:1px solid #333;padding:2px 6px}
+.collapsed{visibility:collapse}
+.recollapsed{visibility:visible}
+</style>
+</head>
+<body>
+<main>
+<h1>visibility collapse</h1>
+
+<p>Rows: the middle one is visibility:collapse, which removes it from a table like display:none.</p>
+<table id="vc-table">
+  <tbody>
+    <tr id="vc-row-visible"><td><button type="button" id="vc-b1">Row one button</button></td></tr>
+    <tr id="vc-row-collapsed" class="collapsed"><td><button type="button" id="vc-b2">Collapsed row button</button></td></tr>
+    <tr id="vc-row-tail"><td><button type="button" id="vc-b3">Row three button</button></td></tr>
+  </tbody>
+</table>
+
+<p>Outside a table, visibility:collapse behaves as visibility:hidden.</p>
+<div id="vc-block" class="collapsed">
+  <button type="button" id="vc-b4">Collapsed block button</button>
+  <span>Collapsed block text</span>
+</div>
+
+<p>A descendant can undo an inherited collapse, exactly as it can undo visibility:hidden.</p>
+<div id="vc-outer" class="collapsed">
+  <button type="button" id="vc-b5" class="recollapsed">Re-shown button</button>
+</div>
+
+<button type="button" id="vc-tail">Tail control</button>
+</main>
+</body>
+</html>

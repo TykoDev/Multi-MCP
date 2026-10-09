@@ -1,2 +1,7 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Line endings are LF in the repository and in the working tree.
+#
+# `deno fmt` enforces this for everything it covers, and would have caught a
+# stray CRLF — but `SPECS/` is excluded from the formatter (D-031), and this
+# repository is developed on Windows and built on Linux. Without this, an editor
+# there rewrites a spec file's endings and the diff is the whole file.
+* text=auto eol=lf

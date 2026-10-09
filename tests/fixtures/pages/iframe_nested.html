@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nested Same-Origin Iframes</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+iframe{border:1px solid #333;width:520px;height:260px;display:block}
+</style>
+</head>
+<body>
+<main>
+<h1>Nested same-origin iframes</h1>
+<button id="top-button" type="button">Top level button</button>
+<iframe id="frame-depth-1" title="depth one frame" src="frames/frame_depth1.html"></iframe>
+<p>After the frame.</p>
+<a id="top-link" href="baseline_button.html" title="Go to baseline">baseline</a>
+</main>
+</body>
+</html>

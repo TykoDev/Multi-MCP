@@ -1,0 +1,209 @@
+/* Design tokens (SPECS/DESIGN-SYSTEM.md §2). The kit's own tokens are tuned here; the app's tokens are named
+ * --ttk-*; the pre-kit names (--bg, --surface, --accent…) are kept as aliases so carried-over screen rules follow
+ * every theme. Every colour derives from the kit's palette, so the four themes come from one definition:
+ *
+ *   Dark   (`wa-dark`,  default) — deep ink; the screencast is the brightest thing on screen (D-089).
+ *   Shade  (`wa-dark`)  — a dimmed slate: the kit's neutral scale lifted, so every derived surface lifts with it.
+ *   Light  (`wa-light`) — crisp white cards on a cool grey canvas.
+ *   Dawn   (`wa-light`) — warm paper neutrals and an iris → rose → amber brand.
+ *
+ * D-152: Shade and Dawn redefine the kit's neutral (and, for Dawn, brand) scale on `<html>`. The kit's scheme rules
+ * map its surfaces and text onto that scale with `var()`, which resolves on the same element, so a variant restates
+ * the eleven steps rather than every surface. */
+
+:root {
+	/* Kit scale: an operator console, denser than the kit's 16 px default. */
+	--wa-font-size-scale: 0.875;
+	--wa-space-scale: 0.9;
+	--wa-border-radius-scale: 1.15;
+	--wa-font-family-body: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue',
+		sans-serif;
+	--wa-font-family-heading: var(--wa-font-family-body);
+	--wa-font-family-code: ui-monospace, 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+	--wa-tooltip-arrow-size: 6px;
+
+	/* Geometry: compact and crisp — tighter radii and lighter glass than the first kit pass (D-152). */
+	--ttk-dock: 56px;
+	--ttk-bar: 52px;
+	--ttk-gutter: 18px;
+	--ttk-radius-s: 7px;
+	--ttk-radius: 11px;
+	--ttk-radius-l: 16px;
+	--ttk-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ttk-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	/* Meaning */
+	--ttk-brand: var(--wa-color-brand-60);
+	--ttk-brand-2: var(--wa-color-purple-60);
+	--ttk-brand-ink: var(--wa-color-brand-70);
+	--ttk-gradient: linear-gradient(
+		135deg,
+		var(--wa-color-blue-50) 0%,
+		var(--wa-color-indigo-50) 55%,
+		var(--wa-color-purple-50) 100%
+	);
+	--ttk-live: var(--wa-color-success-60);
+	--ttk-locked: var(--wa-color-warning-60);
+	--ttk-danger: var(--wa-color-danger-60);
+	--ttk-agent: var(--wa-color-purple-60);
+	--ttk-info: var(--wa-color-brand-60);
+
+	/* Surfaces (every theme follows the kit's surface tokens; the variants adjust a few below) */
+	--ttk-canvas: var(--wa-color-surface-lowered);
+	--ttk-card: var(--wa-color-surface-raised);
+	--ttk-card-hover: color-mix(in oklab, var(--wa-color-surface-raised), var(--wa-color-text-normal) 4%);
+	--ttk-sunken: color-mix(in oklab, var(--wa-color-surface-lowered), black 12%);
+	--ttk-hairline: color-mix(in oklab, var(--wa-color-text-normal) 9%, transparent);
+	--ttk-hairline-strong: color-mix(in oklab, var(--wa-color-text-normal) 15%, transparent);
+	--ttk-row-hover: color-mix(in oklab, var(--wa-color-text-normal) 5%, transparent);
+	--ttk-selected: color-mix(in oklab, var(--ttk-brand) 15%, transparent);
+	--ttk-glass: color-mix(in oklab, var(--wa-color-surface-raised) 82%, transparent);
+	--ttk-glass-strong: color-mix(in oklab, var(--wa-color-surface-raised) 94%, transparent);
+	--ttk-glass-border: color-mix(in oklab, var(--wa-color-text-normal) 10%, transparent);
+	--ttk-ambient-1: color-mix(in oklab, var(--wa-color-blue-50) 14%, transparent);
+	--ttk-ambient-2: color-mix(in oklab, var(--wa-color-purple-50) 10%, transparent);
+	--ttk-shadow: 0 1px 0 color-mix(in oklab, white 4%, transparent) inset,
+		0 8px 22px -14px color-mix(in oklab, black 70%, transparent);
+	--ttk-shadow-pop: 0 20px 48px -16px color-mix(in oklab, black 72%, transparent),
+		0 0 0 1px color-mix(in oklab, black 30%, transparent);
+	--ttk-glow: 0 4px 16px -6px color-mix(in oklab, var(--wa-color-brand-50) 60%, transparent);
+
+	/* The theme picker's swatches (D-152): each theme's canvas, card and brand, drawn the same in every theme. */
+	--ttk-swatch-dark-canvas: var(--wa-color-gray-05);
+	--ttk-swatch-dark-card: var(--wa-color-gray-20);
+	--ttk-swatch-dark-brand: var(--wa-color-blue-60);
+	--ttk-swatch-shade-canvas: #1d2129;
+	--ttk-swatch-shade-card: #3a414c;
+	--ttk-swatch-shade-brand: var(--wa-color-cyan-60);
+	--ttk-swatch-light-canvas: var(--wa-color-gray-90);
+	--ttk-swatch-light-card: white;
+	--ttk-swatch-light-brand: var(--wa-color-blue-50);
+	--ttk-swatch-dawn-canvas: #efe4d6;
+	--ttk-swatch-dawn-card: #fffdf9;
+	--ttk-swatch-dawn-brand: var(--wa-color-pink-50);
+
+	/* Pre-kit aliases, for carried-over screen rules */
+	--bg: var(--ttk-canvas);
+	--bg-2: var(--ttk-sunken);
+	--surface: var(--ttk-card);
+	--surface-2: var(--ttk-card-hover);
+	--surface-3: color-mix(in oklab, var(--wa-color-surface-raised), var(--wa-color-text-normal) 9%);
+	--border: var(--ttk-hairline);
+	--border-2: var(--ttk-hairline-strong);
+	--text: var(--wa-color-text-normal);
+	--text-dim: var(--wa-color-text-quiet);
+	--text-faint: color-mix(in oklab, var(--wa-color-text-quiet) 70%, transparent);
+	--accent: var(--ttk-brand);
+	--accent-2: var(--ttk-brand-2);
+	--accent-soft: color-mix(in oklab, var(--ttk-brand) 16%, transparent);
+	--control: var(--ttk-live);
+	--locked: var(--ttk-locked);
+	--danger: var(--ttk-danger);
+	--font: var(--wa-font-family-body);
+	--mono: var(--wa-font-family-code);
+	--radius: var(--ttk-radius);
+	--radius-sm: var(--ttk-radius-s);
+	--gap: 8px;
+	--ease: var(--ttk-ease);
+	--shadow: var(--ttk-shadow-pop);
+}
+
+/* --- Light and Dawn: the kit's light scheme --- */
+
+.wa-light {
+	--ttk-sunken: color-mix(in oklab, var(--wa-color-surface-lowered), var(--wa-color-neutral-90) 40%);
+	--ttk-hairline: color-mix(in oklab, var(--wa-color-text-normal) 10%, transparent);
+	--ttk-hairline-strong: color-mix(in oklab, var(--wa-color-text-normal) 17%, transparent);
+	--ttk-row-hover: color-mix(in oklab, var(--wa-color-text-normal) 4.5%, transparent);
+	--ttk-selected: color-mix(in oklab, var(--ttk-brand) 11%, transparent);
+	--ttk-glass: color-mix(in oklab, var(--wa-color-surface-raised) 84%, transparent);
+	--ttk-glass-strong: color-mix(in oklab, var(--wa-color-surface-raised) 95%, transparent);
+	--ttk-glass-border: color-mix(in oklab, var(--wa-color-text-normal) 10%, transparent);
+	--ttk-ambient-1: color-mix(in oklab, var(--wa-color-blue-50) 8%, transparent);
+	--ttk-ambient-2: color-mix(in oklab, var(--wa-color-purple-50) 6%, transparent);
+	--ttk-shadow: 0 1px 2px color-mix(in oklab, var(--wa-color-neutral-10) 7%, transparent),
+		0 8px 20px -14px color-mix(in oklab, var(--wa-color-neutral-10) 28%, transparent);
+	--ttk-shadow-pop: 0 20px 48px -18px color-mix(in oklab, var(--wa-color-neutral-10) 32%, transparent),
+		0 0 0 1px color-mix(in oklab, var(--wa-color-neutral-10) 8%, transparent);
+	--ttk-brand: var(--wa-color-brand-50);
+	--ttk-brand-2: var(--wa-color-purple-50);
+	--ttk-brand-ink: var(--wa-color-brand-40);
+	--ttk-live: var(--wa-color-success-50);
+	--ttk-locked: var(--wa-color-warning-50);
+	--ttk-danger: var(--wa-color-danger-50);
+	--ttk-agent: var(--wa-color-purple-50);
+	--ttk-info: var(--wa-color-brand-50);
+}
+
+/* --- Shade: a dimmed slate on the dark scheme --- */
+
+:root[data-theme='shade'] {
+	--wa-color-neutral-95: #eef0f4;
+	--wa-color-neutral-90: #dde1e8;
+	--wa-color-neutral-80: #c1c7d1;
+	--wa-color-neutral-70: #a5adba;
+	--wa-color-neutral-60: #8c95a3;
+	--wa-color-neutral-50: #6f7887;
+	--wa-color-neutral-40: #586170;
+	--wa-color-neutral-30: #474f5c;
+	--wa-color-neutral-20: #3a414c;
+	--wa-color-neutral-10: #2b313b;
+	--wa-color-neutral-05: #232831;
+	--wa-color-surface-lowered: #1d2129;
+	--ttk-sunken: color-mix(in oklab, var(--wa-color-surface-lowered), black 14%);
+	--ttk-hairline: color-mix(in oklab, var(--wa-color-text-normal) 10%, transparent);
+	--ttk-ambient-1: color-mix(in oklab, var(--wa-color-cyan-50) 8%, transparent);
+	--ttk-ambient-2: color-mix(in oklab, var(--wa-color-indigo-50) 8%, transparent);
+	--ttk-brand: var(--wa-color-brand-70);
+	--ttk-brand-ink: var(--wa-color-brand-80);
+	--ttk-gradient: linear-gradient(
+		135deg,
+		var(--wa-color-blue-50) 0%,
+		var(--wa-color-cyan-50) 100%
+	);
+	--ttk-glow: 0 4px 14px -6px color-mix(in oklab, var(--wa-color-cyan-50) 45%, transparent);
+	--ttk-shadow: 0 1px 0 color-mix(in oklab, white 5%, transparent) inset,
+		0 8px 20px -14px color-mix(in oklab, black 60%, transparent);
+}
+
+/* --- Dawn: warm paper and an iris → rose → amber brand on the light scheme --- */
+
+:root[data-theme='dawn'] {
+	--wa-color-neutral-95: #f8f1e7;
+	--wa-color-neutral-90: #efe4d6;
+	--wa-color-neutral-80: #dccdbb;
+	--wa-color-neutral-70: #c3b19e;
+	--wa-color-neutral-60: #a49181;
+	--wa-color-neutral-50: #857467;
+	--wa-color-neutral-40: #685a50;
+	--wa-color-neutral-30: #54473f;
+	--wa-color-neutral-20: #40352e;
+	--wa-color-neutral-10: #2c241f;
+	--wa-color-neutral-05: #1e1814;
+	--wa-color-brand-95: var(--wa-color-purple-95);
+	--wa-color-brand-90: var(--wa-color-purple-90);
+	--wa-color-brand-80: var(--wa-color-purple-80);
+	--wa-color-brand-70: var(--wa-color-purple-70);
+	--wa-color-brand-60: var(--wa-color-purple-60);
+	--wa-color-brand-50: var(--wa-color-purple-50);
+	--wa-color-brand-40: var(--wa-color-purple-40);
+	--wa-color-brand-30: var(--wa-color-purple-30);
+	--wa-color-brand-20: var(--wa-color-purple-20);
+	--wa-color-brand-10: var(--wa-color-purple-10);
+	--wa-color-brand-05: var(--wa-color-purple-05);
+	--wa-color-surface-raised: #fffdf9;
+	--wa-color-surface-default: #fffaf3;
+	--wa-color-surface-lowered: #f5ece0;
+	--wa-color-surface-border: var(--wa-color-neutral-90);
+	--ttk-brand-2: var(--wa-color-pink-50);
+	--ttk-gradient: linear-gradient(
+		135deg,
+		var(--wa-color-purple-50) 0%,
+		var(--wa-color-pink-50) 55%,
+		var(--wa-color-orange-50) 100%
+	);
+	--ttk-glow: 0 4px 16px -6px color-mix(in oklab, var(--wa-color-pink-50) 45%, transparent);
+	--ttk-ambient-1: color-mix(in oklab, var(--wa-color-orange-60) 12%, transparent);
+	--ttk-ambient-2: color-mix(in oklab, var(--wa-color-pink-60) 9%, transparent);
+	--ttk-agent: var(--wa-color-pink-50);
+}

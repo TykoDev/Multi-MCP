@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Shadow Root</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>Open shadow root</h1>
+<button id="light-button" type="button">Light DOM button</button>
+<div id="open-host-a"></div>
+<div id="open-host-b"></div>
+<p>Trailing light DOM text.</p>
+</main>
+<script>
+(function () {
+  var a = document.getElementById('open-host-a');
+  var ra = a.attachShadow({ mode: 'open' });
+  ra.innerHTML = '<style>:host{display:block;padding:6px;border:1px solid #08a}</style>' +
+    '<p>Inside open shadow A</p>' +
+    '<button id="shadow-a-button" type="button">Shadow A button</button>' +
+    '<input id="shadow-a-input" type="text" name="shadowafield" placeholder="shadow A field">';
+
+  var b = document.getElementById('open-host-b');
+  var rb = b.attachShadow({ mode: 'open' });
+  rb.innerHTML = '<style>:host{display:block;padding:6px;border:1px solid #0a8}</style>' +
+    '<p>Inside open shadow B (nested host below)</p>' +
+    '<div id="open-host-nested"></div>';
+  var nested = rb.getElementById('open-host-nested');
+  var rn = nested.attachShadow({ mode: 'open' });
+  rn.innerHTML = '<button id="shadow-nested-button" type="button">Nested shadow button</button>' +
+    '<a id="shadow-nested-link" href="#deep" title="Nested shadow link">deep link</a>';
+})();
+</script>
+</body>
+</html>

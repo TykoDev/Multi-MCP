@@ -1,0 +1,7260 @@
+{
+  "normalizedIdCount": 1,
+  "page": "text_nodes_and_links.html",
+  "payloads": {
+    "Accessibility.getFullAXTree": {
+      "nodes": [
+        {
+          "backendDOMNodeId": 1,
+          "childIds": [
+            "3"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 144
+          },
+          "frameId": "<ID:1>",
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "aria-label",
+                "superseded": true,
+                "type": "attribute"
+              },
+              {
+                "nativeSource": "title",
+                "type": "relatedElement",
+                "value": {
+                  "type": "computedString",
+                  "value": "Text Nodes and Links"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Text Nodes and Links"
+          },
+          "nodeId": "1",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "http://127.0.0.1:38111/text_nodes_and_links.html"
+              }
+            }
+          ],
+          "role": {
+            "type": "internalRole",
+            "value": "RootWebArea"
+          }
+        },
+        {
+          "backendDOMNodeId": 3,
+          "childIds": [
+            "15"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "uninteresting",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "3",
+          "parentId": "1",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 15,
+          "childIds": [
+            "17"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "uninteresting",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "15",
+          "parentId": "3",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 17,
+          "childIds": [
+            "19",
+            "22",
+            "25",
+            "28",
+            "31",
+            "34",
+            "37",
+            "40",
+            "55",
+            "96",
+            "99"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 118
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "17",
+          "parentId": "15",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "main"
+          }
+        },
+        {
+          "backendDOMNodeId": 19,
+          "childIds": [
+            "20"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 96
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Text node and link rendering"
+                }
+              },
+              {
+                "attribute": "title",
+                "superseded": true,
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": "Text node and link rendering"
+          },
+          "nodeId": "19",
+          "parentId": "17",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "heading"
+          }
+        },
+        {
+          "backendDOMNodeId": 22,
+          "childIds": [
+            "23"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "22",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 25,
+          "childIds": [
+            "26"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "25",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 28,
+          "childIds": [
+            "29"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "28",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 31,
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "uninteresting",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "31",
+          "parentId": "17",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 34,
+          "childIds": [
+            "35"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "34",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 37,
+          "childIds": [
+            "38"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "37",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 40,
+          "childIds": [
+            "41",
+            "42",
+            "44",
+            "45",
+            "47"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "40",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 55,
+          "childIds": [
+            "57",
+            "62",
+            "67",
+            "76",
+            "81",
+            "85",
+            "90"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 111
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "55",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "list"
+          }
+        },
+        {
+          "backendDOMNodeId": 96,
+          "childIds": [
+            "97"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 133
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "96",
+          "parentId": "17",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "paragraph"
+          }
+        },
+        {
+          "backendDOMNodeId": 99,
+          "childIds": [
+            "100"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 9
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "nativeSource": "label",
+                "type": "relatedElement"
+              },
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Tail button"
+                }
+              },
+              {
+                "attribute": "title",
+                "superseded": true,
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": "Tail button"
+          },
+          "nodeId": "99",
+          "parentId": "17",
+          "properties": [
+            {
+              "name": "invalid",
+              "value": {
+                "type": "token",
+                "value": "false"
+              }
+            },
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "button"
+          }
+        },
+        {
+          "backendDOMNodeId": 20,
+          "childIds": [
+            "-1000000002"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Text node and link rendering"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Text node and link rendering"
+          },
+          "nodeId": "20",
+          "parentId": "19",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 23,
+          "childIds": [
+            "-1000000003"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Leading and trailing whitespace around this sentence."
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Leading and trailing whitespace around this sentence."
+          },
+          "nodeId": "23",
+          "parentId": "22",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 26,
+          "childIds": [
+            "-1000000004"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "a"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "a"
+          },
+          "nodeId": "26",
+          "parentId": "25",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 29,
+          "childIds": [
+            "-1000000005"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "ab"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "ab"
+          },
+          "nodeId": "29",
+          "parentId": "28",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 35,
+          "childIds": [
+            "-1000000006"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": " "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": " "
+          },
+          "nodeId": "35",
+          "parentId": "34",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 38,
+          "childIds": [
+            "-1000000007"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Multi line text node with embedded newlines."
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Multi line text node with embedded newlines."
+          },
+          "nodeId": "38",
+          "parentId": "37",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 41,
+          "childIds": [
+            "-1000000008"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Text with "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Text with "
+          },
+          "nodeId": "41",
+          "parentId": "40",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 42,
+          "childIds": [
+            "43"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 160
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "42",
+          "parentId": "40",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "strong"
+          }
+        },
+        {
+          "backendDOMNodeId": 44,
+          "childIds": [
+            "-1000000010"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": " and "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": " and "
+          },
+          "nodeId": "44",
+          "parentId": "40",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 45,
+          "childIds": [
+            "46"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 81
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "45",
+          "parentId": "40",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "emphasis"
+          }
+        },
+        {
+          "backendDOMNodeId": 47,
+          "childIds": [
+            "-1000000012"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": " inline children."
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": " inline children."
+          },
+          "nodeId": "47",
+          "parentId": "40",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 57,
+          "childIds": [
+            "58",
+            "59"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "57",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 62,
+          "childIds": [
+            "63",
+            "64"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "62",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 67,
+          "childIds": [
+            "68",
+            "69"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "67",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 76,
+          "childIds": [
+            "77",
+            "78"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "76",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 81,
+          "childIds": [
+            "82",
+            "83"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "81",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 85,
+          "childIds": [
+            "86",
+            "87"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "85",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 90,
+          "childIds": [
+            "91",
+            "92"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 115
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "90",
+          "parentId": "55",
+          "properties": [
+            {
+              "name": "level",
+              "value": {
+                "type": "integer",
+                "value": 1
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "listitem"
+          }
+        },
+        {
+          "backendDOMNodeId": 97,
+          "childIds": [
+            "-1000000028"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Trailing paragraph after the list."
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Trailing paragraph after the list."
+          },
+          "nodeId": "97",
+          "parentId": "96",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 100,
+          "childIds": [
+            "-1000000029"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Tail button"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Tail button"
+          },
+          "nodeId": "100",
+          "parentId": "99",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Text node and link rendering"
+          },
+          "nodeId": "-1000000002",
+          "parentId": "20",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Leading and trailing whitespace around this sentence."
+          },
+          "nodeId": "-1000000003",
+          "parentId": "23",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "a"
+          },
+          "nodeId": "-1000000004",
+          "parentId": "26",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "ab"
+          },
+          "nodeId": "-1000000005",
+          "parentId": "29",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": " "
+          },
+          "nodeId": "-1000000006",
+          "parentId": "35",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Multi line text node with embedded newlines."
+          },
+          "nodeId": "-1000000007",
+          "parentId": "38",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Text with "
+          },
+          "nodeId": "-1000000008",
+          "parentId": "41",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "backendDOMNodeId": 43,
+          "childIds": [
+            "-1000000009"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "nested strong"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "nested strong"
+          },
+          "nodeId": "43",
+          "parentId": "42",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": " and "
+          },
+          "nodeId": "-1000000010",
+          "parentId": "44",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "backendDOMNodeId": 46,
+          "childIds": [
+            "-1000000011"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "nested em"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "nested em"
+          },
+          "nodeId": "46",
+          "parentId": "45",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": " inline children."
+          },
+          "nodeId": "-1000000012",
+          "parentId": "47",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "backendDOMNodeId": 58,
+          "childIds": [
+            "-1000000013"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "58",
+          "parentId": "57",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 59,
+          "childIds": [
+            "60"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 110
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "First link"
+                }
+              },
+              {
+                "attribute": "title",
+                "superseded": true,
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": "First link"
+          },
+          "nodeId": "59",
+          "parentId": "57",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "http://127.0.0.1:38111/text_nodes_and_links.html#one"
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "link"
+          }
+        },
+        {
+          "backendDOMNodeId": 63,
+          "childIds": [
+            "-1000000015"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "63",
+          "parentId": "62",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 64,
+          "childIds": [
+            "65"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 110
+          },
+          "description": {
+            "type": "computedString",
+            "value": "Second link title"
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Second link"
+                }
+              },
+              {
+                "attribute": "title",
+                "attributeValue": {
+                  "type": "string",
+                  "value": "Second link title"
+                },
+                "superseded": true,
+                "type": "attribute",
+                "value": {
+                  "type": "computedString",
+                  "value": "Second link title"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Second link"
+          },
+          "nodeId": "64",
+          "parentId": "62",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "http://127.0.0.1:38111/text_nodes_and_links.html#two"
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "link"
+          }
+        },
+        {
+          "backendDOMNodeId": 68,
+          "childIds": [
+            "-1000000017"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "68",
+          "parentId": "67",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 69,
+          "childIds": [
+            "71",
+            "72",
+            "74"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 110
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "attributeValue": {
+                  "type": "string",
+                  "value": "Third link aria name"
+                },
+                "type": "attribute",
+                "value": {
+                  "type": "computedString",
+                  "value": "Third link aria name"
+                }
+              },
+              {
+                "superseded": true,
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Third link"
+                }
+              },
+              {
+                "attribute": "title",
+                "superseded": true,
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": "Third link aria name"
+          },
+          "nodeId": "69",
+          "parentId": "67",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "http://127.0.0.1:38111/text_nodes_and_links.html#three"
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "link"
+          }
+        },
+        {
+          "backendDOMNodeId": 77,
+          "childIds": [
+            "-1000000021"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "77",
+          "parentId": "76",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 78,
+          "childIds": [
+            "79"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 88
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "78",
+          "parentId": "76",
+          "properties": [],
+          "role": {
+            "type": "role",
+            "value": "generic"
+          }
+        },
+        {
+          "backendDOMNodeId": 82,
+          "childIds": [
+            "-1000000023"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "82",
+          "parentId": "81",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 83,
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 110
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "type": "contents"
+              },
+              {
+                "attribute": "title",
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": ""
+          },
+          "nodeId": "83",
+          "parentId": "81",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "http://127.0.0.1:38111/text_nodes_and_links.html#five"
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "link"
+          }
+        },
+        {
+          "backendDOMNodeId": 86,
+          "childIds": [
+            "-1000000024"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "86",
+          "parentId": "85",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 87,
+          "childIds": [
+            "88"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 110
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Mail link"
+                }
+              },
+              {
+                "attribute": "title",
+                "superseded": true,
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": "Mail link"
+          },
+          "nodeId": "87",
+          "parentId": "85",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "mailto:someone@example.invalid"
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "link"
+          }
+        },
+        {
+          "backendDOMNodeId": 91,
+          "childIds": [
+            "-1000000026"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 116
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "• "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "• "
+          },
+          "nodeId": "91",
+          "parentId": "90",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "ListMarker"
+          }
+        },
+        {
+          "backendDOMNodeId": 92,
+          "childIds": [
+            "93"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 110
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "attribute": "aria-labelledby",
+                "type": "relatedElement"
+              },
+              {
+                "attribute": "aria-label",
+                "type": "attribute"
+              },
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "New tab link"
+                }
+              },
+              {
+                "attribute": "title",
+                "superseded": true,
+                "type": "attribute"
+              }
+            ],
+            "type": "computedString",
+            "value": "New tab link"
+          },
+          "nodeId": "92",
+          "parentId": "90",
+          "properties": [
+            {
+              "name": "focusable",
+              "value": {
+                "type": "booleanOrUndefined",
+                "value": true
+              }
+            },
+            {
+              "name": "url",
+              "value": {
+                "type": "string",
+                "value": "http://127.0.0.1:38111/text_nodes_and_links.html#seven"
+              }
+            }
+          ],
+          "role": {
+            "type": "role",
+            "value": "link"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Trailing paragraph after the list."
+          },
+          "nodeId": "-1000000028",
+          "parentId": "97",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Tail button"
+          },
+          "nodeId": "-1000000029",
+          "parentId": "100",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "nested strong"
+          },
+          "nodeId": "-1000000009",
+          "parentId": "43",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "nested em"
+          },
+          "nodeId": "-1000000011",
+          "parentId": "46",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000013",
+          "parentId": "58",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 60,
+          "childIds": [
+            "-1000000014"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "First link"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "First link"
+          },
+          "nodeId": "60",
+          "parentId": "59",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000015",
+          "parentId": "63",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 65,
+          "childIds": [
+            "-1000000016"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Second link"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Second link"
+          },
+          "nodeId": "65",
+          "parentId": "64",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000017",
+          "parentId": "68",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 71,
+          "childIds": [
+            "-1000000018"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Third"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Third"
+          },
+          "nodeId": "71",
+          "parentId": "69",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 72,
+          "childIds": [
+            "-1000000019"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": " "
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": " "
+          },
+          "nodeId": "72",
+          "parentId": "69",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "backendDOMNodeId": 74,
+          "childIds": [
+            "-1000000020"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "link"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "link"
+          },
+          "nodeId": "74",
+          "parentId": "69",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000021",
+          "parentId": "77",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 79,
+          "childIds": [
+            "-1000000022"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Anchor without href"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Anchor without href"
+          },
+          "nodeId": "79",
+          "parentId": "78",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000023",
+          "parentId": "82",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000024",
+          "parentId": "86",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 88,
+          "childIds": [
+            "-1000000025"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "Mail link"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "Mail link"
+          },
+          "nodeId": "88",
+          "parentId": "87",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 0
+          },
+          "ignored": true,
+          "ignoredReasons": [
+            {
+              "name": "presentationalRole",
+              "value": {
+                "type": "boolean",
+                "value": true
+              }
+            }
+          ],
+          "nodeId": "-1000000026",
+          "parentId": "91",
+          "role": {
+            "type": "role",
+            "value": "none"
+          }
+        },
+        {
+          "backendDOMNodeId": 93,
+          "childIds": [
+            "-1000000027"
+          ],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 158
+          },
+          "ignored": false,
+          "name": {
+            "sources": [
+              {
+                "type": "contents",
+                "value": {
+                  "type": "computedString",
+                  "value": "New tab link"
+                }
+              }
+            ],
+            "type": "computedString",
+            "value": "New tab link"
+          },
+          "nodeId": "93",
+          "parentId": "92",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "StaticText"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "First link"
+          },
+          "nodeId": "-1000000014",
+          "parentId": "60",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Second link"
+          },
+          "nodeId": "-1000000016",
+          "parentId": "65",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Third"
+          },
+          "nodeId": "-1000000018",
+          "parentId": "71",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": " "
+          },
+          "nodeId": "-1000000019",
+          "parentId": "72",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "link"
+          },
+          "nodeId": "-1000000020",
+          "parentId": "74",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Anchor without href"
+          },
+          "nodeId": "-1000000022",
+          "parentId": "79",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "Mail link"
+          },
+          "nodeId": "-1000000025",
+          "parentId": "88",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        },
+        {
+          "childIds": [],
+          "chromeRole": {
+            "type": "internalRole",
+            "value": 101
+          },
+          "ignored": false,
+          "name": {
+            "type": "computedString",
+            "value": "New tab link"
+          },
+          "nodeId": "-1000000027",
+          "parentId": "93",
+          "properties": [],
+          "role": {
+            "type": "internalRole",
+            "value": "InlineTextBox"
+          }
+        }
+      ]
+    },
+    "DOM.getDocument": {
+      "root": {
+        "backendNodeId": 1,
+        "baseURL": "http://127.0.0.1:38111/text_nodes_and_links.html",
+        "childNodeCount": 2,
+        "children": [
+          {
+            "backendNodeId": 2,
+            "localName": "",
+            "nodeId": 73,
+            "nodeName": "html",
+            "nodeType": 10,
+            "nodeValue": "",
+            "parentId": 72,
+            "publicId": "",
+            "systemId": ""
+          },
+          {
+            "attributes": [
+              "lang",
+              "en"
+            ],
+            "backendNodeId": 3,
+            "childNodeCount": 2,
+            "children": [
+              {
+                "attributes": [],
+                "backendNodeId": 4,
+                "childNodeCount": 3,
+                "children": [
+                  {
+                    "attributes": [
+                      "charset",
+                      "utf-8"
+                    ],
+                    "backendNodeId": 6,
+                    "childNodeCount": 0,
+                    "children": [],
+                    "localName": "meta",
+                    "nodeId": 76,
+                    "nodeName": "META",
+                    "nodeType": 1,
+                    "nodeValue": "",
+                    "parentId": 75
+                  },
+                  {
+                    "attributes": [],
+                    "backendNodeId": 8,
+                    "childNodeCount": 1,
+                    "children": [
+                      {
+                        "backendNodeId": 9,
+                        "localName": "",
+                        "nodeId": 78,
+                        "nodeName": "#text",
+                        "nodeType": 3,
+                        "nodeValue": "Text Nodes and Links",
+                        "parentId": 77
+                      }
+                    ],
+                    "localName": "title",
+                    "nodeId": 77,
+                    "nodeName": "TITLE",
+                    "nodeType": 1,
+                    "nodeValue": "",
+                    "parentId": 75
+                  },
+                  {
+                    "attributes": [],
+                    "backendNodeId": 11,
+                    "childNodeCount": 1,
+                    "children": [
+                      {
+                        "backendNodeId": 12,
+                        "localName": "",
+                        "nodeId": 80,
+                        "nodeName": "#text",
+                        "nodeType": 3,
+                        "nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n.invisible-text{display:none}\n",
+                        "parentId": 79
+                      }
+                    ],
+                    "localName": "style",
+                    "nodeId": 79,
+                    "nodeName": "STYLE",
+                    "nodeType": 1,
+                    "nodeValue": "",
+                    "parentId": 75
+                  }
+                ],
+                "localName": "head",
+                "nodeId": 75,
+                "nodeName": "HEAD",
+                "nodeType": 1,
+                "nodeValue": "",
+                "parentId": 74
+              },
+              {
+                "attributes": [],
+                "backendNodeId": 15,
+                "childNodeCount": 1,
+                "children": [
+                  {
+                    "attributes": [],
+                    "backendNodeId": 17,
+                    "childNodeCount": 13,
+                    "children": [
+                      {
+                        "attributes": [],
+                        "backendNodeId": 19,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 20,
+                            "localName": "",
+                            "nodeId": 84,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Text node and link rendering",
+                            "parentId": 83
+                          }
+                        ],
+                        "localName": "h1",
+                        "nodeId": 83,
+                        "nodeName": "H1",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 22,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 23,
+                            "localName": "",
+                            "nodeId": 86,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "   Leading and trailing whitespace around this sentence.   ",
+                            "parentId": 85
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 85,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 25,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 26,
+                            "localName": "",
+                            "nodeId": 88,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "a",
+                            "parentId": 87
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 87,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 28,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 29,
+                            "localName": "",
+                            "nodeId": 90,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "ab",
+                            "parentId": 89
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 89,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 31,
+                        "childNodeCount": 0,
+                        "children": [],
+                        "localName": "p",
+                        "nodeId": 91,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 34,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 35,
+                            "localName": "",
+                            "nodeId": 93,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": " ",
+                            "parentId": 92
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 92,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 37,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 38,
+                            "localName": "",
+                            "nodeId": 95,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Multi\nline\ntext node with embedded newlines.",
+                            "parentId": 94
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 94,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 40,
+                        "childNodeCount": 5,
+                        "children": [
+                          {
+                            "backendNodeId": 41,
+                            "localName": "",
+                            "nodeId": 97,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Text with ",
+                            "parentId": 96
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 42,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "backendNodeId": 43,
+                                "localName": "",
+                                "nodeId": 99,
+                                "nodeName": "#text",
+                                "nodeType": 3,
+                                "nodeValue": "nested strong",
+                                "parentId": 98
+                              }
+                            ],
+                            "localName": "strong",
+                            "nodeId": 98,
+                            "nodeName": "STRONG",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 96
+                          },
+                          {
+                            "backendNodeId": 44,
+                            "localName": "",
+                            "nodeId": 100,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": " and ",
+                            "parentId": 96
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 45,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "backendNodeId": 46,
+                                "localName": "",
+                                "nodeId": 102,
+                                "nodeName": "#text",
+                                "nodeType": 3,
+                                "nodeValue": "nested em",
+                                "parentId": 101
+                              }
+                            ],
+                            "localName": "em",
+                            "nodeId": 101,
+                            "nodeName": "EM",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 96
+                          },
+                          {
+                            "backendNodeId": 47,
+                            "localName": "",
+                            "nodeId": 103,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": " inline children.",
+                            "parentId": 96
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 96,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [
+                          "class",
+                          "invisible-text"
+                        ],
+                        "backendNodeId": 49,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 50,
+                            "localName": "",
+                            "nodeId": 105,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Text inside a display none container.",
+                            "parentId": 104
+                          }
+                        ],
+                        "localName": "div",
+                        "nodeId": 104,
+                        "nodeName": "DIV",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [
+                          "style",
+                          "visibility:hidden"
+                        ],
+                        "backendNodeId": 52,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 53,
+                            "localName": "",
+                            "nodeId": 107,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Text inside a visibility hidden span.",
+                            "parentId": 106
+                          }
+                        ],
+                        "localName": "span",
+                        "nodeId": 106,
+                        "nodeName": "SPAN",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 55,
+                        "childNodeCount": 7,
+                        "children": [
+                          {
+                            "attributes": [],
+                            "backendNodeId": 57,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "href",
+                                  "#one",
+                                  "id",
+                                  "l-one"
+                                ],
+                                "backendNodeId": 59,
+                                "childNodeCount": 1,
+                                "children": [
+                                  {
+                                    "backendNodeId": 60,
+                                    "localName": "",
+                                    "nodeId": 112,
+                                    "nodeName": "#text",
+                                    "nodeType": 3,
+                                    "nodeValue": "First link",
+                                    "parentId": 111
+                                  }
+                                ],
+                                "localName": "a",
+                                "nodeId": 111,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 109
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 109,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 58,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 110,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 62,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "href",
+                                  "#two",
+                                  "id",
+                                  "l-two",
+                                  "title",
+                                  "Second link title"
+                                ],
+                                "backendNodeId": 64,
+                                "childNodeCount": 1,
+                                "children": [
+                                  {
+                                    "backendNodeId": 65,
+                                    "localName": "",
+                                    "nodeId": 116,
+                                    "nodeName": "#text",
+                                    "nodeType": 3,
+                                    "nodeValue": "Second link",
+                                    "parentId": 115
+                                  }
+                                ],
+                                "localName": "a",
+                                "nodeId": 115,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 113
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 113,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 63,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 114,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 67,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "href",
+                                  "#three",
+                                  "id",
+                                  "l-three",
+                                  "aria-label",
+                                  "Third link aria name"
+                                ],
+                                "backendNodeId": 69,
+                                "childNodeCount": 2,
+                                "children": [
+                                  {
+                                    "attributes": [],
+                                    "backendNodeId": 70,
+                                    "childNodeCount": 1,
+                                    "children": [
+                                      {
+                                        "backendNodeId": 71,
+                                        "localName": "",
+                                        "nodeId": 121,
+                                        "nodeName": "#text",
+                                        "nodeType": 3,
+                                        "nodeValue": "Third",
+                                        "parentId": 120
+                                      }
+                                    ],
+                                    "localName": "span",
+                                    "nodeId": 120,
+                                    "nodeName": "SPAN",
+                                    "nodeType": 1,
+                                    "nodeValue": "",
+                                    "parentId": 119
+                                  },
+                                  {
+                                    "attributes": [],
+                                    "backendNodeId": 73,
+                                    "childNodeCount": 1,
+                                    "children": [
+                                      {
+                                        "backendNodeId": 74,
+                                        "localName": "",
+                                        "nodeId": 123,
+                                        "nodeName": "#text",
+                                        "nodeType": 3,
+                                        "nodeValue": "link",
+                                        "parentId": 122
+                                      }
+                                    ],
+                                    "localName": "span",
+                                    "nodeId": 122,
+                                    "nodeName": "SPAN",
+                                    "nodeType": 1,
+                                    "nodeValue": "",
+                                    "parentId": 119
+                                  }
+                                ],
+                                "localName": "a",
+                                "nodeId": 119,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 117
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 117,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 68,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 118,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 76,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "id",
+                                  "l-nohref"
+                                ],
+                                "backendNodeId": 78,
+                                "childNodeCount": 1,
+                                "children": [
+                                  {
+                                    "backendNodeId": 79,
+                                    "localName": "",
+                                    "nodeId": 127,
+                                    "nodeName": "#text",
+                                    "nodeType": 3,
+                                    "nodeValue": "Anchor without href",
+                                    "parentId": 126
+                                  }
+                                ],
+                                "localName": "a",
+                                "nodeId": 126,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 124
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 124,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 77,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 125,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 81,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "href",
+                                  "#five",
+                                  "id",
+                                  "l-empty"
+                                ],
+                                "backendNodeId": 83,
+                                "childNodeCount": 0,
+                                "children": [],
+                                "localName": "a",
+                                "nodeId": 130,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 128
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 128,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 82,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 129,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 85,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "href",
+                                  "mailto:someone@example.invalid",
+                                  "id",
+                                  "l-mailto"
+                                ],
+                                "backendNodeId": 87,
+                                "childNodeCount": 1,
+                                "children": [
+                                  {
+                                    "backendNodeId": 88,
+                                    "localName": "",
+                                    "nodeId": 134,
+                                    "nodeName": "#text",
+                                    "nodeType": 3,
+                                    "nodeValue": "Mail link",
+                                    "parentId": 133
+                                  }
+                                ],
+                                "localName": "a",
+                                "nodeId": 133,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 131
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 131,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 86,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 132,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          },
+                          {
+                            "attributes": [],
+                            "backendNodeId": 90,
+                            "childNodeCount": 1,
+                            "children": [
+                              {
+                                "attributes": [
+                                  "href",
+                                  "#seven",
+                                  "id",
+                                  "l-target",
+                                  "target",
+                                  "_blank",
+                                  "rel",
+                                  "noopener"
+                                ],
+                                "backendNodeId": 92,
+                                "childNodeCount": 1,
+                                "children": [
+                                  {
+                                    "backendNodeId": 93,
+                                    "localName": "",
+                                    "nodeId": 138,
+                                    "nodeName": "#text",
+                                    "nodeType": 3,
+                                    "nodeValue": "New tab link",
+                                    "parentId": 137
+                                  }
+                                ],
+                                "localName": "a",
+                                "nodeId": 137,
+                                "nodeName": "A",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "parentId": 135
+                              }
+                            ],
+                            "localName": "li",
+                            "nodeId": 135,
+                            "nodeName": "LI",
+                            "nodeType": 1,
+                            "nodeValue": "",
+                            "parentId": 108,
+                            "pseudoElements": [
+                              {
+                                "attributes": [],
+                                "backendNodeId": 91,
+                                "childNodeCount": 0,
+                                "localName": "::marker",
+                                "nodeId": 136,
+                                "nodeName": "::marker",
+                                "nodeType": 1,
+                                "nodeValue": "",
+                                "pseudoType": "marker"
+                              }
+                            ]
+                          }
+                        ],
+                        "localName": "ul",
+                        "nodeId": 108,
+                        "nodeName": "UL",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [],
+                        "backendNodeId": 96,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 97,
+                            "localName": "",
+                            "nodeId": 140,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Trailing paragraph after the list.",
+                            "parentId": 139
+                          }
+                        ],
+                        "localName": "p",
+                        "nodeId": 139,
+                        "nodeName": "P",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      },
+                      {
+                        "attributes": [
+                          "type",
+                          "button",
+                          "id",
+                          "tail-button"
+                        ],
+                        "backendNodeId": 99,
+                        "childNodeCount": 1,
+                        "children": [
+                          {
+                            "backendNodeId": 100,
+                            "localName": "",
+                            "nodeId": 142,
+                            "nodeName": "#text",
+                            "nodeType": 3,
+                            "nodeValue": "Tail button",
+                            "parentId": 141
+                          }
+                        ],
+                        "localName": "button",
+                        "nodeId": 141,
+                        "nodeName": "BUTTON",
+                        "nodeType": 1,
+                        "nodeValue": "",
+                        "parentId": 82
+                      }
+                    ],
+                    "localName": "main",
+                    "nodeId": 82,
+                    "nodeName": "MAIN",
+                    "nodeType": 1,
+                    "nodeValue": "",
+                    "parentId": 81
+                  }
+                ],
+                "localName": "body",
+                "nodeId": 81,
+                "nodeName": "BODY",
+                "nodeType": 1,
+                "nodeValue": "",
+                "parentId": 74
+              }
+            ],
+            "frameId": "<ID:1>",
+            "localName": "html",
+            "nodeId": 74,
+            "nodeName": "HTML",
+            "nodeType": 1,
+            "nodeValue": "",
+            "parentId": 72
+          }
+        ],
+        "compatibilityMode": "NoQuirksMode",
+        "documentURL": "http://127.0.0.1:38111/text_nodes_and_links.html",
+        "localName": "",
+        "nodeId": 72,
+        "nodeName": "#document",
+        "nodeType": 9,
+        "nodeValue": "",
+        "xmlVersion": ""
+      }
+    },
+    "DOMSnapshot.captureSnapshot": {
+      "documents": [
+        {
+          "baseURL": 0,
+          "contentHeight": 900,
+          "contentLanguage": -1,
+          "contentWidth": 1280,
+          "documentURL": 0,
+          "encodingName": 2,
+          "frameId": 3,
+          "layout": {
+            "bounds": [
+              [
+                0,
+                0,
+                1280,
+                900
+              ],
+              [
+                0,
+                0,
+                1280,
+                541.59375
+              ],
+              [
+                0,
+                0,
+                1280,
+                541.59375
+              ],
+              [
+                0,
+                0,
+                1280,
+                541.59375
+              ],
+              [
+                12,
+                30.75,
+                1256,
+                39.1875
+              ],
+              [
+                12,
+                33.75,
+                431.046875,
+                33
+              ],
+              [
+                12,
+                88.6875,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                89.6875,
+                407.96875,
+                17
+              ],
+              [
+                12,
+                122.28125,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                123.28125,
+                7.703125,
+                17
+              ],
+              [
+                12,
+                155.875,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                156.875,
+                15.40625,
+                17
+              ],
+              [
+                12,
+                189.46875,
+                1256,
+                0
+              ],
+              [
+                12,
+                189.46875,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                190.46875,
+                7.703125,
+                17
+              ],
+              [
+                12,
+                223.0625,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                224.0625,
+                338.6875,
+                17
+              ],
+              [
+                12,
+                256.65625,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                257.65625,
+                76.984375,
+                17
+              ],
+              [
+                88.984375,
+                257.65625,
+                100.078125,
+                17
+              ],
+              [
+                88.984375,
+                257.65625,
+                100.078125,
+                17
+              ],
+              [
+                189.0625,
+                257.65625,
+                38.5,
+                17
+              ],
+              [
+                227.5625,
+                257.65625,
+                69.28125,
+                17
+              ],
+              [
+                227.5625,
+                257.65625,
+                69.28125,
+                17
+              ],
+              [
+                296.84375,
+                257.65625,
+                130.859375,
+                17
+              ],
+              [
+                12,
+                291.25,
+                284.8125,
+                17
+              ],
+              [
+                12,
+                291.25,
+                284.8125,
+                17
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                12,
+                323.84375,
+                1256,
+                137.15625
+              ],
+              [
+                52,
+                323.84375,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                323.84375,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                324.84375,
+                6,
+                17
+              ],
+              [
+                52,
+                324.84375,
+                76.984375,
+                17
+              ],
+              [
+                52,
+                324.84375,
+                76.984375,
+                17
+              ],
+              [
+                52,
+                343.4375,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                343.4375,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                344.4375,
+                6,
+                17
+              ],
+              [
+                52,
+                344.4375,
+                84.671875,
+                17
+              ],
+              [
+                52,
+                344.4375,
+                84.671875,
+                17
+              ],
+              [
+                52,
+                363.03125,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                363.03125,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                364.03125,
+                6,
+                17
+              ],
+              [
+                52,
+                364.03125,
+                77,
+                17
+              ],
+              [
+                52,
+                364.03125,
+                38.5,
+                17
+              ],
+              [
+                52,
+                364.03125,
+                38.5,
+                17
+              ],
+              [
+                90.5,
+                364.03125,
+                7.703125,
+                17
+              ],
+              [
+                98.203125,
+                364.03125,
+                30.796875,
+                17
+              ],
+              [
+                98.203125,
+                364.03125,
+                30.796875,
+                17
+              ],
+              [
+                52,
+                382.625,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                382.625,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                383.625,
+                6,
+                17
+              ],
+              [
+                52,
+                383.625,
+                146.25,
+                17
+              ],
+              [
+                52,
+                383.625,
+                146.25,
+                17
+              ],
+              [
+                52,
+                402.21875,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                402.21875,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                403.21875,
+                6,
+                17
+              ],
+              [
+                52,
+                403.21875,
+                0,
+                17
+              ],
+              [
+                52,
+                421.8125,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                421.8125,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                422.8125,
+                6,
+                17
+              ],
+              [
+                52,
+                422.8125,
+                69.28125,
+                17
+              ],
+              [
+                52,
+                422.8125,
+                69.28125,
+                17
+              ],
+              [
+                52,
+                441.40625,
+                1216,
+                19.59375
+              ],
+              [
+                36,
+                441.40625,
+                6,
+                19.59375
+              ],
+              [
+                36,
+                442.40625,
+                6,
+                17
+              ],
+              [
+                52,
+                442.40625,
+                92.375,
+                17
+              ],
+              [
+                52,
+                442.40625,
+                92.375,
+                17
+              ],
+              [
+                12,
+                475,
+                1256,
+                19.59375
+              ],
+              [
+                12,
+                476,
+                261.71875,
+                17
+              ],
+              [
+                12,
+                508.59375,
+                76.78125,
+                21
+              ],
+              [
+                20,
+                511.59375,
+                60.78125,
+                15
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "clientRects": [
+              [],
+              [
+                0,
+                0,
+                1280,
+                900
+              ],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                0,
+                0,
+                1256,
+                39
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                0
+              ],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                1256,
+                137
+              ],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                2,
+                2,
+                73,
+                17
+              ],
+              [],
+              []
+            ],
+            "nodeIndex": [
+              0,
+              2,
+              14,
+              16,
+              18,
+              19,
+              21,
+              22,
+              24,
+              25,
+              27,
+              28,
+              30,
+              33,
+              34,
+              36,
+              37,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              51,
+              52,
+              53,
+              54,
+              56,
+              57,
+              57,
+              58,
+              59,
+              61,
+              62,
+              62,
+              63,
+              64,
+              66,
+              67,
+              67,
+              68,
+              69,
+              70,
+              71,
+              72,
+              73,
+              75,
+              76,
+              76,
+              77,
+              78,
+              80,
+              81,
+              81,
+              82,
+              84,
+              85,
+              85,
+              86,
+              87,
+              89,
+              90,
+              90,
+              91,
+              92,
+              95,
+              96,
+              98,
+              99,
+              100
+            ],
+            "offsetRects": [
+              [],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                12,
+                31,
+                1256,
+                39
+              ],
+              [],
+              [
+                12,
+                89,
+                1256,
+                20
+              ],
+              [],
+              [
+                12,
+                122,
+                1256,
+                20
+              ],
+              [],
+              [
+                12,
+                156,
+                1256,
+                20
+              ],
+              [],
+              [
+                12,
+                189,
+                1256,
+                0
+              ],
+              [
+                12,
+                189,
+                1256,
+                20
+              ],
+              [],
+              [
+                12,
+                223,
+                1256,
+                20
+              ],
+              [],
+              [
+                12,
+                257,
+                1256,
+                20
+              ],
+              [],
+              [
+                89,
+                258,
+                100,
+                17
+              ],
+              [],
+              [],
+              [
+                228,
+                258,
+                69,
+                17
+              ],
+              [],
+              [],
+              [
+                12,
+                291,
+                285,
+                17
+              ],
+              [],
+              [],
+              [
+                12,
+                324,
+                1256,
+                137
+              ],
+              [
+                52,
+                324,
+                1216,
+                20
+              ],
+              [
+                36,
+                324,
+                6,
+                20
+              ],
+              [
+                36,
+                324,
+                6,
+                20
+              ],
+              [
+                52,
+                325,
+                77,
+                17
+              ],
+              [],
+              [
+                52,
+                343,
+                1216,
+                20
+              ],
+              [
+                36,
+                343,
+                6,
+                20
+              ],
+              [
+                36,
+                343,
+                6,
+                20
+              ],
+              [
+                52,
+                344,
+                85,
+                17
+              ],
+              [],
+              [
+                52,
+                363,
+                1216,
+                20
+              ],
+              [
+                36,
+                363,
+                6,
+                20
+              ],
+              [
+                36,
+                363,
+                6,
+                20
+              ],
+              [
+                52,
+                364,
+                77,
+                17
+              ],
+              [
+                52,
+                364,
+                39,
+                17
+              ],
+              [],
+              [],
+              [
+                98,
+                364,
+                31,
+                17
+              ],
+              [],
+              [
+                52,
+                383,
+                1216,
+                20
+              ],
+              [
+                36,
+                383,
+                6,
+                20
+              ],
+              [
+                36,
+                383,
+                6,
+                20
+              ],
+              [
+                52,
+                384,
+                146,
+                17
+              ],
+              [],
+              [
+                52,
+                402,
+                1216,
+                20
+              ],
+              [
+                36,
+                402,
+                6,
+                20
+              ],
+              [
+                36,
+                402,
+                6,
+                20
+              ],
+              [
+                52,
+                403,
+                0,
+                17
+              ],
+              [
+                52,
+                422,
+                1216,
+                20
+              ],
+              [
+                36,
+                422,
+                6,
+                20
+              ],
+              [
+                36,
+                422,
+                6,
+                20
+              ],
+              [
+                52,
+                423,
+                69,
+                17
+              ],
+              [],
+              [
+                52,
+                441,
+                1216,
+                20
+              ],
+              [
+                36,
+                441,
+                6,
+                20
+              ],
+              [
+                36,
+                441,
+                6,
+                20
+              ],
+              [
+                52,
+                442,
+                92,
+                17
+              ],
+              [],
+              [
+                12,
+                475,
+                1256,
+                20
+              ],
+              [],
+              [
+                12,
+                509,
+                77,
+                21
+              ],
+              [],
+              []
+            ],
+            "paintOrders": [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "scrollRects": [
+              [],
+              [
+                0,
+                0,
+                1280,
+                900
+              ],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                0,
+                0,
+                1280,
+                542
+              ],
+              [
+                0,
+                0,
+                1256,
+                39
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                0
+              ],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                1256,
+                137
+              ],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1216,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                6,
+                20
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              [],
+              [
+                0,
+                0,
+                1256,
+                20
+              ],
+              [],
+              [
+                0,
+                0,
+                73,
+                17
+              ],
+              [],
+              []
+            ],
+            "stackingContexts": {
+              "index": [
+                0,
+                1
+              ]
+            },
+            "styles": [
+              [],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                14
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                14
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                52,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                52,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                57,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                39,
+                10,
+                11,
+                10,
+                10,
+                10,
+                67,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                99,
+                12,
+                13,
+                100
+              ],
+              [
+                59,
+                10,
+                11,
+                10,
+                10,
+                10,
+                99,
+                12,
+                13,
+                100
+              ],
+              [
+                9,
+                10,
+                11,
+                10,
+                10,
+                10,
+                12,
+                12,
+                13,
+                26
+              ]
+            ],
+            "text": [
+              -1,
+              -1,
+              -1,
+              -1,
+              -1,
+              28,
+              -1,
+              31,
+              -1,
+              32,
+              -1,
+              33,
+              -1,
+              -1,
+              35,
+              -1,
+              36,
+              -1,
+              37,
+              -1,
+              40,
+              41,
+              -1,
+              43,
+              44,
+              -1,
+              53,
+              29,
+              -1,
+              -1,
+              -1,
+              60,
+              -1,
+              68,
+              -1,
+              -1,
+              60,
+              -1,
+              73,
+              -1,
+              -1,
+              60,
+              -1,
+              -1,
+              78,
+              34,
+              -1,
+              79,
+              -1,
+              -1,
+              60,
+              -1,
+              81,
+              -1,
+              -1,
+              60,
+              -1,
+              -1,
+              -1,
+              60,
+              -1,
+              86,
+              -1,
+              -1,
+              60,
+              -1,
+              93,
+              -1,
+              94,
+              -1,
+              101,
+              17
+            ]
+          },
+          "nodes": {
+            "attributes": [
+              [],
+              [],
+              [
+                7,
+                8
+              ],
+              [],
+              [],
+              [
+                19,
+                20
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [
+                46,
+                47
+              ],
+              [],
+              [],
+              [
+                50,
+                51
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [
+                63,
+                64,
+                65,
+                66
+              ],
+              [],
+              [],
+              [],
+              [],
+              [
+                63,
+                69,
+                65,
+                70,
+                71,
+                72
+              ],
+              [],
+              [],
+              [],
+              [],
+              [
+                63,
+                74,
+                65,
+                75,
+                76,
+                77
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [
+                65,
+                80
+              ],
+              [],
+              [],
+              [],
+              [],
+              [
+                63,
+                82,
+                65,
+                83
+              ],
+              [],
+              [],
+              [],
+              [
+                63,
+                84,
+                65,
+                85
+              ],
+              [],
+              [],
+              [],
+              [],
+              [
+                63,
+                87,
+                65,
+                88,
+                89,
+                90,
+                91,
+                92
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [
+                96,
+                97,
+                65,
+                98
+              ],
+              [],
+              [],
+              []
+            ],
+            "backendNodeId": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              49,
+              50,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              67,
+              68,
+              69,
+              70,
+              71,
+              72,
+              73,
+              74,
+              75,
+              76,
+              77,
+              78,
+              79,
+              80,
+              81,
+              82,
+              83,
+              84,
+              85,
+              86,
+              87,
+              88,
+              89,
+              90,
+              91,
+              92,
+              93,
+              94,
+              95,
+              96,
+              97,
+              98,
+              99,
+              100,
+              101,
+              102
+            ],
+            "contentDocumentIndex": {
+              "index": [],
+              "value": []
+            },
+            "currentSourceURL": {
+              "index": [],
+              "value": []
+            },
+            "inputChecked": {
+              "index": []
+            },
+            "inputValue": {
+              "index": [],
+              "value": []
+            },
+            "isClickable": {
+              "index": [
+                58,
+                63,
+                68,
+                82,
+                86,
+                91
+              ]
+            },
+            "nodeName": [
+              4,
+              5,
+              6,
+              15,
+              16,
+              18,
+              16,
+              21,
+              16,
+              16,
+              22,
+              16,
+              16,
+              16,
+              24,
+              16,
+              25,
+              16,
+              27,
+              16,
+              16,
+              30,
+              16,
+              16,
+              30,
+              16,
+              16,
+              30,
+              16,
+              16,
+              30,
+              16,
+              16,
+              30,
+              16,
+              16,
+              30,
+              16,
+              16,
+              30,
+              16,
+              38,
+              16,
+              16,
+              42,
+              16,
+              16,
+              16,
+              45,
+              16,
+              16,
+              49,
+              16,
+              16,
+              54,
+              16,
+              56,
+              58,
+              62,
+              16,
+              16,
+              56,
+              58,
+              62,
+              16,
+              16,
+              56,
+              58,
+              62,
+              49,
+              16,
+              16,
+              49,
+              16,
+              16,
+              56,
+              58,
+              62,
+              16,
+              16,
+              56,
+              58,
+              62,
+              16,
+              56,
+              58,
+              62,
+              16,
+              16,
+              56,
+              58,
+              62,
+              16,
+              16,
+              16,
+              30,
+              16,
+              16,
+              95,
+              16,
+              16,
+              16
+            ],
+            "nodeType": [
+              9,
+              10,
+              1,
+              1,
+              3,
+              1,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              3,
+              1,
+              3,
+              1,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              1,
+              1,
+              1,
+              3,
+              3,
+              1,
+              1,
+              1,
+              3,
+              3,
+              1,
+              1,
+              1,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              1,
+              1,
+              3,
+              3,
+              1,
+              1,
+              1,
+              3,
+              1,
+              1,
+              1,
+              3,
+              3,
+              1,
+              1,
+              1,
+              3,
+              3,
+              3,
+              1,
+              3,
+              3,
+              1,
+              3,
+              3,
+              3
+            ],
+            "nodeValue": [
+              -1,
+              -1,
+              -1,
+              -1,
+              17,
+              -1,
+              17,
+              -1,
+              1,
+              17,
+              -1,
+              23,
+              17,
+              17,
+              -1,
+              17,
+              -1,
+              17,
+              -1,
+              28,
+              29,
+              -1,
+              31,
+              17,
+              -1,
+              32,
+              17,
+              -1,
+              33,
+              17,
+              -1,
+              34,
+              17,
+              -1,
+              35,
+              17,
+              -1,
+              36,
+              17,
+              -1,
+              37,
+              -1,
+              40,
+              41,
+              -1,
+              43,
+              44,
+              17,
+              -1,
+              48,
+              17,
+              -1,
+              53,
+              29,
+              -1,
+              55,
+              -1,
+              -1,
+              -1,
+              68,
+              55,
+              -1,
+              -1,
+              -1,
+              73,
+              55,
+              -1,
+              -1,
+              -1,
+              -1,
+              78,
+              34,
+              -1,
+              79,
+              55,
+              -1,
+              -1,
+              -1,
+              81,
+              55,
+              -1,
+              -1,
+              -1,
+              55,
+              -1,
+              -1,
+              -1,
+              86,
+              55,
+              -1,
+              -1,
+              -1,
+              93,
+              17,
+              29,
+              -1,
+              94,
+              17,
+              -1,
+              101,
+              17,
+              102
+            ],
+            "optionSelected": {
+              "index": []
+            },
+            "originURL": {
+              "index": [],
+              "value": []
+            },
+            "parentIndex": [
+              -1,
+              0,
+              0,
+              2,
+              3,
+              3,
+              3,
+              3,
+              7,
+              3,
+              3,
+              10,
+              3,
+              2,
+              2,
+              14,
+              14,
+              16,
+              16,
+              18,
+              16,
+              16,
+              21,
+              16,
+              16,
+              24,
+              16,
+              16,
+              27,
+              16,
+              16,
+              30,
+              16,
+              16,
+              33,
+              16,
+              16,
+              36,
+              16,
+              16,
+              39,
+              39,
+              41,
+              39,
+              39,
+              44,
+              39,
+              16,
+              16,
+              48,
+              16,
+              16,
+              51,
+              16,
+              16,
+              54,
+              54,
+              56,
+              56,
+              58,
+              54,
+              54,
+              61,
+              61,
+              63,
+              54,
+              54,
+              66,
+              66,
+              68,
+              69,
+              68,
+              68,
+              72,
+              54,
+              54,
+              75,
+              75,
+              77,
+              54,
+              54,
+              80,
+              80,
+              54,
+              54,
+              84,
+              84,
+              86,
+              54,
+              54,
+              89,
+              89,
+              91,
+              54,
+              16,
+              16,
+              95,
+              16,
+              16,
+              98,
+              16,
+              14
+            ],
+            "pseudoIdentifier": {
+              "index": [],
+              "value": []
+            },
+            "pseudoType": {
+              "index": [
+                57,
+                62,
+                67,
+                76,
+                81,
+                85,
+                90
+              ],
+              "value": [
+                61,
+                61,
+                61,
+                61,
+                61,
+                61,
+                61
+              ]
+            },
+            "shadowRootType": {
+              "index": [],
+              "value": []
+            },
+            "textValue": {
+              "index": [],
+              "value": []
+            }
+          },
+          "publicId": -1,
+          "scrollOffsetX": 0,
+          "scrollOffsetY": 0,
+          "systemId": -1,
+          "textBoxes": {
+            "bounds": [
+              [
+                12,
+                33.75,
+                431.046875,
+                33
+              ],
+              [
+                12,
+                89.6875,
+                407.96875,
+                17
+              ],
+              [
+                12,
+                123.28125,
+                7.703125,
+                17
+              ],
+              [
+                12,
+                156.875,
+                15.40625,
+                17
+              ],
+              [
+                12,
+                190.46875,
+                7.703125,
+                17
+              ],
+              [
+                12,
+                224.0625,
+                338.6875,
+                17
+              ],
+              [
+                12,
+                257.65625,
+                76.984375,
+                17
+              ],
+              [
+                88.984375,
+                257.65625,
+                100.078125,
+                17
+              ],
+              [
+                189.0625,
+                257.65625,
+                38.5,
+                17
+              ],
+              [
+                227.5625,
+                257.65625,
+                69.28125,
+                17
+              ],
+              [
+                296.84375,
+                257.65625,
+                130.859375,
+                17
+              ],
+              [
+                12,
+                291.25,
+                284.8125,
+                17
+              ],
+              [
+                36,
+                324.84375,
+                6,
+                17
+              ],
+              [
+                52,
+                324.84375,
+                76.984375,
+                17
+              ],
+              [
+                36,
+                344.4375,
+                6,
+                17
+              ],
+              [
+                52,
+                344.4375,
+                84.671875,
+                17
+              ],
+              [
+                36,
+                364.03125,
+                6,
+                17
+              ],
+              [
+                52,
+                364.03125,
+                38.5,
+                17
+              ],
+              [
+                90.5,
+                364.03125,
+                7.703125,
+                17
+              ],
+              [
+                98.203125,
+                364.03125,
+                30.796875,
+                17
+              ],
+              [
+                36,
+                383.625,
+                6,
+                17
+              ],
+              [
+                52,
+                383.625,
+                146.25,
+                17
+              ],
+              [
+                36,
+                403.21875,
+                6,
+                17
+              ],
+              [
+                36,
+                422.8125,
+                6,
+                17
+              ],
+              [
+                52,
+                422.8125,
+                69.28125,
+                17
+              ],
+              [
+                36,
+                442.40625,
+                6,
+                17
+              ],
+              [
+                52,
+                442.40625,
+                92.375,
+                17
+              ],
+              [
+                12,
+                476,
+                261.71875,
+                17
+              ],
+              [
+                20,
+                511.59375,
+                60.78125,
+                15
+              ]
+            ],
+            "layoutIndex": [
+              5,
+              7,
+              9,
+              11,
+              14,
+              16,
+              18,
+              20,
+              21,
+              23,
+              24,
+              26,
+              31,
+              33,
+              36,
+              38,
+              41,
+              44,
+              45,
+              47,
+              50,
+              52,
+              55,
+              59,
+              61,
+              64,
+              66,
+              68,
+              70
+            ],
+            "length": [
+              28,
+              53,
+              1,
+              2,
+              1,
+              44,
+              10,
+              13,
+              5,
+              9,
+              17,
+              37,
+              2,
+              10,
+              2,
+              11,
+              2,
+              5,
+              1,
+              4,
+              2,
+              19,
+              2,
+              2,
+              9,
+              2,
+              12,
+              34,
+              11
+            ],
+            "start": [
+              0,
+              3,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "title": 1
+        }
+      ],
+      "strings": [
+        "http://127.0.0.1:38111/text_nodes_and_links.html",
+        "Text Nodes and Links",
+        "UTF-8",
+        "<ID:1>",
+        "#document",
+        "html",
+        "HTML",
+        "lang",
+        "en",
+        "block",
+        "visible",
+        "1",
+        "auto",
+        "static",
+        "rgb(255, 255, 255)",
+        "HEAD",
+        "#text",
+        "\n",
+        "META",
+        "charset",
+        "utf-8",
+        "TITLE",
+        "STYLE",
+        "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n.invisible-text{display:none}\n",
+        "BODY",
+        "MAIN",
+        "rgba(0, 0, 0, 0)",
+        "H1",
+        "Text node and link rendering",
+        "\n\n",
+        "P",
+        "   Leading and trailing whitespace around this sentence.   ",
+        "a",
+        "ab",
+        " ",
+        " ",
+        "Multi\nline\ntext node with embedded newlines.",
+        "Text with ",
+        "STRONG",
+        "inline",
+        "nested strong",
+        " and ",
+        "EM",
+        "nested em",
+        " inline children.",
+        "DIV",
+        "class",
+        "invisible-text",
+        "Text inside a display none container.",
+        "SPAN",
+        "style",
+        "visibility:hidden",
+        "hidden",
+        "Text inside a visibility hidden span.",
+        "UL",
+        "\n  ",
+        "LI",
+        "list-item",
+        "::marker",
+        "inline-block",
+        "• ",
+        "marker",
+        "A",
+        "href",
+        "#one",
+        "id",
+        "l-one",
+        "pointer",
+        "First link",
+        "#two",
+        "l-two",
+        "title",
+        "Second link title",
+        "Second link",
+        "#three",
+        "l-three",
+        "aria-label",
+        "Third link aria name",
+        "Third",
+        "link",
+        "l-nohref",
+        "Anchor without href",
+        "#five",
+        "l-empty",
+        "mailto:someone@example.invalid",
+        "l-mailto",
+        "Mail link",
+        "#seven",
+        "l-target",
+        "target",
+        "_blank",
+        "rel",
+        "noopener",
+        "New tab link",
+        "Trailing paragraph after the list.",
+        "BUTTON",
+        "type",
+        "button",
+        "tail-button",
+        "default",
+        "rgb(240, 240, 240)",
+        "Tail button",
+        "\n\n\n"
+      ]
+    }
+  },
+  "url": "http://127.0.0.1:38111/text_nodes_and_links.html"
+}

@@ -1,0 +1,9 @@
+{
+	"name": "@tykotech/sandbox",
+	"version": "0.2.0",
+	"exports": "./mod.ts",
+	"imports": {
+		"#sandbox-fs": "node:fs/promises",
+		"#sandbox-assert": "node:assert/strict"
+	}
+}

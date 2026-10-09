@@ -1,0 +1,4612 @@
+{
+	"rootSessionId": "9A157A0C67D43A845162E2C03400CCCF",
+	"sessions": [
+		{
+			"targetId": "3AAAF988C7A6DB4CEBA8DF544A4DFB9D",
+			"sessionId": "9A157A0C67D43A845162E2C03400CCCF",
+			"frameId": "3AAAF988C7A6DB4CEBA8DF544A4DFB9D",
+			"url": "http://127.0.0.1:38111/details_dialog_popover.html",
+			"devicePixelRatio": 1,
+			"layoutMetrics": {
+				"scrollX": 0,
+				"scrollY": 0,
+				"viewportWidth": 1280,
+				"viewportHeight": 900,
+				"contentWidth": 1280,
+				"contentHeight": 900
+			},
+			"document": {
+				"nodeId": 1,
+				"backendNodeId": 3,
+				"nodeType": 9,
+				"nodeName": "#document",
+				"localName": "",
+				"nodeValue": "",
+				"childNodeCount": 2,
+				"children": [
+					{
+						"nodeId": 2,
+						"parentId": 1,
+						"backendNodeId": 4,
+						"nodeType": 10,
+						"nodeName": "html",
+						"localName": "",
+						"nodeValue": "",
+						"publicId": "",
+						"systemId": ""
+					},
+					{
+						"nodeId": 3,
+						"parentId": 1,
+						"backendNodeId": 5,
+						"nodeType": 1,
+						"nodeName": "HTML",
+						"localName": "html",
+						"nodeValue": "",
+						"childNodeCount": 2,
+						"children": [
+							{
+								"nodeId": 4,
+								"parentId": 3,
+								"backendNodeId": 6,
+								"nodeType": 1,
+								"nodeName": "HEAD",
+								"localName": "head",
+								"nodeValue": "",
+								"childNodeCount": 3,
+								"children": [
+									{
+										"nodeId": 5,
+										"parentId": 4,
+										"backendNodeId": 7,
+										"nodeType": 1,
+										"nodeName": "META",
+										"localName": "meta",
+										"nodeValue": "",
+										"childNodeCount": 0,
+										"children": [],
+										"attributes": [
+											"charset",
+											"utf-8"
+										]
+									},
+									{
+										"nodeId": 6,
+										"parentId": 4,
+										"backendNodeId": 8,
+										"nodeType": 1,
+										"nodeName": "TITLE",
+										"localName": "title",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 7,
+												"parentId": 6,
+												"backendNodeId": 9,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "Details, Dialog and Popover"
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 8,
+										"parentId": 4,
+										"backendNodeId": 10,
+										"nodeType": 1,
+										"nodeName": "STYLE",
+										"localName": "style",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 9,
+												"parentId": 8,
+												"backendNodeId": 11,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\ndetails{border:1px solid #666;padding:6px;margin:8px 0;width:420px}\ndialog{border:1px solid #333;padding:8px}\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							},
+							{
+								"nodeId": 10,
+								"parentId": 3,
+								"backendNodeId": 12,
+								"nodeType": 1,
+								"nodeName": "BODY",
+								"localName": "body",
+								"nodeValue": "",
+								"childNodeCount": 1,
+								"children": [
+									{
+										"nodeId": 11,
+										"parentId": 10,
+										"backendNodeId": 13,
+										"nodeType": 1,
+										"nodeName": "MAIN",
+										"localName": "main",
+										"nodeValue": "",
+										"childNodeCount": 8,
+										"children": [
+											{
+												"nodeId": 12,
+												"parentId": 11,
+												"backendNodeId": 14,
+												"nodeType": 1,
+												"nodeName": "H1",
+												"localName": "h1",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 13,
+														"parentId": 12,
+														"backendNodeId": 15,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Disclosure widgets"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 14,
+												"parentId": 11,
+												"backendNodeId": 16,
+												"nodeType": 1,
+												"nodeName": "DETAILS",
+												"localName": "details",
+												"nodeValue": "",
+												"childNodeCount": 3,
+												"children": [
+													{
+														"nodeId": 22,
+														"parentId": 14,
+														"backendNodeId": 19,
+														"nodeType": 1,
+														"nodeName": "SUMMARY",
+														"localName": "summary",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 24,
+																"parentId": 22,
+																"backendNodeId": 28,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Closed disclosure summary"
+															}
+														],
+														"attributes": [
+															"id",
+															"summary-closed"
+														],
+														"pseudoElements": [
+															{
+																"nodeId": 23,
+																"backendNodeId": 27,
+																"nodeType": 1,
+																"nodeName": "::marker",
+																"localName": "::marker",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"attributes": [],
+																"pseudoType": "marker"
+															}
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 18
+														}
+													},
+													{
+														"nodeId": 25,
+														"parentId": 14,
+														"backendNodeId": 23,
+														"nodeType": 1,
+														"nodeName": "P",
+														"localName": "p",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 26,
+																"parentId": 25,
+																"backendNodeId": 29,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Hidden detail body."
+															}
+														],
+														"attributes": [],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 22
+														}
+													},
+													{
+														"nodeId": 27,
+														"parentId": 14,
+														"backendNodeId": 24,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 28,
+																"parentId": 27,
+																"backendNodeId": 30,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Button inside closed details"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"closed-detail-button"
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 22
+														}
+													}
+												],
+												"attributes": [
+													"id",
+													"details-closed"
+												],
+												"shadowRoots": [
+													{
+														"nodeId": 15,
+														"backendNodeId": 17,
+														"nodeType": 11,
+														"nodeName": "#document-fragment",
+														"localName": "",
+														"nodeValue": "",
+														"childNodeCount": 3,
+														"children": [
+															{
+																"nodeId": 16,
+																"parentId": 15,
+																"backendNodeId": 18,
+																"nodeType": 1,
+																"nodeName": "SLOT",
+																"localName": "slot",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 17,
+																		"parentId": 16,
+																		"backendNodeId": 20,
+																		"nodeType": 1,
+																		"nodeName": "SUMMARY",
+																		"localName": "summary",
+																		"nodeValue": "",
+																		"childNodeCount": 1,
+																		"children": [
+																			{
+																				"nodeId": 18,
+																				"parentId": 17,
+																				"backendNodeId": 21,
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"localName": "",
+																				"nodeValue": "Details"
+																			}
+																		],
+																		"attributes": []
+																	}
+																],
+																"attributes": [
+																	"id",
+																	"details-summary"
+																],
+																"distributedNodes": [
+																	{
+																		"nodeType": 1,
+																		"nodeName": "SUMMARY",
+																		"backendNodeId": 19
+																	}
+																]
+															},
+															{
+																"nodeId": 19,
+																"parentId": 15,
+																"backendNodeId": 22,
+																"nodeType": 1,
+																"nodeName": "SLOT",
+																"localName": "slot",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"id",
+																	"details-content",
+																	"pseudo",
+																	"details-content",
+																	"style",
+																	"content-visibility: hidden; display: block;"
+																],
+																"distributedNodes": [
+																	{
+																		"nodeType": 1,
+																		"nodeName": "P",
+																		"backendNodeId": 23
+																	},
+																	{
+																		"nodeType": 1,
+																		"nodeName": "BUTTON",
+																		"backendNodeId": 24
+																	}
+																]
+															},
+															{
+																"nodeId": 20,
+																"parentId": 15,
+																"backendNodeId": 25,
+																"nodeType": 1,
+																"nodeName": "STYLE",
+																"localName": "style",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 21,
+																		"parentId": 20,
+																		"backendNodeId": 26,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "\n:host summary {\n  display: list-item;\n  counter-increment: list-item 0;\n  list-style: disclosure-closed inside;\n}\n:host([open]) summary {\n  list-style-type: disclosure-open;\n}\n"
+																	}
+																],
+																"attributes": []
+															}
+														],
+														"shadowRootType": "user-agent"
+													}
+												]
+											},
+											{
+												"nodeId": 29,
+												"parentId": 11,
+												"backendNodeId": 31,
+												"nodeType": 1,
+												"nodeName": "DETAILS",
+												"localName": "details",
+												"nodeValue": "",
+												"childNodeCount": 3,
+												"children": [
+													{
+														"nodeId": 37,
+														"parentId": 29,
+														"backendNodeId": 34,
+														"nodeType": 1,
+														"nodeName": "SUMMARY",
+														"localName": "summary",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 39,
+																"parentId": 37,
+																"backendNodeId": 43,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Open disclosure summary"
+															}
+														],
+														"attributes": [
+															"id",
+															"summary-open"
+														],
+														"pseudoElements": [
+															{
+																"nodeId": 38,
+																"backendNodeId": 42,
+																"nodeType": 1,
+																"nodeName": "::marker",
+																"localName": "::marker",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"attributes": [],
+																"pseudoType": "marker"
+															}
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 33
+														}
+													},
+													{
+														"nodeId": 40,
+														"parentId": 29,
+														"backendNodeId": 38,
+														"nodeType": 1,
+														"nodeName": "P",
+														"localName": "p",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 41,
+																"parentId": 40,
+																"backendNodeId": 44,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Visible detail body."
+															}
+														],
+														"attributes": [],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 37
+														}
+													},
+													{
+														"nodeId": 42,
+														"parentId": 29,
+														"backendNodeId": 39,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 43,
+																"parentId": 42,
+																"backendNodeId": 45,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Button inside open details"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"open-detail-button"
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 37
+														}
+													}
+												],
+												"attributes": [
+													"id",
+													"details-open",
+													"open",
+													""
+												],
+												"shadowRoots": [
+													{
+														"nodeId": 30,
+														"backendNodeId": 32,
+														"nodeType": 11,
+														"nodeName": "#document-fragment",
+														"localName": "",
+														"nodeValue": "",
+														"childNodeCount": 3,
+														"children": [
+															{
+																"nodeId": 31,
+																"parentId": 30,
+																"backendNodeId": 33,
+																"nodeType": 1,
+																"nodeName": "SLOT",
+																"localName": "slot",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 32,
+																		"parentId": 31,
+																		"backendNodeId": 35,
+																		"nodeType": 1,
+																		"nodeName": "SUMMARY",
+																		"localName": "summary",
+																		"nodeValue": "",
+																		"childNodeCount": 1,
+																		"children": [
+																			{
+																				"nodeId": 33,
+																				"parentId": 32,
+																				"backendNodeId": 36,
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"localName": "",
+																				"nodeValue": "Details"
+																			}
+																		],
+																		"attributes": []
+																	}
+																],
+																"attributes": [
+																	"id",
+																	"details-summary"
+																],
+																"distributedNodes": [
+																	{
+																		"nodeType": 1,
+																		"nodeName": "SUMMARY",
+																		"backendNodeId": 34
+																	}
+																]
+															},
+															{
+																"nodeId": 34,
+																"parentId": 30,
+																"backendNodeId": 37,
+																"nodeType": 1,
+																"nodeName": "SLOT",
+																"localName": "slot",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"id",
+																	"details-content",
+																	"pseudo",
+																	"details-content",
+																	"style",
+																	"display: block;"
+																],
+																"distributedNodes": [
+																	{
+																		"nodeType": 1,
+																		"nodeName": "P",
+																		"backendNodeId": 38
+																	},
+																	{
+																		"nodeType": 1,
+																		"nodeName": "BUTTON",
+																		"backendNodeId": 39
+																	}
+																]
+															},
+															{
+																"nodeId": 35,
+																"parentId": 30,
+																"backendNodeId": 40,
+																"nodeType": 1,
+																"nodeName": "STYLE",
+																"localName": "style",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 36,
+																		"parentId": 35,
+																		"backendNodeId": 41,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "\n:host summary {\n  display: list-item;\n  counter-increment: list-item 0;\n  list-style: disclosure-closed inside;\n}\n:host([open]) summary {\n  list-style-type: disclosure-open;\n}\n"
+																	}
+																],
+																"attributes": []
+															}
+														],
+														"shadowRootType": "user-agent"
+													}
+												]
+											},
+											{
+												"nodeId": 44,
+												"parentId": 11,
+												"backendNodeId": 46,
+												"nodeType": 1,
+												"nodeName": "DIALOG",
+												"localName": "dialog",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 45,
+														"parentId": 44,
+														"backendNodeId": 47,
+														"nodeType": 1,
+														"nodeName": "P",
+														"localName": "p",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 46,
+																"parentId": 45,
+																"backendNodeId": 48,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Closed dialog body."
+															}
+														],
+														"attributes": []
+													},
+													{
+														"nodeId": 47,
+														"parentId": 44,
+														"backendNodeId": 49,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 48,
+																"parentId": 47,
+																"backendNodeId": 50,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Button inside closed dialog"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"dialog-closed-button"
+														]
+													}
+												],
+												"attributes": [
+													"id",
+													"dialog-closed"
+												]
+											},
+											{
+												"nodeId": 49,
+												"parentId": 11,
+												"backendNodeId": 51,
+												"nodeType": 1,
+												"nodeName": "DIALOG",
+												"localName": "dialog",
+												"nodeValue": "",
+												"childNodeCount": 3,
+												"children": [
+													{
+														"nodeId": 50,
+														"parentId": 49,
+														"backendNodeId": 52,
+														"nodeType": 1,
+														"nodeName": "P",
+														"localName": "p",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 51,
+																"parentId": 50,
+																"backendNodeId": 53,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Open non-modal dialog body."
+															}
+														],
+														"attributes": []
+													},
+													{
+														"nodeId": 52,
+														"parentId": 49,
+														"backendNodeId": 54,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 53,
+																"parentId": 52,
+																"backendNodeId": 55,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Button inside open dialog"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"dialog-open-button"
+														]
+													},
+													{
+														"nodeId": 54,
+														"parentId": 49,
+														"backendNodeId": 2,
+														"nodeType": 1,
+														"nodeName": "FORM",
+														"localName": "form",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 55,
+																"parentId": 54,
+																"backendNodeId": 56,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 56,
+																		"parentId": 55,
+																		"backendNodeId": 57,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Close"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"submit",
+																	"id",
+																	"dialog-close-submit"
+																]
+															}
+														],
+														"attributes": [
+															"method",
+															"dialog"
+														]
+													}
+												],
+												"attributes": [
+													"id",
+													"dialog-open",
+													"open",
+													""
+												]
+											},
+											{
+												"nodeId": 57,
+												"parentId": 11,
+												"backendNodeId": 58,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 58,
+														"parentId": 57,
+														"backendNodeId": 59,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Toggle popover"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"popover-trigger",
+													"popovertarget",
+													"popover-panel"
+												]
+											},
+											{
+												"nodeId": 59,
+												"parentId": 11,
+												"backendNodeId": 60,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 60,
+														"parentId": 59,
+														"backendNodeId": 61,
+														"nodeType": 1,
+														"nodeName": "P",
+														"localName": "p",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 61,
+																"parentId": 60,
+																"backendNodeId": 62,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Popover contents."
+															}
+														],
+														"attributes": []
+													},
+													{
+														"nodeId": 62,
+														"parentId": 59,
+														"backendNodeId": 63,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 63,
+																"parentId": 62,
+																"backendNodeId": 64,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Button inside popover"
+															}
+														],
+														"attributes": [
+															"type",
+															"button",
+															"id",
+															"popover-inner-button"
+														]
+													}
+												],
+												"attributes": [
+													"id",
+													"popover-panel",
+													"popover",
+													""
+												]
+											},
+											{
+												"nodeId": 64,
+												"parentId": 11,
+												"backendNodeId": 65,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 65,
+														"parentId": 64,
+														"backendNodeId": 66,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Tail control"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"tail-control"
+												]
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							}
+						],
+						"attributes": [
+							"lang",
+							"en"
+						],
+						"frameId": "3AAAF988C7A6DB4CEBA8DF544A4DFB9D"
+					}
+				],
+				"documentURL": "http://127.0.0.1:38111/details_dialog_popover.html",
+				"baseURL": "http://127.0.0.1:38111/details_dialog_popover.html",
+				"xmlVersion": "",
+				"compatibilityMode": "NoQuirksMode"
+			},
+			"snapshot": {
+				"documents": [
+					{
+						"documentURL": 0,
+						"title": 1,
+						"baseURL": 0,
+						"contentLanguage": -1,
+						"encodingName": 2,
+						"publicId": -1,
+						"systemId": -1,
+						"frameId": 3,
+						"nodes": {
+							"parentIndex": [
+								-1,
+								0,
+								0,
+								2,
+								3,
+								3,
+								3,
+								3,
+								7,
+								3,
+								3,
+								10,
+								3,
+								2,
+								2,
+								14,
+								14,
+								16,
+								16,
+								18,
+								16,
+								16,
+								21,
+								21,
+								23,
+								23,
+								21,
+								21,
+								27,
+								21,
+								21,
+								30,
+								21,
+								16,
+								16,
+								34,
+								34,
+								36,
+								36,
+								34,
+								34,
+								40,
+								34,
+								34,
+								43,
+								34,
+								16,
+								16,
+								47,
+								47,
+								49,
+								47,
+								47,
+								52,
+								47,
+								16,
+								16,
+								56,
+								56,
+								58,
+								56,
+								56,
+								61,
+								56,
+								56,
+								64,
+								65,
+								56,
+								16,
+								16,
+								69,
+								16,
+								16,
+								72,
+								72,
+								74,
+								72,
+								72,
+								77,
+								72,
+								16,
+								16,
+								81,
+								16,
+								14
+							],
+							"nodeType": [
+								9,
+								10,
+								1,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3
+							],
+							"shadowRootType": {
+								"index": [],
+								"value": []
+							},
+							"nodeName": [
+								4,
+								5,
+								6,
+								15,
+								16,
+								18,
+								16,
+								21,
+								16,
+								16,
+								22,
+								16,
+								16,
+								16,
+								24,
+								16,
+								25,
+								16,
+								27,
+								16,
+								16,
+								30,
+								16,
+								34,
+								37,
+								16,
+								16,
+								42,
+								16,
+								16,
+								44,
+								16,
+								16,
+								16,
+								30,
+								16,
+								34,
+								37,
+								16,
+								16,
+								42,
+								16,
+								16,
+								44,
+								16,
+								16,
+								16,
+								60,
+								16,
+								42,
+								16,
+								16,
+								44,
+								16,
+								16,
+								16,
+								60,
+								16,
+								42,
+								16,
+								16,
+								44,
+								16,
+								16,
+								70,
+								44,
+								16,
+								16,
+								16,
+								44,
+								16,
+								16,
+								80,
+								16,
+								42,
+								16,
+								16,
+								44,
+								16,
+								16,
+								16,
+								44,
+								16,
+								16,
+								16
+							],
+							"nodeValue": [
+								-1,
+								-1,
+								-1,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								1,
+								17,
+								-1,
+								23,
+								17,
+								17,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								28,
+								29,
+								-1,
+								33,
+								-1,
+								-1,
+								41,
+								33,
+								-1,
+								43,
+								33,
+								-1,
+								48,
+								17,
+								29,
+								-1,
+								33,
+								-1,
+								-1,
+								53,
+								33,
+								-1,
+								54,
+								33,
+								-1,
+								59,
+								17,
+								29,
+								-1,
+								33,
+								-1,
+								62,
+								33,
+								-1,
+								64,
+								17,
+								29,
+								-1,
+								33,
+								-1,
+								67,
+								33,
+								-1,
+								69,
+								33,
+								-1,
+								-1,
+								75,
+								17,
+								29,
+								-1,
+								79,
+								17,
+								-1,
+								33,
+								-1,
+								82,
+								33,
+								-1,
+								84,
+								17,
+								29,
+								-1,
+								86,
+								17,
+								87
+							],
+							"backendNodeId": [
+								3,
+								4,
+								5,
+								6,
+								67,
+								7,
+								68,
+								8,
+								9,
+								69,
+								10,
+								11,
+								70,
+								71,
+								12,
+								72,
+								13,
+								73,
+								14,
+								15,
+								74,
+								16,
+								75,
+								19,
+								27,
+								28,
+								76,
+								23,
+								29,
+								77,
+								24,
+								30,
+								78,
+								79,
+								31,
+								80,
+								34,
+								42,
+								43,
+								81,
+								38,
+								44,
+								82,
+								39,
+								45,
+								83,
+								84,
+								46,
+								85,
+								47,
+								48,
+								86,
+								49,
+								50,
+								87,
+								88,
+								51,
+								89,
+								52,
+								53,
+								90,
+								54,
+								55,
+								91,
+								2,
+								56,
+								57,
+								92,
+								93,
+								58,
+								59,
+								94,
+								60,
+								95,
+								61,
+								62,
+								96,
+								63,
+								64,
+								97,
+								98,
+								65,
+								66,
+								99,
+								100
+							],
+							"attributes": [
+								[],
+								[],
+								[
+									7,
+									8
+								],
+								[],
+								[],
+								[
+									19,
+									20
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									32
+								],
+								[],
+								[
+									31,
+									35
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									47
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									49,
+									50,
+									-1
+								],
+								[],
+								[
+									31,
+									51
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									55
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									61
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									63
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									65,
+									50,
+									-1
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									68
+								],
+								[],
+								[],
+								[
+									71,
+									72
+								],
+								[
+									45,
+									73,
+									31,
+									74
+								],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									76,
+									77,
+									78
+								],
+								[],
+								[],
+								[
+									31,
+									78,
+									81,
+									-1
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									83
+								],
+								[],
+								[],
+								[],
+								[
+									45,
+									46,
+									31,
+									85
+								],
+								[],
+								[],
+								[]
+							],
+							"textValue": {
+								"index": [],
+								"value": []
+							},
+							"inputValue": {
+								"index": [],
+								"value": []
+							},
+							"inputChecked": {
+								"index": []
+							},
+							"optionSelected": {
+								"index": []
+							},
+							"contentDocumentIndex": {
+								"index": [],
+								"value": []
+							},
+							"pseudoType": {
+								"index": [
+									24,
+									37
+								],
+								"value": [
+									40,
+									40
+								]
+							},
+							"pseudoIdentifier": {
+								"index": [],
+								"value": []
+							},
+							"isClickable": {
+								"index": [
+									23,
+									36,
+									65
+								]
+							},
+							"currentSourceURL": {
+								"index": [],
+								"value": []
+							},
+							"originURL": {
+								"index": [],
+								"value": []
+							}
+						},
+						"layout": {
+							"nodeIndex": [
+								0,
+								2,
+								14,
+								16,
+								18,
+								19,
+								21,
+								23,
+								24,
+								24,
+								25,
+								34,
+								36,
+								37,
+								37,
+								38,
+								40,
+								41,
+								43,
+								44,
+								45,
+								56,
+								58,
+								59,
+								61,
+								62,
+								63,
+								64,
+								65,
+								66,
+								69,
+								70,
+								71,
+								81,
+								82,
+								83
+							],
+							"styles": [
+								[],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									36,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									38,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									38,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									36,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									36,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									38,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									38,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									36,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									66,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									66,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									57,
+									12,
+									13,
+									58
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								]
+							],
+							"bounds": [
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									273.46875
+								],
+								[
+									0,
+									0,
+									1280,
+									273.46875
+								],
+								[
+									0,
+									0,
+									1280,
+									273.46875
+								],
+								[
+									12,
+									30.75,
+									1256,
+									39.1875
+								],
+								[
+									12,
+									33.75,
+									277.109375,
+									33
+								],
+								[
+									12,
+									88.6875,
+									420,
+									33.59375
+								],
+								[
+									19,
+									95.6875,
+									406,
+									19.59375
+								],
+								[
+									19,
+									96.6875,
+									9.234375,
+									17
+								],
+								[
+									19,
+									96.6875,
+									9.234375,
+									17
+								],
+								[
+									33.828125,
+									96.6875,
+									192.4375,
+									17
+								],
+								[
+									12,
+									130.28125,
+									420,
+									102.1875
+								],
+								[
+									19,
+									137.28125,
+									406,
+									19.59375
+								],
+								[
+									19,
+									138.28125,
+									9.234375,
+									17
+								],
+								[
+									19,
+									138.28125,
+									9.234375,
+									17
+								],
+								[
+									33.828125,
+									138.28125,
+									177.046875,
+									17
+								],
+								[
+									19,
+									170.875,
+									406,
+									19.59375
+								],
+								[
+									19,
+									171.875,
+									153.953125,
+									17
+								],
+								[
+									19,
+									204.46875,
+									168.671875,
+									21
+								],
+								[
+									27,
+									207.46875,
+									152.671875,
+									15
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									527.078125,
+									240.46875,
+									225.828125,
+									107.59375
+								],
+								[
+									536.078125,
+									263.46875,
+									207.828125,
+									19.59375
+								],
+								[
+									536.078125,
+									264.46875,
+									207.828125,
+									17
+								],
+								[
+									536.078125,
+									297.0625,
+									165.71875,
+									21
+								],
+								[
+									544.078125,
+									300.0625,
+									149.71875,
+									15
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									536.078125,
+									318.0625,
+									207.828125,
+									21
+								],
+								[
+									536.078125,
+									318.0625,
+									50.09375,
+									21
+								],
+								[
+									544.078125,
+									321.0625,
+									34.09375,
+									15
+								],
+								[
+									12,
+									240.46875,
+									107.15625,
+									21
+								],
+								[
+									20,
+									243.46875,
+									91.15625,
+									15
+								],
+								[
+									119.15625,
+									242.46875,
+									7.703125,
+									17
+								],
+								[
+									126.859375,
+									240.46875,
+									79.71875,
+									21
+								],
+								[
+									134.859375,
+									243.46875,
+									63.71875,
+									15
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								]
+							],
+							"text": [
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								28,
+								-1,
+								-1,
+								-1,
+								39,
+								41,
+								-1,
+								-1,
+								-1,
+								52,
+								53,
+								-1,
+								54,
+								-1,
+								59,
+								17,
+								-1,
+								-1,
+								67,
+								-1,
+								69,
+								33,
+								-1,
+								-1,
+								75,
+								-1,
+								79,
+								17,
+								-1,
+								86,
+								17
+							],
+							"stackingContexts": {
+								"index": [
+									0,
+									1
+								]
+							},
+							"paintOrders": [
+								0,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1
+							],
+							"offsetRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									12,
+									31,
+									1256,
+									39
+								],
+								[],
+								[
+									12,
+									89,
+									420,
+									34
+								],
+								[
+									19,
+									96,
+									406,
+									20
+								],
+								[
+									19,
+									97,
+									9,
+									17
+								],
+								[
+									19,
+									97,
+									9,
+									17
+								],
+								[],
+								[
+									12,
+									130,
+									420,
+									102
+								],
+								[
+									19,
+									137,
+									406,
+									20
+								],
+								[
+									19,
+									138,
+									9,
+									17
+								],
+								[
+									19,
+									138,
+									9,
+									17
+								],
+								[],
+								[
+									19,
+									171,
+									406,
+									20
+								],
+								[],
+								[
+									19,
+									204,
+									169,
+									21
+								],
+								[],
+								[],
+								[
+									527,
+									240,
+									226,
+									108
+								],
+								[
+									8,
+									22,
+									208,
+									20
+								],
+								[],
+								[
+									8,
+									56,
+									166,
+									21
+								],
+								[],
+								[],
+								[
+									8,
+									77,
+									208,
+									21
+								],
+								[
+									8,
+									77,
+									50,
+									21
+								],
+								[],
+								[
+									12,
+									240,
+									107,
+									21
+								],
+								[],
+								[],
+								[
+									127,
+									240,
+									80,
+									21
+								],
+								[],
+								[]
+							],
+							"scrollRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									418,
+									32
+								],
+								[
+									0,
+									0,
+									406,
+									20
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									418,
+									100
+								],
+								[
+									0,
+									0,
+									406,
+									20
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									406,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									165,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									224,
+									106
+								],
+								[
+									0,
+									0,
+									208,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									162,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									208,
+									21
+								],
+								[
+									0,
+									0,
+									46,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									103,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									76,
+									17
+								],
+								[],
+								[]
+							],
+							"clientRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									0,
+									0,
+									1280,
+									273
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									1,
+									1,
+									418,
+									32
+								],
+								[
+									0,
+									0,
+									406,
+									20
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									1,
+									1,
+									418,
+									100
+								],
+								[
+									0,
+									0,
+									406,
+									20
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[],
+								[
+									0,
+									0,
+									406,
+									20
+								],
+								[],
+								[
+									2,
+									2,
+									165,
+									17
+								],
+								[],
+								[],
+								[
+									1,
+									1,
+									224,
+									106
+								],
+								[
+									0,
+									0,
+									208,
+									20
+								],
+								[],
+								[
+									2,
+									2,
+									162,
+									17
+								],
+								[],
+								[],
+								[
+									0,
+									0,
+									208,
+									21
+								],
+								[
+									2,
+									2,
+									46,
+									17
+								],
+								[],
+								[
+									2,
+									2,
+									103,
+									17
+								],
+								[],
+								[],
+								[
+									2,
+									2,
+									76,
+									17
+								],
+								[],
+								[]
+							]
+						},
+						"textBoxes": {
+							"layoutIndex": [
+								5,
+								9,
+								10,
+								14,
+								15,
+								17,
+								19,
+								23,
+								25,
+								29,
+								31,
+								32,
+								34
+							],
+							"bounds": [
+								[
+									12,
+									33.75,
+									277.109375,
+									33
+								],
+								[
+									19,
+									96.6875,
+									9.234375,
+									17
+								],
+								[
+									33.828125,
+									96.6875,
+									192.4375,
+									17
+								],
+								[
+									19,
+									138.28125,
+									9.234375,
+									17
+								],
+								[
+									33.828125,
+									138.28125,
+									177.046875,
+									17
+								],
+								[
+									19,
+									171.875,
+									153.953125,
+									17
+								],
+								[
+									27,
+									207.46875,
+									152.671875,
+									15
+								],
+								[
+									536.078125,
+									264.46875,
+									207.828125,
+									17
+								],
+								[
+									544.078125,
+									300.0625,
+									149.71875,
+									15
+								],
+								[
+									544.078125,
+									321.0625,
+									34.09375,
+									15
+								],
+								[
+									20,
+									243.46875,
+									91.15625,
+									15
+								],
+								[
+									119.15625,
+									242.46875,
+									7.703125,
+									17
+								],
+								[
+									134.859375,
+									243.46875,
+									63.71875,
+									15
+								]
+							],
+							"start": [
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0
+							],
+							"length": [
+								18,
+								2,
+								25,
+								2,
+								23,
+								20,
+								26,
+								27,
+								25,
+								5,
+								14,
+								1,
+								12
+							]
+						},
+						"scrollOffsetX": 0,
+						"scrollOffsetY": 0,
+						"contentWidth": 1280,
+						"contentHeight": 900
+					}
+				],
+				"strings": [
+					"http://127.0.0.1:38111/details_dialog_popover.html",
+					"Details, Dialog and Popover",
+					"UTF-8",
+					"3AAAF988C7A6DB4CEBA8DF544A4DFB9D",
+					"#document",
+					"html",
+					"HTML",
+					"lang",
+					"en",
+					"block",
+					"visible",
+					"1",
+					"auto",
+					"static",
+					"rgb(255, 255, 255)",
+					"HEAD",
+					"#text",
+					"\n",
+					"META",
+					"charset",
+					"utf-8",
+					"TITLE",
+					"STYLE",
+					"\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\ndetails{border:1px solid #666;padding:6px;margin:8px 0;width:420px}\ndialog{border:1px solid #333;padding:8px}\n",
+					"BODY",
+					"MAIN",
+					"rgba(0, 0, 0, 0)",
+					"H1",
+					"Disclosure widgets",
+					"\n\n",
+					"DETAILS",
+					"id",
+					"details-closed",
+					"\n  ",
+					"SUMMARY",
+					"summary-closed",
+					"list-item",
+					"::marker",
+					"inline",
+					"▸ ",
+					"marker",
+					"Closed disclosure summary",
+					"P",
+					"Hidden detail body.",
+					"BUTTON",
+					"type",
+					"button",
+					"closed-detail-button",
+					"Button inside closed details",
+					"details-open",
+					"open",
+					"summary-open",
+					"▾ ",
+					"Open disclosure summary",
+					"Visible detail body.",
+					"open-detail-button",
+					"inline-block",
+					"default",
+					"rgb(240, 240, 240)",
+					"Button inside open details",
+					"DIALOG",
+					"dialog-closed",
+					"Closed dialog body.",
+					"dialog-closed-button",
+					"Button inside closed dialog",
+					"dialog-open",
+					"absolute",
+					"Open non-modal dialog body.",
+					"dialog-open-button",
+					"Button inside open dialog",
+					"FORM",
+					"method",
+					"dialog",
+					"submit",
+					"dialog-close-submit",
+					"Close",
+					"popover-trigger",
+					"popovertarget",
+					"popover-panel",
+					"Toggle popover",
+					"DIV",
+					"popover",
+					"Popover contents.",
+					"popover-inner-button",
+					"Button inside popover",
+					"tail-control",
+					"Tail control",
+					"\n\n\n"
+				]
+			},
+			"axNodes": [
+				{
+					"nodeId": "3",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "RootWebArea"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 144
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Details, Dialog and Popover",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label",
+								"superseded": true
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Details, Dialog and Popover"
+								},
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/details_dialog_popover.html"
+							}
+						}
+					],
+					"childIds": [
+						"5"
+					],
+					"backendDOMNodeId": 3,
+					"frameId": "3AAAF988C7A6DB4CEBA8DF544A4DFB9D"
+				},
+				{
+					"nodeId": "5",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "3",
+					"childIds": [
+						"12"
+					],
+					"backendDOMNodeId": 5
+				},
+				{
+					"nodeId": "12",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "5",
+					"childIds": [
+						"13"
+					],
+					"backendDOMNodeId": 12
+				},
+				{
+					"nodeId": "13",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "main"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 118
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"14",
+						"16",
+						"31",
+						"51",
+						"58",
+						"65"
+					],
+					"backendDOMNodeId": 13
+				},
+				{
+					"nodeId": "14",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Disclosure widgets",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Disclosure widgets"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 1
+							}
+						}
+					],
+					"parentId": "13",
+					"childIds": [
+						"15"
+					],
+					"backendDOMNodeId": 14
+				},
+				{
+					"nodeId": "16",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "group"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 34
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "13",
+					"childIds": [
+						"18",
+						"22"
+					],
+					"backendDOMNodeId": 16
+				},
+				{
+					"nodeId": "31",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "group"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 34
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "13",
+					"childIds": [
+						"33",
+						"37"
+					],
+					"backendDOMNodeId": 31
+				},
+				{
+					"nodeId": "51",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "dialog"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 35
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "modal",
+							"value": {
+								"type": "boolean",
+								"value": false
+							}
+						}
+					],
+					"parentId": "13",
+					"childIds": [
+						"52",
+						"54",
+						"2"
+					],
+					"backendDOMNodeId": 51
+				},
+				{
+					"nodeId": "58",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Toggle popover",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Toggle popover"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "expanded",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": false
+							}
+						}
+					],
+					"parentId": "13",
+					"childIds": [
+						"59"
+					],
+					"backendDOMNodeId": 58
+				},
+				{
+					"nodeId": "65",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Tail control",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Tail control"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "13",
+					"childIds": [
+						"66"
+					],
+					"backendDOMNodeId": 65
+				},
+				{
+					"nodeId": "15",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Disclosure widgets",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Disclosure widgets"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "14",
+					"childIds": [
+						"-1000000002"
+					],
+					"backendDOMNodeId": 15
+				},
+				{
+					"nodeId": "18",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "16",
+					"childIds": [
+						"19"
+					],
+					"backendDOMNodeId": 18
+				},
+				{
+					"nodeId": "19",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "DisclosureTriangle"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 37
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Closed disclosure summary",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Closed disclosure summary"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "expanded",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": false
+							}
+						}
+					],
+					"parentId": "18",
+					"childIds": [
+						"27",
+						"28"
+					],
+					"backendDOMNodeId": 19
+				},
+				{
+					"nodeId": "22",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "16",
+					"childIds": [],
+					"backendDOMNodeId": 22
+				},
+				{
+					"nodeId": "33",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "31",
+					"childIds": [
+						"34"
+					],
+					"backendDOMNodeId": 33
+				},
+				{
+					"nodeId": "34",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "DisclosureTriangle"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 37
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Open disclosure summary",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Open disclosure summary"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "expanded",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "33",
+					"childIds": [
+						"42",
+						"43"
+					],
+					"backendDOMNodeId": 34
+				},
+				{
+					"nodeId": "37",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "31",
+					"childIds": [
+						"38",
+						"39"
+					],
+					"backendDOMNodeId": 37
+				},
+				{
+					"nodeId": "38",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "paragraph"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 133
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": [
+						"44"
+					],
+					"backendDOMNodeId": 38
+				},
+				{
+					"nodeId": "39",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Button inside open details",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Button inside open details"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "37",
+					"childIds": [
+						"45"
+					],
+					"backendDOMNodeId": 39
+				},
+				{
+					"nodeId": "52",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "paragraph"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 133
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "51",
+					"childIds": [
+						"53"
+					],
+					"backendDOMNodeId": 52
+				},
+				{
+					"nodeId": "54",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Button inside open dialog",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Button inside open dialog"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "51",
+					"childIds": [
+						"55"
+					],
+					"backendDOMNodeId": 54
+				},
+				{
+					"nodeId": "2",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 211
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "51",
+					"childIds": [
+						"56"
+					],
+					"backendDOMNodeId": 2
+				},
+				{
+					"nodeId": "59",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Toggle popover",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Toggle popover"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "58",
+					"childIds": [
+						"-1000000012"
+					],
+					"backendDOMNodeId": 59
+				},
+				{
+					"nodeId": "66",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Tail control",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Tail control"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "65",
+					"childIds": [
+						"-1000000013"
+					],
+					"backendDOMNodeId": 66
+				},
+				{
+					"nodeId": "-1000000002",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Disclosure widgets"
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": []
+				},
+				{
+					"nodeId": "27",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "presentationalRole",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "19",
+					"childIds": [
+						"-1000000003"
+					],
+					"backendDOMNodeId": 27
+				},
+				{
+					"nodeId": "-1000000003",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "presentationalRole",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "27",
+					"childIds": []
+				},
+				{
+					"nodeId": "28",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Closed disclosure summary",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Closed disclosure summary"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "19",
+					"childIds": [
+						"-1000000004"
+					],
+					"backendDOMNodeId": 28
+				},
+				{
+					"nodeId": "42",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "presentationalRole",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "34",
+					"childIds": [
+						"-1000000005"
+					],
+					"backendDOMNodeId": 42
+				},
+				{
+					"nodeId": "-1000000005",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "presentationalRole",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "42",
+					"childIds": []
+				},
+				{
+					"nodeId": "43",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Open disclosure summary",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Open disclosure summary"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "34",
+					"childIds": [
+						"-1000000006"
+					],
+					"backendDOMNodeId": 43
+				},
+				{
+					"nodeId": "44",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Visible detail body.",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Visible detail body."
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "38",
+					"childIds": [
+						"-1000000007"
+					],
+					"backendDOMNodeId": 44
+				},
+				{
+					"nodeId": "45",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Button inside open details",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Button inside open details"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "39",
+					"childIds": [
+						"-1000000008"
+					],
+					"backendDOMNodeId": 45
+				},
+				{
+					"nodeId": "53",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Open non-modal dialog body.",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Open non-modal dialog body."
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "52",
+					"childIds": [
+						"-1000000009"
+					],
+					"backendDOMNodeId": 53
+				},
+				{
+					"nodeId": "55",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Button inside open dialog",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Button inside open dialog"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "54",
+					"childIds": [
+						"-1000000010"
+					],
+					"backendDOMNodeId": 55
+				},
+				{
+					"nodeId": "56",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Close",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Close"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "2",
+					"childIds": [
+						"57"
+					],
+					"backendDOMNodeId": 56
+				},
+				{
+					"nodeId": "-1000000012",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Toggle popover"
+					},
+					"properties": [],
+					"parentId": "59",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000013",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Tail control"
+					},
+					"properties": [],
+					"parentId": "66",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000004",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Closed disclosure summary"
+					},
+					"properties": [],
+					"parentId": "28",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000006",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Open disclosure summary"
+					},
+					"properties": [],
+					"parentId": "43",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000007",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Visible detail body."
+					},
+					"properties": [],
+					"parentId": "44",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000008",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Button inside open details"
+					},
+					"properties": [],
+					"parentId": "45",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000009",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Open non-modal dialog body."
+					},
+					"properties": [],
+					"parentId": "53",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000010",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Button inside open dialog"
+					},
+					"properties": [],
+					"parentId": "55",
+					"childIds": []
+				},
+				{
+					"nodeId": "57",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Close",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Close"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "56",
+					"childIds": [
+						"-1000000011"
+					],
+					"backendDOMNodeId": 57
+				},
+				{
+					"nodeId": "-1000000011",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Close"
+					},
+					"properties": [],
+					"parentId": "57",
+					"childIds": []
+				}
+			],
+			"listeners": {
+				"frames": [
+					{
+						"frame": "",
+						"total": 29,
+						"scanned": 29,
+						"hits": []
+					}
+				],
+				"truncated": false
+			}
+		}
+	],
+	"warnings": []
+}

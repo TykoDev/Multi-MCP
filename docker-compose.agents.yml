@@ -1,0 +1,54 @@
+# Overlay: the ACP bridge to an external coding agent. Put an ACP executable at /opt/agents/agent
+# (derived image or read-only bind) and create the two secrets below. See docs/guides/agents-and-sandbox.md.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d --build
+services:
+  tykotech-mcp:
+    environment:
+      TTK_AGENT_BRIDGE_URL: http://agent-runner:8789
+      TTK_AGENT_BRIDGE_TOKEN_FILE: /run/secrets/ttk_agent_bridge_token
+      TTK_AGENT_DEFAULT: '${TTK_AGENT_DEFAULT:-default}'
+      TTK_AGENT_MCP_URL: http://tykotech-mcp:8787/mcp
+    secrets:
+      - ttk_agent_bridge_token
+    networks:
+      - default
+      - agents-private
+    depends_on:
+      agent-runner:
+        condition: service_healthy
+    # No `command:`: the image's CMD already reaches agent-runner:8789 (tests/unit/images_test.ts enforces this).
+  agent-runner:
+    init: true
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent-runner
+    image: '${TTK_AGENT_RUNNER_IMAGE:-tykotech-agent-runner:0.2.0}'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    environment:
+      TTK_AGENT_COMMANDS_FILE: /run/secrets/ttk_agent_commands
+      TTK_AGENT_BRIDGE_TOKEN_FILE: /run/secrets/ttk_agent_bridge_token
+    secrets:
+      - ttk_agent_bridge_token
+      - ttk_agent_commands
+    volumes:
+      - ttk-agent-work:/agent-workspace
+    tmpfs: ['/tmp:size=128m,mode=1777']
+    networks: [agents-private, agents-egress]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    restart: unless-stopped
+secrets:
+  ttk_agent_bridge_token:
+    file: ./secrets/ttk_agent_bridge_token
+  ttk_agent_commands:
+    file: ./secrets/ttk_agent_commands.json
+volumes:
+  ttk-agent-work: {}
+networks:
+  agents-private:
+    internal: true
+  agents-egress: {}

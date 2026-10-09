@@ -1,0 +1,3839 @@
+{
+	"rootSessionId": "1911B2B5F89AAADB80F97666F911B282",
+	"sessions": [
+		{
+			"targetId": "811F4182A0BFABCE6DB7D26C70F80F1C",
+			"sessionId": "1911B2B5F89AAADB80F97666F911B282",
+			"frameId": "811F4182A0BFABCE6DB7D26C70F80F1C",
+			"url": "http://127.0.0.1:38111/occlusion_paint_order.html",
+			"devicePixelRatio": 1,
+			"layoutMetrics": {
+				"scrollX": 0,
+				"scrollY": 0,
+				"viewportWidth": 1265,
+				"viewportHeight": 900,
+				"contentWidth": 1265,
+				"contentHeight": 1236
+			},
+			"document": {
+				"nodeId": 1,
+				"backendNodeId": 2,
+				"nodeType": 9,
+				"nodeName": "#document",
+				"localName": "",
+				"nodeValue": "",
+				"childNodeCount": 2,
+				"children": [
+					{
+						"nodeId": 2,
+						"parentId": 1,
+						"backendNodeId": 3,
+						"nodeType": 10,
+						"nodeName": "html",
+						"localName": "",
+						"nodeValue": "",
+						"publicId": "",
+						"systemId": ""
+					},
+					{
+						"nodeId": 3,
+						"parentId": 1,
+						"backendNodeId": 4,
+						"nodeType": 1,
+						"nodeName": "HTML",
+						"localName": "html",
+						"nodeValue": "",
+						"childNodeCount": 2,
+						"children": [
+							{
+								"nodeId": 4,
+								"parentId": 3,
+								"backendNodeId": 5,
+								"nodeType": 1,
+								"nodeName": "HEAD",
+								"localName": "head",
+								"nodeValue": "",
+								"childNodeCount": 3,
+								"children": [
+									{
+										"nodeId": 5,
+										"parentId": 4,
+										"backendNodeId": 6,
+										"nodeType": 1,
+										"nodeName": "META",
+										"localName": "meta",
+										"nodeValue": "",
+										"childNodeCount": 0,
+										"children": [],
+										"attributes": [
+											"charset",
+											"utf-8"
+										]
+									},
+									{
+										"nodeId": 6,
+										"parentId": 4,
+										"backendNodeId": 7,
+										"nodeType": 1,
+										"nodeName": "TITLE",
+										"localName": "title",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 7,
+												"parentId": 6,
+												"backendNodeId": 8,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "Paint Order Occlusion"
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 8,
+										"parentId": 4,
+										"backendNodeId": 9,
+										"nodeType": 1,
+										"nodeName": "STYLE",
+										"localName": "style",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 9,
+												"parentId": 8,
+												"backendNodeId": 10,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n.stage{position:relative;width:520px;height:220px;border:1px solid #333;margin-bottom:16px}\n.under{position:absolute;left:20px;top:20px;width:200px;height:60px}\n.cover{position:absolute;left:0;top:0;width:520px;height:220px;background:#ccc}\n.partial{position:absolute;left:120px;top:10px;width:160px;height:100px;background:#fdd;opacity:1}\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							},
+							{
+								"nodeId": 10,
+								"parentId": 3,
+								"backendNodeId": 11,
+								"nodeType": 1,
+								"nodeName": "BODY",
+								"localName": "body",
+								"nodeValue": "",
+								"childNodeCount": 1,
+								"children": [
+									{
+										"nodeId": 11,
+										"parentId": 10,
+										"backendNodeId": 12,
+										"nodeType": 1,
+										"nodeName": "MAIN",
+										"localName": "main",
+										"nodeValue": "",
+										"childNodeCount": 9,
+										"children": [
+											{
+												"nodeId": 12,
+												"parentId": 11,
+												"backendNodeId": 13,
+												"nodeType": 1,
+												"nodeName": "H1",
+												"localName": "h1",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 13,
+														"parentId": 12,
+														"backendNodeId": 14,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Paint-order occlusion"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 14,
+												"parentId": 11,
+												"backendNodeId": 15,
+												"nodeType": 1,
+												"nodeName": "H2",
+												"localName": "h2",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 15,
+														"parentId": 14,
+														"backendNodeId": 16,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Fully covered by an opaque sibling painted later"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 16,
+												"parentId": 11,
+												"backendNodeId": 17,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 17,
+														"parentId": 16,
+														"backendNodeId": 18,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 18,
+																"parentId": 17,
+																"backendNodeId": 19,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Fully occluded button"
+															}
+														],
+														"attributes": [
+															"class",
+															"under",
+															"type",
+															"button",
+															"id",
+															"occluded-button"
+														]
+													},
+													{
+														"nodeId": 19,
+														"parentId": 16,
+														"backendNodeId": 20,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 20,
+																"parentId": 19,
+																"backendNodeId": 21,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Opaque cover"
+															}
+														],
+														"attributes": [
+															"class",
+															"cover",
+															"id",
+															"cover-layer"
+														]
+													}
+												],
+												"attributes": [
+													"class",
+													"stage"
+												]
+											},
+											{
+												"nodeId": 21,
+												"parentId": 11,
+												"backendNodeId": 22,
+												"nodeType": 1,
+												"nodeName": "H2",
+												"localName": "h2",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 22,
+														"parentId": 21,
+														"backendNodeId": 23,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Partially covered"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 23,
+												"parentId": 11,
+												"backendNodeId": 24,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 24,
+														"parentId": 23,
+														"backendNodeId": 25,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 25,
+																"parentId": 24,
+																"backendNodeId": 26,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Partly occluded button"
+															}
+														],
+														"attributes": [
+															"class",
+															"under",
+															"type",
+															"button",
+															"id",
+															"partly-occluded-button"
+														]
+													},
+													{
+														"nodeId": 26,
+														"parentId": 23,
+														"backendNodeId": 27,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 27,
+																"parentId": 26,
+																"backendNodeId": 28,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Partial cover"
+															}
+														],
+														"attributes": [
+															"class",
+															"partial",
+															"id",
+															"partial-cover"
+														]
+													}
+												],
+												"attributes": [
+													"class",
+													"stage"
+												]
+											},
+											{
+												"nodeId": 28,
+												"parentId": 11,
+												"backendNodeId": 29,
+												"nodeType": 1,
+												"nodeName": "H2",
+												"localName": "h2",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 29,
+														"parentId": 28,
+														"backendNodeId": 30,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Covered but the cover is pointer-events:none"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 30,
+												"parentId": 11,
+												"backendNodeId": 31,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 31,
+														"parentId": 30,
+														"backendNodeId": 32,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 32,
+																"parentId": 31,
+																"backendNodeId": 33,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Under pointer-events none"
+															}
+														],
+														"attributes": [
+															"class",
+															"under",
+															"type",
+															"button",
+															"id",
+															"pe-none-covered-button"
+														]
+													},
+													{
+														"nodeId": 33,
+														"parentId": 30,
+														"backendNodeId": 34,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 34,
+																"parentId": 33,
+																"backendNodeId": 35,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Transparent-to-clicks cover"
+															}
+														],
+														"attributes": [
+															"class",
+															"cover",
+															"id",
+															"pe-none-cover",
+															"style",
+															"pointer-events:none;background:rgba(0,0,0,0.15)"
+														]
+													}
+												],
+												"attributes": [
+													"class",
+													"stage"
+												]
+											},
+											{
+												"nodeId": 35,
+												"parentId": 11,
+												"backendNodeId": 36,
+												"nodeType": 1,
+												"nodeName": "H2",
+												"localName": "h2",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 36,
+														"parentId": 35,
+														"backendNodeId": 37,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Not covered (control)"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 37,
+												"parentId": 11,
+												"backendNodeId": 38,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 38,
+														"parentId": 37,
+														"backendNodeId": 39,
+														"nodeType": 1,
+														"nodeName": "BUTTON",
+														"localName": "button",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 39,
+																"parentId": 38,
+																"backendNodeId": 40,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Unoccluded control button"
+															}
+														],
+														"attributes": [
+															"class",
+															"under",
+															"type",
+															"button",
+															"id",
+															"visible-control-button"
+														]
+													}
+												],
+												"attributes": [
+													"class",
+													"stage"
+												]
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							}
+						],
+						"attributes": [
+							"lang",
+							"en"
+						],
+						"frameId": "811F4182A0BFABCE6DB7D26C70F80F1C"
+					}
+				],
+				"documentURL": "http://127.0.0.1:38111/occlusion_paint_order.html",
+				"baseURL": "http://127.0.0.1:38111/occlusion_paint_order.html",
+				"xmlVersion": "",
+				"compatibilityMode": "NoQuirksMode",
+				"isScrollable": true
+			},
+			"snapshot": {
+				"documents": [
+					{
+						"documentURL": 0,
+						"title": 1,
+						"baseURL": 0,
+						"contentLanguage": -1,
+						"encodingName": 2,
+						"publicId": -1,
+						"systemId": -1,
+						"frameId": 3,
+						"nodes": {
+							"parentIndex": [
+								-1,
+								0,
+								0,
+								2,
+								3,
+								3,
+								3,
+								3,
+								7,
+								3,
+								3,
+								10,
+								3,
+								2,
+								2,
+								14,
+								14,
+								16,
+								16,
+								18,
+								16,
+								16,
+								21,
+								16,
+								16,
+								24,
+								24,
+								26,
+								24,
+								24,
+								29,
+								24,
+								16,
+								16,
+								33,
+								16,
+								16,
+								36,
+								36,
+								38,
+								36,
+								36,
+								41,
+								36,
+								16,
+								16,
+								45,
+								16,
+								16,
+								48,
+								48,
+								50,
+								48,
+								48,
+								53,
+								48,
+								16,
+								16,
+								57,
+								16,
+								16,
+								60,
+								60,
+								62,
+								60,
+								16,
+								14
+							],
+							"nodeType": [
+								9,
+								10,
+								1,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								3,
+								3
+							],
+							"shadowRootType": {
+								"index": [],
+								"value": []
+							},
+							"nodeName": [
+								4,
+								5,
+								6,
+								15,
+								16,
+								18,
+								16,
+								21,
+								16,
+								16,
+								22,
+								16,
+								16,
+								16,
+								24,
+								16,
+								25,
+								16,
+								27,
+								16,
+								16,
+								30,
+								16,
+								16,
+								32,
+								16,
+								37,
+								16,
+								16,
+								32,
+								16,
+								16,
+								16,
+								30,
+								16,
+								16,
+								32,
+								16,
+								37,
+								16,
+								16,
+								32,
+								16,
+								16,
+								16,
+								30,
+								16,
+								16,
+								32,
+								16,
+								37,
+								16,
+								16,
+								32,
+								16,
+								16,
+								16,
+								30,
+								16,
+								16,
+								32,
+								16,
+								37,
+								16,
+								16,
+								16,
+								16
+							],
+							"nodeValue": [
+								-1,
+								-1,
+								-1,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								1,
+								17,
+								-1,
+								23,
+								17,
+								17,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								28,
+								29,
+								-1,
+								31,
+								17,
+								-1,
+								36,
+								-1,
+								46,
+								36,
+								-1,
+								50,
+								17,
+								29,
+								-1,
+								51,
+								17,
+								-1,
+								36,
+								-1,
+								53,
+								36,
+								-1,
+								57,
+								17,
+								29,
+								-1,
+								58,
+								17,
+								-1,
+								36,
+								-1,
+								60,
+								36,
+								-1,
+								66,
+								17,
+								29,
+								-1,
+								67,
+								17,
+								-1,
+								36,
+								-1,
+								69,
+								17,
+								17,
+								70
+							],
+							"backendNodeId": [
+								2,
+								3,
+								4,
+								5,
+								41,
+								6,
+								42,
+								7,
+								8,
+								43,
+								9,
+								10,
+								44,
+								45,
+								11,
+								46,
+								12,
+								47,
+								13,
+								14,
+								48,
+								15,
+								16,
+								49,
+								17,
+								50,
+								18,
+								19,
+								51,
+								20,
+								21,
+								52,
+								53,
+								22,
+								23,
+								54,
+								24,
+								55,
+								25,
+								26,
+								56,
+								27,
+								28,
+								57,
+								58,
+								29,
+								30,
+								59,
+								31,
+								60,
+								32,
+								33,
+								61,
+								34,
+								35,
+								62,
+								63,
+								36,
+								37,
+								64,
+								38,
+								65,
+								39,
+								40,
+								66,
+								67,
+								68
+							],
+							"attributes": [
+								[],
+								[],
+								[
+									7,
+									8
+								],
+								[],
+								[],
+								[
+									19,
+									20
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									33,
+									34
+								],
+								[],
+								[
+									33,
+									38,
+									39,
+									40,
+									41,
+									42
+								],
+								[],
+								[],
+								[
+									33,
+									47,
+									41,
+									48
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									33,
+									34
+								],
+								[],
+								[
+									33,
+									38,
+									39,
+									40,
+									41,
+									52
+								],
+								[],
+								[],
+								[
+									33,
+									54,
+									41,
+									55
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									33,
+									34
+								],
+								[],
+								[
+									33,
+									38,
+									39,
+									40,
+									41,
+									59
+								],
+								[],
+								[],
+								[
+									33,
+									47,
+									41,
+									61,
+									62,
+									63
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									33,
+									34
+								],
+								[],
+								[
+									33,
+									38,
+									39,
+									40,
+									41,
+									68
+								],
+								[],
+								[],
+								[],
+								[]
+							],
+							"textValue": {
+								"index": [],
+								"value": []
+							},
+							"inputValue": {
+								"index": [],
+								"value": []
+							},
+							"inputChecked": {
+								"index": []
+							},
+							"optionSelected": {
+								"index": []
+							},
+							"contentDocumentIndex": {
+								"index": [],
+								"value": []
+							},
+							"pseudoType": {
+								"index": [],
+								"value": []
+							},
+							"pseudoIdentifier": {
+								"index": [],
+								"value": []
+							},
+							"isClickable": {
+								"index": []
+							},
+							"currentSourceURL": {
+								"index": [],
+								"value": []
+							},
+							"originURL": {
+								"index": [],
+								"value": []
+							}
+						},
+						"layout": {
+							"nodeIndex": [
+								0,
+								2,
+								14,
+								16,
+								18,
+								19,
+								21,
+								22,
+								24,
+								26,
+								27,
+								29,
+								30,
+								33,
+								34,
+								36,
+								38,
+								39,
+								41,
+								42,
+								45,
+								46,
+								48,
+								50,
+								51,
+								53,
+								54,
+								57,
+								58,
+								60,
+								62,
+								63
+							],
+							"styles": [
+								[],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									35,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									44,
+									49
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									44,
+									49
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									35,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									44,
+									56
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									44,
+									56
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									35,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									64,
+									44,
+									65
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									64,
+									44,
+									65
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									35,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									43,
+									12,
+									44,
+									45
+								]
+							],
+							"bounds": [
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1265,
+									1236.203125
+								],
+								[
+									0,
+									0,
+									1265,
+									1236.203125
+								],
+								[
+									0,
+									0,
+									1265,
+									1236.203125
+								],
+								[
+									12,
+									30.75,
+									1241,
+									39.1875
+								],
+								[
+									12,
+									33.75,
+									323.296875,
+									33
+								],
+								[
+									12,
+									88.6875,
+									1241,
+									29.390625
+								],
+								[
+									12,
+									90.6875,
+									554.203125,
+									24
+								],
+								[
+									12,
+									135.5,
+									520,
+									220
+								],
+								[
+									33,
+									156.5,
+									200,
+									60
+								],
+								[
+									70,
+									179,
+									125.984375,
+									15
+								],
+								[
+									13,
+									136.5,
+									520,
+									220
+								],
+								[
+									13,
+									137.5,
+									92.375,
+									17
+								],
+								[
+									12,
+									372.921875,
+									1241,
+									29.390625
+								],
+								[
+									12,
+									374.921875,
+									196.28125,
+									24
+								],
+								[
+									12,
+									419.734375,
+									520,
+									220
+								],
+								[
+									33,
+									440.734375,
+									200,
+									60
+								],
+								[
+									67.046875,
+									463.234375,
+									131.90625,
+									15
+								],
+								[
+									133,
+									430.734375,
+									160,
+									100
+								],
+								[
+									133,
+									431.734375,
+									100.078125,
+									17
+								],
+								[
+									12,
+									657.15625,
+									1241,
+									29.390625
+								],
+								[
+									12,
+									659.15625,
+									508.03125,
+									24
+								],
+								[
+									12,
+									703.96875,
+									520,
+									220
+								],
+								[
+									33,
+									724.96875,
+									200,
+									60
+								],
+								[
+									54.078125,
+									747.46875,
+									157.84375,
+									15
+								],
+								[
+									13,
+									704.96875,
+									520,
+									220
+								],
+								[
+									13,
+									705.96875,
+									207.828125,
+									17
+								],
+								[
+									12,
+									941.390625,
+									1241,
+									29.390625
+								],
+								[
+									12,
+									943.390625,
+									242.46875,
+									24
+								],
+								[
+									12,
+									988.203125,
+									520,
+									220
+								],
+								[
+									33,
+									1009.203125,
+									200,
+									60
+								],
+								[
+									55.546875,
+									1031.703125,
+									154.890625,
+									15
+								]
+							],
+							"text": [
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								28,
+								-1,
+								31,
+								-1,
+								-1,
+								46,
+								-1,
+								50,
+								-1,
+								51,
+								-1,
+								-1,
+								53,
+								-1,
+								57,
+								-1,
+								58,
+								-1,
+								-1,
+								60,
+								-1,
+								66,
+								-1,
+								67,
+								-1,
+								-1,
+								69
+							],
+							"stackingContexts": {
+								"index": [
+									0,
+									1
+								]
+							},
+							"paintOrders": [
+								0,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								2,
+								3,
+								3,
+								4,
+								4,
+								1,
+								1,
+								5,
+								6,
+								6,
+								7,
+								7,
+								1,
+								1,
+								8,
+								9,
+								9,
+								10,
+								10,
+								1,
+								1,
+								11,
+								12,
+								12
+							],
+							"offsetRects": [
+								[],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									12,
+									31,
+									1241,
+									39
+								],
+								[],
+								[
+									12,
+									89,
+									1241,
+									29
+								],
+								[],
+								[
+									12,
+									136,
+									520,
+									220
+								],
+								[
+									20,
+									20,
+									200,
+									60
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[],
+								[
+									12,
+									373,
+									1241,
+									29
+								],
+								[],
+								[
+									12,
+									420,
+									520,
+									220
+								],
+								[
+									20,
+									20,
+									200,
+									60
+								],
+								[],
+								[
+									120,
+									10,
+									160,
+									100
+								],
+								[],
+								[
+									12,
+									657,
+									1241,
+									29
+								],
+								[],
+								[
+									12,
+									704,
+									520,
+									220
+								],
+								[
+									20,
+									20,
+									200,
+									60
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[],
+								[
+									12,
+									941,
+									1241,
+									29
+								],
+								[],
+								[
+									12,
+									988,
+									520,
+									220
+								],
+								[
+									20,
+									20,
+									200,
+									60
+								],
+								[]
+							],
+							"scrollRects": [
+								[],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1241,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[
+									0,
+									0,
+									196,
+									56
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									0,
+									0,
+									518,
+									218
+								],
+								[
+									0,
+									0,
+									196,
+									56
+								],
+								[],
+								[
+									0,
+									0,
+									160,
+									100
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[
+									0,
+									0,
+									196,
+									56
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									0,
+									0,
+									518,
+									218
+								],
+								[
+									0,
+									0,
+									196,
+									56
+								],
+								[]
+							],
+							"clientRects": [
+								[],
+								[
+									0,
+									0,
+									1265,
+									900
+								],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1265,
+									1236
+								],
+								[
+									0,
+									0,
+									1241,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									1,
+									1,
+									518,
+									218
+								],
+								[
+									2,
+									2,
+									196,
+									56
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									1,
+									1,
+									518,
+									218
+								],
+								[
+									2,
+									2,
+									196,
+									56
+								],
+								[],
+								[
+									0,
+									0,
+									160,
+									100
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									1,
+									1,
+									518,
+									218
+								],
+								[
+									2,
+									2,
+									196,
+									56
+								],
+								[],
+								[
+									0,
+									0,
+									520,
+									220
+								],
+								[],
+								[
+									0,
+									0,
+									1241,
+									29
+								],
+								[],
+								[
+									1,
+									1,
+									518,
+									218
+								],
+								[
+									2,
+									2,
+									196,
+									56
+								],
+								[]
+							]
+						},
+						"textBoxes": {
+							"layoutIndex": [
+								5,
+								7,
+								10,
+								12,
+								14,
+								17,
+								19,
+								21,
+								24,
+								26,
+								28,
+								31
+							],
+							"bounds": [
+								[
+									12,
+									33.75,
+									323.296875,
+									33
+								],
+								[
+									12,
+									90.6875,
+									554.203125,
+									24
+								],
+								[
+									70,
+									179,
+									125.984375,
+									15
+								],
+								[
+									13,
+									137.5,
+									92.375,
+									17
+								],
+								[
+									12,
+									374.921875,
+									196.28125,
+									24
+								],
+								[
+									67.046875,
+									463.234375,
+									131.90625,
+									15
+								],
+								[
+									133,
+									431.734375,
+									100.078125,
+									17
+								],
+								[
+									12,
+									659.15625,
+									508.03125,
+									24
+								],
+								[
+									54.078125,
+									747.46875,
+									157.84375,
+									15
+								],
+								[
+									13,
+									705.96875,
+									207.828125,
+									17
+								],
+								[
+									12,
+									943.390625,
+									242.46875,
+									24
+								],
+								[
+									55.546875,
+									1031.703125,
+									154.890625,
+									15
+								]
+							],
+							"start": [
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0
+							],
+							"length": [
+								21,
+								48,
+								21,
+								12,
+								17,
+								22,
+								13,
+								44,
+								25,
+								27,
+								21,
+								25
+							]
+						},
+						"scrollOffsetX": 0,
+						"scrollOffsetY": 0,
+						"contentWidth": 1265,
+						"contentHeight": 1236
+					}
+				],
+				"strings": [
+					"http://127.0.0.1:38111/occlusion_paint_order.html",
+					"Paint Order Occlusion",
+					"UTF-8",
+					"811F4182A0BFABCE6DB7D26C70F80F1C",
+					"#document",
+					"html",
+					"HTML",
+					"lang",
+					"en",
+					"block",
+					"visible",
+					"1",
+					"auto",
+					"static",
+					"rgb(255, 255, 255)",
+					"HEAD",
+					"#text",
+					"\n",
+					"META",
+					"charset",
+					"utf-8",
+					"TITLE",
+					"STYLE",
+					"\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n.stage{position:relative;width:520px;height:220px;border:1px solid #333;margin-bottom:16px}\n.under{position:absolute;left:20px;top:20px;width:200px;height:60px}\n.cover{position:absolute;left:0;top:0;width:520px;height:220px;background:#ccc}\n.partial{position:absolute;left:120px;top:10px;width:160px;height:100px;background:#fdd;opacity:1}\n",
+					"BODY",
+					"MAIN",
+					"rgba(0, 0, 0, 0)",
+					"H1",
+					"Paint-order occlusion",
+					"\n\n",
+					"H2",
+					"Fully covered by an opaque sibling painted later",
+					"DIV",
+					"class",
+					"stage",
+					"relative",
+					"\n  ",
+					"BUTTON",
+					"under",
+					"type",
+					"button",
+					"id",
+					"occluded-button",
+					"default",
+					"absolute",
+					"rgb(240, 240, 240)",
+					"Fully occluded button",
+					"cover",
+					"cover-layer",
+					"rgb(204, 204, 204)",
+					"Opaque cover",
+					"Partially covered",
+					"partly-occluded-button",
+					"Partly occluded button",
+					"partial",
+					"partial-cover",
+					"rgb(255, 221, 221)",
+					"Partial cover",
+					"Covered but the cover is pointer-events:none",
+					"pe-none-covered-button",
+					"Under pointer-events none",
+					"pe-none-cover",
+					"style",
+					"pointer-events:none;background:rgba(0,0,0,0.15)",
+					"none",
+					"rgba(0, 0, 0, 0.15)",
+					"Transparent-to-clicks cover",
+					"Not covered (control)",
+					"visible-control-button",
+					"Unoccluded control button",
+					"\n\n\n"
+				]
+			},
+			"axNodes": [
+				{
+					"nodeId": "2",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "RootWebArea"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 144
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Paint Order Occlusion",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label",
+								"superseded": true
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Paint Order Occlusion"
+								},
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/occlusion_paint_order.html"
+							}
+						}
+					],
+					"childIds": [
+						"4"
+					],
+					"backendDOMNodeId": 2,
+					"frameId": "811F4182A0BFABCE6DB7D26C70F80F1C"
+				},
+				{
+					"nodeId": "4",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "2",
+					"childIds": [
+						"11"
+					],
+					"backendDOMNodeId": 4
+				},
+				{
+					"nodeId": "11",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "4",
+					"childIds": [
+						"12"
+					],
+					"backendDOMNodeId": 11
+				},
+				{
+					"nodeId": "12",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "main"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 118
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "11",
+					"childIds": [
+						"13",
+						"15",
+						"17",
+						"22",
+						"24",
+						"29",
+						"31",
+						"36",
+						"38"
+					],
+					"backendDOMNodeId": 12
+				},
+				{
+					"nodeId": "13",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Paint-order occlusion",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Paint-order occlusion"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 1
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"14"
+					],
+					"backendDOMNodeId": 13
+				},
+				{
+					"nodeId": "15",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Fully covered by an opaque sibling painted later",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Fully covered by an opaque sibling painted later"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 2
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"16"
+					],
+					"backendDOMNodeId": 15
+				},
+				{
+					"nodeId": "17",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"18",
+						"20"
+					],
+					"backendDOMNodeId": 17
+				},
+				{
+					"nodeId": "22",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partially covered",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Partially covered"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 2
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"23"
+					],
+					"backendDOMNodeId": 22
+				},
+				{
+					"nodeId": "24",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"25",
+						"27"
+					],
+					"backendDOMNodeId": 24
+				},
+				{
+					"nodeId": "29",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Covered but the cover is pointer-events:none",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Covered but the cover is pointer-events:none"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 2
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"30"
+					],
+					"backendDOMNodeId": 29
+				},
+				{
+					"nodeId": "31",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"32",
+						"34"
+					],
+					"backendDOMNodeId": 31
+				},
+				{
+					"nodeId": "36",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Not covered (control)",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Not covered (control)"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 2
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"37"
+					],
+					"backendDOMNodeId": 36
+				},
+				{
+					"nodeId": "38",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"39"
+					],
+					"backendDOMNodeId": 38
+				},
+				{
+					"nodeId": "14",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Paint-order occlusion",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Paint-order occlusion"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "13",
+					"childIds": [
+						"-1000000002"
+					],
+					"backendDOMNodeId": 14
+				},
+				{
+					"nodeId": "16",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Fully covered by an opaque sibling painted later",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Fully covered by an opaque sibling painted later"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"-1000000003"
+					],
+					"backendDOMNodeId": 16
+				},
+				{
+					"nodeId": "18",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Fully occluded button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Fully occluded button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "17",
+					"childIds": [
+						"19"
+					],
+					"backendDOMNodeId": 18
+				},
+				{
+					"nodeId": "20",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "17",
+					"childIds": [
+						"21"
+					],
+					"backendDOMNodeId": 20
+				},
+				{
+					"nodeId": "23",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partially covered",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Partially covered"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "22",
+					"childIds": [
+						"-1000000006"
+					],
+					"backendDOMNodeId": 23
+				},
+				{
+					"nodeId": "25",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partly occluded button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Partly occluded button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "24",
+					"childIds": [
+						"26"
+					],
+					"backendDOMNodeId": 25
+				},
+				{
+					"nodeId": "27",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "24",
+					"childIds": [
+						"28"
+					],
+					"backendDOMNodeId": 27
+				},
+				{
+					"nodeId": "30",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Covered but the cover is pointer-events:none",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Covered but the cover is pointer-events:none"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "29",
+					"childIds": [
+						"-1000000009"
+					],
+					"backendDOMNodeId": 30
+				},
+				{
+					"nodeId": "32",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Under pointer-events none",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Under pointer-events none"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "31",
+					"childIds": [
+						"33"
+					],
+					"backendDOMNodeId": 32
+				},
+				{
+					"nodeId": "34",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "31",
+					"childIds": [
+						"35"
+					],
+					"backendDOMNodeId": 34
+				},
+				{
+					"nodeId": "37",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Not covered (control)",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Not covered (control)"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "36",
+					"childIds": [
+						"-1000000012"
+					],
+					"backendDOMNodeId": 37
+				},
+				{
+					"nodeId": "39",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Unoccluded control button",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Unoccluded control button"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "38",
+					"childIds": [
+						"40"
+					],
+					"backendDOMNodeId": 39
+				},
+				{
+					"nodeId": "-1000000002",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Paint-order occlusion"
+					},
+					"properties": [],
+					"parentId": "14",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000003",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Fully covered by an opaque sibling painted later"
+					},
+					"properties": [],
+					"parentId": "16",
+					"childIds": []
+				},
+				{
+					"nodeId": "19",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Fully occluded button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Fully occluded button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "18",
+					"childIds": [
+						"-1000000004"
+					],
+					"backendDOMNodeId": 19
+				},
+				{
+					"nodeId": "21",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Opaque cover",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Opaque cover"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "20",
+					"childIds": [
+						"-1000000005"
+					],
+					"backendDOMNodeId": 21
+				},
+				{
+					"nodeId": "-1000000006",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partially covered"
+					},
+					"properties": [],
+					"parentId": "23",
+					"childIds": []
+				},
+				{
+					"nodeId": "26",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partly occluded button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Partly occluded button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "25",
+					"childIds": [
+						"-1000000007"
+					],
+					"backendDOMNodeId": 26
+				},
+				{
+					"nodeId": "28",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partial cover",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Partial cover"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "27",
+					"childIds": [
+						"-1000000008"
+					],
+					"backendDOMNodeId": 28
+				},
+				{
+					"nodeId": "-1000000009",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Covered but the cover is pointer-events:none"
+					},
+					"properties": [],
+					"parentId": "30",
+					"childIds": []
+				},
+				{
+					"nodeId": "33",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Under pointer-events none",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Under pointer-events none"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "32",
+					"childIds": [
+						"-1000000010"
+					],
+					"backendDOMNodeId": 33
+				},
+				{
+					"nodeId": "35",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Transparent-to-clicks cover",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Transparent-to-clicks cover"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "34",
+					"childIds": [
+						"-1000000011"
+					],
+					"backendDOMNodeId": 35
+				},
+				{
+					"nodeId": "-1000000012",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Not covered (control)"
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": []
+				},
+				{
+					"nodeId": "40",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Unoccluded control button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Unoccluded control button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "39",
+					"childIds": [
+						"-1000000013"
+					],
+					"backendDOMNodeId": 40
+				},
+				{
+					"nodeId": "-1000000004",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Fully occluded button"
+					},
+					"properties": [],
+					"parentId": "19",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000005",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Opaque cover"
+					},
+					"properties": [],
+					"parentId": "21",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000007",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partly occluded button"
+					},
+					"properties": [],
+					"parentId": "26",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000008",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Partial cover"
+					},
+					"properties": [],
+					"parentId": "28",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000010",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Under pointer-events none"
+					},
+					"properties": [],
+					"parentId": "33",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000011",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Transparent-to-clicks cover"
+					},
+					"properties": [],
+					"parentId": "35",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000013",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Unoccluded control button"
+					},
+					"properties": [],
+					"parentId": "40",
+					"childIds": []
+				}
+			],
+			"listeners": {
+				"frames": [
+					{
+						"frame": "",
+						"total": 23,
+						"scanned": 23,
+						"hits": []
+					}
+				],
+				"truncated": false
+			}
+		}
+	],
+	"warnings": []
+}

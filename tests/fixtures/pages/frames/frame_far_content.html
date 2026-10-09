@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Frame With Content Far Above And Below The Fold</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#f8f8f8;color:#000}
+main{padding:0}
+.row{height:60px;border-bottom:1px solid #ccc;padding:4px}
+.gap-above{height:1500px}
+.gap-below{height:1700px}
+</style>
+</head>
+<body>
+<main>
+<div class="row"><button type="button" id="ff-above1">Frame above row 1</button></div>
+<div class="row"><button type="button" id="ff-above2">Frame above row 2</button></div>
+<div class="row"><button type="button" id="ff-above3">Frame above row 3</button></div>
+<div class="gap-above"></div>
+<div class="row"><button type="button" id="ff-near1">Frame near row 1</button></div>
+<div class="gap-below"></div>
+<div class="row"><button type="button" id="ff-far1">Frame far row 1</button></div>
+<div class="row"><button type="button" id="ff-far2">Frame far row 2</button></div>
+<div class="row"><button type="button" id="ff-far3">Frame far row 3</button></div>
+<div class="row"><button type="button" id="ff-far4">Frame far row 4</button></div>
+<div class="row"><button type="button" id="ff-far5">Frame far row 5</button></div>
+<div class="row"><button type="button" id="ff-far6">Frame far row 6</button></div>
+<div class="row"><button type="button" id="ff-far7">Frame far row 7</button></div>
+<div class="row"><button type="button" id="ff-far8">Frame far row 8</button></div>
+<div class="row"><button type="button" id="ff-far9">Frame far row 9</button></div>
+<div class="row"><button type="button" id="ff-far10">Frame far row 10</button></div>
+<div class="row"><button type="button" id="ff-far11">Frame far row 11</button></div>
+<div class="row"><button type="button" id="ff-far12">Frame far row 12</button></div>
+</main>
+<script>
+// Park the fold on `#ff-near1`: three rows sit ~1500px ABOVE the frame's box and twelve sit ~1700px
+// BELOW it, both well outside the +/-1000px visibility slack. That is what makes the hidden-element
+// hints fire in both directions at once, which is the only way to observe that they are sorted by
+// ABSOLUTE distance rather than by signed offset. Deterministic: one absolute scroll, no timers.
+window.scrollTo(0, 3 * 61 + 1500);
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Horizontal Scroll</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+#hstrip{width:400px;height:90px;overflow-x:scroll;overflow-y:hidden;border:1px solid #333;white-space:nowrap}
+#hstrip button{display:inline-block;width:180px;height:60px;margin:6px}
+#bothstrip{width:400px;height:120px;overflow:scroll;border:1px solid #06c;margin-top:12px}
+#bothstrip .wide{width:1400px;height:400px}
+</style>
+</head>
+<body>
+<main>
+<h1>Horizontally scrollable containers</h1>
+
+<div id="hstrip" role="region" aria-label="Horizontal strip">
+  <button type="button" id="h-1">Card 1</button><button type="button" id="h-2">Card 2</button><button type="button" id="h-3">Card 3</button><button type="button" id="h-4">Card 4</button><button type="button" id="h-5">Card 5</button><button type="button" id="h-6">Card 6</button>
+</div>
+
+<div id="bothstrip">
+  <div class="wide">
+    <button type="button" id="b-1">Both-axis card A</button>
+    <div style="height:200px"></div>
+    <button type="button" id="b-2">Both-axis card B</button>
+  </div>
+</div>
+</main>
+</body>
+</html>

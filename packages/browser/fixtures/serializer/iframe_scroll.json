@@ -1,0 +1,35 @@
+{
+	"name": "iframe_scroll",
+	"pins": "§6.4 frame marker as the reference writes it — |scroll element[idx] with no closing bar, the literal (scroll) and no src — plus the '… (N more elements below - scroll to reveal):' hint block, ≤10 and sorted by pages",
+	"options": { "maxHiddenElementHints": 2 },
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{
+						"tag": "IFRAME",
+						"id": 600,
+						"attrs": { "src": "/inner.html" },
+						"hidden": [
+							{ "tag": "BUTTON", "text": "Submit form", "pages": 2.3 },
+							{ "tag": "A", "text": "Next", "pages": 1.1 },
+							{ "tag": "DIV", "text": "Footer", "pages": 4 }
+						],
+						"document": {
+							"tag": "#document",
+							"id": 601,
+							"client": [0, 0, 100, 100],
+							"scroll": [35, 0, 200, 310],
+							"children": [
+								{ "text": "inner text" },
+								{ "tag": "BUTTON", "id": 610, "children": [{ "text": "Buy" }] }
+							]
+						}
+					}
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page-Level Scroll, Captured Scrolled</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+.block{height:400px;border-bottom:1px solid #ccc;padding:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Page-level scroll, captured scrolled</h1>
+<div class="block"><button type="button" id="ps-b1">Prescrolled block 1</button></div>
+<div class="block"><button type="button" id="ps-b2">Prescrolled block 2</button></div>
+<div class="block"><button type="button" id="ps-b3">Prescrolled block 3</button></div>
+<div class="block"><button type="button" id="ps-b4">Prescrolled block 4</button></div>
+<div class="block"><button type="button" id="ps-b5">Prescrolled block 5</button></div>
+<div class="block"><button type="button" id="ps-b6">Prescrolled block 6</button></div>
+<div class="block"><button type="button" id="ps-b7">Prescrolled block 7</button></div>
+<div class="block"><button type="button" id="ps-b8">Prescrolled block 8</button></div>
+<div class="block"><button type="button" id="ps-b9">Prescrolled block 9</button></div>
+<div class="block"><button type="button" id="ps-b10">Prescrolled block 10</button></div>
+</main>
+<script>
+// Scroll the MAIN frame before the capture, synchronously at parse time so the position is settled
+// long before any CDP read. `scroll_page` covers the at-rest case; the recorded corpus contains no
+// page whose main document is scrolled, which leaves the page-absolute-geometry invariant
+// (DOMSnapshot bounds are document coordinates and do NOT move with the scroll offset — only the
+// viewport band moves) with no fixture behind it. Deterministic: one absolute scroll, no timers.
+window.scrollTo(0, 2000);
+</script>
+</body>
+</html>

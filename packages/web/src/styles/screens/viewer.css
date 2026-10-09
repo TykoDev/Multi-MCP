@@ -1,0 +1,909 @@
+/* Live View (viewer_view.ts) and its inspector (inspector.ts): a full-bleed stage with a floating glass toolbar, the
+ * canvas framed by a ring whose colour is the control state (green: you drive, amber: someone else, neutral: nobody),
+ * one recovery overlay, and the inspector as a side panel that becomes a slide-over on narrow screens. */
+
+/* --- layout --- */
+
+.lv-body {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 0;
+	column-gap: 0;
+	transition: grid-template-columns 0.32s var(--ttk-ease), column-gap 0.32s var(--ttk-ease);
+}
+.lv-body.inspector-open {
+	grid-template-columns: minmax(0, 1fr) 340px;
+	column-gap: 12px;
+}
+
+/* The stage surface: the toolbar floats on it, the canvas sits in the middle of it. */
+.lv-main {
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius-l);
+	background:
+		radial-gradient(900px 520px at 50% -10%, color-mix(in oklab, var(--ttk-brand) 12%, transparent), transparent 70%),
+		var(--ttk-sunken);
+	overflow: hidden;
+}
+
+/* --- toolbar --- */
+
+.lv-toolbar {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	margin: 10px 10px 0;
+	padding: 6px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 18px;
+	background: var(--ttk-glass);
+	backdrop-filter: blur(18px) saturate(1.4);
+	box-shadow: var(--ttk-shadow);
+	animation: lv-float-in 0.4s var(--ttk-spring) both;
+}
+.lv-group {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.lv-end {
+	margin-left: auto;
+}
+
+/* The address pill: the connection dot, then the address. */
+.lv-address {
+	flex: 1;
+	min-width: 140px;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 14px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+.lv-address:focus-within {
+	border-color: color-mix(in oklab, var(--ttk-brand) 60%, transparent);
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--ttk-brand) 20%, transparent);
+}
+.lv-address .dot {
+	position: relative;
+	transition: background 0.3s;
+}
+.lv-address input.lv-url {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+	color: var(--wa-color-text-normal);
+	font: 12.5px var(--wa-font-family-code);
+	text-overflow: ellipsis;
+}
+.lv-address input.lv-url:read-only {
+	color: var(--wa-color-text-quiet);
+	cursor: default;
+}
+
+.lv-tabs {
+	position: relative;
+	flex: 0 1 190px;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+}
+.lv-tabs > .icon {
+	position: absolute;
+	left: 11px;
+	z-index: 1;
+	color: var(--wa-color-text-quiet);
+	pointer-events: none;
+}
+.lv-tabs select {
+	height: 36px;
+	margin: 0;
+	padding-left: 32px;
+	border-color: var(--ttk-hairline);
+	border-radius: 999px;
+	background-color: var(--ttk-sunken);
+	font-size: 12px;
+}
+
+/* The mode chip: a glyph, and the word only while you drive. */
+.lv-mode {
+	height: 30px;
+	min-width: 30px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 0 7px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	color: var(--wa-color-text-quiet);
+	font: 750 11px/1 var(--wa-font-family-body);
+	letter-spacing: 0.08em;
+	white-space: nowrap;
+	transition: background 0.25s, color 0.25s, border-color 0.25s;
+}
+.lv-mode .icon {
+	width: 15px;
+	height: 15px;
+}
+.lv-mode.connecting .icon {
+	animation: lv-spin 1s linear infinite;
+}
+.lv-mode.offline {
+	border-color: color-mix(in oklab, var(--ttk-danger) 40%, transparent);
+	color: var(--ttk-danger);
+}
+.lv-mode.locked {
+	border-color: color-mix(in oklab, var(--ttk-locked) 45%, transparent);
+	background: color-mix(in oklab, var(--ttk-locked) 14%, transparent);
+	color: var(--ttk-locked);
+}
+.lv-mode.driving {
+	padding: 0 11px 0 9px;
+	border-color: var(--wa-color-success-fill-loud);
+	background: var(--wa-color-success-fill-loud);
+	color: var(--wa-color-success-on-loud);
+	animation: lv-pill 2s ease-in-out infinite;
+}
+
+/* The control toggle: the loudest control on the bar; green while you hold it. */
+.lv-toolbar button.ttk-btn.lv-control {
+	--wa-form-control-height: 36px;
+	border-color: transparent;
+	border-radius: 12px;
+	background: var(--ttk-gradient);
+	color: white;
+	box-shadow: var(--ttk-glow);
+	transition: background 0.25s, box-shadow 0.25s, transform 0.25s var(--ttk-spring);
+}
+.lv-toolbar button.ttk-btn.lv-control:hover:not(:disabled) {
+	transform: scale(1.06);
+	filter: brightness(1.08);
+}
+.lv-toolbar button.ttk-btn.lv-control.driving {
+	background: var(--wa-color-success-fill-loud);
+	color: var(--wa-color-success-on-loud);
+	box-shadow: 0 0 0 4px color-mix(in oklab, var(--ttk-live) 25%, transparent);
+}
+.lv-toolbar button.ttk-btn.lv-control:disabled {
+	background: var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	box-shadow: none;
+}
+
+/* A notice under the toolbar: who holds the lock, or the server's last error. */
+.lv-banner {
+	position: relative;
+	z-index: 2;
+	align-self: center;
+	max-width: calc(100% - 20px);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 10px 0;
+	padding: 5px 14px 5px 6px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 999px;
+	background: var(--ttk-glass);
+	backdrop-filter: blur(14px);
+	box-shadow: var(--ttk-shadow);
+	font-size: 12.5px;
+	animation: lv-drop 0.25s var(--ttk-ease) both;
+}
+.lv-banner-glyph {
+	width: 24px;
+	height: 24px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+}
+.lv-banner-glyph .icon {
+	width: 14px;
+	height: 14px;
+}
+.lv-banner.locked .lv-banner-glyph {
+	background: color-mix(in oklab, var(--ttk-locked) 18%, transparent);
+	color: var(--ttk-locked);
+}
+.lv-banner.error {
+	border-color: color-mix(in oklab, var(--ttk-danger) 40%, transparent);
+}
+.lv-banner.error .lv-banner-glyph {
+	background: color-mix(in oklab, var(--ttk-danger) 18%, transparent);
+	color: var(--ttk-danger);
+}
+.lv-banner-text {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* The session id and the page title, in the context bar. */
+.lv-ident {
+	height: 30px;
+	min-width: 0;
+	max-width: 240px;
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0 2px 0 11px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+}
+.lv-session {
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lv-ident button.ttk-btn {
+	--wa-form-control-height: 24px;
+	border-radius: 999px;
+}
+.lv-title {
+	max-width: 32vw;
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* --- stage and canvas --- */
+
+.lv-stage {
+	--ring: color-mix(in oklab, var(--wa-color-text-normal) 16%, transparent);
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+}
+.lv-stage[data-control='you'] {
+	--ring: var(--ttk-live);
+}
+.lv-stage[data-control='other'] {
+	--ring: var(--ttk-locked);
+}
+.lv-stage > canvas {
+	display: block;
+	max-width: 100%;
+	max-height: 100%;
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-canvas);
+	outline: 2px solid var(--ring);
+	outline-offset: 5px;
+	box-shadow: 0 0 0 10px color-mix(in oklab, var(--ring) 9%, transparent), var(--ttk-shadow-pop);
+	transition: outline-color 0.3s var(--ttk-ease), box-shadow 0.3s var(--ttk-ease), filter 0.4s;
+}
+.lv-stage > canvas:focus-visible {
+	outline-width: 3px;
+}
+.lv-stage > canvas.driving {
+	animation: lv-ring 2.4s ease-in-out infinite;
+}
+.lv-stage > canvas.dead {
+	filter: grayscale(1) brightness(0.5);
+}
+
+/* The one overlay (F2): connection lost, retrying, or ended. */
+.lv-stage > .overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+	overflow: auto;
+	background: color-mix(in oklab, var(--ttk-canvas) 62%, transparent);
+	backdrop-filter: blur(8px) saturate(1.2);
+	animation: lv-fade 0.25s var(--ttk-ease) both;
+}
+.overlay-card {
+	width: min(440px, 100%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 22px 22px 18px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-glass-strong);
+	box-shadow: var(--ttk-shadow-pop);
+	text-align: center;
+	animation: lv-pop 0.36s var(--ttk-spring) both;
+}
+.overlay-card .illustration {
+	width: 96px;
+	height: 96px;
+}
+.overlay-card .illustration.warn {
+	--tone: var(--ttk-locked);
+}
+.overlay-card .illustration.warn .orb {
+	background: linear-gradient(135deg, var(--wa-color-warning-50), var(--wa-color-orange-50));
+	box-shadow: 0 6px 22px -6px color-mix(in oklab, var(--ttk-locked) 70%, transparent);
+	animation: lv-throb 1.6s ease-in-out infinite;
+}
+.overlay-card .illustration.danger {
+	--tone: var(--ttk-danger);
+}
+.overlay-card .illustration.danger .orb {
+	background: linear-gradient(135deg, var(--wa-color-danger-50), var(--wa-color-pink-50));
+	box-shadow: 0 6px 22px -6px color-mix(in oklab, var(--ttk-danger) 70%, transparent);
+}
+.overlay-title {
+	font-size: 15px;
+	font-weight: 650;
+	overflow-wrap: anywhere;
+}
+.overlay-detail {
+	max-width: 38ch;
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+}
+.overlay-countdown {
+	width: 100%;
+	height: 4px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: var(--ttk-hairline);
+}
+.overlay-countdown-fill {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--ttk-locked);
+	transform-origin: left center;
+	animation: lv-drain var(--lv-wait, 1s) linear forwards;
+}
+.overlay-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+/* --- inspector --- */
+
+.lv-inspector {
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-glass);
+	backdrop-filter: blur(18px) saturate(1.3);
+	box-shadow: var(--ttk-shadow);
+	overflow: hidden;
+	visibility: hidden;
+	opacity: 0;
+	transition: visibility 0s 0.32s, opacity 0.2s var(--ttk-ease);
+}
+.lv-body.inspector-open .lv-inspector {
+	visibility: visible;
+	opacity: 1;
+	transition: opacity 0.25s var(--ttk-ease) 0.05s;
+}
+.insp-head {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 260px;
+	padding: 10px 10px 10px 14px;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.insp-head h2 {
+	flex: 1;
+	font-size: 13.5px;
+}
+.insp-head-glyph {
+	width: 28px;
+	height: 28px;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	background: color-mix(in oklab, var(--ttk-brand) 16%, transparent);
+	color: var(--ttk-brand);
+}
+.insp-scroll {
+	flex: 1;
+	min-width: 260px;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+wa-details.insp-section {
+	--spacing: 10px;
+}
+wa-details.insp-section::part(header) {
+	padding: 7px 8px;
+	border-radius: 12px;
+	transition: background 0.15s;
+}
+wa-details.insp-section::part(header):hover {
+	background: var(--ttk-hairline);
+}
+wa-details.insp-section::part(content) {
+	padding: 4px 8px 12px;
+}
+.insp-summary {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	font-size: 12.5px;
+	font-weight: 650;
+}
+.insp-glyph {
+	width: 26px;
+	height: 26px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 8px;
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+	color: var(--ttk-brand);
+	transition: transform 0.3s var(--ttk-spring);
+}
+.insp-glyph .icon {
+	width: 14px;
+	height: 14px;
+}
+wa-details.insp-section[open] .insp-glyph {
+	background: var(--ttk-gradient);
+	color: white;
+	transform: rotate(-6deg);
+}
+.insp-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.insp-summary button.ttk-btn {
+	--wa-form-control-height: 26px;
+}
+.insp-count {
+	min-width: 20px;
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	font: 650 11px/18px var(--wa-font-family-body);
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
+.insp-hint {
+	display: inline-grid;
+	place-items: center;
+	color: var(--wa-color-text-quiet);
+	cursor: help;
+}
+.insp-body {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.insp-none {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 2px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+
+/* Actions: icon tiles; their names are their tooltips. */
+.insp-actions {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+	gap: 6px;
+}
+.insp-actions > .empty {
+	grid-column: 1 / -1;
+	padding: 16px 8px;
+}
+.insp-actions button.ttk-btn.insp-act {
+	--wa-form-control-height: 44px;
+	width: 100%;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 12px;
+	background: var(--ttk-card);
+	transition: transform 0.22s var(--ttk-spring), border-color 0.2s, color 0.2s, background 0.2s;
+}
+.insp-actions button.ttk-btn.insp-act .icon {
+	width: 18px;
+	height: 18px;
+}
+.insp-actions button.ttk-btn.insp-act:hover:not(:disabled) {
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--ttk-brand) 45%, transparent);
+	color: var(--ttk-brand);
+}
+.insp-actions button.ttk-btn.insp-act.wa-danger {
+	color: var(--ttk-danger);
+}
+.insp-actions button.ttk-btn.insp-act.wa-danger:hover:not(:disabled) {
+	border-color: color-mix(in oklab, var(--ttk-danger) 50%, transparent);
+	background: color-mix(in oklab, var(--ttk-danger) 12%, transparent);
+	color: var(--ttk-danger);
+}
+.insp-actions button.ttk-btn.insp-act.recording {
+	border-color: color-mix(in oklab, var(--ttk-danger) 55%, transparent);
+	background: color-mix(in oklab, var(--ttk-danger) 14%, transparent);
+	color: var(--ttk-danger);
+}
+.insp-actions button.ttk-btn.insp-act.recording .icon {
+	fill: currentColor;
+	animation: lv-blink 1s ease-in-out infinite;
+}
+
+/* Viewport presets and the custom size row. */
+.insp-presets {
+	align-self: flex-start;
+}
+.insp-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+label.insp-field {
+	width: auto;
+	display: flex;
+}
+label.insp-field.grow {
+	flex: 1;
+	min-width: 120px;
+}
+label.insp-field > input {
+	margin: 0;
+	--wa-form-control-height: 30px;
+	font-size: 12px;
+}
+label.insp-field.num > input {
+	width: 66px;
+	padding: 0 6px;
+	font-family: var(--wa-font-family-code);
+}
+label.insp-field.num.small > input {
+	width: 54px;
+}
+.insp-sep {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+
+/* Tabs and downloads. */
+.insp-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.insp-item {
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 4px 6px 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 12px;
+	background: var(--ttk-card);
+	animation: lv-fade 0.2s var(--ttk-ease) both;
+}
+.insp-item.focused {
+	border-color: color-mix(in oklab, var(--ttk-brand) 45%, transparent);
+	background: color-mix(in oklab, var(--ttk-brand) 8%, var(--ttk-card));
+}
+.insp-item button.ttk-btn {
+	--wa-form-control-height: 26px;
+}
+.insp-pip {
+	width: 7px;
+	height: 7px;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background: color-mix(in oklab, var(--wa-color-text-normal) 25%, transparent);
+}
+.insp-item.focused .insp-pip {
+	background: var(--ttk-brand);
+	box-shadow: 0 0 8px var(--ttk-brand);
+}
+.insp-file-glyph {
+	display: grid;
+	place-items: center;
+	color: var(--wa-color-text-quiet);
+}
+.insp-meta {
+	flex: 1;
+	min-width: 0;
+}
+.insp-name,
+.insp-sub {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.insp-name {
+	font-size: 12px;
+	font-weight: 600;
+}
+.insp-sub {
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+}
+
+/* Events: a glyph per kind family, its colour, the time and a one-line payload. */
+.insp-events {
+	max-height: 280px;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+.insp-event {
+	--kind: var(--wa-color-text-quiet);
+	min-width: 0;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	grid-template-areas: 'glyph kind time' 'glyph text text';
+	column-gap: 8px;
+	padding: 5px 8px 5px 6px;
+	border-radius: 9px;
+	background: var(--ttk-card);
+	font-size: 11px;
+	animation: lv-slide 0.25s var(--ttk-ease) both;
+}
+.insp-event.k-navigation,
+.insp-event.k-tab {
+	--kind: var(--ttk-brand);
+}
+.insp-event.k-download {
+	--kind: var(--ttk-live);
+}
+.insp-event.k-dialog,
+.insp-event.k-control {
+	--kind: var(--ttk-locked);
+}
+.insp-event.k-console {
+	--kind: var(--ttk-agent);
+}
+.insp-event.k-gap,
+.insp-event.k-bye {
+	--kind: var(--ttk-danger);
+}
+.insp-ev-glyph {
+	grid-area: glyph;
+	width: 24px;
+	height: 24px;
+	display: grid;
+	place-items: center;
+	align-self: center;
+	border-radius: 7px;
+	background: color-mix(in oklab, var(--kind) 16%, transparent);
+	color: var(--kind);
+}
+.insp-ev-glyph .icon {
+	width: 13px;
+	height: 13px;
+}
+.insp-ev-kind {
+	grid-area: kind;
+	overflow: hidden;
+	color: var(--kind);
+	font-weight: 600;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.insp-ev-time {
+	grid-area: time;
+	color: var(--wa-color-text-quiet);
+}
+.insp-ev-text {
+	grid-area: text;
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* Output of the read-only actions. */
+.insp-output {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	border-radius: var(--ttk-radius-s);
+}
+.insp-output-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+}
+.insp-output .code {
+	max-height: 340px;
+}
+.insp-output.flash {
+	animation: lv-flash 0.7s var(--ttk-ease);
+}
+
+/* --- narrow screens --- */
+
+@media (max-width: 1100px) {
+	.lv-body.inspector-open {
+		grid-template-columns: minmax(0, 1fr) 300px;
+	}
+}
+
+/* The inspector slides over the stage instead of taking a column. */
+@media (max-width: 860px) {
+	.lv-body.inspector-open {
+		grid-template-columns: minmax(0, 1fr) 0;
+		column-gap: 0;
+	}
+	.lv-inspector {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 6;
+		width: min(340px, 92%);
+		background: var(--ttk-glass-strong);
+		box-shadow: var(--ttk-shadow-pop);
+		transform: translateX(18px);
+		transition: visibility 0s 0.3s, opacity 0.2s var(--ttk-ease), transform 0.3s var(--ttk-ease);
+	}
+	.lv-body.inspector-open .lv-inspector {
+		transform: none;
+		transition: opacity 0.2s var(--ttk-ease), transform 0.32s var(--ttk-spring);
+	}
+	.insp-head,
+	.insp-scroll {
+		min-width: 0;
+	}
+}
+
+/* The address takes its own row so the controls stay reachable at phone width (G3-3). `order` is visual only: the
+ * address field stays the first input in document order. */
+@media (max-width: 720px) {
+	.lv-toolbar {
+		flex-wrap: wrap;
+		row-gap: 6px;
+		margin: 6px 6px 0;
+	}
+	.lv-address {
+		order: 10;
+		flex-basis: 100%;
+	}
+	.lv-tabs {
+		flex: 1 1 120px;
+	}
+	.lv-stage {
+		padding: 14px;
+	}
+	.lv-title {
+		display: none;
+	}
+	.lv-ident {
+		max-width: 150px;
+	}
+	.overlay-card .illustration {
+		width: 76px;
+		height: 76px;
+	}
+}
+
+@keyframes lv-float-in {
+	from {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.98);
+	}
+}
+@keyframes lv-drop {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+}
+@keyframes lv-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes lv-pop {
+	from {
+		opacity: 0;
+		transform: scale(0.96) translateY(6px);
+	}
+}
+@keyframes lv-slide {
+	from {
+		opacity: 0;
+		transform: translateX(-6px);
+	}
+}
+@keyframes lv-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@keyframes lv-blink {
+	50% {
+		opacity: 0.4;
+	}
+}
+@keyframes lv-throb {
+	50% {
+		transform: scale(1.06);
+	}
+}
+@keyframes lv-drain {
+	from {
+		transform: scaleX(1);
+	}
+	to {
+		transform: scaleX(0);
+	}
+}
+@keyframes lv-ring {
+	50% {
+		box-shadow: 0 0 0 14px color-mix(in oklab, var(--ring) 18%, transparent), var(--ttk-shadow-pop);
+	}
+}
+@keyframes lv-pill {
+	50% {
+		box-shadow: 0 0 14px color-mix(in oklab, var(--ttk-live) 60%, transparent);
+	}
+}
+@keyframes lv-flash {
+	30% {
+		box-shadow: 0 0 0 4px color-mix(in oklab, var(--ttk-brand) 22%, transparent);
+	}
+}

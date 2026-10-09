@@ -1,0 +1,769 @@
+/* The shell: floating dock, context bar, main region, user popover, command palette. */
+
+.app-shell {
+	--dock-w: var(--ttk-dock);
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: calc(var(--dock-w) + 20px) minmax(0, 1fr);
+	grid-template-rows: var(--ttk-bar) minmax(0, 1fr);
+	grid-template-areas: 'dock bar' 'dock main';
+	transition: grid-template-columns 0.32s var(--ttk-ease);
+}
+/* The logo widens the dock to show section names beside the icons (D-093). */
+.app-shell.dock-open {
+	--dock-w: 196px;
+}
+
+/* --- dock --- */
+
+/* Items fill the dock's inner width: 40px when narrow (56px less 7px padding each side and the border), the label's
+ * room when wide. Icons sit 11px from the item's left edge, so they stay put as the dock opens. */
+.dock {
+	grid-area: dock;
+	align-self: stretch;
+	margin: 10px 0 10px 10px;
+	width: var(--dock-w);
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	padding: 8px 7px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-glass);
+	backdrop-filter: blur(14px) saturate(1.3);
+	box-shadow: var(--ttk-shadow);
+	overflow: hidden;
+	transition: width 0.32s var(--ttk-ease);
+	z-index: 5;
+}
+
+.dock-label {
+	display: none;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: 13px;
+	font-weight: 600;
+}
+.dock-open .dock-label {
+	display: block;
+	animation: dock-label-in 0.3s var(--ttk-ease) both;
+}
+@keyframes dock-label-in {
+	from {
+		opacity: 0;
+		transform: translateX(-6px);
+	}
+}
+
+/* The logo: outlined in the brand colour (not filled, so the only highlighted square is the current screen), and the
+ * dock's open / close control. A hairline below separates it from the navigation. */
+.dock-brand {
+	all: unset;
+	box-sizing: border-box;
+	position: relative;
+	height: 44px;
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	padding-left: 8px;
+	border-radius: 10px;
+	color: var(--ttk-brand);
+	cursor: pointer;
+	transition: background 0.18s;
+}
+.dock-logo {
+	flex: 0 0 auto;
+	width: 42px;
+	height: 43px;
+	/* 42 px is wider than a narrow dock item's 40 px less the brand's 8 px inset: pull it left so it sits centred (it
+	 * overhangs the item by a pixel each side, into the dock's 7 px padding). */
+	margin-left: -9px;
+	object-fit: contain;
+	filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.35));
+	transition: transform 0.35s var(--ttk-spring);
+}
+.dock-brand:hover {
+	background: var(--ttk-hairline);
+}
+.dock-brand:hover .dock-logo {
+	transform: scale(1.1) rotate(-6deg);
+}
+.dock-brand:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 2px;
+}
+.dock-brand::after {
+	content: '';
+	position: absolute;
+	left: 10px;
+	right: 10px;
+	bottom: -8px;
+	height: 1px;
+	background: var(--ttk-hairline);
+}
+.dock-wordmark {
+	font-size: 15px;
+	font-weight: 750;
+	letter-spacing: -0.01em;
+	background: var(--ttk-gradient);
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+}
+
+/* The maker's mark at the dock's foot: the full TykoTech logo while the dock is open, its lettering while narrow. No
+ * hairline above it, so the mark reads as part of the dock rather than a separate footer. */
+.dock-maker {
+	position: relative;
+	margin-top: auto;
+	flex: 0 0 auto;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	padding: 2px;
+	user-select: none;
+}
+.dock-maker img {
+	display: block;
+	object-fit: contain;
+	opacity: 0.92;
+}
+.dock-maker-full {
+	display: none !important;
+	width: 100%;
+	max-width: 168px;
+	height: auto;
+	aspect-ratio: 360 / 74;
+}
+.dock-maker-mark {
+	width: 36px;
+	height: auto;
+	aspect-ratio: 120 / 83;
+}
+.dock-open .dock-maker-full {
+	display: block !important;
+	animation: dock-label-in 0.3s var(--ttk-ease) both;
+}
+.dock-open .dock-maker-mark {
+	display: none;
+}
+
+.dock-items {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 6px;
+}
+
+/* Each item is 40px tall with a 4px gap: the indicator moves in steps of 44px. */
+.dock-indicator {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 40px;
+	border-radius: 10px;
+	background: var(--ttk-gradient);
+	box-shadow: var(--ttk-glow);
+	transform: translateY(calc(var(--y, 0) * 44px));
+	transition: transform 0.4s var(--ttk-spring);
+	pointer-events: none;
+}
+
+.dock-item {
+	all: unset;
+	box-sizing: border-box;
+	position: relative;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 10px 0 11px;
+	border-radius: 10px;
+	color: var(--wa-color-text-quiet);
+	cursor: pointer;
+	transition: color 0.18s, background 0.18s;
+}
+.dock-item .icon {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	transition: transform 0.25s var(--ttk-spring);
+}
+.dock-item:hover {
+	color: var(--wa-color-text-normal);
+	background: var(--ttk-hairline);
+}
+.dock-item:hover .icon {
+	transform: scale(1.12);
+}
+.dock-item.active {
+	color: white;
+	background: transparent;
+}
+.dock-item:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: -2px;
+}
+
+/* Narrow: a badge on the icon's corner. Wide: a pill at the end of the row. */
+.dock-count {
+	position: absolute;
+	top: 2px;
+	left: 24px;
+	min-width: 17px;
+	height: 17px;
+	padding: 0 4px;
+	display: grid;
+	place-items: center;
+	border: 2px solid var(--wa-color-surface-raised);
+	border-radius: 999px;
+	background: var(--ttk-live);
+	color: white;
+	font: 700 10px/1 var(--wa-font-family-body);
+	font-variant-numeric: tabular-nums;
+}
+.dock-open .dock-count {
+	position: static;
+	margin-left: auto;
+	border: none;
+}
+
+/* --- context bar --- */
+
+.contextbar {
+	grid-area: bar;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+	padding: 0 var(--ttk-gutter) 0 12px;
+}
+
+.ctx-title {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* --- page tabs (D-147): a section's views, as one glass pill at the left of the bar. They are links (each view is a
+ * route); the lit one is a raised card, its glyph in the brand colour, matching the dock's one highlighted square. --- */
+
+.page-tabs {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+	max-width: 100%;
+	padding: 3px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 13px;
+	background: var(--ttk-glass);
+	backdrop-filter: blur(14px) saturate(1.3);
+	box-shadow: var(--ttk-shadow);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.page-tabs::-webkit-scrollbar {
+	display: none;
+}
+.page-tab {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 7px;
+	height: 32px;
+	padding: 0 13px 0 11px;
+	border-radius: 10px;
+	color: var(--wa-color-text-quiet);
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: color 0.18s var(--ttk-ease), background 0.18s var(--ttk-ease), box-shadow 0.18s var(--ttk-ease);
+}
+.page-tab .icon {
+	width: 15px;
+	height: 15px;
+}
+.page-tab:hover {
+	background: color-mix(in oklab, var(--wa-color-text-normal) 6%, transparent);
+	color: var(--wa-color-text-normal);
+}
+.page-tab.active {
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	box-shadow: 0 0 0 1px var(--ttk-hairline), 0 6px 16px -8px color-mix(in oklab, black 60%, transparent);
+}
+.page-tab.active .icon {
+	color: var(--ttk-brand);
+}
+.page-tab:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 1px;
+}
+
+/* The screen's own actions sit at the right, before the global tools and split from them by a hairline. A screen
+ * whose actions are all hidden for now (an empty list hands its one action to the empty state) shows no group. */
+.ctx-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+.ctx-actions[hidden],
+.ctx-actions:not(:has(> :not([hidden]))) {
+	display: none;
+}
+
+.ctx-tools {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.ctx-actions:has(> :not([hidden])) + .ctx-tools {
+	padding-left: 14px;
+	border-left: 1px solid var(--ttk-hairline);
+}
+
+.palette-trigger {
+	all: unset;
+	box-sizing: border-box;
+	height: 34px;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 8px 0 12px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 999px;
+	background: var(--ttk-glass);
+	color: var(--wa-color-text-quiet);
+	cursor: pointer;
+	transition: border-color 0.18s, color 0.18s;
+}
+.palette-trigger:hover {
+	color: var(--wa-color-text-normal);
+	border-color: color-mix(in oklab, var(--ttk-brand) 50%, transparent);
+}
+.palette-trigger:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+}
+
+.health {
+	position: relative;
+	width: 10px;
+	height: 10px;
+	margin: 0 6px;
+	border-radius: 50%;
+	background: var(--wa-color-text-quiet);
+}
+.health.up {
+	background: var(--ttk-live);
+}
+.health.up::after {
+	content: '';
+	position: absolute;
+	inset: -4px;
+	border-radius: 50%;
+	border: 2px solid var(--ttk-live);
+	opacity: 0;
+	animation: health-ping 2.4s var(--ttk-ease) infinite;
+}
+.health.down {
+	background: var(--ttk-danger);
+}
+@keyframes health-ping {
+	0% {
+		transform: scale(0.6);
+		opacity: 0.7;
+	}
+	80%,
+	100% {
+		transform: scale(1.5);
+		opacity: 0;
+	}
+}
+
+.user-trigger {
+	all: unset;
+	cursor: pointer;
+	border-radius: 50%;
+	display: grid;
+}
+.user-trigger:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 2px;
+}
+
+/* 360 px: the longest sign-in chip ("Signed in with an account API key", D-146) beside the avatar overran 320. */
+.user-popover {
+	--max-width: 360px;
+}
+.user-popover::part(body) {
+	padding: 16px;
+	border-radius: var(--ttk-radius);
+}
+.user-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 260px;
+}
+.user-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.user-id {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	min-width: 0;
+}
+.user-name {
+	font-size: 15px;
+	font-weight: 650;
+}
+.user-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+/* --- theme picker (D-152): four swatch rows in a glass menu --- */
+
+.theme-popover::part(body) {
+	padding: 6px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(18px) saturate(1.3);
+	box-shadow: var(--ttk-shadow-pop);
+}
+.theme-menu {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 264px;
+}
+.theme-item {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 12px;
+	padding: 7px 10px 7px 7px;
+	border-radius: var(--ttk-radius-s);
+	cursor: pointer;
+	transition: background 0.15s;
+}
+.theme-item:hover,
+.theme-item:focus-visible {
+	background: var(--ttk-row-hover);
+}
+.theme-item:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: -2px;
+}
+.theme-item[aria-checked='true'] {
+	background: var(--ttk-selected);
+}
+/* A swatch is the theme in miniature: its canvas, a card on it, and a brand bar on the card. */
+.theme-swatch {
+	--sw-canvas: var(--ttk-swatch-dark-canvas);
+	--sw-card: var(--ttk-swatch-dark-card);
+	--sw-brand: var(--ttk-swatch-dark-brand);
+	position: relative;
+	width: 40px;
+	height: 30px;
+	border-radius: 7px;
+	background: var(--sw-canvas);
+	box-shadow: inset 0 0 0 1px var(--ttk-hairline-strong);
+	overflow: hidden;
+}
+.theme-swatch.swatch-shade {
+	--sw-canvas: var(--ttk-swatch-shade-canvas);
+	--sw-card: var(--ttk-swatch-shade-card);
+	--sw-brand: var(--ttk-swatch-shade-brand);
+}
+.theme-swatch.swatch-light {
+	--sw-canvas: var(--ttk-swatch-light-canvas);
+	--sw-card: var(--ttk-swatch-light-card);
+	--sw-brand: var(--ttk-swatch-light-brand);
+}
+.theme-swatch.swatch-dawn {
+	--sw-canvas: var(--ttk-swatch-dawn-canvas);
+	--sw-card: var(--ttk-swatch-dawn-card);
+	--sw-brand: var(--ttk-swatch-dawn-brand);
+}
+.theme-swatch .sw-card {
+	position: absolute;
+	left: 9px;
+	top: 7px;
+	right: -4px;
+	bottom: -4px;
+	border-radius: 5px 0 0 0;
+	background: var(--sw-card);
+}
+.theme-swatch .sw-brand {
+	position: absolute;
+	left: 14px;
+	top: 12px;
+	width: 16px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--sw-brand);
+}
+.theme-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.theme-name {
+	font-weight: 650;
+	font-size: 13px;
+}
+.theme-hint {
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.theme-check {
+	color: var(--ttk-brand);
+	visibility: hidden;
+}
+.theme-item[aria-checked='true'] .theme-check {
+	visibility: visible;
+}
+
+/* --- main --- */
+
+.main {
+	grid-area: main;
+	min-height: 0;
+	overflow: auto;
+	padding: 6px var(--ttk-gutter) var(--ttk-gutter) 12px;
+}
+.main.flush {
+	overflow: hidden;
+	padding: 4px 12px 12px;
+	display: flex;
+	flex-direction: column;
+}
+/* Reading-width cap for card and panel screens on very wide displays; list/detail workbenches use .page.wide. */
+.page {
+	max-width: 1680px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	animation: page-in 0.35s var(--ttk-ease) both;
+}
+.page.wide {
+	max-width: none;
+}
+@keyframes page-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+
+/* --- command palette --- */
+
+.palette {
+	--width: min(620px, 92vw);
+}
+.palette::part(dialog) {
+	margin-top: 12vh;
+	align-self: flex-start;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(22px) saturate(1.4);
+	box-shadow: var(--ttk-shadow-pop);
+}
+.palette::part(body) {
+	padding: 0;
+}
+.palette-search {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+}
+.palette-search .icon {
+	width: 20px;
+	height: 20px;
+}
+.palette-input {
+	all: unset;
+	flex: 1;
+	font-size: 16px;
+	color: var(--wa-color-text-normal);
+}
+.palette-list {
+	max-height: min(56vh, 460px);
+	overflow: auto;
+	padding: 8px;
+}
+.palette-group {
+	padding: 10px 10px 4px;
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.palette-item {
+	all: unset;
+	box-sizing: border-box;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	cursor: pointer;
+	color: var(--wa-color-text-normal);
+}
+.palette-item.active {
+	background: color-mix(in oklab, var(--ttk-brand) 16%, transparent);
+}
+.palette-glyph {
+	width: 30px;
+	height: 30px;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	background: var(--ttk-hairline);
+	color: var(--ttk-brand);
+}
+.palette-item.active .palette-glyph {
+	background: var(--ttk-gradient);
+	color: white;
+}
+.palette-label {
+	font-weight: 550;
+}
+.palette-hint {
+	margin-left: auto;
+	color: var(--wa-color-text-quiet);
+	font: 12px var(--wa-font-family-code);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 50%;
+}
+.palette-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 28px;
+	color: var(--wa-color-text-quiet);
+}
+
+/* --- narrow screens: the dock becomes a bottom bar --- */
+
+@media (max-width: 720px) {
+	.app-shell {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: 52px minmax(0, 1fr) auto;
+		grid-template-areas: 'bar' 'main' 'dock';
+	}
+	.dock {
+		flex-direction: row;
+		width: auto;
+		margin: 0 8px 8px;
+		padding: 6px 8px;
+		overflow-x: auto;
+		border-radius: 18px;
+	}
+	.dock-brand,
+	.dock-maker,
+	.dock-indicator,
+	.dock-label {
+		display: none !important;
+	}
+	.app-shell.dock-open {
+		--dock-w: var(--ttk-dock);
+	}
+	.dock {
+		justify-content: center;
+		scrollbar-width: none;
+	}
+	.dock::-webkit-scrollbar {
+		display: none;
+	}
+	/* Nine 36px items with 2px gaps fit a 390px phone with its margins. */
+	.dock-items {
+		flex-direction: row;
+		gap: 2px;
+		margin: 0;
+	}
+	.dock-item {
+		width: 36px;
+		height: 36px;
+		padding: 0;
+		justify-content: center;
+		border-radius: 11px;
+	}
+	.dock-count {
+		top: -2px;
+		left: 20px;
+	}
+	.dock-item .icon {
+		width: 18px;
+		height: 18px;
+	}
+	.dock-item.active {
+		background: var(--ttk-gradient);
+	}
+	.contextbar {
+		padding: 0 10px;
+		gap: 8px;
+	}
+	.ctx-actions {
+		flex-wrap: nowrap;
+		overflow-x: auto;
+	}
+	.palette-trigger kbd {
+		display: none;
+	}
+	/* On a phone the tabs are glyphs; each name stays in the link's text for assistive technology. */
+	.page-tab {
+		padding: 0 10px;
+	}
+	.page-tab-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+	.palette-trigger {
+		padding: 0 10px;
+	}
+	.main {
+		padding: 4px 10px 10px;
+	}
+}

@@ -1,0 +1,26 @@
+# Secrets never enter a build context.
+secrets/
+openai_compatible_api
+.env
+.env.*
+
+# Not part of any image.
+.git/
+.github/
+docs/
+coverage/
+tests/.scratch/
+dist/
+data/
+*.md
+
+# Rebuilt inside the image by `deno task build:web`.
+packages/web/dist/
+
+# Local tooling.
+.codex/
+.claude/
+.playwright-mcp/
+node_modules/
+__pycache__/
+*.lcov

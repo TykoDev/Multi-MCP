@@ -1,0 +1,17 @@
+{
+	"name": "new_marking_after",
+	"pins": "R6.2 step 2 — the element absent from the previous step's (sessionId, backendNodeId) set renders as *[idx]",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{ "tag": "BUTTON", "id": 10, "children": [{ "text": "One" }] },
+					{ "tag": "BUTTON", "id": 12, "children": [{ "text": "Three" }] },
+					{ "tag": "BUTTON", "id": 11, "children": [{ "text": "Two" }] }
+				]
+			}
+		]
+	}
+}

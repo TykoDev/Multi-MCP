@@ -1,0 +1,50 @@
+# Overlay: run each coding workspace as its own Docker container (Engine API) instead of a bubblewrap cage.
+#
+#   docker build -f docker/Dockerfile.sandbox-workspace -t tykotech-sandbox-workspace:0.2.0 .
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox-docker.yml up -d --build
+#
+# WARNING: Docker socket access is root on the host. Only the sandbox service mounts it, never the gateway, and it
+# creates containers only from fixed, validated specs (packages/sandbox/src/docker_spec.ts): uid 1993, read-only
+# root, no network, no capabilities. Prefer rootless Docker.
+#
+# Variables (.env):
+#   TTK_SANDBOX_DOCKER_GID          group owning the socket (`stat -c %g /var/run/docker.sock`; 0 on Docker Desktop)
+#   TTK_SANDBOX_WORKSPACE_IMAGE     workspace image (default tykotech-sandbox-workspace:0.2.0)
+#   TTK_SANDBOX_DOCKER_VOLUME       code volume name (default ttk-code)
+#   TTK_SANDBOX_DOCKER_SOCK_VOLUME  socket volume name (default ttk-sandbox-sock)
+# Two deployments on one Docker daemon must use different volume names: containers are scoped by the code volume.
+services:
+  sandbox:
+    # Replaces the image's CMD: no --allow-run; read/write add the Engine socket and the socket volume; env adds the
+    # backend's names. Git and token grants match the image's CMD.
+    command: [
+      deno,
+      run,
+      --deny-ffi,
+      --unstable-no-legacy-abort,
+      '--allow-read=/work,/tmp/ttk-sandbox,/run/secrets/ttk_sandbox_token,/run/secrets/ttk_git_remotes,/run/ttk-sandbox-token,/run/ttk-sandbox-sock,/var/run/docker.sock',
+      '--allow-write=/work,/tmp/ttk-sandbox,/run/ttk-sandbox-token,/run/ttk-sandbox-sock,/var/run/docker.sock',
+      --allow-net,
+      '--allow-env=TTK_SANDBOX_TOKEN_FILE,TTK_SANDBOX_BACKEND,TTK_SANDBOX_DOCKER_SOCKET,TTK_SANDBOX_WORKSPACE_IMAGE,TTK_SANDBOX_DOCKER_VOLUME,TTK_SANDBOX_DOCKER_SOCK_VOLUME,TTK_SANDBOX_GIT_HOSTS,TTK_SANDBOX_GIT_REMOTES_FILE',
+      --allow-sys=statfs,
+      packages/sandbox/service.ts,
+    ]
+    environment:
+      TTK_SANDBOX_BACKEND: docker
+      TTK_SANDBOX_DOCKER_SOCKET: /var/run/docker.sock
+      TTK_SANDBOX_WORKSPACE_IMAGE: '${TTK_SANDBOX_WORKSPACE_IMAGE:-tykotech-sandbox-workspace:0.2.0}'
+      TTK_SANDBOX_DOCKER_VOLUME: '${TTK_SANDBOX_DOCKER_VOLUME:-ttk-code}'
+      TTK_SANDBOX_DOCKER_SOCK_VOLUME: '${TTK_SANDBOX_DOCKER_SOCK_VOLUME:-ttk-sandbox-sock}'
+    group_add:
+      - '${TTK_SANDBOX_DOCKER_GID:-0}'
+    # No cage is built in this container any more, so it keeps Docker's default seccomp profile and /proc masks.
+    security_opt: !override
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ttk-sandbox-sock:/run/ttk-sandbox-sock
+volumes:
+  ttk-code:
+    name: '${TTK_SANDBOX_DOCKER_VOLUME:-ttk-code}'
+  ttk-sandbox-sock:
+    name: '${TTK_SANDBOX_DOCKER_SOCK_VOLUME:-ttk-sandbox-sock}'

@@ -1,0 +1,20 @@
+# Overlay: use a sandbox token file you made instead of the one the sandbox service generates.
+#
+#   deno eval "console.log(crypto.randomUUID() + crypto.randomUUID())" > secrets/ttk_sandbox_token
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
+#
+# The token needs at least 32 non-whitespace characters.
+services:
+  tykotech-mcp:
+    environment:
+      TTK_SANDBOX_TOKEN_FILE: /run/secrets/ttk_sandbox_token
+    secrets:
+      - ttk_sandbox_token
+  sandbox:
+    environment:
+      TTK_SANDBOX_TOKEN_FILE: /run/secrets/ttk_sandbox_token
+    secrets:
+      - ttk_sandbox_token
+secrets:
+  ttk_sandbox_token:
+    file: ./secrets/ttk_sandbox_token

@@ -1,0 +1,1330 @@
+/* Resources (the absorbed Library) and Workspaces (screen agent C, D-089; run model-providers-ui).
+ *
+ * Resources: the Files, Skills and Prompts groups of the one tree — the share as type-glyph tiles (grid or list) over a
+ * drop zone with a standing "drop" strip, skills and prompts as cards, editors in a drawer; the viewer parts the tree
+ * lays out (`rx-*`) sit with the Tools console's frame in tools.css. `lib-*` names are kept from the Library screen
+ * these rules came from. Workspaces: a rail of workspace cards; the chosen one in a card with a split editor / shell.
+ * Colours are tokens only; motion uses the shared easings and the global reduced-motion rule.
+ *
+ * Native buttons used as tiles and cards (.lib-file-open, .lib-card-open, .ws-card) are reset here: the kit's native
+ * layer paints every <button> as a loud filled button, and these unlayered rules win over that layer. */
+
+/* --- shared: forms in dialogs and drawers --- */
+
+.lib-form {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.lib-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+.lib-field-glyph {
+	position: absolute;
+	left: 11px;
+	z-index: 1;
+	display: grid;
+	place-items: center;
+	color: var(--wa-color-text-quiet);
+	pointer-events: none;
+	transition: color 0.2s var(--ttk-ease);
+}
+.lib-field > input {
+	flex: 1;
+	min-width: 0;
+	padding-left: 36px;
+}
+.lib-field:focus-within .lib-field-glyph {
+	color: var(--ttk-brand);
+}
+.lib-field.lib-field-area {
+	align-items: stretch;
+}
+.lib-field.lib-field-area .lib-field-glyph {
+	top: 11px;
+}
+.lib-field.lib-field-area > textarea {
+	padding-left: 36px;
+}
+.lib-form-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.editor {
+	width: 100%;
+	min-height: 160px;
+	resize: vertical;
+	font-size: 12.5px;
+	line-height: 1.55;
+	tab-size: 4;
+}
+
+@keyframes lib-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.98);
+	}
+}
+
+/* --- resources: the argument count in the prompt drawer --- */
+
+wa-badge.lib-count {
+	font-size: 10.5px;
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+}
+
+.lib-pane {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	animation: lib-in 0.3s var(--ttk-ease) both;
+}
+.lib-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.lib-toolbar > .grow {
+	flex: 1;
+}
+.lib-sep {
+	width: 1px;
+	height: 22px;
+	background: var(--ttk-hairline);
+}
+
+/* --- files: the path as crumbs --- */
+
+.lib-crumbs {
+	display: flex;
+	flex: 1 1 220px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+}
+.lib-crumb-sep {
+	width: 13px;
+	height: 13px;
+	color: var(--wa-color-text-quiet);
+	opacity: 0.6;
+}
+.lib-crumbs button.ttk-btn.lib-crumb {
+	max-width: 200px;
+	font-weight: 550;
+}
+.lib-crumbs button.lib-crumb .label {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-crumbs button.ttk-btn[aria-current] {
+	color: var(--wa-color-text-normal);
+	background: color-mix(in oklab, var(--ttk-brand) 12%, transparent);
+}
+.lib-crumbs button.ttk-btn[aria-current] .icon {
+	color: var(--ttk-brand);
+}
+
+/* --- files: the drop zone, its standing strip and the veil while dragging --- */
+
+.lib-drop {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-height: 220px;
+	border-radius: var(--ttk-radius-l);
+}
+.lib-drop-strip {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin-top: auto;
+	padding: 10px 12px;
+	border: 2px dashed var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+	font-weight: 550;
+	transition: border-color 0.2s var(--ttk-ease), color 0.2s var(--ttk-ease);
+}
+.lib-drop-strip .icon {
+	width: 16px;
+	height: 16px;
+}
+.rx-files:hover .lib-drop-strip {
+	border-color: color-mix(in oklab, var(--ttk-brand) 45%, transparent);
+	color: var(--ttk-brand);
+}
+.lib-drop-veil {
+	position: absolute;
+	inset: -6px;
+	z-index: 3;
+	display: grid;
+	place-content: center;
+	justify-items: center;
+	gap: 12px;
+	border: 2px dashed color-mix(in oklab, var(--ttk-brand) 65%, transparent);
+	border-radius: var(--ttk-radius-l);
+	background: color-mix(in oklab, var(--ttk-brand) 10%, var(--ttk-glass));
+	backdrop-filter: blur(6px);
+	color: var(--ttk-brand);
+	font-weight: 650;
+	opacity: 0;
+	pointer-events: none;
+	transform: scale(0.985);
+	transition: opacity 0.2s var(--ttk-ease), transform 0.3s var(--ttk-spring);
+}
+.rx-files.dragging .lib-drop-veil {
+	opacity: 1;
+	transform: none;
+}
+
+/* --- files: the folder view — the toolbar reads where you are · how you see it · what you can add --- */
+
+.rx-files {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 0;
+}
+.rx-files > .rx-head,
+.rx-files > .rx-body {
+	padding: 16px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-card);
+	box-shadow: var(--ttk-shadow);
+	animation: tc-rise 0.32s var(--ttk-ease) both;
+}
+.rx-files > .rx-head.rx-files-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+}
+.rx-files-head > .lib-crumbs {
+	flex: 1 1 220px;
+}
+.rx-files-head > .rx-files-layout {
+	margin-inline: auto;
+}
+.rx-files-add {
+	display: flex;
+	align-items: center;
+	margin-left: auto;
+}
+.rx-files-add[hidden] {
+	display: none;
+}
+.rx-gate {
+	display: inline-flex;
+}
+.rx-files > .rx-body.rx-files-body {
+	display: block;
+}
+
+/* --- a file in the viewer: the editor and its footer --- */
+
+.rx-file > .lib-editor {
+	min-height: 52vh;
+}
+.rx-file-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.rx-file-foot > .grow {
+	flex: 1;
+}
+
+/* --- the tree: a lock on a prompt the server only serves; the fold bar on narrow screens --- */
+
+.rx-lock {
+	display: inline-grid;
+	place-items: center;
+	flex: 0 0 auto;
+	color: var(--ttk-locked);
+}
+.rx-lock .icon {
+	width: 13px;
+	height: 13px;
+}
+button.ttk-btn.rx-browse {
+	display: none;
+	width: calc(100% - 20px);
+	margin: 10px;
+	justify-content: flex-start;
+}
+button.ttk-btn.rx-browse .label {
+	flex: 1;
+	text-align: left;
+}
+.rx-browse-caret {
+	width: 14px;
+	height: 14px;
+	transition: transform 0.2s var(--ttk-ease);
+}
+.rx-pane.open .rx-browse-caret {
+	transform: rotate(180deg);
+}
+
+/* --- the viewer: JSON as facts or raw; the Server and Sessions groups as rows; templates with their result --- */
+
+.rx-json {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+}
+.rx-json-tools {
+	display: flex;
+	align-items: center;
+}
+.rx-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+button.rx-row,
+.rx-row.static {
+	width: 100%;
+	height: auto;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 10px;
+	padding: 6px 8px;
+	border: 1px solid transparent;
+	border-radius: var(--ttk-radius-s);
+	background: transparent;
+	color: var(--wa-color-text-normal);
+	box-shadow: none;
+	font-weight: 500;
+	text-align: left;
+	white-space: nowrap;
+	transform: none;
+	transition: background-color 0.18s var(--ttk-ease), border-color 0.18s var(--ttk-ease);
+}
+button.rx-row:hover {
+	border-color: var(--ttk-hairline);
+	background: var(--ttk-card-hover);
+	transform: none;
+}
+.rx-row-name {
+	flex: 0 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.rx-row-uri {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	text-overflow: ellipsis;
+}
+.rx-sessions {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.rx-session-name {
+	margin-bottom: 6px;
+	font-size: 13px;
+	font-weight: 650;
+}
+.rx-tpl-slot {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.rx-tpl-result:empty {
+	display: none;
+}
+.rx-tpl-result {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding-left: 12px;
+	border-left: 2px solid color-mix(in oklab, var(--ttk-brand) 40%, transparent);
+}
+
+/* --- files: tiles (grid) or rows (list) --- */
+
+.lib-files {
+	min-width: 0;
+}
+.lib-files.grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+	gap: 10px;
+}
+.lib-files.list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.lib-files > .empty,
+.lib-files > .skeleton-group {
+	grid-column: 1 / -1;
+}
+
+.lib-file {
+	--tone: var(--wa-color-text-quiet);
+	position: relative;
+	min-width: 0;
+	animation: lib-in 0.32s var(--ttk-ease) both;
+	animation-delay: calc(var(--i, 0) * 14ms);
+}
+.lib-file.kind-folder {
+	--tone: var(--ttk-brand);
+}
+.lib-file.kind-code {
+	--tone: var(--ttk-agent);
+}
+.lib-file.kind-json {
+	--tone: var(--ttk-locked);
+}
+.lib-file.kind-sheet {
+	--tone: var(--wa-color-green-60);
+}
+.lib-file.kind-image {
+	--tone: var(--ttk-live);
+}
+.lib-file.kind-audio {
+	--tone: var(--wa-color-pink-60);
+}
+.lib-file.kind-video {
+	--tone: var(--wa-color-red-60);
+}
+.lib-file.kind-archive {
+	--tone: var(--wa-color-orange-60);
+}
+.lib-file.kind-text {
+	--tone: var(--wa-color-cyan-60);
+}
+
+button.lib-file-open {
+	width: 100%;
+	height: auto;
+	min-width: 0;
+	padding: 16px 10px 12px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 9px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	box-shadow: var(--ttk-shadow);
+	font-weight: 550;
+	text-align: center;
+	white-space: normal;
+	transform: none;
+	transition: transform 0.25s var(--ttk-ease), border-color 0.2s var(--ttk-ease), background-color 0.2s var(--ttk-ease);
+}
+button.lib-file-open:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--tone) 45%, transparent);
+	background: var(--ttk-card-hover);
+}
+.lib-file-glyph {
+	width: 48px;
+	height: 48px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 14px;
+	background: color-mix(in oklab, var(--tone) 15%, transparent);
+	color: var(--tone);
+	transition: transform 0.3s var(--ttk-spring);
+}
+.lib-file-glyph .icon {
+	width: 24px;
+	height: 24px;
+}
+button.lib-file-open:hover .lib-file-glyph {
+	transform: scale(1.06) rotate(-3deg);
+}
+.lib-file-name {
+	max-width: 100%;
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	font-size: 12.5px;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+.lib-file-size,
+.lib-file-time {
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	font-weight: 450;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.lib-files.grid .lib-file-time {
+	display: none;
+}
+.lib-files.grid .lib-file-size:empty {
+	display: none;
+}
+
+/* Per-item actions: revealed on hover or keyboard focus; always shown where there is no hover. */
+.lib-file-actions {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	border-radius: 10px;
+	background: var(--ttk-glass-strong);
+	box-shadow: var(--ttk-shadow);
+	opacity: 0;
+	transform: translateY(-3px);
+	transition: opacity 0.18s var(--ttk-ease), transform 0.22s var(--ttk-ease);
+}
+.lib-file-actions:empty {
+	display: none;
+}
+.lib-file:hover .lib-file-actions,
+.lib-file:focus-within .lib-file-actions {
+	opacity: 1;
+	transform: none;
+}
+@media (hover: none) {
+	.lib-file-actions {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* List layout: one row per entry, the actions inline at the end. */
+.lib-files.list .lib-file {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding-right: 6px;
+	border: 1px solid transparent;
+	border-radius: var(--ttk-radius-s);
+	animation-delay: calc(var(--i, 0) * 8ms);
+}
+.lib-files.list .lib-file:hover {
+	border-color: var(--ttk-hairline);
+	background: var(--ttk-card);
+}
+.lib-files.list button.lib-file-open {
+	flex: 1;
+	display: grid;
+	grid-template-columns: 30px minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 8px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	text-align: left;
+}
+.lib-files.list button.lib-file-open:hover {
+	transform: none;
+	background: transparent;
+}
+.lib-files.list .lib-file-glyph {
+	width: 30px;
+	height: 30px;
+	border-radius: 9px;
+}
+.lib-files.list .lib-file-glyph .icon {
+	width: 16px;
+	height: 16px;
+}
+.lib-files.list button.lib-file-open:hover .lib-file-glyph {
+	transform: none;
+}
+.lib-files.list .lib-file-name {
+	display: block;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-files.list .lib-file-size {
+	min-width: 64px;
+	text-align: right;
+}
+.lib-files.list .lib-file-time {
+	min-width: 72px;
+	text-align: right;
+}
+.lib-files.list .lib-file-actions {
+	position: static;
+	padding: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+/* --- skills and prompts as cards --- */
+
+.lib-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 12px;
+}
+.lib-cards > .empty,
+.lib-cards > .skeleton-group {
+	grid-column: 1 / -1;
+}
+.lib-card {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-card);
+	box-shadow: var(--ttk-shadow);
+	overflow: hidden;
+	animation: lib-in 0.32s var(--ttk-ease) both;
+	animation-delay: calc(var(--i, 0) * 30ms);
+	transition: transform 0.25s var(--ttk-ease), border-color 0.2s var(--ttk-ease);
+}
+.lib-card::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 auto;
+	height: 2px;
+	background: var(--ttk-gradient);
+	opacity: 0;
+	transition: opacity 0.2s var(--ttk-ease);
+}
+.lib-card:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--ttk-brand) 35%, transparent);
+}
+.lib-card:hover::before {
+	opacity: 1;
+}
+button.lib-card-open {
+	width: 100%;
+	height: auto;
+	min-width: 0;
+	padding: 16px 16px 8px;
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	gap: 12px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--wa-color-text-normal);
+	font-weight: 400;
+	text-align: left;
+	white-space: normal;
+	transform: none;
+}
+button.lib-card-open:hover {
+	background: transparent;
+	transform: none;
+}
+.lib-card-glyph {
+	width: 42px;
+	height: 42px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 13px;
+	background: color-mix(in oklab, var(--ttk-agent) 16%, transparent);
+	color: var(--ttk-agent);
+	transition: transform 0.3s var(--ttk-spring);
+}
+.lib-card-glyph.prompt {
+	background: color-mix(in oklab, var(--ttk-brand) 15%, transparent);
+	color: var(--ttk-brand);
+}
+.lib-card-glyph .icon {
+	width: 21px;
+	height: 21px;
+}
+.lib-card:hover .lib-card-glyph {
+	transform: scale(1.06) rotate(-4deg);
+}
+.lib-card-text {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+	padding-right: 64px;
+}
+.lib-card-title {
+	overflow: hidden;
+	font-size: 14px;
+	font-weight: 650;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-card-name {
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-card-desc {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+	line-height: 1.45;
+}
+.lib-card-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: auto;
+	padding: 6px 16px 14px 70px;
+}
+.lib-fact {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	font-weight: 550;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.lib-fact .icon {
+	width: 12px;
+	height: 12px;
+}
+.lib-card-actions {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: flex;
+	gap: 2px;
+	opacity: 0;
+	transform: translateY(-3px);
+	transition: opacity 0.18s var(--ttk-ease), transform 0.22s var(--ttk-ease);
+}
+.lib-card:hover .lib-card-actions,
+.lib-card:focus-within .lib-card-actions {
+	opacity: 1;
+	transform: none;
+}
+@media (hover: none) {
+	.lib-card-actions {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* --- the editor drawer --- */
+
+wa-drawer.lib-drawer {
+	--size: min(780px, 100vw);
+	--spacing: 18px;
+}
+wa-drawer.lib-drawer::part(dialog) {
+	border-left: 1px solid var(--ttk-glass-border);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(22px) saturate(1.3);
+	box-shadow: var(--ttk-shadow-pop);
+}
+wa-drawer.lib-drawer::part(header) {
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+wa-drawer.lib-drawer::part(footer) {
+	border-top: 1px solid var(--ttk-hairline);
+}
+.lib-drawer-title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+.lib-drawer-glyph {
+	width: 32px;
+	height: 32px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 10px;
+	background: var(--ttk-gradient);
+	color: white;
+	box-shadow: var(--ttk-glow);
+}
+.lib-drawer-name {
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 650;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-drawer-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	min-height: 100%;
+}
+.lib-drawer-body > .lib-editor {
+	flex: 1;
+	min-height: 52vh;
+}
+.lib-drawer-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+}
+.lib-desc {
+	color: var(--wa-color-text-quiet);
+	line-height: 1.55;
+}
+.lib-ident {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 6px 6px 6px 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+}
+.lib-ident > code {
+	overflow: hidden;
+	font-size: 12.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-glyph-tip {
+	display: inline-grid;
+	place-items: center;
+	color: var(--ttk-brand);
+}
+.lib-glyph-tip.lib-ro {
+	color: var(--ttk-locked);
+}
+.lib-when {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.lib-when .icon {
+	width: 13px;
+	height: 13px;
+}
+.lib-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	min-width: 0;
+}
+.lib-chips {
+	display: flex;
+	flex: 1;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+}
+.lib-chips button.ttk-btn.lib-chip {
+	max-width: 100%;
+	border-radius: 999px;
+	font-family: var(--wa-font-family-code);
+	font-size: 12px;
+	font-weight: 500;
+}
+.lib-chips button.lib-chip .label {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.lib-chips button.ttk-btn.lib-chip[aria-pressed='true'] {
+	color: var(--ttk-brand);
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ttk-brand) 40%, transparent);
+}
+.lib-inline {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	animation: lib-in 0.22s var(--ttk-ease) both;
+}
+.lib-inline > .lib-field {
+	flex: 1;
+}
+.lib-grid2 {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 10px;
+}
+.lib-section {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: color-mix(in oklab, var(--ttk-sunken) 60%, transparent);
+}
+.lib-section-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.lib-args {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.lib-arg {
+	display: grid;
+	grid-template-columns: 20px minmax(110px, 1fr) minmax(140px, 2fr) auto auto;
+	align-items: center;
+	gap: 8px;
+	animation: lib-in 0.22s var(--ttk-ease) both;
+}
+.lib-arg-glyph {
+	display: grid;
+	place-items: center;
+	color: var(--wa-color-text-quiet);
+}
+.lib-arg input {
+	min-width: 0;
+}
+.lib-preview-slot:empty {
+	display: none;
+}
+.lib-preview-form {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+	border: 1px dashed color-mix(in oklab, var(--ttk-brand) 45%, transparent);
+	border-radius: var(--ttk-radius);
+	animation: lib-in 0.22s var(--ttk-ease) both;
+}
+.lib-preview-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.lib-preview-field > label {
+	font-size: 12px;
+}
+pre.code.lib-preview {
+	max-height: 40vh;
+	animation: lib-in 0.25s var(--ttk-ease) both;
+}
+
+/* --- workspaces: the rail of cards --- */
+
+.ws-rail {
+	min-width: 0;
+}
+.ws-rail.has-cards {
+	display: grid;
+	grid-auto-columns: minmax(210px, 250px);
+	grid-auto-flow: column;
+	gap: 10px;
+	padding: 2px 2px 10px;
+	overflow-x: auto;
+	scroll-snap-type: x proximity;
+}
+button.ws-card {
+	position: relative;
+	width: 100%;
+	height: auto;
+	min-width: 0;
+	padding: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	box-shadow: var(--ttk-shadow);
+	font-weight: 400;
+	text-align: left;
+	white-space: normal;
+	transform: none;
+	scroll-snap-align: start;
+	animation: lib-in 0.32s var(--ttk-ease) both;
+	animation-delay: calc(var(--i, 0) * 30ms);
+	transition: transform 0.25s var(--ttk-ease), border-color 0.2s var(--ttk-ease), background-color 0.2s var(--ttk-ease);
+}
+button.ws-card:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--ttk-brand) 35%, transparent);
+	background: var(--ttk-card-hover);
+}
+button.ws-card[aria-pressed='true'] {
+	border-color: color-mix(in oklab, var(--ttk-brand) 60%, transparent);
+	background: color-mix(in oklab, var(--ttk-brand) 9%, var(--ttk-card));
+	box-shadow: var(--ttk-glow);
+}
+.ws-card-glyph {
+	width: 40px;
+	height: 40px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 12px;
+	background: color-mix(in oklab, var(--ttk-live) 14%, transparent);
+	color: var(--ttk-live);
+	transition: transform 0.3s var(--ttk-spring);
+}
+button.ws-card[aria-pressed='true'] .ws-card-glyph {
+	background: var(--ttk-gradient);
+	color: white;
+}
+button.ws-card:hover .ws-card-glyph {
+	transform: scale(1.06);
+}
+.ws-card-glyph .icon {
+	width: 20px;
+	height: 20px;
+}
+.ws-card-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.ws-card-name {
+	overflow: hidden;
+	font-weight: 650;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.ws-card-time {
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+}
+.ws-card-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	align-self: flex-start;
+	padding-top: 4px;
+}
+
+/* --- workspaces: the detail card --- */
+
+.ws-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 0;
+	padding: 16px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-card);
+	box-shadow: var(--ttk-shadow);
+	animation: lib-in 0.32s var(--ttk-ease) both;
+}
+.ws-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+}
+.ws-head-glyph {
+	width: 44px;
+	height: 44px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 14px;
+	background: var(--ttk-gradient);
+	color: white;
+	box-shadow: var(--ttk-glow);
+}
+.ws-head-glyph .icon {
+	width: 22px;
+	height: 22px;
+}
+.ws-head-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.ws-head-text h2 {
+	overflow: hidden;
+	font-size: 17px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.ws-head-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	min-width: 0;
+	color: var(--wa-color-text-quiet);
+}
+.ws-id {
+	min-width: 0;
+	overflow: hidden;
+	font-size: 12px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.ws-age {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	white-space: nowrap;
+}
+.ws-age .icon {
+	width: 13px;
+	height: 13px;
+}
+.ws-head-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* --- workspaces: editor | shell in a split panel --- */
+
+wa-split-panel.ws-split {
+	--divider-width: 14px;
+	--divider-hit-area: 18px;
+	--min: 260px;
+	--max: calc(100% - 260px);
+	min-width: 0;
+}
+wa-split-panel.ws-split::part(divider) {
+	background: transparent;
+	color: var(--wa-color-text-quiet);
+}
+.ws-grip {
+	display: grid;
+	place-items: center;
+	width: 6px;
+	height: 44px;
+	border-radius: 999px;
+	background: var(--ttk-hairline);
+	transition: background-color 0.2s var(--ttk-ease), color 0.2s var(--ttk-ease);
+}
+.ws-grip .icon {
+	width: 12px;
+	height: 12px;
+}
+wa-split-panel.ws-split::part(divider):hover {
+	color: var(--ttk-brand);
+}
+.ws-pane {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	padding: 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-sunken);
+}
+.ws-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.ws-bar-glyph {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	flex: 0 0 auto;
+	border-radius: 9px;
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+	color: var(--ttk-brand);
+}
+.ws-shell-pane .ws-bar-glyph {
+	background: color-mix(in oklab, var(--ttk-live) 14%, transparent);
+	color: var(--ttk-live);
+}
+.ws-bar > input {
+	flex: 1 1 140px;
+	min-width: 0;
+	--wa-form-control-height: 30px;
+}
+.ws-editor-pane > .ws-editor {
+	flex: 1;
+	min-height: 360px;
+}
+.ws-shell-pane.is-live {
+	border-color: color-mix(in oklab, var(--ttk-live) 40%, transparent);
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--ttk-live) 10%, transparent);
+}
+
+/* The terminal stays dark in both themes, as terminals do. */
+.terminal {
+	flex: 1;
+	min-height: 320px;
+	max-height: 60vh;
+	margin: 0;
+	padding: 10px 12px;
+	border: 1px solid color-mix(in oklab, var(--wa-color-gray-90) 10%, transparent);
+	border-radius: var(--ttk-radius-s);
+	background: var(--wa-color-gray-05);
+	color: var(--wa-color-gray-90);
+	font-size: 12.5px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	overflow-y: auto;
+}
+.terminal .cmd {
+	color: var(--wa-color-blue-70);
+}
+.terminal .muted {
+	color: var(--wa-color-gray-60);
+}
+.ws-prompt {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px 0 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-card);
+}
+.ws-prompt:focus-within {
+	border-color: color-mix(in oklab, var(--ttk-live) 55%, transparent);
+}
+.ws-prompt-mark {
+	color: var(--ttk-live);
+	font-family: var(--wa-font-family-code);
+	font-weight: 700;
+}
+.ws-prompt > .term-input {
+	flex: 1;
+	min-width: 0;
+	border-color: transparent;
+	background: transparent;
+	outline: none;
+}
+
+/* The diff dialog: additions, removals and hunks in colour. */
+pre.code.ws-diff {
+	max-height: 70vh;
+	white-space: pre;
+	overflow-wrap: normal;
+}
+.ws-diff .add {
+	color: var(--ttk-live);
+}
+.ws-diff .del {
+	color: var(--ttk-danger);
+}
+.ws-diff .hunk {
+	color: var(--ttk-agent);
+}
+.ws-diff .meta {
+	color: var(--wa-color-text-quiet);
+	font-weight: 650;
+}
+
+/* --- narrow screens --- */
+
+@media (max-width: 900px) {
+	/* The split stacks: editor above shell. The kit writes the columns inline, so the stack needs !important. */
+	wa-split-panel.ws-split {
+		grid-template-columns: minmax(0, 1fr) !important;
+		grid-template-rows: none !important;
+		gap: 12px;
+	}
+	wa-split-panel.ws-split::part(divider) {
+		display: none;
+	}
+	.lib-arg {
+		grid-template-columns: 20px minmax(0, 1fr) auto auto;
+	}
+	.lib-arg > input:nth-of-type(2) {
+		grid-column: 2 / -1;
+		grid-row: 2;
+	}
+}
+@media (max-width: 767px) {
+	/* The tree folds behind a bar that names the group in view; the viewer takes the screen. */
+	button.ttk-btn.rx-browse {
+		display: flex;
+	}
+	.rx-pane:not(.open) > .rx-pane-body {
+		display: none;
+	}
+	.rx-files-head > .rx-files-layout {
+		order: 3;
+		width: 100%;
+		margin-inline: 0;
+	}
+}
+@media (max-width: 720px) {
+	.lib-files.grid {
+		grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+		gap: 8px;
+	}
+	.lib-files.list .lib-file-time {
+		display: none;
+	}
+	.lib-cards {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.lib-sep {
+		display: none;
+	}
+	.ws-detail {
+		padding: 12px;
+	}
+	.ws-head {
+		flex-wrap: wrap;
+	}
+	.ws-editor-pane > .ws-editor {
+		min-height: 220px;
+	}
+	.terminal {
+		min-height: 240px;
+	}
+}

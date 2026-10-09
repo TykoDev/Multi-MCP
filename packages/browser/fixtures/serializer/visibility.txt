@@ -1,0 +1,4 @@
+ab
+inherited
+[701]<button />
+	Can click

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ARIA Listbox and Combobox</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+[role="listbox"]{border:1px solid #333;width:260px;padding:4px}
+[role="option"]{padding:2px 4px}
+[role="option"][aria-selected="true"]{background:#def}
+.combo{margin-top:14px;width:300px}
+.combo-popup{border:1px solid #666;margin-top:2px}
+.combo-popup[hidden]{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>ARIA listbox and combobox</h1>
+
+<div id="lb-label">Colour list</div>
+<div id="aria-listbox" role="listbox" tabindex="0" aria-labelledby="lb-label" aria-activedescendant="lb-opt-2" aria-multiselectable="false">
+  <div role="option" id="lb-opt-1" aria-selected="false">Crimson</div>
+  <div role="option" id="lb-opt-2" aria-selected="true">Cerulean</div>
+  <div role="option" id="lb-opt-3" aria-selected="false">Chartreuse</div>
+  <div role="option" id="lb-opt-4" aria-selected="false" aria-disabled="true">Charcoal (disabled)</div>
+</div>
+
+<div id="multi-listbox" role="listbox" tabindex="0" aria-label="Multi select list" aria-multiselectable="true">
+  <div role="option" id="ml-1" aria-selected="true">Alpha</div>
+  <div role="option" id="ml-2" aria-selected="true">Bravo</div>
+  <div role="option" id="ml-3" aria-selected="false">Charlie</div>
+</div>
+
+<div class="combo">
+  <label id="combo-label" for="combo-input">Combobox (collapsed)</label>
+  <input id="combo-input" role="combobox" type="text"
+         aria-expanded="false" aria-controls="combo-popup" aria-autocomplete="list"
+         aria-labelledby="combo-label" aria-haspopup="listbox" placeholder="type to filter">
+  <div id="combo-popup" class="combo-popup" role="listbox" aria-label="Combo options" hidden>
+    <div role="option" id="cp-1" aria-selected="false">Hidden option one</div>
+    <div role="option" id="cp-2" aria-selected="false">Hidden option two</div>
+  </div>
+</div>
+
+<div class="combo">
+  <label id="combo2-label" for="combo2-input">Combobox (expanded)</label>
+  <input id="combo2-input" role="combobox" type="text"
+         aria-expanded="true" aria-controls="combo2-popup" aria-autocomplete="both"
+         aria-labelledby="combo2-label" aria-haspopup="listbox" value="ce">
+  <div id="combo2-popup" class="combo-popup" role="listbox" aria-label="Expanded combo options">
+    <div role="option" id="c2-1" aria-selected="false">Cedar</div>
+    <div role="option" id="c2-2" aria-selected="true">Celery</div>
+    <div role="option" id="c2-3" aria-selected="false">Cement</div>
+  </div>
+</div>
+
+<div role="menu" aria-label="Demo menu" tabindex="0" id="aria-menu">
+  <div role="menuitem" id="mi-1" tabindex="-1">Menu item one</div>
+  <div role="menuitemcheckbox" id="mi-2" aria-checked="true" tabindex="-1">Menu checkbox</div>
+  <div role="menuitemradio" id="mi-3" aria-checked="false" tabindex="-1">Menu radio</div>
+</div>
+
+<div role="tablist" aria-label="Demo tabs" id="aria-tablist">
+  <button role="tab" id="tab-1" aria-selected="true" aria-controls="panel-1">Tab one</button>
+  <button role="tab" id="tab-2" aria-selected="false" aria-controls="panel-2">Tab two</button>
+</div>
+<div role="tabpanel" id="panel-1" aria-labelledby="tab-1">Panel one content</div>
+<div role="tabpanel" id="panel-2" aria-labelledby="tab-2" hidden>Panel two content</div>
+</main>
+</body>
+</html>

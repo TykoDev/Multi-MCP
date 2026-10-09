@@ -1,0 +1,30 @@
+{
+	"name": "selector_collision",
+	"pins": "R6.1 — selectorIndex is the backendNodeId, assigned in document order (the host <iframe> before its content); a cross-session collision takes the next free synthetic index above max(reservedBackendIds)",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{ "tag": "BUTTON", "id": 500, "children": [{ "text": "Main" }] },
+					{
+						"tag": "IFRAME",
+						"id": 600,
+						"attrs": { "src": "/inner.html" },
+						"document": {
+							"tag": "#document",
+							"id": 601,
+							"session": "session-oopif",
+							"frame": "frame-oopif",
+							"children": [
+								{ "tag": "BUTTON", "id": 500, "children": [{ "text": "Inner A" }] },
+								{ "tag": "BUTTON", "id": 700, "children": [{ "text": "Inner B" }] }
+							]
+						}
+					}
+				]
+			}
+		]
+	}
+}

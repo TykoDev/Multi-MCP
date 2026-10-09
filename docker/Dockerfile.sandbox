@@ -1,0 +1,37 @@
+# D-064: a separate non-root service is the only process permitted to run bwrap.
+# D-108: /run/ttk-sandbox-sock is where the opt-in Docker backend (docker-compose.sandbox-docker.yml) mounts its
+# socket volume, owned by 1993 here so a fresh volume takes that owner. The default (bwrap) CMD never uses it.
+# D-151: /run/ttk-sandbox-token is where docker-compose.yml mounts the ttk-sandbox-token volume, in which the service
+# creates its bearer on the first start. Owned by 1993 with mode 0700 here for the same reason: Docker copies a fresh
+# volume's owner and mode from the image's folder, and only this service (read-write) and the gateway (read-only,
+# also uid 1993) mount it.
+# C13 (D-103): pinned by digest to the gateway images' Deno — denoland/deno:2.9.7, resolved 2026-10-04.
+ARG DENO_IMAGE=denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
+FROM ${DENO_IMAGE}
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bubblewrap socat git python3 python3-pip nodejs npm curl ca-certificates util-linux \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /work /tmp/ttk-sandbox /run/ttk-sandbox-sock /run/ttk-sandbox-token \
+    && chown -R 1993:1993 /work /tmp/ttk-sandbox /run/ttk-sandbox-sock /run/ttk-sandbox-token \
+    && chmod 0700 /run/ttk-sandbox-token
+WORKDIR /app
+COPY deno.json deno.lock ./
+COPY packages ./packages
+COPY tests/sandbox ./tests/sandbox
+COPY scripts/sandbox_healthcheck.ts ./scripts/sandbox_healthcheck.ts
+RUN deno cache --frozen packages/sandbox/service.ts tests/sandbox/cages_test.ts tests/sandbox/runner_test.ts
+USER 1993:1993
+ENV TTK_SANDBOX_TOKEN_FILE=/run/secrets/ttk_sandbox_token DENO_NO_UPDATE_CHECK=1
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD deno run --deny-ffi --allow-net=127.0.0.1:8080 scripts/sandbox_healthcheck.ts
+# D-066: proxy DNS and validated public-IP dials require service network access.
+# Every code cage remains in a fresh network namespace with only the explicit proxy socket.
+# D-131 (R12): the two git names (unset, clone stays off; docker-compose.yml sets the hosts, D-151) and the remotes
+# secret, read once at start-up and then revoked; git itself still runs only inside cages, so --allow-run stays
+# bubblewrap alone.
+# D-151: read and write on the token volume's folder, not the file: the token is written beside it and renamed into
+# place, and Deno's rename needs read access to the file it moves. Both grants, and the read grant on the compose
+# secret, are revoked once the token is read (packages/sandbox/src/token.ts), whichever of the two was used.
+CMD ["deno", "run", "--deny-ffi", "--unstable-no-legacy-abort", "--allow-run=/usr/bin/bwrap", "--allow-read=/work,/tmp/ttk-sandbox,/run/secrets/ttk_sandbox_token,/run/secrets/ttk_git_remotes,/run/ttk-sandbox-token", "--allow-write=/work,/tmp/ttk-sandbox,/run/ttk-sandbox-token", "--allow-net", "--allow-env=TTK_SANDBOX_TOKEN_FILE,TTK_SANDBOX_GIT_HOSTS,TTK_SANDBOX_GIT_REMOTES_FILE", "--allow-sys=statfs", "packages/sandbox/service.ts"]

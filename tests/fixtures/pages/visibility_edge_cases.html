@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visibility Edge Cases</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+.hidden-display{display:none}
+.hidden-visibility{visibility:hidden}
+.zero-opacity{opacity:0}
+.zero-size{width:0;height:0;overflow:hidden;padding:0;border:0}
+.offscreen-left{position:absolute;left:-9999px;top:20px}
+.offscreen-above{position:absolute;top:-5000px;left:20px}
+.offscreen-below{position:absolute;top:12000px;left:20px}
+.clipped{position:absolute;clip-path:inset(100%);width:1px;height:1px;overflow:hidden}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</head>
+<body>
+<main>
+<h1>Visibility edge cases</h1>
+
+<button type="button" id="v-visible">Plainly visible button</button>
+
+<div class="hidden-display"><button type="button" id="v-display-none">display none button</button><span>display none text</span></div>
+
+<div class="hidden-visibility"><button type="button" id="v-visibility-hidden">visibility hidden button</button><span>visibility hidden text</span></div>
+
+<div class="zero-opacity"><button type="button" id="v-opacity-zero">opacity zero button</button><span>opacity zero text</span></div>
+
+<button type="button" id="v-zero-size" class="zero-size">zero size button</button>
+
+<button type="button" id="v-offscreen-left" class="offscreen-left">offscreen left button</button>
+
+<button type="button" id="v-offscreen-above" class="offscreen-above">offscreen above button</button>
+
+<button type="button" id="v-offscreen-below" class="offscreen-below">offscreen below button</button>
+
+<button type="button" id="v-clipped" class="clipped">clip-path hidden button</button>
+
+<button type="button" id="v-sr-only" class="sr-only">screen reader only button</button>
+
+<button type="button" id="v-aria-hidden" aria-hidden="true">aria-hidden button</button>
+
+<button type="button" id="v-hidden-attr" hidden>hidden attribute button</button>
+
+<input type="hidden" id="v-input-hidden" name="hiddenfield" value="hidden-input-value">
+
+<button type="button" id="v-disabled" disabled>disabled button</button>
+
+<button type="button" id="v-visible-tail">Tail visible button</button>
+</main>
+</body>
+</html>

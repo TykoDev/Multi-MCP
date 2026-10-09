@@ -1,0 +1,30 @@
+{
+	"name": "visibility",
+	"pins": "§6.4 text-node gate (visible, stripped length > 1) and the invisible-element gate; unknown visibility inherits from the nearest ancestor that knows",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{ "text": "ab" },
+					{ "text": "a" },
+					{ "text": " \t \n " },
+					{ "text": "invisible text", "visible": false },
+					{
+						"tag": "DIV",
+						"visible": true,
+						"children": [{ "text": "inherited", "visible": null }]
+					},
+					{
+						"tag": "DIV",
+						"visible": false,
+						"children": [{ "text": "hidden branch", "visible": null }]
+					},
+					{ "tag": "BUTTON", "id": 700, "visible": false, "children": [{ "text": "Cannot click" }] },
+					{ "tag": "BUTTON", "id": 701, "children": [{ "text": "Can click" }] }
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Native Select Elements</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+label{display:block;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Native select</h1>
+
+<label for="sel-simple">Simple select</label>
+<select id="sel-simple" name="selSimple">
+  <option value="">-- choose --</option>
+  <option value="red">Red</option>
+  <option value="green" selected>Green</option>
+  <option value="blue">Blue</option>
+</select>
+
+<label for="sel-grouped">Grouped select</label>
+<select id="sel-grouped" name="selGrouped">
+  <optgroup label="Fruit">
+    <option value="apple">Apple</option>
+    <option value="pear">Pear</option>
+  </optgroup>
+  <optgroup label="Vegetable">
+    <option value="leek">Leek</option>
+    <option value="kale" disabled>Kale (disabled)</option>
+  </optgroup>
+</select>
+
+<label for="sel-multi">Multiple select</label>
+<select id="sel-multi" name="selMulti" multiple size="4">
+  <option value="m1" selected>Multi one</option>
+  <option value="m2">Multi two</option>
+  <option value="m3" selected>Multi three</option>
+  <option value="m4">Multi four</option>
+</select>
+
+<label for="sel-disabled">Disabled select</label>
+<select id="sel-disabled" name="selDisabled" disabled>
+  <option value="x">Cannot pick</option>
+</select>
+
+<label for="sel-required">Required select</label>
+<select id="sel-required" name="selRequired" required>
+  <option value="">none</option>
+  <option value="ok">ok</option>
+</select>
+</main>
+</body>
+</html>

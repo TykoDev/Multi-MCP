@@ -1,0 +1,4036 @@
+{
+	"rootSessionId": "59D40F09E5E4866E67473A4F0E88AEF7",
+	"sessions": [
+		{
+			"targetId": "F0A42AC7EAD9217FA9734C73AC7D853D",
+			"sessionId": "59D40F09E5E4866E67473A4F0E88AEF7",
+			"frameId": "F0A42AC7EAD9217FA9734C73AC7D853D",
+			"url": "http://127.0.0.1:38111/react_controlled_inputs.html",
+			"devicePixelRatio": 1,
+			"layoutMetrics": {
+				"scrollX": 0,
+				"scrollY": 0,
+				"viewportWidth": 1280,
+				"viewportHeight": 900,
+				"contentWidth": 1280,
+				"contentHeight": 900
+			},
+			"document": {
+				"nodeId": 1,
+				"backendNodeId": 6,
+				"nodeType": 9,
+				"nodeName": "#document",
+				"localName": "",
+				"nodeValue": "",
+				"childNodeCount": 2,
+				"children": [
+					{
+						"nodeId": 2,
+						"parentId": 1,
+						"backendNodeId": 7,
+						"nodeType": 10,
+						"nodeName": "html",
+						"localName": "",
+						"nodeValue": "",
+						"publicId": "",
+						"systemId": ""
+					},
+					{
+						"nodeId": 3,
+						"parentId": 1,
+						"backendNodeId": 8,
+						"nodeType": 1,
+						"nodeName": "HTML",
+						"localName": "html",
+						"nodeValue": "",
+						"childNodeCount": 2,
+						"children": [
+							{
+								"nodeId": 4,
+								"parentId": 3,
+								"backendNodeId": 9,
+								"nodeType": 1,
+								"nodeName": "HEAD",
+								"localName": "head",
+								"nodeValue": "",
+								"childNodeCount": 3,
+								"children": [
+									{
+										"nodeId": 5,
+										"parentId": 4,
+										"backendNodeId": 10,
+										"nodeType": 1,
+										"nodeName": "META",
+										"localName": "meta",
+										"nodeValue": "",
+										"childNodeCount": 0,
+										"children": [],
+										"attributes": [
+											"charset",
+											"utf-8"
+										]
+									},
+									{
+										"nodeId": 6,
+										"parentId": 4,
+										"backendNodeId": 11,
+										"nodeType": 1,
+										"nodeName": "TITLE",
+										"localName": "title",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 7,
+												"parentId": 6,
+												"backendNodeId": 12,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "React-Style Controlled Inputs"
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 8,
+										"parentId": 4,
+										"backendNodeId": 13,
+										"nodeType": 1,
+										"nodeName": "STYLE",
+										"localName": "style",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 9,
+												"parentId": 8,
+												"backendNodeId": 14,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\nlabel{display:block;margin:6px 0}\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							},
+							{
+								"nodeId": 10,
+								"parentId": 3,
+								"backendNodeId": 15,
+								"nodeType": 1,
+								"nodeName": "BODY",
+								"localName": "body",
+								"nodeValue": "",
+								"childNodeCount": 2,
+								"children": [
+									{
+										"nodeId": 11,
+										"parentId": 10,
+										"backendNodeId": 16,
+										"nodeType": 1,
+										"nodeName": "MAIN",
+										"localName": "main",
+										"nodeValue": "",
+										"childNodeCount": 10,
+										"children": [
+											{
+												"nodeId": 12,
+												"parentId": 11,
+												"backendNodeId": 17,
+												"nodeType": 1,
+												"nodeName": "H1",
+												"localName": "h1",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 13,
+														"parentId": 12,
+														"backendNodeId": 18,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Controlled inputs (React value-tracker pattern, no framework)"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 14,
+												"parentId": 11,
+												"backendNodeId": 19,
+												"nodeType": 1,
+												"nodeName": "LABEL",
+												"localName": "label",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 15,
+														"parentId": 14,
+														"backendNodeId": 20,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Controlled text"
+													}
+												],
+												"attributes": [
+													"for",
+													"ctrl-text"
+												]
+											},
+											{
+												"nodeId": 16,
+												"parentId": 11,
+												"backendNodeId": 2,
+												"nodeType": 1,
+												"nodeName": "INPUT",
+												"localName": "input",
+												"nodeValue": "",
+												"childNodeCount": 0,
+												"children": [],
+												"attributes": [
+													"id",
+													"ctrl-text",
+													"name",
+													"ctrlText",
+													"type",
+													"text",
+													"value",
+													"initial-state",
+													"placeholder",
+													"controlled text"
+												],
+												"shadowRoots": [
+													{
+														"nodeId": 17,
+														"backendNodeId": 21,
+														"nodeType": 11,
+														"nodeName": "#document-fragment",
+														"localName": "",
+														"nodeValue": "",
+														"childNodeCount": 2,
+														"children": [
+															{
+																"nodeId": 18,
+																"parentId": 17,
+																"backendNodeId": 22,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 19,
+																		"parentId": 18,
+																		"backendNodeId": 23,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "controlled text"
+																	}
+																],
+																"attributes": [
+																	"pseudo",
+																	"-webkit-input-placeholder",
+																	"id",
+																	"placeholder",
+																	"style",
+																	"display: none !important;"
+																]
+															},
+															{
+																"nodeId": 20,
+																"parentId": 17,
+																"backendNodeId": 24,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 21,
+																		"parentId": 20,
+																		"backendNodeId": 25,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "initial-state"
+																	}
+																],
+																"attributes": []
+															}
+														],
+														"shadowRootType": "user-agent"
+													}
+												]
+											},
+											{
+												"nodeId": 22,
+												"parentId": 11,
+												"backendNodeId": 26,
+												"nodeType": 1,
+												"nodeName": "LABEL",
+												"localName": "label",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 23,
+														"parentId": 22,
+														"backendNodeId": 27,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Controlled textarea"
+													}
+												],
+												"attributes": [
+													"for",
+													"ctrl-textarea"
+												]
+											},
+											{
+												"nodeId": 24,
+												"parentId": 11,
+												"backendNodeId": 3,
+												"nodeType": 1,
+												"nodeName": "TEXTAREA",
+												"localName": "textarea",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 30,
+														"parentId": 24,
+														"backendNodeId": 33,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "area-state"
+													}
+												],
+												"attributes": [
+													"id",
+													"ctrl-textarea",
+													"name",
+													"ctrlArea",
+													"rows",
+													"3",
+													"cols",
+													"30",
+													"placeholder",
+													"controlled area"
+												],
+												"shadowRoots": [
+													{
+														"nodeId": 25,
+														"backendNodeId": 28,
+														"nodeType": 11,
+														"nodeName": "#document-fragment",
+														"localName": "",
+														"nodeValue": "",
+														"childNodeCount": 2,
+														"children": [
+															{
+																"nodeId": 26,
+																"parentId": 25,
+																"backendNodeId": 29,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 27,
+																		"parentId": 26,
+																		"backendNodeId": 30,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "controlled area"
+																	}
+																],
+																"attributes": [
+																	"pseudo",
+																	"-webkit-input-placeholder",
+																	"id",
+																	"placeholder",
+																	"style",
+																	"display: none !important;"
+																]
+															},
+															{
+																"nodeId": 28,
+																"parentId": 25,
+																"backendNodeId": 31,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 29,
+																		"parentId": 28,
+																		"backendNodeId": 32,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "area-state"
+																	}
+																],
+																"attributes": []
+															}
+														],
+														"shadowRootType": "user-agent"
+													}
+												]
+											},
+											{
+												"nodeId": 31,
+												"parentId": 11,
+												"backendNodeId": 34,
+												"nodeType": 1,
+												"nodeName": "LABEL",
+												"localName": "label",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 32,
+														"parentId": 31,
+														"backendNodeId": 35,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Controlled checkbox"
+													}
+												],
+												"attributes": [
+													"for",
+													"ctrl-checkbox"
+												]
+											},
+											{
+												"nodeId": 33,
+												"parentId": 11,
+												"backendNodeId": 5,
+												"nodeType": 1,
+												"nodeName": "INPUT",
+												"localName": "input",
+												"nodeValue": "",
+												"childNodeCount": 0,
+												"children": [],
+												"attributes": [
+													"id",
+													"ctrl-checkbox",
+													"name",
+													"ctrlCheck",
+													"type",
+													"checkbox",
+													"checked",
+													""
+												]
+											},
+											{
+												"nodeId": 34,
+												"parentId": 11,
+												"backendNodeId": 36,
+												"nodeType": 1,
+												"nodeName": "LABEL",
+												"localName": "label",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 35,
+														"parentId": 34,
+														"backendNodeId": 37,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Controlled select"
+													}
+												],
+												"attributes": [
+													"for",
+													"ctrl-select"
+												]
+											},
+											{
+												"nodeId": 36,
+												"parentId": 11,
+												"backendNodeId": 4,
+												"nodeType": 1,
+												"nodeName": "SELECT",
+												"localName": "select",
+												"nodeValue": "",
+												"childNodeCount": 3,
+												"children": [
+													{
+														"nodeId": 45,
+														"parentId": 36,
+														"backendNodeId": 44,
+														"nodeType": 1,
+														"nodeName": "OPTION",
+														"localName": "option",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 50,
+																"parentId": 45,
+																"backendNodeId": 53,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "One"
+															}
+														],
+														"attributes": [
+															"value",
+															"one"
+														],
+														"shadowRoots": [
+															{
+																"nodeId": 46,
+																"backendNodeId": 49,
+																"nodeType": 11,
+																"nodeName": "#document-fragment",
+																"localName": "",
+																"nodeValue": "",
+																"childNodeCount": 2,
+																"children": [
+																	{
+																		"nodeId": 47,
+																		"parentId": 46,
+																		"backendNodeId": 50,
+																		"nodeType": 1,
+																		"nodeName": "SPAN",
+																		"localName": "span",
+																		"nodeValue": "",
+																		"childNodeCount": 1,
+																		"children": [
+																			{
+																				"nodeId": 48,
+																				"parentId": 47,
+																				"backendNodeId": 51,
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"localName": "",
+																				"nodeValue": "One"
+																			}
+																		],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-option-label-container",
+																			"aria-hidden",
+																			"true"
+																		]
+																	},
+																	{
+																		"nodeId": 49,
+																		"parentId": 46,
+																		"backendNodeId": 52,
+																		"nodeType": 1,
+																		"nodeName": "SLOT",
+																		"localName": "slot",
+																		"nodeValue": "",
+																		"childNodeCount": 0,
+																		"children": [],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-option-slot"
+																		],
+																		"distributedNodes": [
+																			{
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"backendNodeId": 53
+																			}
+																		]
+																	}
+																],
+																"shadowRootType": "user-agent"
+															}
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 43
+														}
+													},
+													{
+														"nodeId": 51,
+														"parentId": 36,
+														"backendNodeId": 45,
+														"nodeType": 1,
+														"nodeName": "OPTION",
+														"localName": "option",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 56,
+																"parentId": 51,
+																"backendNodeId": 58,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Two"
+															}
+														],
+														"attributes": [
+															"value",
+															"two",
+															"selected",
+															""
+														],
+														"shadowRoots": [
+															{
+																"nodeId": 52,
+																"backendNodeId": 54,
+																"nodeType": 11,
+																"nodeName": "#document-fragment",
+																"localName": "",
+																"nodeValue": "",
+																"childNodeCount": 2,
+																"children": [
+																	{
+																		"nodeId": 53,
+																		"parentId": 52,
+																		"backendNodeId": 55,
+																		"nodeType": 1,
+																		"nodeName": "SPAN",
+																		"localName": "span",
+																		"nodeValue": "",
+																		"childNodeCount": 1,
+																		"children": [
+																			{
+																				"nodeId": 54,
+																				"parentId": 53,
+																				"backendNodeId": 56,
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"localName": "",
+																				"nodeValue": "Two"
+																			}
+																		],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-option-label-container",
+																			"aria-hidden",
+																			"true"
+																		]
+																	},
+																	{
+																		"nodeId": 55,
+																		"parentId": 52,
+																		"backendNodeId": 57,
+																		"nodeType": 1,
+																		"nodeName": "SLOT",
+																		"localName": "slot",
+																		"nodeValue": "",
+																		"childNodeCount": 0,
+																		"children": [],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-option-slot"
+																		],
+																		"distributedNodes": [
+																			{
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"backendNodeId": 58
+																			}
+																		]
+																	}
+																],
+																"shadowRootType": "user-agent"
+															}
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 43
+														}
+													},
+													{
+														"nodeId": 57,
+														"parentId": 36,
+														"backendNodeId": 46,
+														"nodeType": 1,
+														"nodeName": "OPTION",
+														"localName": "option",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 62,
+																"parentId": 57,
+																"backendNodeId": 63,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Three"
+															}
+														],
+														"attributes": [
+															"value",
+															"three"
+														],
+														"shadowRoots": [
+															{
+																"nodeId": 58,
+																"backendNodeId": 59,
+																"nodeType": 11,
+																"nodeName": "#document-fragment",
+																"localName": "",
+																"nodeValue": "",
+																"childNodeCount": 2,
+																"children": [
+																	{
+																		"nodeId": 59,
+																		"parentId": 58,
+																		"backendNodeId": 60,
+																		"nodeType": 1,
+																		"nodeName": "SPAN",
+																		"localName": "span",
+																		"nodeValue": "",
+																		"childNodeCount": 1,
+																		"children": [
+																			{
+																				"nodeId": 60,
+																				"parentId": 59,
+																				"backendNodeId": 61,
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"localName": "",
+																				"nodeValue": "Three"
+																			}
+																		],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-option-label-container",
+																			"aria-hidden",
+																			"true"
+																		]
+																	},
+																	{
+																		"nodeId": 61,
+																		"parentId": 58,
+																		"backendNodeId": 62,
+																		"nodeType": 1,
+																		"nodeName": "SLOT",
+																		"localName": "slot",
+																		"nodeValue": "",
+																		"childNodeCount": 0,
+																		"children": [],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-option-slot"
+																		],
+																		"distributedNodes": [
+																			{
+																				"nodeType": 3,
+																				"nodeName": "#text",
+																				"backendNodeId": 63
+																			}
+																		]
+																	}
+																],
+																"shadowRootType": "user-agent"
+															}
+														],
+														"assignedSlot": {
+															"nodeType": 1,
+															"nodeName": "SLOT",
+															"backendNodeId": 43
+														}
+													}
+												],
+												"attributes": [
+													"id",
+													"ctrl-select",
+													"name",
+													"ctrlSelect"
+												],
+												"shadowRoots": [
+													{
+														"nodeId": 37,
+														"backendNodeId": 38,
+														"nodeType": 11,
+														"nodeName": "#document-fragment",
+														"localName": "",
+														"nodeValue": "",
+														"childNodeCount": 4,
+														"children": [
+															{
+																"nodeId": 38,
+																"parentId": 37,
+																"backendNodeId": 39,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 39,
+																		"parentId": 38,
+																		"backendNodeId": 40,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Two"
+																	}
+																],
+																"attributes": [
+																	"aria-hidden",
+																	"true",
+																	"pseudo",
+																	"-internal-select-inner-element"
+																]
+															},
+															{
+																"nodeId": 40,
+																"parentId": 37,
+																"backendNodeId": 41,
+																"nodeType": 1,
+																"nodeName": "SLOT",
+																"localName": "slot",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"pseudo",
+																	"-internal-select-button-slot"
+																],
+																"distributedNodes": []
+															},
+															{
+																"nodeId": 41,
+																"parentId": 37,
+																"backendNodeId": 42,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 42,
+																		"parentId": 41,
+																		"backendNodeId": 43,
+																		"nodeType": 1,
+																		"nodeName": "SLOT",
+																		"localName": "slot",
+																		"nodeValue": "",
+																		"childNodeCount": 0,
+																		"children": [],
+																		"attributes": [
+																			"id",
+																			"select-popover-options"
+																		],
+																		"distributedNodes": [
+																			{
+																				"nodeType": 1,
+																				"nodeName": "OPTION",
+																				"backendNodeId": 44
+																			},
+																			{
+																				"nodeType": 1,
+																				"nodeName": "OPTION",
+																				"backendNodeId": 45
+																			},
+																			{
+																				"nodeType": 1,
+																				"nodeName": "OPTION",
+																				"backendNodeId": 46
+																			}
+																		]
+																	}
+																],
+																"attributes": [
+																	"pseudo",
+																	"picker(select)",
+																	"popover",
+																	"auto"
+																]
+															},
+															{
+																"nodeId": 43,
+																"parentId": 37,
+																"backendNodeId": 47,
+																"nodeType": 1,
+																"nodeName": "DIV",
+																"localName": "div",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 44,
+																		"parentId": 43,
+																		"backendNodeId": 48,
+																		"nodeType": 1,
+																		"nodeName": "DIV",
+																		"localName": "div",
+																		"nodeValue": "",
+																		"childNodeCount": 0,
+																		"children": [],
+																		"attributes": [
+																			"pseudo",
+																			"-internal-select-autofill-preview-text"
+																		]
+																	}
+																],
+																"attributes": [
+																	"pseudo",
+																	"-internal-select-autofill-preview",
+																	"popover",
+																	"manual"
+																]
+															}
+														],
+														"shadowRootType": "user-agent"
+													}
+												]
+											},
+											{
+												"nodeId": 63,
+												"parentId": 11,
+												"backendNodeId": 64,
+												"nodeType": 1,
+												"nodeName": "P",
+												"localName": "p",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 64,
+														"parentId": 63,
+														"backendNodeId": 65,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "mirror: initial-state"
+													}
+												],
+												"attributes": [
+													"id",
+													"mirror"
+												]
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 65,
+										"parentId": 10,
+										"backendNodeId": 66,
+										"nodeType": 1,
+										"nodeName": "SCRIPT",
+										"localName": "script",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 66,
+												"parentId": 65,
+												"backendNodeId": 67,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n(function () {\n  // Emulate React's value tracker: the DOM value setter is shadowed by an own\n  // property descriptor, so naive `el.value = x` assignments are swallowed and\n  // only native-setter + input-event writes take effect.\n  function installTracker(el, prop) {\n    var proto = Object.getPrototypeOf(el);\n    var desc = Object.getOwnPropertyDescriptor(proto, prop);\n    var current = el[prop];\n    Object.defineProperty(el, prop, {\n      configurable: true,\n      enumerable: false,\n      get: function () { return current; },\n      set: function (v) {\n        // Swallow direct writes that do not come through the native setter,\n        // exactly like a controlled component re-rendering from state.\n        current = current;\n        desc.set.call(el, current);\n      }\n    });\n    el.__setControlled = function (v) {\n      current = v;\n      desc.set.call(el, v);\n    };\n    el.addEventListener('input', function () {\n      current = desc.get.call(el);\n      var m = document.getElementById('mirror');\n      if (m && el.id === 'ctrl-text') { m.textContent = 'mirror: ' + current; }\n    });\n  }\n\n  installTracker(document.getElementById('ctrl-text'), 'value');\n  installTracker(document.getElementById('ctrl-textarea'), 'value');\n  installTracker(document.getElementById('ctrl-checkbox'), 'checked');\n  installTracker(document.getElementById('ctrl-select'), 'value');\n})();\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							}
+						],
+						"attributes": [
+							"lang",
+							"en"
+						],
+						"frameId": "F0A42AC7EAD9217FA9734C73AC7D853D"
+					}
+				],
+				"documentURL": "http://127.0.0.1:38111/react_controlled_inputs.html",
+				"baseURL": "http://127.0.0.1:38111/react_controlled_inputs.html",
+				"xmlVersion": "",
+				"compatibilityMode": "NoQuirksMode"
+			},
+			"snapshot": {
+				"documents": [
+					{
+						"documentURL": 0,
+						"title": 1,
+						"baseURL": 0,
+						"contentLanguage": -1,
+						"encodingName": 2,
+						"publicId": -1,
+						"systemId": -1,
+						"frameId": 3,
+						"nodes": {
+							"parentIndex": [
+								-1,
+								0,
+								0,
+								2,
+								3,
+								3,
+								3,
+								3,
+								7,
+								3,
+								3,
+								10,
+								3,
+								2,
+								2,
+								14,
+								14,
+								16,
+								16,
+								18,
+								16,
+								16,
+								21,
+								16,
+								16,
+								16,
+								16,
+								26,
+								16,
+								16,
+								29,
+								16,
+								16,
+								32,
+								16,
+								16,
+								16,
+								16,
+								37,
+								16,
+								16,
+								40,
+								40,
+								42,
+								40,
+								40,
+								45,
+								40,
+								40,
+								48,
+								40,
+								16,
+								16,
+								52,
+								16,
+								14,
+								14,
+								56,
+								14
+							],
+							"nodeType": [
+								9,
+								10,
+								1,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3
+							],
+							"shadowRootType": {
+								"index": [],
+								"value": []
+							},
+							"nodeName": [
+								4,
+								5,
+								6,
+								15,
+								16,
+								18,
+								16,
+								21,
+								16,
+								16,
+								22,
+								16,
+								16,
+								16,
+								24,
+								16,
+								25,
+								16,
+								27,
+								16,
+								16,
+								30,
+								16,
+								16,
+								35,
+								16,
+								30,
+								16,
+								16,
+								49,
+								16,
+								16,
+								30,
+								16,
+								16,
+								35,
+								16,
+								30,
+								16,
+								16,
+								65,
+								16,
+								68,
+								16,
+								16,
+								68,
+								16,
+								16,
+								68,
+								16,
+								16,
+								16,
+								76,
+								16,
+								16,
+								16,
+								79,
+								16,
+								16
+							],
+							"nodeValue": [
+								-1,
+								-1,
+								-1,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								1,
+								17,
+								-1,
+								23,
+								17,
+								17,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								28,
+								29,
+								-1,
+								34,
+								17,
+								-1,
+								29,
+								-1,
+								48,
+								17,
+								-1,
+								56,
+								29,
+								-1,
+								58,
+								17,
+								-1,
+								29,
+								-1,
+								64,
+								17,
+								-1,
+								67,
+								-1,
+								70,
+								67,
+								-1,
+								73,
+								67,
+								-1,
+								75,
+								17,
+								29,
+								-1,
+								78,
+								17,
+								17,
+								-1,
+								80,
+								81
+							],
+							"backendNodeId": [
+								6,
+								7,
+								8,
+								9,
+								68,
+								10,
+								69,
+								11,
+								12,
+								70,
+								13,
+								14,
+								71,
+								72,
+								15,
+								73,
+								16,
+								74,
+								17,
+								18,
+								75,
+								19,
+								20,
+								76,
+								2,
+								77,
+								26,
+								27,
+								78,
+								3,
+								33,
+								79,
+								34,
+								35,
+								80,
+								5,
+								81,
+								36,
+								37,
+								82,
+								4,
+								83,
+								44,
+								53,
+								84,
+								45,
+								58,
+								85,
+								46,
+								63,
+								86,
+								87,
+								64,
+								65,
+								88,
+								89,
+								66,
+								67,
+								90
+							],
+							"attributes": [
+								[],
+								[],
+								[
+									7,
+									8
+								],
+								[],
+								[],
+								[
+									19,
+									20
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									32
+								],
+								[],
+								[],
+								[
+									36,
+									32,
+									37,
+									38,
+									39,
+									40,
+									41,
+									42,
+									43,
+									44
+								],
+								[],
+								[
+									31,
+									47
+								],
+								[],
+								[],
+								[
+									36,
+									47,
+									37,
+									50,
+									51,
+									52,
+									53,
+									54,
+									43,
+									55
+								],
+								[],
+								[],
+								[
+									31,
+									57
+								],
+								[],
+								[],
+								[
+									36,
+									57,
+									37,
+									59,
+									39,
+									60,
+									61,
+									-1
+								],
+								[],
+								[
+									31,
+									63
+								],
+								[],
+								[],
+								[
+									36,
+									63,
+									37,
+									66
+								],
+								[],
+								[
+									41,
+									69
+								],
+								[],
+								[],
+								[
+									41,
+									71,
+									72,
+									-1
+								],
+								[],
+								[],
+								[
+									41,
+									74
+								],
+								[],
+								[],
+								[],
+								[
+									36,
+									77
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[]
+							],
+							"textValue": {
+								"index": [
+									29
+								],
+								"value": [
+									56
+								]
+							},
+							"inputValue": {
+								"index": [
+									24,
+									35
+								],
+								"value": [
+									42,
+									62
+								]
+							},
+							"inputChecked": {
+								"index": [
+									35
+								]
+							},
+							"optionSelected": {
+								"index": [
+									45
+								]
+							},
+							"contentDocumentIndex": {
+								"index": [],
+								"value": []
+							},
+							"pseudoType": {
+								"index": [],
+								"value": []
+							},
+							"pseudoIdentifier": {
+								"index": [],
+								"value": []
+							},
+							"isClickable": {
+								"index": [
+									21,
+									24,
+									32,
+									35
+								]
+							},
+							"currentSourceURL": {
+								"index": [],
+								"value": []
+							},
+							"originURL": {
+								"index": [],
+								"value": []
+							}
+						},
+						"layout": {
+							"nodeIndex": [
+								0,
+								2,
+								14,
+								16,
+								18,
+								19,
+								21,
+								22,
+								24,
+								25,
+								26,
+								27,
+								29,
+								31,
+								32,
+								33,
+								35,
+								36,
+								37,
+								38,
+								40,
+								51,
+								52,
+								53
+							],
+							"styles": [
+								[],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									45,
+									10,
+									11,
+									46,
+									46,
+									46,
+									40,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									45,
+									10,
+									11,
+									12,
+									12,
+									12,
+									40,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									45,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									26
+								],
+								[
+									45,
+									10,
+									11,
+									10,
+									10,
+									10,
+									33,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								]
+							],
+							"bounds": [
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									387.4375
+								],
+								[
+									0,
+									0,
+									1280,
+									387.4375
+								],
+								[
+									0,
+									0,
+									1280,
+									387.4375
+								],
+								[
+									12,
+									30.75,
+									1256,
+									39.1875
+								],
+								[
+									12,
+									33.75,
+									939.078125,
+									33
+								],
+								[
+									12,
+									88.6875,
+									1256,
+									19.59375
+								],
+								[
+									12,
+									89.6875,
+									115.46875,
+									17
+								],
+								[
+									12,
+									114.28125,
+									177,
+									21
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									141.28125,
+									1256,
+									19.59375
+								],
+								[
+									12,
+									142.28125,
+									146.25,
+									17
+								],
+								[
+									12,
+									166.875,
+									241,
+									51
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									229.46875,
+									1256,
+									19.59375
+								],
+								[
+									12,
+									230.46875,
+									146.25,
+									17
+								],
+								[
+									16,
+									258.0625,
+									13,
+									13
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									282.65625,
+									1256,
+									19.59375
+								],
+								[
+									12,
+									283.65625,
+									130.859375,
+									17
+								],
+								[
+									12,
+									308.25,
+									57,
+									19
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									341.84375,
+									1256,
+									19.59375
+								],
+								[
+									12,
+									342.84375,
+									161.65625,
+									17
+								]
+							],
+							"text": [
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								28,
+								-1,
+								34,
+								-1,
+								29,
+								-1,
+								48,
+								-1,
+								29,
+								-1,
+								58,
+								-1,
+								29,
+								-1,
+								64,
+								-1,
+								29,
+								-1,
+								78
+							],
+							"stackingContexts": {
+								"index": [
+									0,
+									1
+								]
+							},
+							"paintOrders": [
+								0,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								3,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1,
+								1
+							],
+							"offsetRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									12,
+									31,
+									1256,
+									39
+								],
+								[],
+								[
+									12,
+									89,
+									1256,
+									20
+								],
+								[],
+								[
+									12,
+									114,
+									177,
+									21
+								],
+								[],
+								[
+									12,
+									141,
+									1256,
+									20
+								],
+								[],
+								[
+									12,
+									167,
+									241,
+									51
+								],
+								[],
+								[
+									12,
+									229,
+									1256,
+									20
+								],
+								[],
+								[
+									16,
+									258,
+									13,
+									13
+								],
+								[],
+								[
+									12,
+									283,
+									1256,
+									20
+								],
+								[],
+								[
+									12,
+									308,
+									57,
+									19
+								],
+								[],
+								[
+									12,
+									342,
+									1256,
+									20
+								],
+								[]
+							],
+							"scrollRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									173,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									239,
+									49
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									13,
+									13
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									55,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[]
+							],
+							"clientRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									0,
+									0,
+									1280,
+									387
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									2,
+									2,
+									173,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									1,
+									1,
+									239,
+									49
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									13,
+									13
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[],
+								[
+									1,
+									1,
+									55,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									1256,
+									20
+								],
+								[]
+							]
+						},
+						"textBoxes": {
+							"layoutIndex": [
+								5,
+								7,
+								11,
+								15,
+								19,
+								23
+							],
+							"bounds": [
+								[
+									12,
+									33.75,
+									939.078125,
+									33
+								],
+								[
+									12,
+									89.6875,
+									115.46875,
+									17
+								],
+								[
+									12,
+									142.28125,
+									146.25,
+									17
+								],
+								[
+									12,
+									230.46875,
+									146.25,
+									17
+								],
+								[
+									12,
+									283.65625,
+									130.859375,
+									17
+								],
+								[
+									12,
+									342.84375,
+									161.65625,
+									17
+								]
+							],
+							"start": [
+								0,
+								0,
+								0,
+								0,
+								0,
+								0
+							],
+							"length": [
+								61,
+								15,
+								19,
+								19,
+								17,
+								21
+							]
+						},
+						"scrollOffsetX": 0,
+						"scrollOffsetY": 0,
+						"contentWidth": 1280,
+						"contentHeight": 900
+					}
+				],
+				"strings": [
+					"http://127.0.0.1:38111/react_controlled_inputs.html",
+					"React-Style Controlled Inputs",
+					"UTF-8",
+					"F0A42AC7EAD9217FA9734C73AC7D853D",
+					"#document",
+					"html",
+					"HTML",
+					"lang",
+					"en",
+					"block",
+					"visible",
+					"1",
+					"auto",
+					"static",
+					"rgb(255, 255, 255)",
+					"HEAD",
+					"#text",
+					"\n",
+					"META",
+					"charset",
+					"utf-8",
+					"TITLE",
+					"STYLE",
+					"\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\nlabel{display:block;margin:6px 0}\n",
+					"BODY",
+					"MAIN",
+					"rgba(0, 0, 0, 0)",
+					"H1",
+					"Controlled inputs (React value-tracker pattern, no framework)",
+					"\n\n",
+					"LABEL",
+					"for",
+					"ctrl-text",
+					"default",
+					"Controlled text",
+					"INPUT",
+					"id",
+					"name",
+					"ctrlText",
+					"type",
+					"text",
+					"value",
+					"initial-state",
+					"placeholder",
+					"controlled text",
+					"inline-block",
+					"clip",
+					"ctrl-textarea",
+					"Controlled textarea",
+					"TEXTAREA",
+					"ctrlArea",
+					"rows",
+					"3",
+					"cols",
+					"30",
+					"controlled area",
+					"area-state",
+					"ctrl-checkbox",
+					"Controlled checkbox",
+					"ctrlCheck",
+					"checkbox",
+					"checked",
+					"on",
+					"ctrl-select",
+					"Controlled select",
+					"SELECT",
+					"ctrlSelect",
+					"\n  ",
+					"OPTION",
+					"one",
+					"One",
+					"two",
+					"selected",
+					"Two",
+					"three",
+					"Three",
+					"P",
+					"mirror",
+					"mirror: initial-state",
+					"SCRIPT",
+					"\n(function () {\n  // Emulate React's value tracker: the DOM value setter is shadowed by an own\n  // property descriptor, so naive `el.value = x` assignments are swallowed and\n  // only native-setter + input-event writes take effect.\n  function installTracker(el, prop) {\n    var proto = Object.getPrototypeOf(el);\n    var desc = Object.getOwnPropertyDescriptor(proto, prop);\n    var current = el[prop];\n    Object.defineProperty(el, prop, {\n      configurable: true,\n      enumerable: false,\n      get: function () { return current; },\n      set: function (v) {\n        // Swallow direct writes that do not come through the native setter,\n        // exactly like a controlled component re-rendering from state.\n        current = current;\n        desc.set.call(el, current);\n      }\n    });\n    el.__setControlled = function (v) {\n      current = v;\n      desc.set.call(el, v);\n    };\n    el.addEventListener('input', function () {\n      current = desc.get.call(el);\n      var m = document.getElementById('mirror');\n      if (m && el.id === 'ctrl-text') { m.textContent = 'mirror: ' + current; }\n    });\n  }\n\n  installTracker(document.getElementById('ctrl-text'), 'value');\n  installTracker(document.getElementById('ctrl-textarea'), 'value');\n  installTracker(document.getElementById('ctrl-checkbox'), 'checked');\n  installTracker(document.getElementById('ctrl-select'), 'value');\n})();\n",
+					"\n\n\n"
+				]
+			},
+			"axNodes": [
+				{
+					"nodeId": "6",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "RootWebArea"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 144
+					},
+					"name": {
+						"type": "computedString",
+						"value": "React-Style Controlled Inputs",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label",
+								"superseded": true
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "React-Style Controlled Inputs"
+								},
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/react_controlled_inputs.html"
+							}
+						}
+					],
+					"childIds": [
+						"8"
+					],
+					"backendDOMNodeId": 6,
+					"frameId": "F0A42AC7EAD9217FA9734C73AC7D853D"
+				},
+				{
+					"nodeId": "8",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "6",
+					"childIds": [
+						"15"
+					],
+					"backendDOMNodeId": 8
+				},
+				{
+					"nodeId": "15",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "8",
+					"childIds": [
+						"16"
+					],
+					"backendDOMNodeId": 15
+				},
+				{
+					"nodeId": "16",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "main"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 118
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"17",
+						"19",
+						"2",
+						"26",
+						"3",
+						"34",
+						"5",
+						"36",
+						"4",
+						"64"
+					],
+					"backendDOMNodeId": 16
+				},
+				{
+					"nodeId": "17",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled inputs (React value-tracker pattern, no framework)",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled inputs (React value-tracker pattern, no framework)"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 1
+							}
+						}
+					],
+					"parentId": "16",
+					"childIds": [
+						"18"
+					],
+					"backendDOMNodeId": 17
+				},
+				{
+					"nodeId": "19",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "LabelText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 104
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "16",
+					"childIds": [
+						"20"
+					],
+					"backendDOMNodeId": 19
+				},
+				{
+					"nodeId": "2",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "textbox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 170
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled text",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled text"
+								},
+								"nativeSource": "labelfor",
+								"nativeSourceValue": {
+									"type": "nodeList",
+									"relatedNodes": [
+										{
+											"backendDOMNodeId": 19,
+											"text": "Controlled text"
+										}
+									]
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							},
+							{
+								"type": "placeholder",
+								"value": {
+									"type": "computedString",
+									"value": "controlled text"
+								},
+								"attribute": "placeholder",
+								"attributeValue": {
+									"type": "string",
+									"value": "controlled text"
+								},
+								"superseded": true
+							},
+							{
+								"type": "placeholder",
+								"attribute": "aria-placeholder",
+								"superseded": true
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"value": {
+						"type": "string",
+						"value": "initial-state"
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						},
+						{
+							"name": "settable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "multiline",
+							"value": {
+								"type": "boolean",
+								"value": false
+							}
+						},
+						{
+							"name": "readonly",
+							"value": {
+								"type": "boolean",
+								"value": false
+							}
+						},
+						{
+							"name": "required",
+							"value": {
+								"type": "boolean",
+								"value": false
+							}
+						},
+						{
+							"name": "labelledby",
+							"value": {
+								"type": "nodeList",
+								"relatedNodes": [
+									{
+										"backendDOMNodeId": 19,
+										"text": "Controlled text"
+									}
+								]
+							}
+						}
+					],
+					"parentId": "16",
+					"childIds": [
+						"22",
+						"24"
+					],
+					"backendDOMNodeId": 2
+				},
+				{
+					"nodeId": "26",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "LabelText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 104
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "16",
+					"childIds": [
+						"27"
+					],
+					"backendDOMNodeId": 26
+				},
+				{
+					"nodeId": "3",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "textbox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 170
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled textarea",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled textarea"
+								},
+								"nativeSource": "labelfor",
+								"nativeSourceValue": {
+									"type": "nodeList",
+									"relatedNodes": [
+										{
+											"backendDOMNodeId": 26,
+											"text": "Controlled textarea"
+										}
+									]
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							},
+							{
+								"type": "placeholder",
+								"value": {
+									"type": "computedString",
+									"value": "controlled area"
+								},
+								"attribute": "placeholder",
+								"attributeValue": {
+									"type": "string",
+									"value": "controlled area"
+								},
+								"superseded": true
+							},
+							{
+								"type": "placeholder",
+								"attribute": "aria-placeholder",
+								"superseded": true
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"value": {
+						"type": "string",
+						"value": "area-state"
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						},
+						{
+							"name": "settable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "multiline",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						},
+						{
+							"name": "readonly",
+							"value": {
+								"type": "boolean",
+								"value": false
+							}
+						},
+						{
+							"name": "required",
+							"value": {
+								"type": "boolean",
+								"value": false
+							}
+						},
+						{
+							"name": "labelledby",
+							"value": {
+								"type": "nodeList",
+								"relatedNodes": [
+									{
+										"backendDOMNodeId": 26,
+										"text": "Controlled textarea"
+									}
+								]
+							}
+						}
+					],
+					"parentId": "16",
+					"childIds": [
+						"29",
+						"31"
+					],
+					"backendDOMNodeId": 3
+				},
+				{
+					"nodeId": "34",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "labelFor",
+							"value": {
+								"type": "idref",
+								"relatedNodes": [
+									{
+										"backendDOMNodeId": 5,
+										"idref": "ctrl-checkbox"
+									}
+								]
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "16",
+					"childIds": [
+						"35"
+					],
+					"backendDOMNodeId": 34
+				},
+				{
+					"nodeId": "35",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "presentationalRole",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "34",
+					"childIds": [],
+					"backendDOMNodeId": 35
+				},
+				{
+					"nodeId": "5",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "checkbox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 14
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled checkbox",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled checkbox"
+								},
+								"nativeSource": "labelfor",
+								"nativeSourceValue": {
+									"type": "nodeList",
+									"relatedNodes": [
+										{
+											"backendDOMNodeId": 34,
+											"text": "Controlled checkbox"
+										}
+									]
+								}
+							},
+							{
+								"type": "contents",
+								"superseded": true
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "checked",
+							"value": {
+								"type": "tristate",
+								"value": "true"
+							}
+						},
+						{
+							"name": "labelledby",
+							"value": {
+								"type": "nodeList",
+								"relatedNodes": [
+									{
+										"backendDOMNodeId": 34,
+										"text": "Controlled checkbox"
+									}
+								]
+							}
+						}
+					],
+					"parentId": "16",
+					"childIds": [],
+					"backendDOMNodeId": 5
+				},
+				{
+					"nodeId": "36",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "LabelText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 104
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "16",
+					"childIds": [
+						"37"
+					],
+					"backendDOMNodeId": 36
+				},
+				{
+					"nodeId": "4",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "combobox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 209
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled select",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled select"
+								},
+								"nativeSource": "labelfor",
+								"nativeSourceValue": {
+									"type": "nodeList",
+									"relatedNodes": [
+										{
+											"backendDOMNodeId": 36,
+											"text": "Controlled select"
+										}
+									]
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"value": {
+						"type": "string",
+						"value": "Two"
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "hasPopup",
+							"value": {
+								"type": "token",
+								"value": "menu"
+							}
+						},
+						{
+							"name": "expanded",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": false
+							}
+						},
+						{
+							"name": "labelledby",
+							"value": {
+								"type": "nodeList",
+								"relatedNodes": [
+									{
+										"backendDOMNodeId": 36,
+										"text": "Controlled select"
+									}
+								]
+							}
+						}
+					],
+					"parentId": "16",
+					"childIds": [
+						"42"
+					],
+					"backendDOMNodeId": 4
+				},
+				{
+					"nodeId": "64",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "paragraph"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 133
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "16",
+					"childIds": [
+						"65"
+					],
+					"backendDOMNodeId": 64
+				},
+				{
+					"nodeId": "18",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled inputs (React value-tracker pattern, no framework)",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled inputs (React value-tracker pattern, no framework)"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "17",
+					"childIds": [
+						"-1000000002"
+					],
+					"backendDOMNodeId": 18
+				},
+				{
+					"nodeId": "20",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled text",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled text"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "19",
+					"childIds": [
+						"-1000000003"
+					],
+					"backendDOMNodeId": 20
+				},
+				{
+					"nodeId": "22",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "notRendered",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "2",
+					"childIds": [],
+					"backendDOMNodeId": 22
+				},
+				{
+					"nodeId": "24",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						}
+					],
+					"parentId": "2",
+					"childIds": [
+						"25"
+					],
+					"backendDOMNodeId": 24
+				},
+				{
+					"nodeId": "27",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled textarea",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled textarea"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "26",
+					"childIds": [
+						"-1000000005"
+					],
+					"backendDOMNodeId": 27
+				},
+				{
+					"nodeId": "29",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "notRendered",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "3",
+					"childIds": [],
+					"backendDOMNodeId": 29
+				},
+				{
+					"nodeId": "31",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						}
+					],
+					"parentId": "3",
+					"childIds": [
+						"32"
+					],
+					"backendDOMNodeId": 31
+				},
+				{
+					"nodeId": "37",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled select",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Controlled select"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "36",
+					"childIds": [
+						"-1000000008"
+					],
+					"backendDOMNodeId": 37
+				},
+				{
+					"nodeId": "42",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "MenuListPopup"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 128
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "4",
+					"childIds": [
+						"44",
+						"45",
+						"46"
+					],
+					"backendDOMNodeId": 42
+				},
+				{
+					"nodeId": "65",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "mirror: initial-state",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "mirror: initial-state"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "64",
+					"childIds": [
+						"-1000000009"
+					],
+					"backendDOMNodeId": 65
+				},
+				{
+					"nodeId": "-1000000002",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled inputs (React value-tracker pattern, no framework)"
+					},
+					"properties": [],
+					"parentId": "18",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000003",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled text"
+					},
+					"properties": [],
+					"parentId": "20",
+					"childIds": []
+				},
+				{
+					"nodeId": "25",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "initial-state",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "initial-state"
+								}
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						}
+					],
+					"parentId": "24",
+					"childIds": [
+						"-1000000004"
+					],
+					"backendDOMNodeId": 25
+				},
+				{
+					"nodeId": "-1000000005",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled textarea"
+					},
+					"properties": [],
+					"parentId": "27",
+					"childIds": []
+				},
+				{
+					"nodeId": "32",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "area-state",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "area-state"
+								}
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						}
+					],
+					"parentId": "31",
+					"childIds": [
+						"-1000000006"
+					],
+					"backendDOMNodeId": 32
+				},
+				{
+					"nodeId": "-1000000008",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Controlled select"
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": []
+				},
+				{
+					"nodeId": "44",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "option"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 127
+					},
+					"name": {
+						"type": "computedString",
+						"value": "One",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "One"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "selected",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": false
+							}
+						}
+					],
+					"parentId": "42",
+					"childIds": [],
+					"backendDOMNodeId": 44
+				},
+				{
+					"nodeId": "45",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "option"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 127
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Two",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Two"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "selected",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "42",
+					"childIds": [],
+					"backendDOMNodeId": 45
+				},
+				{
+					"nodeId": "46",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "option"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 127
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Three",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Three"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "selected",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": false
+							}
+						}
+					],
+					"parentId": "42",
+					"childIds": [],
+					"backendDOMNodeId": 46
+				},
+				{
+					"nodeId": "-1000000009",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "mirror: initial-state"
+					},
+					"properties": [],
+					"parentId": "65",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000004",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "initial-state"
+					},
+					"properties": [
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						}
+					],
+					"parentId": "25",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000006",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "area-state"
+					},
+					"properties": [
+						{
+							"name": "editable",
+							"value": {
+								"type": "token",
+								"value": "plaintext"
+							}
+						}
+					],
+					"parentId": "32",
+					"childIds": []
+				}
+			],
+			"listeners": {
+				"frames": [
+					{
+						"frame": "",
+						"total": 21,
+						"scanned": 21,
+						"hits": []
+					}
+				],
+				"truncated": false
+			}
+		}
+	],
+	"warnings": []
+}

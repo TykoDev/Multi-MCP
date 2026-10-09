@@ -1,0 +1,32 @@
+{
+	"name": "svg_collapse",
+	"pins": "§6.4 'SVG root survives; svg children collapsed' — every <svg> root keeps its line and its collapsed-content comment, interactive or not, and everything below it (including an interactive child) is dropped",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{
+						"tag": "SVG",
+						"id": 544,
+						"jsClick": true,
+						"children": [
+							{ "tag": "PATH", "attrs": { "d": "M0 0" } },
+							{ "text": "chart label" },
+							{ "tag": "BUTTON", "id": 545, "children": [{ "text": "inside svg" }] }
+						]
+					},
+					{
+						"tag": "SVG",
+						"id": 546,
+						"children": [
+							{ "tag": "BUTTON", "id": 547, "children": [{ "text": "also inside svg" }] }
+						]
+					},
+					{ "tag": "BUTTON", "id": 548, "children": [{ "text": "after" }] }
+				]
+			}
+		]
+	}
+}

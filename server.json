@@ -1,0 +1,427 @@
+{
+	"name": "eu.tykotech/tykotech-mcp",
+	"title": "Multi-MCP",
+	"description": "Browser control with a live view, a coding sandbox and agents over MCP",
+	"version": "0.2.0",
+	"packages": [
+		{
+			"registryType": "oci",
+			"identifier": "tykotech-mcp:0.2.0",
+			"transport": {
+				"type": "streamable-http",
+				"url": "http://localhost:8787/mcp"
+			},
+			"environmentVariables": [
+				{
+					"name": "TTK_HOST",
+					"description": "Bind address. A non-loopback bind needs API keys, OAuth or a user account.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "0.0.0.0"
+				},
+				{
+					"name": "TTK_PORT",
+					"description": "Bind port. The image's net grant names 8787; changing it means changing the CMD grant too.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "8787"
+				},
+				{
+					"name": "TTK_PUBLIC_URL",
+					"description": "The URL clients use; seeds the Host and Origin allowlists, the OAuth audience and every link this server builds.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ALLOWED_HOSTS",
+					"description": "Host header allowlist (DNS-rebinding guard), as bare hostnames; replaces the derived list.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ALLOWED_ORIGINS",
+					"description": "Browser Origin allowlist, as bare hostnames; replaces the derived list.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_API_KEYS_FILE",
+					"description": "File holding the JSON array of hashed API key records; watched and reloaded on change.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_API_KEYS_REF",
+					"description": "The API key records read once at startup from Vault (vault:<mount>/<path>#<key>) or 1Password Connect (op:<vault>/<item>#<field>).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ADMIN_USER_FILE",
+					"description": "File holding the PBKDF2 administrator record that seeds the user store on first start.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_LOGIN_TTL_S",
+					"description": "Lifetime of a web sign-in session in seconds, 60 to 31536000 (default 604800).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ANON_SCOPES",
+					"description": "Scopes for credential-less principals (loopback development and stdio); default the default grant.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_OAUTH_ISSUER",
+					"description": "OAuth 2.1 issuer URL; enables resource-server mode.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_OAUTH_AUDIENCE",
+					"description": "Expected aud claim; default TTK_PUBLIC_URL.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_OAUTH_JWKS_URL",
+					"description": "JWKS location; default discovered from the issuer's metadata.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ALLOWED_DOMAINS",
+					"description": "Navigation allowlist (comma list); a host matches itself and its subdomains. Empty is unrestricted.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ALLOWED_DOMAINS_SCOPE",
+					"description": "What the allowlist judges in the browser: documents (default) or all requests. all needs a non-empty TTK_ALLOWED_DOMAINS.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SECRETS_FILE",
+					"description": "File holding the browser secrets JSON a model may type by name; values are never returned.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_MODEL_PROVIDERS_FILE",
+					"description": "File naming the model providers the built-in agent may run text tasks on (D-143); it may hold provider keys, which are never returned.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_SECRETS_REF",
+					"description": "The browser secrets JSON read once at startup from Vault or 1Password Connect (same forms as TTK_API_KEYS_REF).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_VAULT_ADDR",
+					"description": "Vault address for a vault: reference (https://, or http:// on loopback only).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_VAULT_TOKEN_FILE",
+					"description": "File holding the Vault token; read at startup, never placed in the environment.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_VAULT_NAMESPACE",
+					"description": "Vault Enterprise namespace, sent as X-Vault-Namespace.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_OP_CONNECT_URL",
+					"description": "1Password Connect address for an op: reference (https://, or http:// on loopback only).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_OP_CONNECT_TOKEN_FILE",
+					"description": "File holding the 1Password Connect token; read at startup, never placed in the environment.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_SECRET_PROVIDER_CA_FILE",
+					"description": "PEM bundle trusted for the secret provider connections only.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_DATA_DIR",
+					"description": "Persistent data directory: profiles, downloads, recordings, the file share, accounts and agent state.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "/data"
+				},
+				{
+					"name": "TTK_FFMPEG",
+					"description": "Path to ffmpeg; session recording needs it and TTK_DATA_DIR.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "/usr/bin/ffmpeg"
+				},
+				{
+					"name": "TTK_BROWSER_PATH",
+					"description": "Chromium executable.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "/usr/bin/chromium"
+				},
+				{
+					"name": "TTK_BROWSER_ARGS",
+					"description": "Extra Chromium switches; a switch that weakens the sandbox or runs another program refuses startup.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_CHROMIUM_NO_SANDBOX",
+					"description": "true runs Chromium without its sandbox. No shipped image sets it.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_HEADLESS",
+					"description": "Run Chromium headless.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "true"
+				},
+				{
+					"name": "TTK_MAX_SESSIONS",
+					"description": "Concurrent browser sessions, 1 to 128 (default 8).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SESSION_TTL_S",
+					"description": "Idle seconds before a session is closed, 10 to 86400 (default 1800).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SESSION_OWNERSHIP",
+					"description": "shared (default) or owner: in owner mode each principal reaches only its own browser sessions.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_MAX_VIEWERS",
+					"description": "Live-view viewers per session, 1 to 64 (default 4).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_CAST_QUALITY",
+					"description": "Screencast JPEG quality, 1 to 100 (default 60).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_HUMAN_HANDOFF",
+					"description": "true offers browser_request_human, which hands a session to a person through the live view.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_CONFIRM_DESTRUCTIVE",
+					"description": "Ask a form-capable client to confirm destructive tools (default true).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SIGNED_LINKS",
+					"description": "true offers browser_file_link: short-lived signed download links for session files.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SIGNED_LINK_TTL_S",
+					"description": "Default signed-link lifetime in seconds, 10 to 3600 (default 3600).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SIGNED_LINK_KEY_FILE",
+					"description": "File holding the link-signing key (at least 32 characters); required in a cluster.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_DB_KEY_FILE",
+					"description": "File holding the 32-byte key that encrypts every secret in <TTK_DATA_DIR>/ttk.db (base64url or hex; setup or doctor --new-db-key writes one). Keep it off the data volume.",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_MCP_APPS",
+					"description": "off (default), watch or control: serve the live view as an MCP Apps embed.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_MCP_APPS_ORIGINS",
+					"description": "Full https:// origins of the MCP Apps hosts an embed ticket may be bound to.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_MCP_APPS_DOMAIN",
+					"description": "Optional sandbox domain advertised to MCP Apps hosts.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_RATE_RPM",
+					"description": "Requests per minute per principal, 1 to 100000 (default 120).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_MAX_BODY_KB",
+					"description": "Largest request body on the REST and A2A routes, in KiB (default 256).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_MCP_STATEFUL",
+					"description": "Also serve 2025-era clients on a stateful mount with Mcp-Session-Id; not with TTK_CLUSTER_KV.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_OTEL_ENDPOINTS",
+					"description": "OTLP collector origins (comma list, max 16). While OTEL_DENO=true it must name every endpoint's origin, so empty or off-list refuses start. A malformed entry refuses start in any mode.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_METRICS",
+					"description": "true serves Prometheus metrics at /metrics to metrics:read or admin credentials.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_LOG_LEVEL",
+					"description": "debug, info (default), warn or error.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_LOG_FORMAT",
+					"description": "json (default) or pretty.",
+					"isRequired": false,
+					"isSecret": false,
+					"default": "json"
+				},
+				{
+					"name": "TTK_CLUSTER_KV",
+					"description": "A Deno KV path or URL shared by every node; enables clustering.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_ROLE",
+					"description": "all (default), browser or edge; any role but all needs TTK_CLUSTER_KV.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_NODE_ID",
+					"description": "This node's id in a cluster (default node-<8 hex>).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_NODE_URL",
+					"description": "The URL other nodes use to reach this one; required for all and browser nodes in a cluster.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SANDBOX_URL",
+					"description": "Origin of the coding sandbox service; enables the sandbox_* tools.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_SANDBOX_TOKEN_FILE",
+					"description": "File holding the sandbox service's shared bearer token (at least 32 characters).",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_AGENT_BRIDGE_URL",
+					"description": "URL of the private ACP agent runner; enables agent_prompt.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_AGENT_BRIDGE_TOKEN_FILE",
+					"description": "File holding the agent runner's bearer token (at least 32 characters).",
+					"isRequired": false,
+					"isSecret": true
+				},
+				{
+					"name": "TTK_AGENT_DEFAULT",
+					"description": "The runner's agent id to use (default default).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_AGENT_AUTH_METHOD",
+					"description": "ACP authentication method to select when the agent advertises it.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_AGENT_MCP_URL",
+					"description": "The MCP URL handed to the agent with its delegated token (default <TTK_PUBLIC_URL>/mcp).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_AGENT_PEERS_FILE",
+					"description": "JSON array of A2A peers [{ id, url, token_file? }], at most 32 entries.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_A2UI_ACTIONS",
+					"description": "Inline JSON array of operator-defined A2UI button actions.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_AGENT_TASK_TIMEOUT_S",
+					"description": "How long a text or delegation task may run, 10 to 86400 seconds (default 600).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_AGENT_TASK_RETENTION_S",
+					"description": "How long finished agent tasks are kept, 60 to 2592000 seconds (default 86400).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
+					"name": "TTK_A2A_PUSH_ALLOWED_HOSTS",
+					"description": "Hosts A2A push webhooks may target; push is offered only with a proven outbound grant for each.",
+					"isRequired": false,
+					"isSecret": false
+				}
+			]
+		}
+	]
+}

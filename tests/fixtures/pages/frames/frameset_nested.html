@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!--
+The depth-2 leaf: an <iframe> inside a <frame> inside a <frameset>. Its own sentinel,
+BIL51-NESTED-SENTINEL-4D7B, is what criterion 2a asserts - a nested same-origin frame returns only
+that frame's document, so this string must appear when this frame is named and must appear in
+NEITHER the frameset shell nor its parent content frame.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nested note</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:12px/1.4 monospace;background:#ffe;color:#000}
+p{margin:6px}
+</style>
+</head>
+<body>
+<p id="nested-marker">BIL51-NESTED-SENTINEL-4D7B</p>
+<a id="nested-source" href="frameset_content.html">source table</a>
+</body>
+</html>

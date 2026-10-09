@@ -1,0 +1,19 @@
+[10]<input type=password name=pw />
+[11]<input type=text name=pw2 autocomplete=new-password />
+[12]<input type=text name=city value=Berlin />
+[13]<input type=date name=when format=YYYY-MM-DD placeholder=YYYY-MM-DD />
+[14]<input type=text name=d1 format=mm/dd/yyyy />
+[15]<input type=text name=d2 format=dd.mm.yyyy />
+[16]<input type=text name=d3 expected_format=dd-MMMM-yyyy />
+[17]<button id=save />
+[18]<button expanded=true />
+[19]<button aria-label=Submit order title=Submit order />
+	Submit order
+[20]<button title=duplicate-value />
+[21]<button id=abc name=abc />
+[22]<button title=0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789... />
+[23]<button />
+	Icon
+*[24]<div compound_components=(name=Volume,role=slider,min=0,max=10,current=3,count=11,options=a|b|c,format=int) />
+*[25]<select name=size valuetext=Large value=Large compound_components=(name=Dropdown Toggle,role=button),(name=Options,role=listbox,count=1,options=Large) />
+	Large

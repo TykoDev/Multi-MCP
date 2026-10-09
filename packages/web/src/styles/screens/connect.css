@@ -1,0 +1,145 @@
+/* Sign-in (connect_view.ts). */
+
+.login-screen {
+	position: relative;
+	flex: 1;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+	overflow: auto;
+}
+
+/* RV-5: fixed, not absolute. The aura's breathing transform (scale 1.06) grew past `.login-screen`, which scrolls,
+ * so the screen always drew a scrollbar for 1–45 px of decoration. A fixed box is sized to the viewport — the same
+ * box here, since `#app` is the viewport's height and the screen its only child — and is not part of the screen's
+ * scrollable overflow; `body` does not scroll. */
+.login-aura {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(520px 360px at 50% 38%, color-mix(in oklab, var(--wa-color-indigo-50) 22%, transparent), transparent
+		70%),
+		radial-gradient(380px 260px at 62% 64%, color-mix(in oklab, var(--wa-color-purple-50) 16%, transparent), transparent
+		70%);
+	animation: aura 14s ease-in-out infinite alternate;
+}
+@keyframes aura {
+	to {
+		transform: translate3d(-3%, 2%, 0) scale(1.06);
+	}
+}
+
+.login-card {
+	position: relative;
+	width: min(380px, 100%);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 28px 26px 20px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 26px;
+	background: var(--ttk-glass);
+	backdrop-filter: blur(24px) saturate(1.4);
+	box-shadow: var(--ttk-shadow-pop);
+	animation: card-in 0.5s var(--ttk-spring) both;
+}
+@keyframes card-in {
+	from {
+		opacity: 0;
+		transform: translateY(14px) scale(0.98);
+	}
+}
+.login-card.shake {
+	animation: shake 0.42s var(--ttk-ease);
+}
+@keyframes shake {
+	20%,
+	60% {
+		transform: translateX(-7px);
+	}
+	40%,
+	80% {
+		transform: translateX(7px);
+	}
+}
+
+.login-brand {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+/* The 360px source draws at half size, so it stays sharp on a 2x display. */
+.login-wordmark {
+	width: 180px;
+	height: auto;
+	user-select: none;
+}
+
+.login-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	max-height: 60px;
+	transition: max-height 0.3s var(--ttk-ease), opacity 0.25s, margin 0.3s var(--ttk-ease);
+}
+.field-glyph {
+	position: absolute;
+	left: 14px;
+	display: grid;
+	color: var(--wa-color-text-quiet);
+	pointer-events: none;
+	transition: color 0.2s;
+}
+.login-field:focus-within .field-glyph {
+	color: var(--ttk-brand);
+}
+.login-field input {
+	width: 100%;
+	height: 46px;
+	padding-left: 42px;
+	border-radius: 14px;
+	font-size: 15px;
+	background: var(--ttk-sunken);
+}
+
+/* A recognised API key folds the password field away. */
+.key-mode .login-field.secret {
+	max-height: 0;
+	opacity: 0;
+	margin-top: -12px;
+	overflow: hidden;
+	pointer-events: none;
+}
+.key-mode .login-field.identity .field-glyph {
+	color: var(--ttk-brand);
+}
+
+.login-error {
+	font-size: 13px;
+}
+
+.login-foot {
+	display: flex;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+.login-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 26px;
+	padding: 0 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	cursor: help;
+}
+.login-chip .icon {
+	width: 13px;
+	height: 13px;
+}

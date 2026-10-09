@@ -1,0 +1,4834 @@
+{
+	"rootSessionId": "0015634C666F0130E5757AEE4964DE6E",
+	"sessions": [
+		{
+			"targetId": "E4A2A2B848C4795FF008D3F086882626",
+			"sessionId": "0015634C666F0130E5757AEE4964DE6E",
+			"frameId": "E4A2A2B848C4795FF008D3F086882626",
+			"url": "http://127.0.0.1:38111/scroll_element.html",
+			"devicePixelRatio": 1,
+			"layoutMetrics": {
+				"scrollX": 0,
+				"scrollY": 0,
+				"viewportWidth": 1280,
+				"viewportHeight": 900,
+				"contentWidth": 1280,
+				"contentHeight": 900
+			},
+			"document": {
+				"nodeId": 1,
+				"backendNodeId": 2,
+				"nodeType": 9,
+				"nodeName": "#document",
+				"localName": "",
+				"nodeValue": "",
+				"childNodeCount": 2,
+				"children": [
+					{
+						"nodeId": 2,
+						"parentId": 1,
+						"backendNodeId": 3,
+						"nodeType": 10,
+						"nodeName": "html",
+						"localName": "",
+						"nodeValue": "",
+						"publicId": "",
+						"systemId": ""
+					},
+					{
+						"nodeId": 3,
+						"parentId": 1,
+						"backendNodeId": 4,
+						"nodeType": 1,
+						"nodeName": "HTML",
+						"localName": "html",
+						"nodeValue": "",
+						"childNodeCount": 2,
+						"children": [
+							{
+								"nodeId": 4,
+								"parentId": 3,
+								"backendNodeId": 5,
+								"nodeType": 1,
+								"nodeName": "HEAD",
+								"localName": "head",
+								"nodeValue": "",
+								"childNodeCount": 3,
+								"children": [
+									{
+										"nodeId": 5,
+										"parentId": 4,
+										"backendNodeId": 6,
+										"nodeType": 1,
+										"nodeName": "META",
+										"localName": "meta",
+										"nodeValue": "",
+										"childNodeCount": 0,
+										"children": [],
+										"attributes": [
+											"charset",
+											"utf-8"
+										]
+									},
+									{
+										"nodeId": 6,
+										"parentId": 4,
+										"backendNodeId": 7,
+										"nodeType": 1,
+										"nodeName": "TITLE",
+										"localName": "title",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 7,
+												"parentId": 6,
+												"backendNodeId": 8,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "Element-Level Scroll Container"
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 8,
+										"parentId": 4,
+										"backendNodeId": 9,
+										"nodeType": 1,
+										"nodeName": "STYLE",
+										"localName": "style",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 9,
+												"parentId": 8,
+												"backendNodeId": 10,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n#scroller{width:420px;height:180px;overflow-y:scroll;border:1px solid #333}\n#scroller .row{height:70px;border-bottom:1px solid #ddd;padding:4px}\n#auto-scroller{width:420px;height:120px;overflow:auto;border:1px dashed #666;margin-top:12px}\n#hidden-overflow{width:420px;height:80px;overflow:hidden;border:1px dotted #999;margin-top:12px}\n#hidden-overflow .row{height:60px}\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							},
+							{
+								"nodeId": 10,
+								"parentId": 3,
+								"backendNodeId": 11,
+								"nodeType": 1,
+								"nodeName": "BODY",
+								"localName": "body",
+								"nodeValue": "",
+								"childNodeCount": 1,
+								"children": [
+									{
+										"nodeId": 11,
+										"parentId": 10,
+										"backendNodeId": 12,
+										"nodeType": 1,
+										"nodeName": "MAIN",
+										"localName": "main",
+										"nodeValue": "",
+										"childNodeCount": 4,
+										"children": [
+											{
+												"nodeId": 12,
+												"parentId": 11,
+												"backendNodeId": 13,
+												"nodeType": 1,
+												"nodeName": "H1",
+												"localName": "h1",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 13,
+														"parentId": 12,
+														"backendNodeId": 14,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "Element-level scroll containers"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 14,
+												"parentId": 11,
+												"backendNodeId": 15,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 7,
+												"children": [
+													{
+														"nodeId": 15,
+														"parentId": 14,
+														"backendNodeId": 16,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 16,
+																"parentId": 15,
+																"backendNodeId": 17,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 17,
+																		"parentId": 16,
+																		"backendNodeId": 18,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 1"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b1"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 18,
+														"parentId": 14,
+														"backendNodeId": 19,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 19,
+																"parentId": 18,
+																"backendNodeId": 20,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 20,
+																		"parentId": 19,
+																		"backendNodeId": 21,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 2"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b2"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 21,
+														"parentId": 14,
+														"backendNodeId": 22,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 22,
+																"parentId": 21,
+																"backendNodeId": 23,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 23,
+																		"parentId": 22,
+																		"backendNodeId": 24,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 3"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b3"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 24,
+														"parentId": 14,
+														"backendNodeId": 25,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 25,
+																"parentId": 24,
+																"backendNodeId": 26,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 26,
+																		"parentId": 25,
+																		"backendNodeId": 27,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 4"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b4"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 27,
+														"parentId": 14,
+														"backendNodeId": 28,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 28,
+																"parentId": 27,
+																"backendNodeId": 29,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 29,
+																		"parentId": 28,
+																		"backendNodeId": 30,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 5"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b5"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 30,
+														"parentId": 14,
+														"backendNodeId": 31,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 31,
+																"parentId": 30,
+																"backendNodeId": 32,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 32,
+																		"parentId": 31,
+																		"backendNodeId": 33,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 6"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b6"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 33,
+														"parentId": 14,
+														"backendNodeId": 34,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 34,
+																"parentId": 33,
+																"backendNodeId": 35,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 35,
+																		"parentId": 34,
+																		"backendNodeId": 36,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Scroller row 7"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"s-b7"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													}
+												],
+												"attributes": [
+													"id",
+													"scroller",
+													"role",
+													"region",
+													"aria-label",
+													"Vertical scroll region"
+												],
+												"isScrollable": true
+											},
+											{
+												"nodeId": 36,
+												"parentId": 11,
+												"backendNodeId": 37,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 37,
+														"parentId": 36,
+														"backendNodeId": 38,
+														"nodeType": 1,
+														"nodeName": "P",
+														"localName": "p",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 38,
+																"parentId": 37,
+																"backendNodeId": 39,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "overflow:auto container"
+															}
+														],
+														"attributes": []
+													},
+													{
+														"nodeId": 39,
+														"parentId": 36,
+														"backendNodeId": 40,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 40,
+																"parentId": 39,
+																"backendNodeId": 41,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 41,
+																		"parentId": 40,
+																		"backendNodeId": 42,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Auto row deep"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"a-b1"
+																]
+															}
+														],
+														"attributes": [
+															"style",
+															"height:300px"
+														]
+													}
+												],
+												"attributes": [
+													"id",
+													"auto-scroller"
+												],
+												"isScrollable": true
+											},
+											{
+												"nodeId": 42,
+												"parentId": 11,
+												"backendNodeId": 43,
+												"nodeType": 1,
+												"nodeName": "DIV",
+												"localName": "div",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 43,
+														"parentId": 42,
+														"backendNodeId": 44,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 44,
+																"parentId": 43,
+																"backendNodeId": 45,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 45,
+																		"parentId": 44,
+																		"backendNodeId": 46,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Clipped row 1"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"h-b1"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													},
+													{
+														"nodeId": 46,
+														"parentId": 42,
+														"backendNodeId": 47,
+														"nodeType": 1,
+														"nodeName": "DIV",
+														"localName": "div",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 47,
+																"parentId": 46,
+																"backendNodeId": 48,
+																"nodeType": 1,
+																"nodeName": "BUTTON",
+																"localName": "button",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 48,
+																		"parentId": 47,
+																		"backendNodeId": 49,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "Clipped row 2"
+																	}
+																],
+																"attributes": [
+																	"type",
+																	"button",
+																	"id",
+																	"h-b2"
+																]
+															}
+														],
+														"attributes": [
+															"class",
+															"row"
+														]
+													}
+												],
+												"attributes": [
+													"id",
+													"hidden-overflow"
+												]
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							}
+						],
+						"attributes": [
+							"lang",
+							"en"
+						],
+						"frameId": "E4A2A2B848C4795FF008D3F086882626"
+					}
+				],
+				"documentURL": "http://127.0.0.1:38111/scroll_element.html",
+				"baseURL": "http://127.0.0.1:38111/scroll_element.html",
+				"xmlVersion": "",
+				"compatibilityMode": "NoQuirksMode"
+			},
+			"snapshot": {
+				"documents": [
+					{
+						"documentURL": 0,
+						"title": 1,
+						"baseURL": 0,
+						"contentLanguage": -1,
+						"encodingName": 2,
+						"publicId": -1,
+						"systemId": -1,
+						"frameId": 3,
+						"nodes": {
+							"parentIndex": [
+								-1,
+								0,
+								0,
+								2,
+								3,
+								3,
+								3,
+								3,
+								7,
+								3,
+								3,
+								10,
+								3,
+								2,
+								2,
+								14,
+								14,
+								16,
+								16,
+								18,
+								16,
+								16,
+								21,
+								21,
+								23,
+								24,
+								21,
+								21,
+								27,
+								28,
+								21,
+								21,
+								31,
+								32,
+								21,
+								21,
+								35,
+								36,
+								21,
+								21,
+								39,
+								40,
+								21,
+								21,
+								43,
+								44,
+								21,
+								21,
+								47,
+								48,
+								21,
+								16,
+								16,
+								52,
+								52,
+								54,
+								52,
+								52,
+								57,
+								58,
+								52,
+								16,
+								16,
+								62,
+								62,
+								64,
+								65,
+								62,
+								62,
+								68,
+								69,
+								62,
+								16,
+								14
+							],
+							"nodeType": [
+								9,
+								10,
+								1,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								1,
+								3,
+								3,
+								1,
+								1,
+								3,
+								3,
+								3,
+								3
+							],
+							"shadowRootType": {
+								"index": [],
+								"value": []
+							},
+							"nodeName": [
+								4,
+								5,
+								6,
+								15,
+								16,
+								18,
+								16,
+								21,
+								16,
+								16,
+								22,
+								16,
+								16,
+								16,
+								24,
+								16,
+								25,
+								16,
+								27,
+								16,
+								16,
+								30,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								16,
+								30,
+								16,
+								63,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								16,
+								30,
+								16,
+								30,
+								42,
+								16,
+								16,
+								30,
+								42,
+								16,
+								16,
+								16,
+								16
+							],
+							"nodeValue": [
+								-1,
+								-1,
+								-1,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								1,
+								17,
+								-1,
+								23,
+								17,
+								17,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								28,
+								29,
+								-1,
+								39,
+								-1,
+								-1,
+								49,
+								39,
+								-1,
+								-1,
+								51,
+								39,
+								-1,
+								-1,
+								53,
+								39,
+								-1,
+								-1,
+								55,
+								39,
+								-1,
+								-1,
+								57,
+								39,
+								-1,
+								-1,
+								59,
+								39,
+								-1,
+								-1,
+								61,
+								17,
+								29,
+								-1,
+								39,
+								-1,
+								64,
+								39,
+								-1,
+								-1,
+								68,
+								17,
+								29,
+								-1,
+								39,
+								-1,
+								-1,
+								72,
+								39,
+								-1,
+								-1,
+								74,
+								17,
+								17,
+								75
+							],
+							"backendNodeId": [
+								2,
+								3,
+								4,
+								5,
+								50,
+								6,
+								51,
+								7,
+								8,
+								52,
+								9,
+								10,
+								53,
+								54,
+								11,
+								55,
+								12,
+								56,
+								13,
+								14,
+								57,
+								15,
+								58,
+								16,
+								17,
+								18,
+								59,
+								19,
+								20,
+								21,
+								60,
+								22,
+								23,
+								24,
+								61,
+								25,
+								26,
+								27,
+								62,
+								28,
+								29,
+								30,
+								63,
+								31,
+								32,
+								33,
+								64,
+								34,
+								35,
+								36,
+								65,
+								66,
+								37,
+								67,
+								38,
+								39,
+								68,
+								40,
+								41,
+								42,
+								69,
+								70,
+								43,
+								71,
+								44,
+								45,
+								46,
+								72,
+								47,
+								48,
+								49,
+								73,
+								74,
+								75
+							],
+							"attributes": [
+								[],
+								[],
+								[
+									7,
+									8
+								],
+								[],
+								[],
+								[
+									19,
+									20
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									34,
+									35,
+									36
+								],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									45
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									50
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									52
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									54
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									56
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									58
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									60
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									62
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									65,
+									66
+								],
+								[
+									43,
+									44,
+									31,
+									67
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									69
+								],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									71
+								],
+								[],
+								[],
+								[
+									40,
+									41
+								],
+								[
+									43,
+									44,
+									31,
+									73
+								],
+								[],
+								[],
+								[],
+								[]
+							],
+							"textValue": {
+								"index": [],
+								"value": []
+							},
+							"inputValue": {
+								"index": [],
+								"value": []
+							},
+							"inputChecked": {
+								"index": []
+							},
+							"optionSelected": {
+								"index": []
+							},
+							"contentDocumentIndex": {
+								"index": [],
+								"value": []
+							},
+							"pseudoType": {
+								"index": [],
+								"value": []
+							},
+							"pseudoIdentifier": {
+								"index": [],
+								"value": []
+							},
+							"isClickable": {
+								"index": []
+							},
+							"currentSourceURL": {
+								"index": [],
+								"value": []
+							},
+							"originURL": {
+								"index": [],
+								"value": []
+							}
+						},
+						"layout": {
+							"nodeIndex": [
+								0,
+								2,
+								14,
+								16,
+								18,
+								19,
+								21,
+								23,
+								24,
+								25,
+								27,
+								28,
+								29,
+								31,
+								32,
+								33,
+								35,
+								36,
+								37,
+								39,
+								40,
+								41,
+								43,
+								44,
+								45,
+								47,
+								48,
+								49,
+								52,
+								54,
+								55,
+								57,
+								58,
+								59,
+								62,
+								64,
+								65,
+								66,
+								68,
+								69,
+								70
+							],
+							"styles": [
+								[],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									37,
+									12,
+									38,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									12,
+									12,
+									12,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									70,
+									70,
+									70,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								],
+								[
+									46,
+									10,
+									11,
+									10,
+									10,
+									10,
+									47,
+									12,
+									13,
+									48
+								]
+							],
+							"bounds": [
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									504.6875
+								],
+								[
+									0,
+									0,
+									1280,
+									504.6875
+								],
+								[
+									0,
+									0,
+									1280,
+									504.6875
+								],
+								[
+									12,
+									30.75,
+									1256,
+									39.1875
+								],
+								[
+									12,
+									33.75,
+									477.234375,
+									33
+								],
+								[
+									12,
+									88.6875,
+									420,
+									180
+								],
+								[
+									13,
+									89.6875,
+									403,
+									70
+								],
+								[
+									17,
+									93.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									96.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									159.6875,
+									403,
+									70
+								],
+								[
+									17,
+									163.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									166.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									229.6875,
+									403,
+									70
+								],
+								[
+									17,
+									233.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									236.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									299.6875,
+									403,
+									70
+								],
+								[
+									17,
+									303.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									306.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									369.6875,
+									403,
+									70
+								],
+								[
+									17,
+									373.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									376.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									439.6875,
+									403,
+									70
+								],
+								[
+									17,
+									443.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									446.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									509.6875,
+									403,
+									70
+								],
+								[
+									17,
+									513.6875,
+									97.484375,
+									21
+								],
+								[
+									25,
+									516.6875,
+									81.484375,
+									15
+								],
+								[
+									12,
+									280.6875,
+									420,
+									120
+								],
+								[
+									13,
+									295.6875,
+									403,
+									19.59375
+								],
+								[
+									13,
+									296.6875,
+									177.046875,
+									17
+								],
+								[
+									13,
+									329.28125,
+									403,
+									300
+								],
+								[
+									13,
+									329.28125,
+									101.96875,
+									21
+								],
+								[
+									21,
+									332.28125,
+									85.96875,
+									15
+								],
+								[
+									12,
+									412.6875,
+									420,
+									80
+								],
+								[
+									13,
+									413.6875,
+									418,
+									60
+								],
+								[
+									13,
+									413.6875,
+									97.515625,
+									21
+								],
+								[
+									21,
+									416.6875,
+									81.515625,
+									15
+								],
+								[
+									13,
+									473.6875,
+									418,
+									60
+								],
+								[
+									13,
+									473.6875,
+									97.515625,
+									21
+								],
+								[
+									21,
+									476.6875,
+									81.515625,
+									15
+								]
+							],
+							"text": [
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								28,
+								-1,
+								-1,
+								-1,
+								49,
+								-1,
+								-1,
+								51,
+								-1,
+								-1,
+								53,
+								-1,
+								-1,
+								55,
+								-1,
+								-1,
+								57,
+								-1,
+								-1,
+								59,
+								-1,
+								-1,
+								61,
+								-1,
+								-1,
+								64,
+								-1,
+								-1,
+								68,
+								-1,
+								-1,
+								-1,
+								72,
+								-1,
+								-1,
+								74
+							],
+							"stackingContexts": {
+								"index": [
+									0,
+									1
+								]
+							},
+							"paintOrders": [
+								0,
+								1,
+								1,
+								1,
+								1,
+								1,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								4,
+								4,
+								4,
+								4,
+								4,
+								4,
+								4
+							],
+							"offsetRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									12,
+									31,
+									1256,
+									39
+								],
+								[],
+								[
+									12,
+									89,
+									420,
+									180
+								],
+								[
+									13,
+									90,
+									403,
+									70
+								],
+								[
+									17,
+									94,
+									97,
+									21
+								],
+								[],
+								[
+									13,
+									160,
+									403,
+									70
+								],
+								[
+									17,
+									164,
+									97,
+									21
+								],
+								[],
+								[
+									13,
+									230,
+									403,
+									70
+								],
+								[
+									17,
+									234,
+									97,
+									21
+								],
+								[],
+								[
+									13,
+									300,
+									403,
+									70
+								],
+								[
+									17,
+									304,
+									97,
+									21
+								],
+								[],
+								[
+									13,
+									370,
+									403,
+									70
+								],
+								[
+									17,
+									374,
+									97,
+									21
+								],
+								[],
+								[
+									13,
+									440,
+									403,
+									70
+								],
+								[
+									17,
+									444,
+									97,
+									21
+								],
+								[],
+								[
+									13,
+									510,
+									403,
+									70
+								],
+								[
+									17,
+									514,
+									97,
+									21
+								],
+								[],
+								[
+									12,
+									281,
+									420,
+									120
+								],
+								[
+									13,
+									296,
+									403,
+									20
+								],
+								[],
+								[
+									13,
+									329,
+									403,
+									300
+								],
+								[
+									13,
+									329,
+									102,
+									21
+								],
+								[],
+								[
+									12,
+									413,
+									420,
+									80
+								],
+								[
+									13,
+									414,
+									418,
+									60
+								],
+								[
+									13,
+									414,
+									98,
+									21
+								],
+								[],
+								[
+									13,
+									474,
+									418,
+									60
+								],
+								[
+									13,
+									474,
+									98,
+									21
+								],
+								[]
+							],
+							"scrollRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									490
+								],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									0,
+									0,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									348
+								],
+								[
+									0,
+									0,
+									403,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									300
+								],
+								[
+									0,
+									0,
+									98,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									418,
+									120
+								],
+								[
+									0,
+									0,
+									418,
+									60
+								],
+								[
+									0,
+									0,
+									94,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									418,
+									60
+								],
+								[
+									0,
+									0,
+									94,
+									17
+								],
+								[]
+							],
+							"clientRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									0,
+									0,
+									1280,
+									505
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									1,
+									1,
+									403,
+									178
+								],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									69
+								],
+								[
+									2,
+									2,
+									93,
+									17
+								],
+								[],
+								[
+									1,
+									1,
+									403,
+									118
+								],
+								[
+									0,
+									0,
+									403,
+									20
+								],
+								[],
+								[
+									0,
+									0,
+									403,
+									300
+								],
+								[
+									2,
+									2,
+									98,
+									17
+								],
+								[],
+								[
+									1,
+									1,
+									418,
+									78
+								],
+								[
+									0,
+									0,
+									418,
+									60
+								],
+								[
+									2,
+									2,
+									94,
+									17
+								],
+								[],
+								[
+									0,
+									0,
+									418,
+									60
+								],
+								[
+									2,
+									2,
+									94,
+									17
+								],
+								[]
+							]
+						},
+						"textBoxes": {
+							"layoutIndex": [
+								5,
+								9,
+								12,
+								15,
+								18,
+								21,
+								24,
+								27,
+								30,
+								33,
+								37,
+								40
+							],
+							"bounds": [
+								[
+									12,
+									33.75,
+									477.234375,
+									33
+								],
+								[
+									25,
+									96.6875,
+									81.484375,
+									15
+								],
+								[
+									25,
+									166.6875,
+									81.484375,
+									15
+								],
+								[
+									25,
+									236.6875,
+									81.484375,
+									15
+								],
+								[
+									25,
+									306.6875,
+									81.484375,
+									15
+								],
+								[
+									25,
+									376.6875,
+									81.484375,
+									15
+								],
+								[
+									25,
+									446.6875,
+									81.484375,
+									15
+								],
+								[
+									25,
+									516.6875,
+									81.484375,
+									15
+								],
+								[
+									13,
+									296.6875,
+									177.046875,
+									17
+								],
+								[
+									21,
+									332.28125,
+									85.96875,
+									15
+								],
+								[
+									21,
+									416.6875,
+									81.515625,
+									15
+								],
+								[
+									21,
+									476.6875,
+									81.515625,
+									15
+								]
+							],
+							"start": [
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0
+							],
+							"length": [
+								31,
+								14,
+								14,
+								14,
+								14,
+								14,
+								14,
+								14,
+								23,
+								13,
+								13,
+								13
+							]
+						},
+						"scrollOffsetX": 0,
+						"scrollOffsetY": 0,
+						"contentWidth": 1280,
+						"contentHeight": 900
+					}
+				],
+				"strings": [
+					"http://127.0.0.1:38111/scroll_element.html",
+					"Element-Level Scroll Container",
+					"UTF-8",
+					"E4A2A2B848C4795FF008D3F086882626",
+					"#document",
+					"html",
+					"HTML",
+					"lang",
+					"en",
+					"block",
+					"visible",
+					"1",
+					"auto",
+					"static",
+					"rgb(255, 255, 255)",
+					"HEAD",
+					"#text",
+					"\n",
+					"META",
+					"charset",
+					"utf-8",
+					"TITLE",
+					"STYLE",
+					"\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\n#scroller{width:420px;height:180px;overflow-y:scroll;border:1px solid #333}\n#scroller .row{height:70px;border-bottom:1px solid #ddd;padding:4px}\n#auto-scroller{width:420px;height:120px;overflow:auto;border:1px dashed #666;margin-top:12px}\n#hidden-overflow{width:420px;height:80px;overflow:hidden;border:1px dotted #999;margin-top:12px}\n#hidden-overflow .row{height:60px}\n",
+					"BODY",
+					"MAIN",
+					"rgba(0, 0, 0, 0)",
+					"H1",
+					"Element-level scroll containers",
+					"\n\n",
+					"DIV",
+					"id",
+					"scroller",
+					"role",
+					"region",
+					"aria-label",
+					"Vertical scroll region",
+					"auto scroll",
+					"scroll",
+					"\n  ",
+					"class",
+					"row",
+					"BUTTON",
+					"type",
+					"button",
+					"s-b1",
+					"inline-block",
+					"default",
+					"rgb(240, 240, 240)",
+					"Scroller row 1",
+					"s-b2",
+					"Scroller row 2",
+					"s-b3",
+					"Scroller row 3",
+					"s-b4",
+					"Scroller row 4",
+					"s-b5",
+					"Scroller row 5",
+					"s-b6",
+					"Scroller row 6",
+					"s-b7",
+					"Scroller row 7",
+					"auto-scroller",
+					"P",
+					"overflow:auto container",
+					"style",
+					"height:300px",
+					"a-b1",
+					"Auto row deep",
+					"hidden-overflow",
+					"hidden",
+					"h-b1",
+					"Clipped row 1",
+					"h-b2",
+					"Clipped row 2",
+					"\n\n\n"
+				]
+			},
+			"axNodes": [
+				{
+					"nodeId": "2",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "RootWebArea"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 144
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Element-Level Scroll Container",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label",
+								"superseded": true
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Element-Level Scroll Container"
+								},
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/scroll_element.html"
+							}
+						}
+					],
+					"childIds": [
+						"4"
+					],
+					"backendDOMNodeId": 2,
+					"frameId": "E4A2A2B848C4795FF008D3F086882626"
+				},
+				{
+					"nodeId": "4",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "2",
+					"childIds": [
+						"11"
+					],
+					"backendDOMNodeId": 4
+				},
+				{
+					"nodeId": "11",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "4",
+					"childIds": [
+						"12"
+					],
+					"backendDOMNodeId": 11
+				},
+				{
+					"nodeId": "12",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "main"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 118
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "11",
+					"childIds": [
+						"13",
+						"15",
+						"37",
+						"43"
+					],
+					"backendDOMNodeId": 12
+				},
+				{
+					"nodeId": "13",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Element-level scroll containers",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Element-level scroll containers"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 1
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"14"
+					],
+					"backendDOMNodeId": 13
+				},
+				{
+					"nodeId": "15",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "region"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 143
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Vertical scroll region",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"value": {
+									"type": "computedString",
+									"value": "Vertical scroll region"
+								},
+								"attribute": "aria-label",
+								"attributeValue": {
+									"type": "string",
+									"value": "Vertical scroll region"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"16",
+						"19",
+						"22",
+						"25",
+						"28",
+						"31",
+						"34"
+					],
+					"backendDOMNodeId": 15
+				},
+				{
+					"nodeId": "37",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"38",
+						"40"
+					],
+					"backendDOMNodeId": 37
+				},
+				{
+					"nodeId": "43",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"44",
+						"47"
+					],
+					"backendDOMNodeId": 43
+				},
+				{
+					"nodeId": "14",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Element-level scroll containers",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Element-level scroll containers"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "13",
+					"childIds": [
+						"-1000000002"
+					],
+					"backendDOMNodeId": 14
+				},
+				{
+					"nodeId": "16",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"17"
+					],
+					"backendDOMNodeId": 16
+				},
+				{
+					"nodeId": "19",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"20"
+					],
+					"backendDOMNodeId": 19
+				},
+				{
+					"nodeId": "22",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"23"
+					],
+					"backendDOMNodeId": 22
+				},
+				{
+					"nodeId": "25",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"26"
+					],
+					"backendDOMNodeId": 25
+				},
+				{
+					"nodeId": "28",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"29"
+					],
+					"backendDOMNodeId": 28
+				},
+				{
+					"nodeId": "31",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"32"
+					],
+					"backendDOMNodeId": 31
+				},
+				{
+					"nodeId": "34",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"35"
+					],
+					"backendDOMNodeId": 34
+				},
+				{
+					"nodeId": "38",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "paragraph"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 133
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": [
+						"39"
+					],
+					"backendDOMNodeId": 38
+				},
+				{
+					"nodeId": "40",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": [
+						"41"
+					],
+					"backendDOMNodeId": 40
+				},
+				{
+					"nodeId": "44",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "43",
+					"childIds": [
+						"45"
+					],
+					"backendDOMNodeId": 44
+				},
+				{
+					"nodeId": "47",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "43",
+					"childIds": [
+						"48"
+					],
+					"backendDOMNodeId": 47
+				},
+				{
+					"nodeId": "-1000000002",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Element-level scroll containers"
+					},
+					"properties": [],
+					"parentId": "14",
+					"childIds": []
+				},
+				{
+					"nodeId": "17",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 1",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 1"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "16",
+					"childIds": [
+						"18"
+					],
+					"backendDOMNodeId": 17
+				},
+				{
+					"nodeId": "20",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 2",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 2"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "19",
+					"childIds": [
+						"21"
+					],
+					"backendDOMNodeId": 20
+				},
+				{
+					"nodeId": "23",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 3",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 3"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "22",
+					"childIds": [
+						"24"
+					],
+					"backendDOMNodeId": 23
+				},
+				{
+					"nodeId": "26",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 4",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 4"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "25",
+					"childIds": [
+						"27"
+					],
+					"backendDOMNodeId": 26
+				},
+				{
+					"nodeId": "29",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 5",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 5"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "28",
+					"childIds": [
+						"30"
+					],
+					"backendDOMNodeId": 29
+				},
+				{
+					"nodeId": "32",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 6",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 6"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "31",
+					"childIds": [
+						"33"
+					],
+					"backendDOMNodeId": 32
+				},
+				{
+					"nodeId": "35",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 7",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 7"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "34",
+					"childIds": [
+						"36"
+					],
+					"backendDOMNodeId": 35
+				},
+				{
+					"nodeId": "39",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "overflow:auto container",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "overflow:auto container"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "38",
+					"childIds": [
+						"-1000000010"
+					],
+					"backendDOMNodeId": 39
+				},
+				{
+					"nodeId": "41",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Auto row deep",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Auto row deep"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "40",
+					"childIds": [
+						"42"
+					],
+					"backendDOMNodeId": 41
+				},
+				{
+					"nodeId": "45",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Clipped row 1",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Clipped row 1"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "44",
+					"childIds": [
+						"46"
+					],
+					"backendDOMNodeId": 45
+				},
+				{
+					"nodeId": "48",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Clipped row 2",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Clipped row 2"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "47",
+					"childIds": [
+						"49"
+					],
+					"backendDOMNodeId": 48
+				},
+				{
+					"nodeId": "18",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 1",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 1"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "17",
+					"childIds": [
+						"-1000000003"
+					],
+					"backendDOMNodeId": 18
+				},
+				{
+					"nodeId": "21",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 2",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 2"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "20",
+					"childIds": [
+						"-1000000004"
+					],
+					"backendDOMNodeId": 21
+				},
+				{
+					"nodeId": "24",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 3",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 3"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "23",
+					"childIds": [
+						"-1000000005"
+					],
+					"backendDOMNodeId": 24
+				},
+				{
+					"nodeId": "27",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 4",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 4"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "26",
+					"childIds": [
+						"-1000000006"
+					],
+					"backendDOMNodeId": 27
+				},
+				{
+					"nodeId": "30",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 5",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 5"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "29",
+					"childIds": [
+						"-1000000007"
+					],
+					"backendDOMNodeId": 30
+				},
+				{
+					"nodeId": "33",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 6",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 6"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "32",
+					"childIds": [
+						"-1000000008"
+					],
+					"backendDOMNodeId": 33
+				},
+				{
+					"nodeId": "36",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 7",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Scroller row 7"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "35",
+					"childIds": [
+						"-1000000009"
+					],
+					"backendDOMNodeId": 36
+				},
+				{
+					"nodeId": "-1000000010",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "overflow:auto container"
+					},
+					"properties": [],
+					"parentId": "39",
+					"childIds": []
+				},
+				{
+					"nodeId": "42",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Auto row deep",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Auto row deep"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "41",
+					"childIds": [
+						"-1000000011"
+					],
+					"backendDOMNodeId": 42
+				},
+				{
+					"nodeId": "46",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Clipped row 1",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Clipped row 1"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "45",
+					"childIds": [
+						"-1000000012"
+					],
+					"backendDOMNodeId": 46
+				},
+				{
+					"nodeId": "49",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Clipped row 2",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "Clipped row 2"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "48",
+					"childIds": [
+						"-1000000013"
+					],
+					"backendDOMNodeId": 49
+				},
+				{
+					"nodeId": "-1000000003",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 1"
+					},
+					"properties": [],
+					"parentId": "18",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000004",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 2"
+					},
+					"properties": [],
+					"parentId": "21",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000005",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 3"
+					},
+					"properties": [],
+					"parentId": "24",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000006",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 4"
+					},
+					"properties": [],
+					"parentId": "27",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000007",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 5"
+					},
+					"properties": [],
+					"parentId": "30",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000008",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 6"
+					},
+					"properties": [],
+					"parentId": "33",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000009",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Scroller row 7"
+					},
+					"properties": [],
+					"parentId": "36",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000011",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Auto row deep"
+					},
+					"properties": [],
+					"parentId": "42",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000012",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Clipped row 1"
+					},
+					"properties": [],
+					"parentId": "46",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000013",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Clipped row 2"
+					},
+					"properties": [],
+					"parentId": "49",
+					"childIds": []
+				}
+			],
+			"listeners": {
+				"frames": [
+					{
+						"frame": "",
+						"total": 32,
+						"scanned": 32,
+						"hits": []
+					}
+				],
+				"truncated": false
+			}
+		}
+	],
+	"warnings": []
+}

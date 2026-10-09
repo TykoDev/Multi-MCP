@@ -1,0 +1,149 @@
+# TykoTech-MCP — the slim image shape (SPECS/ROADMAP.md R11, D-009 reopen).
+#
+# Same product, less of it *to attack*. The bundled image ships the Deno
+# toolchain, the module cache and the whole source tree, because that is what
+# `deno run` needs. This one ships a single compiled binary (R15) and nothing
+# else of ours: no interpreter to invoke, no lockfile, no `packages/`, no tests.
+#
+# What it does NOT buy is size, and pretending otherwise would be dishonest.
+# Re-measured on 2026-09-11 at 0.2.0: 409 MB against the bundled image's 425 MB
+# — about 3.8%. The compiled binary is ~100 MB and largely replaces what it
+# removes, while Chromium and ffmpeg account for most of both images. Choose
+# this shape because you want no interpreter and no source in the runtime, not
+# because you want a smaller download.
+#
+# Those are `docker image inspect --format '{{.Size}}'` figures: the image's own
+# uncompressed layer total. `docker images` reports ~1.58 GB and ~1.63 GB on a
+# containerd-backed engine, because that column measures the unpacked snapshot
+# on disk instead. Both are real; they answer different questions, and the older
+# revision of this comment did not say which one it meant.
+#
+# ## The permission matrix: the same egress, wider file and env grants (D-053, D-151)
+#
+# The bundled image's grants live in its `CMD`, so an operator can scope or
+# widen them per deployment. **A compiled binary has no CMD to edit.**
+# `scripts/compile.ts` bakes the matrix at build time and it cannot be
+# re-flagged at launch, so it passes a bare `--allow-net` — a binary cannot know
+# which address a deployment will bind — and bare `--allow-read`,
+# `--allow-write` and `--allow-env`.
+#
+# Until D-151 that made the two shapes differ in what they could dial: the
+# bundled `CMD` granted the bind and loopback only, so `browser_head` (whose
+# availability predicate is a `Deno.permissions.query` on a public host) was
+# offered here and withheld there, and a model provider was `reachable: true`
+# here and `false` there. D-151 (owner-approved, 2026-10-07) gave the bundled
+# `CMD` the same unscoped net grant, so both shapes now offer `browser_head`,
+# reach the providers the file names (`builtinAgent: true` for the same
+# fixture) and leave the server's egress to the code that dials:
+# `browser_head`'s literal-address deny and `TTK_ALLOWED_DOMAINS` (unrestricted
+# by default), and the providers file as the only allowlist for model hosts.
+# The difference left is the file and env grants, and that the bundled image
+# can still be scoped back with a compose `command:` override while this one
+# cannot.
+#
+# `tests/container/verify_container.ts` asserts the egress-dependent tools
+# alike for both shapes, so neither image can drift away from the other
+# unnoticed.
+#
+# It is *slim*, not distroless, and the difference is deliberate rather than a
+# compromise. Chromium is a dynamically linked program with a long tail of
+# dependencies — fontconfig, NSS, dbus, a dozen X and GTK libraries — and the
+# setuid sandbox helper it must use is a Debian package with its own ownership
+# and permission bits. Assembling that by hand on a distroless base would mean
+# maintaining an undocumented copy of Debian's own dependency graph, and the
+# first thing to break would be the sandbox. A trimmed Debian keeps the package
+# manager's answer to that question and drops everything else.
+#
+# The security posture is identical to the bundled image: `--no-sandbox` is
+# refused in TTK_BROWSER_ARGS and TTK_CHROMIUM_NO_SANDBOX is never set (D-094),
+# the setuid helper is present, and the container still needs
+# `no-new-privileges` dropped plus the custom seccomp profile in docker/.
+# See SPECS/SECURITY-AUTH.md §6.
+
+# Base images pinned by digest, tags kept for the reader (C13, D-103; see the
+# bundled Dockerfile for how to move them). The Deno digest is the bundled
+# image's: denoland/deno:2.9.7, resolved 2026-10-04.
+ARG DENO_IMAGE=denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
+# debian:stable-slim, resolved 2026-10-04.
+ARG RUNTIME_IMAGE=debian:stable-slim@sha256:5bc3287b25407c965a30f38e32603dc253a3869e1b12a21ac09bfc27fd8b13ce
+
+# --- build ------------------------------------------------------------------
+FROM ${DENO_IMAGE} AS build
+WORKDIR /app
+
+COPY deno.json deno.lock ./
+COPY packages ./packages
+COPY scripts ./scripts
+COPY tests ./tests
+
+RUN deno cache --frozen packages/cli/mod.ts scripts/healthcheck.ts
+# The SPA is compiled *into* the binary, so it is built first.
+RUN deno task build:web
+# The permission matrix is baked in here and cannot be widened at launch; the
+# Chromium path is passed because a compiled grant has to name a real file.
+RUN deno run -A scripts/compile.ts --out /out --chromium /usr/bin/chromium
+
+# --- runtime ----------------------------------------------------------------
+FROM ${RUNTIME_IMAGE}
+
+# Chromium, its sandbox helper, fonts, and the encoder R7 shells out to.
+# `--no-install-recommends` is what makes this shape worth having.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	chromium \
+	chromium-sandbox \
+	fonts-liberation \
+	ca-certificates \
+	dumb-init \
+	ffmpeg \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& apt-get clean
+
+# An unprivileged user, created here because there is no base image to inherit
+# one from. Its uid (1000) is NOT the bundled image's: that image runs as
+# `deno`, uid 1993 (measured in the 2.9.7 base), which docker-compose.yml also
+# sets — so moving a /data volume between the two shapes needs a chown. (An
+# older revision of this comment claimed the two matched.)
+RUN groupadd --gid 1000 ttk \
+	&& useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin ttk
+
+COPY --from=build --chown=ttk:ttk /out/tykotech-mcp /usr/local/bin/tykotech-mcp
+# D-154: the bundled image's maintenance name (`ttk seed --force`, `ttk doctor`), so one compose command serves both
+# shapes. Here it is the binary itself, with its baked matrix: a compiled binary cannot be re-flagged.
+RUN ln -s /usr/local/bin/tykotech-mcp /usr/local/bin/ttk
+
+# Chromium needs a writable HOME for its crashpad handler (E-08); without one it
+# dies with SIGTRAP before the CDP endpoint comes up. /data is the volume.
+RUN mkdir -p /data /home/ttk/.cache \
+	&& chown -R ttk:ttk /data /home/ttk
+
+# Configuration only — never a secret. Secrets arrive as *_FILE paths and are
+# read inside the process, so they never enter an image layer or the environment
+# Chromium inherits.
+ENV TTK_LOG_FORMAT=json \
+	TTK_BROWSER_PATH=/usr/bin/chromium \
+	TTK_DATA_DIR=/data \
+	TTK_FFMPEG=/usr/bin/ffmpeg \
+	TTK_HEADLESS=true \
+	TTK_HOST=0.0.0.0 \
+	TTK_PORT=8787
+
+# R14 (D-122): the MCP Registry's OCI ownership proof, matching `name` in server.json. Metadata only, no grant;
+# the bundled Dockerfile carries the same label.
+LABEL io.modelcontextprotocol.server.name="eu.tykotech/tykotech-mcp"
+
+USER ttk
+WORKDIR /home/ttk
+VOLUME ["/data"]
+
+# 8787 only. The CDP port is never published: it is an unauthenticated remote
+# control for the browser.
+EXPOSE 8787
+
+# The binary answers its own health check, so this image needs no second
+# runtime to run a script with.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+	CMD ["/usr/local/bin/tykotech-mcp", "healthcheck"]
+
+# dumb-init reaps the process tree Chromium leaves behind.
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["/usr/local/bin/tykotech-mcp", "serve"]

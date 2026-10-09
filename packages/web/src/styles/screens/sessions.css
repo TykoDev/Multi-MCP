@@ -1,0 +1,438 @@
+/* Sessions (sessions_view.ts): the stored-data dashboard, the launch form, and a reflowing grid of session cards whose
+ * actions appear on hover (always shown where there is no hover). Colour tokens only; motion is cut by the
+ * reduced-motion rule. */
+
+/* --- stored-data dashboard (D-155): the stat strip's glass bar, as a grid of compact tiles that each link to the screen
+ * managing what they count. Tiles keep `.tile`'s tones from components.css; a zero recedes there too. --- */
+
+.ov[hidden] {
+	display: none;
+}
+.ov-grid {
+	list-style: none;
+	margin: 0;
+	padding: 4px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+	gap: 2px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 16px;
+	background:
+		linear-gradient(135deg, color-mix(in oklab, var(--ttk-brand) 7%, transparent), transparent 55%),
+		var(--ttk-glass);
+	backdrop-filter: blur(14px) saturate(1.3);
+	box-shadow: var(--ttk-shadow);
+}
+.ov-item {
+	min-width: 0;
+}
+.ov-item .tile {
+	height: 100%;
+	box-sizing: border-box;
+	padding-right: 10px;
+}
+.ov-item .tile-body {
+	flex-wrap: wrap;
+	row-gap: 3px;
+}
+.ov-item .tile-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* The byte total (or what is active) under the label: a second line, quieter still. */
+.tile-sub {
+	flex-basis: 100%;
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.tile-sub:empty {
+	display: none;
+}
+.ov-link {
+	display: block;
+	height: 100%;
+	border-radius: 12px;
+	color: inherit;
+	text-decoration: none;
+}
+.ov-link:hover .tile-label {
+	color: var(--wa-color-text-normal);
+}
+.ov-link:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: -2px;
+}
+@media (max-width: 720px) {
+	.ov-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+/* --- launch form --- */
+
+.sc-create {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	padding: 10px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-glass);
+	backdrop-filter: blur(16px) saturate(1.3);
+	box-shadow: var(--ttk-shadow);
+	animation: sc-drop 0.28s var(--ttk-ease) both;
+}
+.sc-create-glyph {
+	width: 34px;
+	height: 34px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 11px;
+	background: var(--ttk-gradient);
+	color: white;
+	box-shadow: var(--ttk-glow);
+}
+.sc-field {
+	position: relative;
+	flex: 1 1 200px;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+}
+.sc-field > .icon {
+	position: absolute;
+	left: 11px;
+	color: var(--wa-color-text-quiet);
+	pointer-events: none;
+}
+.sc-field > input {
+	width: 100%;
+	margin: 0;
+	padding-left: 34px;
+	border-radius: 10px;
+}
+.sc-create-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+wa-callout.sc-notice {
+	animation: sc-drop 0.25s var(--ttk-ease) both;
+}
+
+/* --- the grid of cards --- */
+
+.sc-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+	gap: 16px;
+}
+.sc-grid > .empty {
+	grid-column: 1 / -1;
+}
+wa-skeleton.sc-skeleton {
+	height: 232px;
+	--border-radius: var(--ttk-radius-l);
+}
+
+.sc-card {
+	position: relative;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-l);
+	background: var(--ttk-card);
+	box-shadow: var(--ttk-shadow);
+	overflow: hidden;
+	transition: transform 0.28s var(--ttk-ease), border-color 0.2s, box-shadow 0.28s var(--ttk-ease);
+	animation: sc-rise 0.38s var(--ttk-ease) backwards;
+	animation-delay: calc(var(--i, 0) * 40ms);
+}
+.sc-card:hover,
+.sc-card:focus-within {
+	transform: translateY(-3px);
+	border-color: color-mix(in oklab, var(--ttk-brand) 40%, transparent);
+	box-shadow: var(--ttk-shadow-pop);
+}
+.sc-card.locked {
+	border-color: color-mix(in oklab, var(--ttk-locked) 45%, transparent);
+}
+
+/* The preview: a faux browser window tinted by the session's id, the globe in a glass orb. */
+.sc-screen {
+	--hue: var(--wa-color-blue-50);
+	position: relative;
+	aspect-ratio: 16 / 8;
+	display: grid;
+	place-items: center;
+	border-bottom: 1px solid var(--ttk-hairline);
+	background:
+		radial-gradient(120% 95% at 15% 0%, color-mix(in oklab, var(--hue) 36%, transparent), transparent 62%),
+		radial-gradient(90% 85% at 100% 100%, color-mix(in oklab, var(--ttk-brand-2) 20%, transparent), transparent 66%),
+		var(--ttk-sunken);
+	cursor: pointer;
+	overflow: hidden;
+}
+.sc-screen.hue-1 {
+	--hue: var(--wa-color-indigo-50);
+}
+.sc-screen.hue-2 {
+	--hue: var(--wa-color-purple-50);
+}
+.sc-screen.hue-3 {
+	--hue: var(--wa-color-cyan-50);
+}
+.sc-screen.hue-4 {
+	--hue: var(--wa-color-pink-50);
+}
+.sc-screen.hue-5 {
+	--hue: var(--wa-color-green-50);
+}
+.sc-chrome {
+	position: absolute;
+	top: 11px;
+	left: 13px;
+	display: flex;
+	gap: 5px;
+}
+.sc-chrome i {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: color-mix(in oklab, var(--wa-color-text-normal) 22%, transparent);
+}
+.sc-orb {
+	width: 54px;
+	height: 54px;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 18px;
+	background: var(--ttk-glass);
+	backdrop-filter: blur(10px);
+	color: var(--wa-color-text-normal);
+	box-shadow: var(--ttk-shadow);
+	transition: transform 0.4s var(--ttk-spring);
+}
+.sc-orb .icon {
+	width: 26px;
+	height: 26px;
+	stroke-width: 1.6;
+}
+.sc-card:hover .sc-orb {
+	transform: scale(1.08) rotate(-6deg);
+}
+.sc-card.live .sc-orb {
+	color: var(--ttk-live);
+}
+.sc-card.locked .sc-orb {
+	color: var(--ttk-locked);
+}
+
+.sc-state {
+	position: absolute;
+	top: 10px;
+	right: 12px;
+	display: grid;
+	place-items: center;
+}
+.sc-state .dot {
+	position: relative;
+}
+.sc-card.live .sc-state .dot::after,
+.sc-card.locked .sc-state .dot::after {
+	content: '';
+	position: absolute;
+	inset: -4px;
+	border: 2px solid currentColor;
+	border-radius: 50%;
+	opacity: 0;
+	animation: sc-ping 2.4s var(--ttk-ease) infinite;
+}
+.sc-card.live .sc-state .dot {
+	color: var(--ttk-live);
+}
+.sc-card.locked .sc-state .dot {
+	color: var(--ttk-locked);
+}
+
+/* Hover actions: a glass pill in the preview's corner. Shown on hover or focus, and always without a hover pointer. */
+.sc-actions {
+	position: absolute;
+	right: 10px;
+	bottom: 10px;
+	display: flex;
+	gap: 4px;
+	padding: 4px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: 13px;
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(14px);
+	box-shadow: var(--ttk-shadow);
+	cursor: default;
+	opacity: 0;
+	transform: translateY(6px);
+	transition: opacity 0.2s var(--ttk-ease), transform 0.28s var(--ttk-ease);
+}
+.sc-card:hover .sc-actions,
+.sc-card:focus-within .sc-actions {
+	opacity: 1;
+	transform: none;
+}
+@media (hover: none) {
+	.sc-actions {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.sc-body {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 14px 12px;
+}
+.sc-name {
+	overflow: hidden;
+	font-size: 14px;
+	font-weight: 650;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.sc-id {
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+.sc-id .mono {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.sc-id button.ttk-btn {
+	--wa-form-control-height: 22px;
+	opacity: 0.55;
+	transition: opacity 0.18s;
+}
+.sc-card:hover .sc-id button.ttk-btn,
+.sc-id button.ttk-btn:focus-visible {
+	opacity: 1;
+}
+.sc-facts {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 6px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+.sc-fact {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+}
+.sc-fact .icon {
+	width: 14px;
+	height: 14px;
+}
+.sc-lock {
+	width: 24px;
+	height: 24px;
+	display: inline-grid;
+	place-items: center;
+	border-radius: 8px;
+}
+.sc-lock .icon {
+	width: 14px;
+	height: 14px;
+}
+.sc-lock.held {
+	color: var(--ttk-locked);
+	background: color-mix(in oklab, var(--ttk-locked) 16%, transparent);
+}
+.sc-lock.free {
+	color: var(--wa-color-text-quiet);
+	opacity: 0.7;
+}
+/* RV-7: whose session this is, when an admin lists every principal's in owner mode — beside the id it tells apart
+ * (two `default-…` cards are otherwise identical); the full owner is the tooltip. */
+.sc-owner {
+	display: inline-flex;
+	flex: 0 1 auto;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	margin-left: auto;
+	padding-left: 8px;
+	font-weight: 650;
+}
+.sc-owner .icon {
+	width: 14px;
+	height: 14px;
+	flex: 0 0 auto;
+}
+.sc-owner-name {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.sc-time {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+}
+.sc-time .icon {
+	width: 13px;
+	height: 13px;
+}
+
+/* --- narrow screens --- */
+
+@media (max-width: 720px) {
+	.sc-grid {
+		gap: 12px;
+	}
+	.sc-create-actions {
+		width: 100%;
+		justify-content: flex-end;
+	}
+}
+
+@keyframes sc-rise {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.985);
+	}
+}
+@keyframes sc-drop {
+	from {
+		opacity: 0;
+		transform: translateY(-6px);
+	}
+}
+@keyframes sc-ping {
+	0% {
+		transform: scale(0.6);
+		opacity: 0.7;
+	}
+	80%,
+	100% {
+		transform: scale(1.6);
+		opacity: 0;
+	}
+}

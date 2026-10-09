@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Text Nodes and Links</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+.invisible-text{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Text node and link rendering</h1>
+
+<p>   Leading and trailing whitespace around this sentence.   </p>
+<p>a</p>
+<p>ab</p>
+<p> </p>
+<p>&nbsp;</p>
+<p>Multi
+line
+text node with embedded newlines.</p>
+<p>Text with <strong>nested strong</strong> and <em>nested em</em> inline children.</p>
+<div class="invisible-text">Text inside a display none container.</div>
+<span style="visibility:hidden">Text inside a visibility hidden span.</span>
+
+<ul>
+  <li><a href="#one" id="l-one">First link</a></li>
+  <li><a href="#two" id="l-two" title="Second link title">Second link</a></li>
+  <li><a href="#three" id="l-three" aria-label="Third link aria name"><span>Third</span> <span>link</span></a></li>
+  <li><a id="l-nohref">Anchor without href</a></li>
+  <li><a href="#five" id="l-empty"></a></li>
+  <li><a href="mailto:someone@example.invalid" id="l-mailto">Mail link</a></li>
+  <li><a href="#seven" id="l-target" target="_blank" rel="noopener">New tab link</a></li>
+</ul>
+
+<p>Trailing paragraph after the list.</p>
+<button type="button" id="tail-button">Tail button</button>
+</main>
+</body>
+</html>

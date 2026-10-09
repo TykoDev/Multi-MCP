@@ -1,0 +1,16 @@
+{
+	"name": "new_marking_before",
+	"pins": "R6.2 step 1 — no previous state at all, so nothing is marked new",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{ "tag": "BUTTON", "id": 10, "children": [{ "text": "One" }] },
+					{ "tag": "BUTTON", "id": 11, "children": [{ "text": "Two" }] }
+				]
+			}
+		]
+	}
+}

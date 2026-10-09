@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live Value Versus Markup Attribute</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+label{display:block;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Live value versus markup attribute</h1>
+
+<label for="lv-number">Number, markup says 7</label>
+<input id="lv-number" name="lvNumber" type="number" min="1" max="99" step="1" value="7">
+
+<label for="lv-range">Range, markup says 2</label>
+<input id="lv-range" name="lvRange" type="range" min="0" max="10" step="1" value="2">
+
+<label for="lv-text">Text, markup says markup-only-value</label>
+<input id="lv-text" name="lvText" type="text" value="markup-only-value">
+
+<p>Checkbox with no checked attribute, ticked by script</p>
+<input id="lv-check-on" name="lvCheckOn" type="checkbox">
+
+<p>Checkbox with a checked attribute, unticked by script</p>
+<input id="lv-check-off" name="lvCheckOff" type="checkbox" checked>
+
+<p>Listbox whose markup selects Alpha and whose script selects Gamma</p>
+<select id="lv-select" name="lvSelect" size="3">
+  <option value="a" selected>Alpha</option>
+  <option value="b">Beta</option>
+  <option value="c">Gamma</option>
+</select>
+
+<button type="button" id="lv-tail">Tail control</button>
+</main>
+<script>
+// Every write below sets the DOM *property* and never touches the markup attribute, so
+// `EnhancedDomTreeNode.attributes` keeps the authored value while the accessibility tree reports the
+// live one. That disagreement is the whole point of DATA-MODEL §6.5's "AX value overrides DOM value"
+// rule, and no page of the recorded corpus produces it. Deterministic: no timers, no randomness.
+document.getElementById('lv-number').value = '42';
+document.getElementById('lv-range').value = '9';
+document.getElementById('lv-text').value = 'live-typed-value';
+document.getElementById('lv-check-on').checked = true;
+document.getElementById('lv-check-off').checked = false;
+document.getElementById('lv-select').selectedIndex = 2;
+</script>
+</body>
+</html>

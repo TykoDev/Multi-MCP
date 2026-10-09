@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+  A1 (W1, 2026-10-04): what lies between the pointer and a control.
+
+  Every control records its own clicks into #log, so a test can prove that a click at the point
+  browser_element_at answered for really lands on the element it named.
+
+  - #under-pe-none: covered by a translucent pointer-events:none layer. Chromium hit-tests through the
+    layer; the serializer used to treat it as an occluder (fixed by ERRATUM(E-76)).
+  - #icon-button: its only visible content is an icon drawn by i::before. Chromium names the ::before box.
+  - #card-link: a "stretched link" whose a::after covers the whole card.
+  - #under-backdrop: covered by a backdrop drawn by a NON-interactive element's ::before. A click there lands
+    on the backdrop's element, so nothing interactive is under the point.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Element-at covers</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+.stage{position:relative;width:420px;height:120px;margin:12px;border:1px solid #333}
+#under-pe-none{position:absolute;left:20px;top:20px;width:160px;height:50px}
+#pe-none-layer{position:absolute;left:0;top:0;width:420px;height:120px;background:rgba(0,0,128,0.2);pointer-events:none}
+#icon-button{position:absolute;left:20px;top:20px;width:72px;height:72px;padding:0;border:1px solid #333;background:#fff}
+#icon-button i::before{content:'';display:inline-block;width:48px;height:48px;background:#c00}
+.card{position:absolute;left:20px;top:10px;width:380px;height:100px;background:#eee}
+.card p{margin:8px}
+#card-link::after{content:'';position:absolute;inset:0}
+#under-backdrop{position:absolute;left:20px;top:20px;width:160px;height:50px}
+#backdrop::before{content:'';position:absolute;left:0;top:0;width:420px;height:120px;background:rgba(0,0,0,0.45)}
+</style>
+</head>
+<body>
+<div class="stage" id="stage-pe-none">
+  <button type="button" id="under-pe-none">Under a pointer-events:none layer</button>
+  <div id="pe-none-layer"></div>
+</div>
+<div class="stage" id="stage-icon">
+  <button type="button" id="icon-button" aria-label="Delete"><i id="icon"></i></button>
+</div>
+<div class="stage" id="stage-card">
+  <div class="card"><p>Card body text, no control here</p><a id="card-link" href="#card">Open card</a></div>
+</div>
+<div class="stage" id="stage-backdrop">
+  <button type="button" id="under-backdrop">Under a backdrop</button>
+  <div id="backdrop"></div>
+</div>
+<pre id="log">clicks:</pre>
+<script>
+for (const id of ['under-pe-none', 'icon-button', 'card-link', 'under-backdrop']) {
+  document.getElementById(id).addEventListener('click', (event) => {
+    event.preventDefault();
+    document.getElementById('log').textContent += ' ' + id;
+  });
+}
+</script>
+</body>
+</html>

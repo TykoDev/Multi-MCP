@@ -1,0 +1,9 @@
+[Start of page]
+Welcome
+Store
+[1423]<button type=submit />
+	Go
+[1301]<a title=Home />
+[1500]<input type=text name=q placeholder=Search />
+nested text
+[End of page]

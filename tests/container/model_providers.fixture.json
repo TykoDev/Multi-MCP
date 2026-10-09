@@ -1,0 +1,12 @@
+{
+	"version": 1,
+	"providers": [
+		{
+			"id": "openai-main",
+			"kind": "openai",
+			"label": "Verify provider",
+			"base_url": "https://api.openai.com/v1",
+			"models": ["gpt-4.1"]
+		}
+	]
+}

@@ -1,0 +1,53 @@
+{
+	"name": "shadow_dom",
+	"pins": "§6.4 |SHADOW(open)| host marker — including on a user-agent-only host — plus Open/Closed Shadow … Shadow End fragment wrappers, host-not-rendered hoisting, and user-agent CONTENT still skipped",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{
+						"tag": "CUSTOM-BUTTON",
+						"id": 977,
+						"ax": { "role": "button", "name": "Fancy" },
+						"shadow": [
+							{
+								"type": "open",
+								"children": [
+									{ "tag": "BUTTON", "id": 978, "children": [{ "text": "Click" }] }
+								]
+							}
+						]
+					},
+					{
+						"tag": "MY-PANEL",
+						"id": 980,
+						"shadow": [
+							{
+								"type": "closed",
+								"children": [
+									{ "text": "Secret panel" },
+									{ "tag": "BUTTON", "id": 981, "children": [{ "text": "OK" }] }
+								]
+							}
+						]
+					},
+					{
+						"tag": "INPUT",
+						"id": 990,
+						"attrs": { "type": "range" },
+						"shadow": [
+							{
+								"type": "user-agent",
+								"children": [
+									{ "tag": "DIV", "children": [{ "text": "slider thumb" }] }
+								]
+							}
+						]
+					}
+				]
+			}
+		]
+	}
+}

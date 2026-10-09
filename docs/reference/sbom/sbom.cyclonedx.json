@@ -1,0 +1,5005 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.5",
+	"serialNumber": "urn:uuid:1d9fd24d-1eab-43f9-9035-1266301d8e30",
+	"version": 4,
+	"metadata": {
+		"timestamp": "2026-10-04T00:00:00Z",
+		"lifecycles": [
+			{
+				"phase": "pre-build"
+			}
+		],
+		"tools": {
+			"components": [
+				{
+					"type": "application",
+					"name": "deno.lock export (manual)",
+					"description": "Components from deno.lock (v5), licenses from package.json files in the Deno npm cache, container and OS components from Dockerfile, Dockerfile.slim, docker/Dockerfile.sandbox, docker/Dockerfile.sandbox-workspace and docker/Dockerfile.agent-runner."
+				}
+			]
+		},
+		"supplier": {
+			"name": "TykoTech"
+		},
+		"component": {
+			"type": "application",
+			"bom-ref": "pkg:generic/tykotech-mcp@0.2.0",
+			"supplier": {
+				"name": "TykoTech"
+			},
+			"name": "tykotech-mcp",
+			"version": "0.2.0",
+			"description": "MCP browser server with optional isolated coding workspaces, A2A 1.0 tasks, external ACP v1 bridging and A2UI v0.9 surfaces.",
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/tykotech-mcp@0.2.0"
+		},
+		"properties": [
+			{
+				"name": "tykotech:jsr-purl-convention",
+				"value": "pkg:generic/<%40scope>/<name>@<version>?repository_url=https://jsr.io"
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40awesome.me/webawesome@3.14.0",
+			"name": "@awesome.me/webawesome",
+			"version": "3.14.0",
+			"description": "A forward-thinking library of web components.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "9b9ad318b2bf88ebda5453a46314638813a9f25c2b05aa79b6ffb3cf582ca8b800c657f076f12507b0551a3b3e2dff600e9b3b6d644f4e41b4170664e349a4d8"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40awesome.me/webawesome@3.14.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@awesome.me/webawesome/-/webawesome-3.14.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@awesome.me/webawesome@3.14.0_@floating-ui+utils@0.2.12_@types+react@19.3.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Bundled into the live-view SPA (packages/web/dist) by build:web."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40modelcontextprotocol/client@2.0.0",
+			"name": "@modelcontextprotocol/client",
+			"version": "2.0.0",
+			"description": "Model Context Protocol implementation for TypeScript - Client package",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "f1fd4e821436ae3cc839faa05023fef068945aa46cf3d9e3a162cda807bc91698378fbf7b357d95ec79e8fe4177a6b2c12eb8ebcb2e62cefe4a8cdc8407b484b"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40modelcontextprotocol/client@2.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@modelcontextprotocol/client/-/client-2.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@modelcontextprotocol/client@2.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Imported only by test modules (gateway_test.ts, library_test.ts, tests/)."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40modelcontextprotocol/hono@2.0.0",
+			"name": "@modelcontextprotocol/hono",
+			"version": "2.0.0",
+			"description": "Hono adapters for the Model Context Protocol TypeScript server SDK - Hono middleware",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "94a0925d1bac2f1a57eb71beea883d7b071192a55b8c1db14b1a6f53f549871714929bc68290eb99c80d450e1d4daa46afc02ca4d15d44176625ce74d15865fc"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40modelcontextprotocol/hono@2.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@modelcontextprotocol/hono/-/hono-2.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@modelcontextprotocol/hono@2.0.0_@modelcontextprotocol+server@2.0.0_hono@4.13.5"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40modelcontextprotocol/server@2.0.0",
+			"name": "@modelcontextprotocol/server",
+			"version": "2.0.0",
+			"description": "Model Context Protocol implementation for TypeScript - Server package",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "6211d67477e914c41f774a6bb049f129e4b7433df2b481a6b12d2cb61e0a0e39da7084fb87193a8571e427d2b2b31964bd333e59902d41b6dc5217683f81efb7"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40modelcontextprotocol/server@2.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@modelcontextprotocol/server/-/server-2.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@modelcontextprotocol/server@2.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/hono@4.13.5",
+			"name": "hono",
+			"version": "4.13.5",
+			"description": "Web framework built on Web Standards",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "3bafbf782611933cf3cb4acf5b028b886051d6716e50f6729e7c23c4dd4c040eb634da9b4f4c101334322b68123b9c83203077dfab1742578084e1ebce56322b"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/hono@4.13.5",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/hono/-/hono-4.13.5.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:hono@4.13.5"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/jose@6.2.10",
+			"name": "jose",
+			"version": "6.2.10",
+			"description": "JWA, JWS, JWE, JWT, JWK, JWKS for Node.js, Browser, Cloudflare Workers, Deno, Bun, and other Web-interoperable runtimes",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "8a25bb27da911651b1bc2388043043c4578f4129fb64c027ad81a1aeb3a8eac88efcc22ac1fca294b476ee991f0e0524fab68bbb30034bc0374bf28b062b1cd2"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/jose@6.2.10",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/jose/-/jose-6.2.10.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:jose@6.2.10"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/lucide-static@1.49.0",
+			"name": "lucide-static",
+			"version": "1.49.0",
+			"description": "Lucide is a community-run fork of Feather Icons, open for anyone to contribute icons.",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "8128ed97b6d1dafdbaa032278765ae6b53eb17605145797d8a78672d67057e746a452866819be51518ac3c7a937d4ee4c6cb9953c4e1363005a2d6c89ebccaa3"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "ISC"
+					}
+				}
+			],
+			"purl": "pkg:npm/lucide-static@1.49.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/lucide-static/-/lucide-static-1.49.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "build-time, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:lucide-static@1.49.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Read by scripts/build_icons.ts during build:web, which writes its glyph data into packages/web/dist/icons.svg; also read by packages/web/src/web_test.ts."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/zod@4.5.1",
+			"name": "zod",
+			"version": "4.5.1",
+			"description": "TypeScript-first schema declaration and validation library with static type inference",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "3f71aa78010e103a8abda7d518b7b36e0fb7f585bfcdee31ac3e2a752d1a74e63c7a8237cdf8efd4f40ce14c10ce04fc99929711baad56df0af99286aa43052a"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/zod@4.5.1",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/zod/-/zod-4.5.1.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:zod@4.5.1"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40ctrl/tinycolor@4.1.0",
+			"name": "@ctrl/tinycolor",
+			"version": "4.1.0",
+			"description": "Fast, small color manipulation and conversion for JavaScript",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "5b23b1f1c250f8542eb38326e2e3c8640eb881b9375b1874b28e4b7228b468989fab0a153a57c5b68ae32c4d077a7e0e6321d93170d6a8c99a41e981860c4545"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40ctrl/tinycolor@4.1.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@ctrl/tinycolor/-/tinycolor-4.1.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@ctrl/tinycolor@4.1.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40floating-ui/core@1.8.0",
+			"name": "@floating-ui/core",
+			"version": "1.8.0",
+			"description": "Positioning library for floating elements: tooltips, popovers, dropdowns, and more",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "d02219e62b69b3ff31ec11bc744221b39dc1bc2507d8f0a8a20b5a930453badf80ae6e7cb09a2827402e6612f0d87258211e5c30b34f0524bbdbcb0f868da485"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40floating-ui/core@1.8.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@floating-ui/core/-/core-1.8.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@floating-ui/core@1.8.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40floating-ui/dom@1.8.0",
+			"name": "@floating-ui/dom",
+			"version": "1.8.0",
+			"description": "Floating UI for the web",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "c974abcde1d905365a74b3a57f28429091cd78b2671d19d1227c1d678d0bed989a02dac1c28625b03ad7defe7307552d93b08b7f370e5675555a85c4932ec27a"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40floating-ui/dom@1.8.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@floating-ui/dom/-/dom-1.8.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@floating-ui/dom@1.8.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40floating-ui/utils@0.2.12",
+			"name": "@floating-ui/utils",
+			"version": "0.2.12",
+			"description": "Utilities for Floating UI",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "1e90a8f2d996ccb55a779b36775f44840cf9ceaaeb43ab3af6a77a9a83cc42f90eb92c034f562045f59256e7387a79eaae0bf7387a6988e18c43ba02d77c88c3"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40floating-ui/utils@0.2.12",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@floating-ui/utils/-/utils-0.2.12.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@floating-ui/utils@0.2.12"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40konnorr/qr-creator@1.1.0",
+			"name": "@konnorr/qr-creator",
+			"version": "1.1.0",
+			"description": "Lightweight QR code generator for stylish QR codes",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "e807b701f1b8e4c3aa17d41d7bed58c48c4a7ff194b1199cae257b8826ff1da47e324d580c560fdd120d0d1308f33f183165b70674ad84eba35fd46839ec7f2b"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40konnorr/qr-creator@1.1.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@konnorr/qr-creator/-/qr-creator-1.1.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@konnorr/qr-creator@1.1.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40lit-labs/ssr@4.1.0",
+			"name": "@lit-labs/ssr",
+			"version": "4.1.0",
+			"description": "SSR for Lit",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "9b4cf29955651c1d5d74943595ab2db15f11396df08453a21c98553d059dd383271939139545152d072dbb1d509720fd06d2d734dea2012c6fdfcf2f86028c16"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40lit-labs/ssr@4.1.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@lit-labs/ssr/-/ssr-4.1.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@lit-labs/ssr@4.1.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40lit-labs/ssr-client@1.1.8",
+			"name": "@lit-labs/ssr-client",
+			"version": "1.1.8",
+			"description": "Client package for @lit-labs/ssr.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "3e31a1f35a0ab2823ae26dc80e34eaaa3842eddaf6b82fe8d23ae59546f9811032a7f465007c5aa6026b8eaf645b3f7b7da0872d0f235254e2ead1a6fbc7e0c8"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40lit-labs/ssr-client@1.1.8",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@lit-labs/ssr-client/-/ssr-client-1.1.8.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@lit-labs/ssr-client@1.1.8"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40lit-labs/ssr-dom-shim@1.6.0",
+			"name": "@lit-labs/ssr-dom-shim",
+			"version": "1.6.0",
+			"description": "DOM shim for Lit Server Side Rendering (SSR)",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "5476f400b3cc4e580a8cceb2231c6840d9e92b250a2c3d3857379076c89790caa4bd89401f1abd82518b9a06dbf3cf7fd46b288523808ef418a22069a5716aad"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40lit-labs/ssr-dom-shim@1.6.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@lit-labs/ssr-dom-shim/-/ssr-dom-shim-1.6.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@lit-labs/ssr-dom-shim@1.6.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40lit/context@1.1.6",
+			"name": "@lit/context",
+			"version": "1.1.6",
+			"description": "Helpers and controllers for using Context protocol",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "336eaa0c4e949106d9036990dd18c9dc6cddf13c4ffbfd286cc804e477e47cb844132604dc1ba2e00e571e218f8f2d0c506032c41dd0815bb0d9c892d241e7e8"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40lit/context@1.1.6",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@lit/context/-/context-1.1.6.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@lit/context@1.1.6"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40lit/react@1.0.8",
+			"name": "@lit/react",
+			"version": "1.0.8",
+			"description": "A React component wrapper for web components.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "a76f98705f8913aed2457de63252754ca0924ec832395740c1dfe7c69dcdb95d7e09be8c5802db37a9d3ecb778b69998a1f704e6471a498d58041f5ead8fba7f"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40lit/react@1.0.8",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@lit/react/-/react-1.0.8.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@lit/react@1.0.8_@types+react@19.3.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40lit/reactive-element@2.1.2",
+			"name": "@lit/reactive-element",
+			"version": "2.1.2",
+			"description": "A simple low level base class for creating fast, lightweight web components",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "a5b0838953279ded6561421a60d379c2bc105c3b47698b60ed81053de5be870b3a538ed6785bc84865167a43c629638fd7282bb3479fd28d5524c9357b1a2ce4"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40lit/reactive-element@2.1.2",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@lit/reactive-element/-/reactive-element-2.1.2.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@lit/reactive-element@2.1.2"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40modelcontextprotocol/core@2.0.0",
+			"name": "@modelcontextprotocol/core",
+			"version": "2.0.0",
+			"description": "Model Context Protocol for TypeScript — public Zod schemas (spec + OAuth/OpenID)",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "a49084c061bb2dfafff8f429f594f029735e3b9c336df28bec7dcc6290a8acce28141a10add8e7060128a86f918e1b2f4b514aac36cabb1f8cd478659c65aa70"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40modelcontextprotocol/core@2.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@modelcontextprotocol/core/-/core-2.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@modelcontextprotocol/core@2.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40parse5/tools@0.3.0",
+			"name": "@parse5/tools",
+			"version": "0.3.0",
+			"description": "A small set of utilities for dealing with parse5 syntax trees",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "cf14724c792a6fb590315f244cd04a59bd4178e1542970574c15aec60f47f617ef401dc8c0fe88c3653be486b97b24713cd96d998ec4f18025cfacd6c149e32a"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40parse5/tools@0.3.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@parse5/tools/-/tools-0.3.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@parse5/tools@0.3.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40shoelace-style/animations@1.2.0",
+			"name": "@shoelace-style/animations",
+			"version": "1.2.0",
+			"description": "Your favorite animate.css effects available as ES modules for use with the Web Animations API.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "6afbe8d71c642dbbf6760b5a6dd7b005ba9c25f5747b4cc2c05aa43cc9c71466c96c11e8ad115f3001e1d4d1bdca69979f48d6f7989b5151f4dc4d4d6170fa1b"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40shoelace-style/animations@1.2.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@shoelace-style/animations/-/animations-1.2.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@shoelace-style/animations@1.2.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40shoelace-style/localize@3.2.3",
+			"name": "@shoelace-style/localize",
+			"version": "3.2.3",
+			"description": "A micro library for localizing custom elements using Lit's Reactive Controller model.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "a56a19cb08b332295e9cb7d072913d6e36aa8bb58a8905c9078d9cc6f9923f0612efa53befac09ec1e504343f6f32562b75be91ee159cead42b5f545bf7da369"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40shoelace-style/localize@3.2.3",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@shoelace-style/localize/-/localize-3.2.3.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@shoelace-style/localize@3.2.3"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40types/react@19.3.0",
+			"name": "@types/react",
+			"version": "19.3.0",
+			"description": "TypeScript definitions for react",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "374ac50ae1fd628c46f7f9bad65f4c7e924a7e62ce554d1e9bb8a9233e9346049292f45e2c1f6f2fce4607ecabf01b3995eaa9be0f7a252c05e194b5b38be242"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40types/react@19.3.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@types/react@19.3.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/%40types/trusted-types@2.0.7",
+			"name": "@types/trusted-types",
+			"version": "2.0.7",
+			"description": "TypeScript definitions for trusted-types",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "49c68f767d5d41cce06e5d101537933a65471542eddfde17260390368c95859eabdaf2e730b25f04f779dd2079d93ff71b7e95235fe0d8c65a5f47300ee5ec7f"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/%40types/trusted-types@2.0.7",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/@types/trusted-types/-/trusted-types-2.0.7.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:@types/trusted-types@2.0.7"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/composed-offset-position@0.0.6",
+			"name": "composed-offset-position",
+			"version": "0.0.6",
+			"description": "This provides a set of ponyfills to achieve the same behavior of `offsetParent`, `offsetLeft` and `offsetTop` before the `offsetParent` spec was changed.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "43b74ba26a48ea553077b2d6c8870febaaf859c4bdbbb00bda1f0769e8a98917c244f2cc5aa471f1f62c8dbe0e1e2e9440589f3bb5ed342d88944275a33205c7"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/composed-offset-position@0.0.6",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/composed-offset-position/-/composed-offset-position-0.0.6.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:composed-offset-position@0.0.6_@floating-ui+utils@0.2.12"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/cross-spawn@7.0.6",
+			"name": "cross-spawn",
+			"version": "7.0.6",
+			"description": "Cross platform child_process#spawn and child_process#spawnSync",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "b95d903963f69d6ceccb668ca7c69189b862f5d9731791e0879487681f4e893184c834e2249cb1d2ecb9d505ddc966ed00736e6b85c9cd429c6b73b3294777bc"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/cross-spawn@7.0.6",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:cross-spawn@7.0.6"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/csstype@3.2.3",
+			"name": "csstype",
+			"version": "3.2.3",
+			"description": "Strict TypeScript and Flow types for style based on MDN data",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "cf51c629c632db103c00641fc2b9f43c0cbe3c1ed7fc64a3dd45495bda8aca7e37c566be825e675e6538aaa2cc4735952c50bc2aeb145fc4ffd240a2398a4021"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/csstype@3.2.3",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:csstype@3.2.3"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/data-uri-to-buffer@4.0.1",
+			"name": "data-uri-to-buffer",
+			"version": "4.0.1",
+			"description": "Generate a Buffer instance from a Data URI string",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "d11f629116faebc1c1ed00f14f5be4a6e501b6a739dd8c80c0cc0679414a4688d8fcd58abdd67ef5462d45f1a686a35b4644d256931b9b28578a9145bf671bfc"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/data-uri-to-buffer@4.0.1",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/data-uri-to-buffer/-/data-uri-to-buffer-4.0.1.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:data-uri-to-buffer@4.0.1"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/enhanced-resolve@5.24.5",
+			"name": "enhanced-resolve",
+			"version": "5.24.5",
+			"description": "Offers a async require.resolve function. It's highly configurable.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "2f597c4cdbe89a6e94556e41db9dc01b141a81242bfaf1b084c96badf452daa9a1c78e8032931524a4182ef5986f2b13318f15a2270ebf31f3a0731bcb307ee0"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/enhanced-resolve@5.24.5",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/enhanced-resolve/-/enhanced-resolve-5.24.5.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:enhanced-resolve@5.24.5"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/entities@6.0.1",
+			"name": "entities",
+			"version": "6.0.1",
+			"description": "Encode & decode XML and HTML entities with ease & speed",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "68df7b357585e805814da85f54e22b07f352864ce2e47ec5f6bd6cf660f77038f82a8e5fdaa86156860c89b5c5ec694bbde6ff0f68a859acbc97123ded57a7de"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-2-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/entities@6.0.1",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/entities/-/entities-6.0.1.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:entities@6.0.1"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/eventsource@3.0.7",
+			"name": "eventsource",
+			"version": "3.0.7",
+			"description": "WhatWG/W3C compliant EventSource client for Node.js and browsers",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "0914f5593cae4280fbef5196e7a5c464543f66849f5a27756a52860d832692ddb297c517ad5478a6ca6a58d11ca8abd523383a3c096d5a3c5c4923eb6e803888"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/eventsource@3.0.7",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/eventsource/-/eventsource-3.0.7.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:eventsource@3.0.7"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/eventsource-parser@3.1.1",
+			"name": "eventsource-parser",
+			"version": "3.1.1",
+			"description": "Streaming, source-agnostic EventSource/Server-Sent Events parser",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "10a375bca00c719f0c95832968dbb137a47dc9a9331fab9a8c7707553a96273beee695b0f43ca16cfdf91c7f0c54143e7598c07c3c64f80f0d891f4a59a5e2c9"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/eventsource-parser@3.1.1",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/eventsource-parser/-/eventsource-parser-3.1.1.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:eventsource-parser@3.1.1"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/fetch-blob@3.2.0",
+			"name": "fetch-blob",
+			"version": "3.2.0",
+			"description": "Blob & File implementation in Node.js, originally from node-fetch.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "ef2010a43d94309ccb8b50eabfba856273db68fc7b65f14ae8f888c50e0f7e418fc8dca5d94831f9afee994a2798aaa384ce039df6ccbdd5faa2d5eaf37b2841"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/fetch-blob@3.2.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/fetch-blob/-/fetch-blob-3.2.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:fetch-blob@3.2.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/formdata-polyfill@4.0.10",
+			"name": "formdata-polyfill",
+			"version": "4.0.10",
+			"description": "HTML5 `FormData` for Browsers and Node.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "6ee7b01f332f60bdbd8dd7904d520b79c49a64a9edfd12568e8642179396eb467aeff1a648b06438533baa1d4f237cc536d25b6992f9790bb5bcb7daccec23e2"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/formdata-polyfill@4.0.10",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/formdata-polyfill/-/formdata-polyfill-4.0.10.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:formdata-polyfill@4.0.10"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/graceful-fs@4.2.11",
+			"name": "graceful-fs",
+			"version": "4.2.11",
+			"description": "A drop-in replacement for fs, making various improvements.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "45b279fe398570d342703579a3d7939c12c9fc7b33595d0fef76dcf857f89d2feb263f98692e881b288e2f45680585fe9755ab97793ade1fcaac7fa7849d17bd"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "ISC"
+					}
+				}
+			],
+			"purl": "pkg:npm/graceful-fs@4.2.11",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.11.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:graceful-fs@4.2.11"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/isexe@2.0.0",
+			"name": "isexe",
+			"version": "2.0.0",
+			"description": "Minimal module to check if a file is executable.",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "447c4c2e9f659ca1c61d19e0f5016144231b600715a67ebdb2648672addfdfac638155564e18f8aaa2db4cb96aed2b23f01f9f210d44b8210623694ab3241e23"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "ISC"
+					}
+				}
+			],
+			"purl": "pkg:npm/isexe@2.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:isexe@2.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/lit@3.3.3",
+			"name": "lit",
+			"version": "3.3.3",
+			"description": "A library for building fast, lightweight web components",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "7f272ebd983f864a68ccbd34966d691091f99cdfe5afd65777a9892361d2378f81cdcf8b0cd74402927a1c56cf91d14d1cbbcea65208b89bf1912e17531aa2af"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/lit@3.3.3",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/lit/-/lit-3.3.3.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:lit@3.3.3"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/lit-element@4.2.2",
+			"name": "lit-element",
+			"version": "4.2.2",
+			"description": "A simple base class for creating fast, lightweight web components",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "6852a1353a16c68ca190d0e6599c04bdad9295089afa37c6d1f8c8595fff61e4da5ab5673b10fcf5d3ca7e280252ca571668f3384510a4e91e8c7e4bcbab06d3"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/lit-element@4.2.2",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/lit-element/-/lit-element-4.2.2.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:lit-element@4.2.2"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/lit-html@3.3.3",
+			"name": "lit-html",
+			"version": "3.3.3",
+			"description": "HTML templates literals in JavaScript",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "7a5f0cea32b6a37457067ad21d7dd92abb0df33115eb7a521314ced70609cfb427746619f37e777b66b93cf5fea877b66866b27e7721426900a2369601110e20"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:npm/lit-html@3.3.3",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/lit-html/-/lit-html-3.3.3.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:lit-html@3.3.3"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/marked@11.2.0",
+			"name": "marked",
+			"version": "11.2.0",
+			"description": "A markdown parser built for speed",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "1d1d26ddbbeed2300f62222f2d4510b5d83583a0f6e3bfff96f71e9291ced5632f6f00e5c12919017f4bc381786071354f41da68dbded2db805ae575509eafb7"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/marked@11.2.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/marked/-/marked-11.2.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:marked@11.2.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/nanoid@5.1.16",
+			"name": "nanoid",
+			"version": "5.1.16",
+			"description": "A tiny (118 bytes), secure URL-friendly unique string ID generator",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "915ae7b2b26a311f3ea0b2671849925b0f418af2b99adec7dc565ab55463adce701aa158b81c57d721bbf80ec68b901e7e45fab7fa02922cdc420a6ed1c63575"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/nanoid@5.1.16",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/nanoid/-/nanoid-5.1.16.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:nanoid@5.1.16"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/node-domexception@1.0.0",
+			"name": "node-domexception",
+			"version": "1.0.0",
+			"description": "An implementation of the DOMException class from NodeJS",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "fe3299a0ca70d05f06470978fde2d138f03771f717b4b0293f44332e6513fc7b8f0995b207b218f59acc78ac363bf9c522a3d00773d533d6989b4177d760170d"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/node-domexception@1.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/node-domexception/-/node-domexception-1.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:node-domexception@1.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/node-fetch@3.3.2",
+			"name": "node-fetch",
+			"version": "3.3.2",
+			"description": "A light-weight module that brings Fetch API to node.js",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "75107bf2cacdfe5ea0a96ba56a1f52af17989f179d7481b7d3e18ea8affd3a52d5c8b8371cf9ebe92a8e59358e5ca4700b6786602919e7d34db9282f4aba6038"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/node-fetch@3.3.2",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/node-fetch/-/node-fetch-3.3.2.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:node-fetch@3.3.2"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/parse5@7.3.0",
+			"name": "parse5",
+			"version": "7.3.0",
+			"description": "HTML parser and serializer.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "2089ef53b7da6e5df8aa68bd818f17395c61632332b87db150da5bdaaf3f63eef9e762a57a3911beabc3d7d9cca145bfb901866ea36903a4ee7eee452f905983"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/parse5@7.3.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/parse5/-/parse5-7.3.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:parse5@7.3.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/path-key@3.1.1",
+			"name": "path-key",
+			"version": "3.1.1",
+			"description": "Get the PATH environment variable key cross-platform",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "a2399e374a9dfb2d23b3312da18e3caf43deab97703049089423aee90e5fe3595f92cc17b8ab58ae18284e92e7c887079b6e1486ac7ee53aa6d889d2c0b844e9"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/path-key@3.1.1",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:path-key@3.1.1"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/pkce-challenge@5.0.1",
+			"name": "pkce-challenge",
+			"version": "5.0.1",
+			"description": "Generate or verify a Proof Key for Code Exchange (PKCE) challenge pair",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "c10d1bfd6e05af4d6ab691e5a92aaca5c8f712106f8a6b1d8742a51e11fc1d166732c11ad1e6b67d350b397392f5c710af7a26f86706464e1efa2b2b65657ca9"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/pkce-challenge@5.0.1",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/pkce-challenge/-/pkce-challenge-5.0.1.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:pkce-challenge@5.0.1"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/shebang-command@2.0.0",
+			"name": "shebang-command",
+			"version": "2.0.0",
+			"description": "Get the command from a shebang",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "907c6bdb366962d766acdd6a0e3aeb5ff675ad1d641bc0f1fa09292b51b87979af5ecc26704d614d6056614ce5ada630d7fc99a7a62e0d8efb62dbdb3747660c"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/shebang-command@2.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:shebang-command@2.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/shebang-regex@3.0.0",
+			"name": "shebang-regex",
+			"version": "3.0.0",
+			"description": "Regular expression for matching a shebang line",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "efef9d161b5cc77df9dee05aabc0c347836ec417ad0730bb6503a19934089c711de9b4ab5dd884cb30af1b4ed9e3851874b4a1594c97b7933fca1cfc7a471bd4"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/shebang-regex@3.0.0",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:shebang-regex@3.0.0"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/tapable@2.3.3",
+			"name": "tapable",
+			"version": "2.3.3",
+			"description": "Just a little module for plugins.",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "bb173fce9a8583ac7b0bcbce13b961e8b6dd6bc7842fdce6566fcf2de4cf051861d710a0756690f89d42522786a487e6d8776db14a51bfe1ec8626ac04c71ce8"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/tapable@2.3.3",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/tapable/-/tapable-2.3.3.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:tapable@2.3.3"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/web-streams-polyfill@3.3.3",
+			"name": "web-streams-polyfill",
+			"version": "3.3.3",
+			"description": "Web Streams, based on the WHATWG spec reference implementation",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "7762562c28af999613488a207bd32c805099aede7bd418a47161989230b59219656d3783946a99d83f2f0fc13f9496bc58659b6fb3e59bcfd725857b2091d967"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:npm/web-streams-polyfill@3.3.3",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-3.3.3.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "web-bundle"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:web-streams-polyfill@3.3.3"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:npm/which@2.0.2",
+			"name": "which",
+			"version": "2.0.2",
+			"description": "Like which(1) unix command. Find the first instance of an executable in the PATH.",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-512",
+					"content": "04b2374e5d535b73ef97bd25df2ab763ae22f9ac29c17aac181616924a8cb676d782b303fb28fbae15b492e103c7325a6171a3116e6881aa4a34c10a34c8e26c"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "ISC"
+					}
+				}
+			],
+			"purl": "pkg:npm/which@2.0.2",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://registry.npmjs.org/which/-/which-2.0.2.tgz"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "npm"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "npm:which@2.0.2"
+				},
+				{
+					"name": "tykotech:license-source",
+					"value": "package.json in the Deno npm cache"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/assert@1.0.19?repository_url=https://jsr.io",
+			"name": "@std/assert",
+			"version": "1.0.19",
+			"description": "Assertion functions for tests",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/assert@1.0.19?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/assert/1.0.19"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/assert@1.0.19"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/async@1.5.0?repository_url=https://jsr.io",
+			"name": "@std/async",
+			"version": "1.5.0",
+			"description": "Delays, deadlines, debounce, retry and pooling",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "4c1f22d287a17ad7d8643b1952bc5a4d21e5d8b68dc8c20d8268eecc69096e82"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/async@1.5.0?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/async/1.5.0"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/async@1.5.0"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/cli@1.0.32?repository_url=https://jsr.io",
+			"name": "@std/cli",
+			"version": "1.0.32",
+			"description": "Command-line argument parsing",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "188b3a100d6202d64e3f5bd3d799c7fa4f6d77f92cc65eb7f641c1fa0aa92a66"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/cli@1.0.32?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/cli/1.0.32"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/cli@1.0.32"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/crypto@1.1.0?repository_url=https://jsr.io",
+			"name": "@std/crypto",
+			"version": "1.1.0",
+			"description": "Web Crypto extensions, including timing-safe comparison",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "b8d6d0a6377a32b213af2661ed7bf1062d94feac0c57def5526a8e74a95c3ec8"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/crypto@1.1.0?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/crypto/1.1.0"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/crypto@1.1.0"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/encoding@1.0.11?repository_url=https://jsr.io",
+			"name": "@std/encoding",
+			"version": "1.0.11",
+			"description": "Base64, hex and other encoders",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "e7cef2f0b3153bccc17431e7c864a1de03a4b6d9647389c43e08aaa775d37385"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/encoding@1.0.11?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/encoding/1.0.11"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/encoding@1.0.11"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/expect@1.0.20?repository_url=https://jsr.io",
+			"name": "@std/expect",
+			"version": "1.0.20",
+			"description": "Jest-compatible expect API for tests",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "ffc4f3c33f732417e3e9acf3d995818c89984313c37d933b9ebbb4571d2887e9"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/expect@1.0.20?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/expect/1.0.20"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/expect@1.0.20"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+			"name": "@std/fs",
+			"version": "1.0.24",
+			"description": "File-system helpers",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/fs/1.0.24"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/fs@1.0.24"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Imported directly only by tests; reached at runtime through @std/http."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/http@1.1.3?repository_url=https://jsr.io",
+			"name": "@std/http",
+			"version": "1.1.3",
+			"description": "HTTP utilities, including static file serving",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "73a98e05ff58aa18bea562d286172e6c815b1eddd4fcab194beda19e3683b88c"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/http@1.1.3?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/http/1.1.3"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/http@1.1.3"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/log@0.224.14?repository_url=https://jsr.io",
+			"name": "@std/log",
+			"version": "0.224.14",
+			"description": "Structured logging",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "257f7adceee3b53bb2bc86c7242e7d1bc59729e57d4981c4a7e5b876c808f05e"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/log@0.224.14?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/log/0.224.14"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "unused"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/log@0.224.14"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Declared in the deno.json import map; no module imports it."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io",
+			"name": "@std/path",
+			"version": "1.1.6",
+			"description": "Path manipulation",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "c68485c2a4dfbb5ae3cc74fae4e8c4e5d874cf8a8ed12927917235c758b46cbe"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/path/1.1.6"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/path@1.1.6"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/streams@1.1.2?repository_url=https://jsr.io",
+			"name": "@std/streams",
+			"version": "1.1.2",
+			"description": "Web stream utilities",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "0249bf9b78a999f57032ca4d8e7ccaa57579090242640b35ddc948fbb745d3af"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/streams@1.1.2?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/streams/1.1.2"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/streams@1.1.2"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Declared in the deno.json import map; reached at runtime only through @std/http."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/testing@1.0.20?repository_url=https://jsr.io",
+			"name": "@std/testing",
+			"version": "1.0.20",
+			"description": "BDD, mocking, snapshot and fake-time test helpers",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "21380ed438672762e4ec549cbf4fe41c5b68f5598773a30b64abe7375513e721"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/testing@1.0.20?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/testing/1.0.20"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/testing@1.0.20"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/ulid@1.0.0?repository_url=https://jsr.io",
+			"name": "@std/ulid",
+			"version": "1.0.0",
+			"description": "ULID generation",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "d41c3d27a907714413649fee864b7cde8d42ee68437d22b79d5de4f81d808780"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/ulid@1.0.0?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/ulid/1.0.0"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/ulid@1.0.0"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/uuid@1.1.1?repository_url=https://jsr.io",
+			"name": "@std/uuid",
+			"version": "1.1.1",
+			"description": "UUID generation and validation",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "7b49060282d90f72fec64952f8c7a2914cbe6fdba3eca665f8cedc90830154a7"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/uuid@1.1.1?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/uuid/1.1.1"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "direct"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/uuid@1.1.1"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/bytes@1.0.6?repository_url=https://jsr.io",
+			"name": "@std/bytes",
+			"version": "1.0.6",
+			"description": "Byte-slice utilities",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/bytes@1.0.6?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/bytes/1.0.6"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/bytes@1.0.6"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/data-structures@1.1.2?repository_url=https://jsr.io",
+			"name": "@std/data-structures",
+			"version": "1.1.2",
+			"description": "Heaps, trees and other data structures",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "2471377c9e0051f9ec34e57d0ebd0ad133a5a889677446ec6ba9938e4e102918"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/data-structures@1.1.2?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/data-structures/1.1.2"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/data-structures@1.1.2"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/fmt@1.0.10?repository_url=https://jsr.io",
+			"name": "@std/fmt",
+			"version": "1.0.10",
+			"description": "Text and colour formatting",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "90dfba288802ac6de82fb31d0917eb9e4450b9925b954d5e51fc29ac07419db5"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/fmt@1.0.10?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/fmt/1.0.10"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/fmt@1.0.10"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/html@1.0.7?repository_url=https://jsr.io",
+			"name": "@std/html",
+			"version": "1.0.7",
+			"description": "HTML escaping",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "175c818905a6e75743c69c251395e273d82698e58cfe7dd76268d70e28b8d8fe"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/html@1.0.7?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/html/1.0.7"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/html@1.0.7"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io",
+			"name": "@std/internal",
+			"version": "1.0.14",
+			"description": "Internal helpers shared by the standard library",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/internal/1.0.14"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime, test-only"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/internal@1.0.14"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/io@0.225.3?repository_url=https://jsr.io",
+			"name": "@std/io",
+			"version": "0.225.3",
+			"description": "Reader and writer utilities",
+			"scope": "optional",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "27b07b591384d12d7b568f39e61dff966b8230559122df1e9fd11cc068f7ddd1"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/io@0.225.3?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/io/0.225.3"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "unused"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/io@0.225.3"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/media-types@1.1.0?repository_url=https://jsr.io",
+			"name": "@std/media-types",
+			"version": "1.1.0",
+			"description": "MIME type lookup",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "c9d093f0c05c3512932b330e3cc1fe1d627b301db33a4c2c2185c02471d6eaa4"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/media-types@1.1.0?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/media-types/1.1.0"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/media-types@1.1.0"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:generic/%40std/net@1.0.6?repository_url=https://jsr.io",
+			"name": "@std/net",
+			"version": "1.0.6",
+			"description": "Network helpers",
+			"scope": "required",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "110735f93e95bb9feb95790a8b1d1bf69ec0dc74f3f97a00a76ea5efea25500c"
+				}
+			],
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:generic/%40std/net@1.0.6?repository_url=https://jsr.io",
+			"externalReferences": [
+				{
+					"type": "distribution",
+					"url": "https://jsr.io/@std/net/1.0.6"
+				}
+			],
+			"properties": [
+				{
+					"name": "tykotech:ecosystem",
+					"value": "jsr"
+				},
+				{
+					"name": "tykotech:dependency",
+					"value": "transitive"
+				},
+				{
+					"name": "tykotech:usage",
+					"value": "runtime"
+				},
+				{
+					"name": "tykotech:lock-key",
+					"value": "jsr:@std/net@1.0.6"
+				},
+				{
+					"name": "tykotech:hash-subject",
+					"value": "JSR version manifest (deno.lock integrity)"
+				}
+			]
+		},
+		{
+			"type": "platform",
+			"bom-ref": "pkg:github/denoland/deno@v2.9.7",
+			"name": "deno",
+			"version": "2.9.7",
+			"description": "Deno JavaScript and TypeScript runtime",
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:github/denoland/deno@v2.9.7",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-agent-runner:0.2.0 (docker/Dockerfile.agent-runner)"
+				},
+				{
+					"name": "tykotech:note",
+					"value": "Runtime in the bundled, sandbox and agent-runner images; embedded in the compiled binary of the slim image; the binary copied into the sandbox-workspace image. One release for every image and for CI."
+				}
+			]
+		},
+		{
+			"type": "container",
+			"bom-ref": "pkg:docker/denoland/deno@2.9.7",
+			"name": "denoland/deno",
+			"version": "2.9.7",
+			"description": "Base image denoland/deno:2.9.7, pinned by digest sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432 (the multi-architecture index, the same as debian-2.9.7)",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432"
+				}
+			],
+			"purl": "pkg:docker/denoland/deno@2.9.7",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile): build and runtime stages"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim): build stage only"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox): runtime"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-agent-runner:0.2.0 (docker/Dockerfile.agent-runner): runtime"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace): source of the Deno binary only"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "tag and digest sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432"
+				}
+			]
+		},
+		{
+			"type": "container",
+			"bom-ref": "pkg:docker/debian@stable-slim",
+			"name": "debian",
+			"version": "stable-slim",
+			"description": "Base image debian:stable-slim, pinned by digest sha256:5bc3287b25407c965a30f38e32603dc253a3869e1b12a21ac09bfc27fd8b13ce",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "5bc3287b25407c965a30f38e32603dc253a3869e1b12a21ac09bfc27fd8b13ce"
+				}
+			],
+			"purl": "pkg:docker/debian@stable-slim",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim): runtime stage"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "tag and digest sha256:5bc3287b25407c965a30f38e32603dc253a3869e1b12a21ac09bfc27fd8b13ce"
+				}
+			]
+		},
+		{
+			"type": "container",
+			"bom-ref": "pkg:docker/debian@trixie-slim",
+			"name": "debian",
+			"version": "trixie-slim",
+			"description": "Base image debian:trixie-slim, pinned by digest sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a",
+			"hashes": [
+				{
+					"alg": "SHA-256",
+					"content": "a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a"
+				}
+			],
+			"purl": "pkg:docker/debian@trixie-slim",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace): runtime stage"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "tag and digest sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a"
+				}
+			]
+		},
+		{
+			"type": "operating-system",
+			"bom-ref": "os:debian",
+			"name": "debian",
+			"description": "Debian GNU/Linux userland of every base image; each release is fixed by its pinned digest",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-agent-runner:0.2.0 (docker/Dockerfile.agent-runner)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/chromium",
+			"name": "chromium",
+			"description": "Chromium web browser driven over CDP",
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/chromium",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "upstream primary license; per-file terms are in /usr/share/doc/<package>/copyright in the image"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/chromium-sandbox",
+			"name": "chromium-sandbox",
+			"description": "Chromium setuid sandbox helper",
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/chromium-sandbox",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "upstream primary license; per-file terms are in /usr/share/doc/<package>/copyright in the image"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:deb/debian/fonts-liberation",
+			"name": "fonts-liberation",
+			"description": "Liberation fonts for page rendering",
+			"licenses": [
+				{
+					"license": {
+						"name": "NOASSERTION"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/fonts-liberation",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "Debian ships Liberation 1.x (GPL-2.0 with font exception) or 2.x (OFL-1.1) depending on the release the untagged base resolves to"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "pkg:deb/debian/ca-certificates",
+			"name": "ca-certificates",
+			"description": "Mozilla CA certificate bundle",
+			"licenses": [
+				{
+					"expression": "GPL-2.0-or-later AND MPL-2.0"
+				}
+			],
+			"purl": "pkg:deb/debian/ca-certificates",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "MPL-2.0 certificate data; GPL-2.0-or-later Debian scripts"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/dumb-init",
+			"name": "dumb-init",
+			"description": "PID 1 init that reaps the Chromium process tree",
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/dumb-init",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/ffmpeg",
+			"name": "ffmpeg",
+			"description": "Encoder for session recording",
+			"licenses": [
+				{
+					"expression": "LGPL-2.1-or-later AND GPL-2.0-or-later"
+				}
+			],
+			"purl": "pkg:deb/debian/ffmpeg",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:0.2.0 (Dockerfile)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-mcp:slim (Dockerfile.slim)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "LGPL-2.1-or-later upstream; Debian builds with --enable-gpl"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/bubblewrap",
+			"name": "bubblewrap",
+			"description": "Unprivileged sandbox for code cages",
+			"licenses": [
+				{
+					"license": {
+						"id": "LGPL-2.0-or-later"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/bubblewrap",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/socat",
+			"name": "socat",
+			"description": "Socket relay for the cage proxy",
+			"licenses": [
+				{
+					"license": {
+						"id": "GPL-2.0-only"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/socat",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "GPL-2.0-only with an OpenSSL linking exception"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/git",
+			"name": "git",
+			"description": "Version control inside workspaces",
+			"licenses": [
+				{
+					"license": {
+						"id": "GPL-2.0-only"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/git",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "upstream primary license; per-file terms are in /usr/share/doc/<package>/copyright in the image"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/python3",
+			"name": "python3",
+			"description": "Python interpreter for workspaces",
+			"licenses": [
+				{
+					"license": {
+						"id": "Python-2.0"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/python3",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/python3-pip",
+			"name": "python3-pip",
+			"description": "Python package installer",
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/python3-pip",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/nodejs",
+			"name": "nodejs",
+			"description": "Node.js runtime for workspaces",
+			"licenses": [
+				{
+					"license": {
+						"id": "MIT"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/nodejs",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "upstream primary license; per-file terms are in /usr/share/doc/<package>/copyright in the image"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/npm",
+			"name": "npm",
+			"description": "Node package manager",
+			"licenses": [
+				{
+					"license": {
+						"id": "Artistic-2.0"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/npm",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/curl",
+			"name": "curl",
+			"description": "HTTP client",
+			"licenses": [
+				{
+					"license": {
+						"id": "curl"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/curl",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/util-linux",
+			"name": "util-linux",
+			"description": "setsid, kill and other system utilities",
+			"licenses": [
+				{
+					"license": {
+						"id": "GPL-2.0-or-later"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/util-linux",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox:0.2.0 (docker/Dockerfile.sandbox)"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-agent-runner:0.2.0 (docker/Dockerfile.agent-runner)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "upstream primary license; per-file terms are in /usr/share/doc/<package>/copyright in the image"
+				},
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-sandbox-workspace:0.2.0 (docker/Dockerfile.sandbox-workspace)"
+				}
+			]
+		},
+		{
+			"type": "application",
+			"bom-ref": "pkg:deb/debian/procps",
+			"name": "procps",
+			"description": "Process inspection utilities",
+			"licenses": [
+				{
+					"license": {
+						"id": "GPL-2.0-or-later"
+					}
+				}
+			],
+			"purl": "pkg:deb/debian/procps",
+			"properties": [
+				{
+					"name": "tykotech:image",
+					"value": "tykotech-agent-runner:0.2.0 (docker/Dockerfile.agent-runner)"
+				},
+				{
+					"name": "tykotech:pinning",
+					"value": "unversioned apt install; version is whatever the base release carries at build time"
+				},
+				{
+					"name": "tykotech:license-basis",
+					"value": "upstream primary license; per-file terms are in /usr/share/doc/<package>/copyright in the image"
+				}
+			]
+		}
+	],
+	"dependencies": [
+		{
+			"ref": "pkg:generic/tykotech-mcp@0.2.0",
+			"dependsOn": [
+				"pkg:npm/%40awesome.me/webawesome@3.14.0",
+				"pkg:npm/%40modelcontextprotocol/client@2.0.0",
+				"pkg:npm/%40modelcontextprotocol/hono@2.0.0",
+				"pkg:npm/%40modelcontextprotocol/server@2.0.0",
+				"pkg:npm/hono@4.13.5",
+				"pkg:npm/jose@6.2.10",
+				"pkg:npm/lucide-static@1.49.0",
+				"pkg:npm/zod@4.5.1",
+				"pkg:generic/%40std/assert@1.0.19?repository_url=https://jsr.io",
+				"pkg:generic/%40std/async@1.5.0?repository_url=https://jsr.io",
+				"pkg:generic/%40std/cli@1.0.32?repository_url=https://jsr.io",
+				"pkg:generic/%40std/crypto@1.1.0?repository_url=https://jsr.io",
+				"pkg:generic/%40std/encoding@1.0.11?repository_url=https://jsr.io",
+				"pkg:generic/%40std/expect@1.0.20?repository_url=https://jsr.io",
+				"pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+				"pkg:generic/%40std/http@1.1.3?repository_url=https://jsr.io",
+				"pkg:generic/%40std/log@0.224.14?repository_url=https://jsr.io",
+				"pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io",
+				"pkg:generic/%40std/streams@1.1.2?repository_url=https://jsr.io",
+				"pkg:generic/%40std/testing@1.0.20?repository_url=https://jsr.io",
+				"pkg:generic/%40std/ulid@1.0.0?repository_url=https://jsr.io",
+				"pkg:generic/%40std/uuid@1.1.1?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40awesome.me/webawesome@3.14.0",
+			"dependsOn": [
+				"pkg:npm/%40ctrl/tinycolor@4.1.0",
+				"pkg:npm/%40floating-ui/dom@1.8.0",
+				"pkg:npm/%40floating-ui/utils@0.2.12",
+				"pkg:npm/%40konnorr/qr-creator@1.1.0",
+				"pkg:npm/%40lit-labs/ssr@4.1.0",
+				"pkg:npm/%40lit-labs/ssr-client@1.1.8",
+				"pkg:npm/%40lit/context@1.1.6",
+				"pkg:npm/%40lit/react@1.0.8",
+				"pkg:npm/%40shoelace-style/animations@1.2.0",
+				"pkg:npm/%40shoelace-style/localize@3.2.3",
+				"pkg:npm/%40types/react@19.3.0",
+				"pkg:npm/composed-offset-position@0.0.6",
+				"pkg:npm/lit@3.3.3",
+				"pkg:npm/marked@11.2.0",
+				"pkg:npm/nanoid@5.1.16"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40modelcontextprotocol/client@2.0.0",
+			"dependsOn": [
+				"pkg:npm/%40modelcontextprotocol/core@2.0.0",
+				"pkg:npm/cross-spawn@7.0.6",
+				"pkg:npm/eventsource@3.0.7",
+				"pkg:npm/eventsource-parser@3.1.1",
+				"pkg:npm/jose@6.2.10",
+				"pkg:npm/pkce-challenge@5.0.1",
+				"pkg:npm/zod@4.5.1"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40modelcontextprotocol/hono@2.0.0",
+			"dependsOn": [
+				"pkg:npm/%40modelcontextprotocol/server@2.0.0",
+				"pkg:npm/hono@4.13.5"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40modelcontextprotocol/server@2.0.0",
+			"dependsOn": [
+				"pkg:npm/%40modelcontextprotocol/core@2.0.0",
+				"pkg:npm/zod@4.5.1"
+			]
+		},
+		{
+			"ref": "pkg:npm/hono@4.13.5",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/jose@6.2.10",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/lucide-static@1.49.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/zod@4.5.1",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40ctrl/tinycolor@4.1.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40floating-ui/core@1.8.0",
+			"dependsOn": [
+				"pkg:npm/%40floating-ui/utils@0.2.12"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40floating-ui/dom@1.8.0",
+			"dependsOn": [
+				"pkg:npm/%40floating-ui/core@1.8.0",
+				"pkg:npm/%40floating-ui/utils@0.2.12"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40floating-ui/utils@0.2.12",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40konnorr/qr-creator@1.1.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40lit-labs/ssr@4.1.0",
+			"dependsOn": [
+				"pkg:npm/%40lit-labs/ssr-client@1.1.8",
+				"pkg:npm/%40lit-labs/ssr-dom-shim@1.6.0",
+				"pkg:npm/%40lit/reactive-element@2.1.2",
+				"pkg:npm/%40parse5/tools@0.3.0",
+				"pkg:npm/enhanced-resolve@5.24.5",
+				"pkg:npm/lit@3.3.3",
+				"pkg:npm/lit-element@4.2.2",
+				"pkg:npm/lit-html@3.3.3",
+				"pkg:npm/node-fetch@3.3.2",
+				"pkg:npm/parse5@7.3.0"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40lit-labs/ssr-client@1.1.8",
+			"dependsOn": [
+				"pkg:npm/%40lit/reactive-element@2.1.2",
+				"pkg:npm/lit@3.3.3",
+				"pkg:npm/lit-html@3.3.3"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40lit-labs/ssr-dom-shim@1.6.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40lit/context@1.1.6",
+			"dependsOn": [
+				"pkg:npm/%40lit/reactive-element@2.1.2"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40lit/react@1.0.8",
+			"dependsOn": [
+				"pkg:npm/%40types/react@19.3.0"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40lit/reactive-element@2.1.2",
+			"dependsOn": [
+				"pkg:npm/%40lit-labs/ssr-dom-shim@1.6.0"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40modelcontextprotocol/core@2.0.0",
+			"dependsOn": [
+				"pkg:npm/zod@4.5.1"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40parse5/tools@0.3.0",
+			"dependsOn": [
+				"pkg:npm/parse5@7.3.0"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40shoelace-style/animations@1.2.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40shoelace-style/localize@3.2.3",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/%40types/react@19.3.0",
+			"dependsOn": [
+				"pkg:npm/csstype@3.2.3"
+			]
+		},
+		{
+			"ref": "pkg:npm/%40types/trusted-types@2.0.7",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/composed-offset-position@0.0.6",
+			"dependsOn": [
+				"pkg:npm/%40floating-ui/utils@0.2.12"
+			]
+		},
+		{
+			"ref": "pkg:npm/cross-spawn@7.0.6",
+			"dependsOn": [
+				"pkg:npm/path-key@3.1.1",
+				"pkg:npm/shebang-command@2.0.0",
+				"pkg:npm/which@2.0.2"
+			]
+		},
+		{
+			"ref": "pkg:npm/csstype@3.2.3",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/data-uri-to-buffer@4.0.1",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/enhanced-resolve@5.24.5",
+			"dependsOn": [
+				"pkg:npm/graceful-fs@4.2.11",
+				"pkg:npm/tapable@2.3.3"
+			]
+		},
+		{
+			"ref": "pkg:npm/entities@6.0.1",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/eventsource@3.0.7",
+			"dependsOn": [
+				"pkg:npm/eventsource-parser@3.1.1"
+			]
+		},
+		{
+			"ref": "pkg:npm/eventsource-parser@3.1.1",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/fetch-blob@3.2.0",
+			"dependsOn": [
+				"pkg:npm/node-domexception@1.0.0",
+				"pkg:npm/web-streams-polyfill@3.3.3"
+			]
+		},
+		{
+			"ref": "pkg:npm/formdata-polyfill@4.0.10",
+			"dependsOn": [
+				"pkg:npm/fetch-blob@3.2.0"
+			]
+		},
+		{
+			"ref": "pkg:npm/graceful-fs@4.2.11",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/isexe@2.0.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/lit@3.3.3",
+			"dependsOn": [
+				"pkg:npm/%40lit/reactive-element@2.1.2",
+				"pkg:npm/lit-element@4.2.2",
+				"pkg:npm/lit-html@3.3.3"
+			]
+		},
+		{
+			"ref": "pkg:npm/lit-element@4.2.2",
+			"dependsOn": [
+				"pkg:npm/%40lit-labs/ssr-dom-shim@1.6.0",
+				"pkg:npm/%40lit/reactive-element@2.1.2",
+				"pkg:npm/lit-html@3.3.3"
+			]
+		},
+		{
+			"ref": "pkg:npm/lit-html@3.3.3",
+			"dependsOn": [
+				"pkg:npm/%40types/trusted-types@2.0.7"
+			]
+		},
+		{
+			"ref": "pkg:npm/marked@11.2.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/nanoid@5.1.16",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/node-domexception@1.0.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/node-fetch@3.3.2",
+			"dependsOn": [
+				"pkg:npm/data-uri-to-buffer@4.0.1",
+				"pkg:npm/fetch-blob@3.2.0",
+				"pkg:npm/formdata-polyfill@4.0.10"
+			]
+		},
+		{
+			"ref": "pkg:npm/parse5@7.3.0",
+			"dependsOn": [
+				"pkg:npm/entities@6.0.1"
+			]
+		},
+		{
+			"ref": "pkg:npm/path-key@3.1.1",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/pkce-challenge@5.0.1",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/shebang-command@2.0.0",
+			"dependsOn": [
+				"pkg:npm/shebang-regex@3.0.0"
+			]
+		},
+		{
+			"ref": "pkg:npm/shebang-regex@3.0.0",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/tapable@2.3.3",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/web-streams-polyfill@3.3.3",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:npm/which@2.0.2",
+			"dependsOn": [
+				"pkg:npm/isexe@2.0.0"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/assert@1.0.19?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/async@1.5.0?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/data-structures@1.1.2?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/cli@1.0.32?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/fmt@1.0.10?repository_url=https://jsr.io",
+				"pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/crypto@1.1.0?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/encoding@1.0.11?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/expect@1.0.20?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/assert@1.0.19?repository_url=https://jsr.io",
+				"pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io",
+				"pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io",
+				"pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/http@1.1.3?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/cli@1.0.32?repository_url=https://jsr.io",
+				"pkg:generic/%40std/encoding@1.0.11?repository_url=https://jsr.io",
+				"pkg:generic/%40std/fmt@1.0.10?repository_url=https://jsr.io",
+				"pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+				"pkg:generic/%40std/html@1.0.7?repository_url=https://jsr.io",
+				"pkg:generic/%40std/media-types@1.1.0?repository_url=https://jsr.io",
+				"pkg:generic/%40std/net@1.0.6?repository_url=https://jsr.io",
+				"pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io",
+				"pkg:generic/%40std/streams@1.1.2?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/log@0.224.14?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/fmt@1.0.10?repository_url=https://jsr.io",
+				"pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+				"pkg:generic/%40std/io@0.225.3?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/streams@1.1.2?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/bytes@1.0.6?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/testing@1.0.20?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/assert@1.0.19?repository_url=https://jsr.io",
+				"pkg:generic/%40std/async@1.5.0?repository_url=https://jsr.io",
+				"pkg:generic/%40std/data-structures@1.1.2?repository_url=https://jsr.io",
+				"pkg:generic/%40std/fs@1.0.24?repository_url=https://jsr.io",
+				"pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io",
+				"pkg:generic/%40std/path@1.1.6?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/ulid@1.0.0?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/uuid@1.1.1?repository_url=https://jsr.io",
+			"dependsOn": [
+				"pkg:generic/%40std/bytes@1.0.6?repository_url=https://jsr.io",
+				"pkg:generic/%40std/crypto@1.1.0?repository_url=https://jsr.io"
+			]
+		},
+		{
+			"ref": "pkg:generic/%40std/bytes@1.0.6?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/data-structures@1.1.2?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/fmt@1.0.10?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/html@1.0.7?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/internal@1.0.14?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/io@0.225.3?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/media-types@1.1.0?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:generic/%40std/net@1.0.6?repository_url=https://jsr.io",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:github/denoland/deno@v2.9.7",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:docker/denoland/deno@2.9.7",
+			"dependsOn": [
+				"pkg:github/denoland/deno@v2.9.7",
+				"os:debian",
+				"pkg:deb/debian/chromium",
+				"pkg:deb/debian/chromium-sandbox",
+				"pkg:deb/debian/fonts-liberation",
+				"pkg:deb/debian/ca-certificates",
+				"pkg:deb/debian/dumb-init",
+				"pkg:deb/debian/ffmpeg",
+				"pkg:deb/debian/bubblewrap",
+				"pkg:deb/debian/socat",
+				"pkg:deb/debian/git",
+				"pkg:deb/debian/python3",
+				"pkg:deb/debian/python3-pip",
+				"pkg:deb/debian/nodejs",
+				"pkg:deb/debian/npm",
+				"pkg:deb/debian/curl",
+				"pkg:deb/debian/util-linux",
+				"pkg:deb/debian/procps"
+			]
+		},
+		{
+			"ref": "pkg:docker/debian@stable-slim",
+			"dependsOn": [
+				"os:debian",
+				"pkg:deb/debian/chromium",
+				"pkg:deb/debian/chromium-sandbox",
+				"pkg:deb/debian/fonts-liberation",
+				"pkg:deb/debian/ca-certificates",
+				"pkg:deb/debian/dumb-init",
+				"pkg:deb/debian/ffmpeg"
+			]
+		},
+		{
+			"ref": "pkg:docker/debian@trixie-slim",
+			"dependsOn": [
+				"pkg:github/denoland/deno@v2.9.7",
+				"os:debian",
+				"pkg:deb/debian/socat",
+				"pkg:deb/debian/git",
+				"pkg:deb/debian/python3",
+				"pkg:deb/debian/python3-pip",
+				"pkg:deb/debian/nodejs",
+				"pkg:deb/debian/npm",
+				"pkg:deb/debian/curl",
+				"pkg:deb/debian/ca-certificates",
+				"pkg:deb/debian/util-linux"
+			]
+		},
+		{
+			"ref": "os:debian",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/chromium",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/chromium-sandbox",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/fonts-liberation",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/ca-certificates",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/dumb-init",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/ffmpeg",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/bubblewrap",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/socat",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/git",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/python3",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/python3-pip",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/nodejs",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/npm",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/curl",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/util-linux",
+			"dependsOn": []
+		},
+		{
+			"ref": "pkg:deb/debian/procps",
+			"dependsOn": []
+		}
+	]
+}

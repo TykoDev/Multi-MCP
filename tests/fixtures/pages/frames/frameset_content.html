@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+The content child of frameset_statbank_shape.html, and the document acceptance criterion 1 is about.
+
+BIL51-SENTINEL-9F2A lives in the <table>'s <caption>. It is unique in the whole corpus: a
+browser_get_html that returns it has provably read THIS document, and a default browser_get_html on
+the frameset shell must not contain it. The 2024M12 period cell and the numeric data are shaped like
+the statbank.dk BIL51 table on purpose - S5 replays the live site and must assert the same three
+things (a table label, a period and numeric data) in the captured bytes, so the shape is pinned here
+where it can be tested offline.
+
+The nested same-origin <iframe> is criterion 2a's depth-2 case: a frame inside a frameset child is
+still reachable, and reading it returns only ITS document.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BIL51</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:13px/1.4 monospace;background:#fff;color:#000}
+main{padding:8px}
+table{border-collapse:collapse;margin-bottom:12px}
+th,td{border:1px solid #666;padding:2px 6px;text-align:left}
+iframe{border:1px solid #333;width:380px;height:90px;display:block}
+</style>
+</head>
+<body>
+<main>
+<table id="bil51">
+<caption>BIL51-SENTINEL-9F2A</caption>
+<thead>
+<tr><th scope="col">Period</th><th scope="col">Passenger cars</th><th scope="col">Lorries</th></tr>
+</thead>
+<tbody>
+<tr><th scope="row">2024M10</th><td>2812444</td><td>417392</td></tr>
+<tr><th scope="row">2024M11</th><td>2818107</td><td>418004</td></tr>
+<tr><th scope="row">2024M12</th><td>2823961</td><td>418655</td></tr>
+</tbody>
+</table>
+<button id="content-export" type="button">Export</button>
+<iframe id="frameset-nested" title="nested note" src="frameset_nested.html"></iframe>
+</main>
+</body>
+</html>

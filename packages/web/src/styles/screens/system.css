@@ -1,0 +1,1714 @@
+/* System (D-149): three page tabs — Overview (the metrics strip, the capabilities grouped beside Network over Process),
+ * MCP (Tool access beside Events, then Protocol and the live-view origins across the width) and Configuration (a
+ * filter bar over the settings in section cards, in columns) — plus the Raw modal and the configuration composer
+ * drawer (run model-providers-ui). Owned by screen agent D (D-089). Every colour is a token. */
+
+/* --- stat strip: the heap metric's glyph is a progress ring, sized like the other glyphs --- */
+
+.sys-tiles .meter-ring {
+	width: 30px;
+	height: 30px;
+}
+.sys-tiles .meter-ring .icon {
+	width: 14px;
+	height: 14px;
+}
+.sys-ring {
+	--ring: var(--ttk-agent);
+}
+.sys-ring.hot {
+	--ring: var(--ttk-danger);
+}
+
+/* --- the tab grids: one column on a narrow screen. Overview puts the capabilities beside a side column (Network over
+ * Process); MCP pairs Tool access with Events on a 12-column grid, then Protocol and the origins take full rows. --- */
+
+.sys-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
+	gap: 16px;
+	min-width: 0;
+}
+.sys-slot {
+	display: contents;
+}
+.sys-side {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	min-width: 0;
+}
+.sys-slot > .skeleton-group {
+	grid-column: 1 / -1;
+}
+@media (min-width: 1100px) {
+	.sys-overview {
+		grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+	}
+	.sys-mcp {
+		grid-template-columns: repeat(12, minmax(0, 1fr));
+		align-items: stretch;
+	}
+	.sys-mcp wa-card.sys-tools-panel {
+		grid-column: span 7;
+	}
+	.sys-mcp wa-card.sys-events-panel {
+		grid-column: span 5;
+	}
+	.sys-mcp wa-card.sys-protocol-panel,
+	.sys-mcp wa-card.sys-origins-panel,
+	.sys-mcp > .sys-slot > p {
+		grid-column: 1 / -1;
+	}
+}
+.sys-grid wa-card.panel {
+	min-width: 0;
+	animation: sys-rise 0.35s var(--ttk-ease) both;
+}
+.sys-grid wa-card.panel::part(base) {
+	height: 100%;
+}
+/* The heads carry a faint wash of the brand, so each panel reads as a titled card rather than a box of rows. */
+.sys-grid wa-card.panel::part(header) {
+	background: linear-gradient(100deg, color-mix(in oklab, var(--ttk-brand) 7%, transparent), transparent 70%);
+}
+.sys-grid .panel-glyph {
+	background: linear-gradient(
+		140deg,
+		color-mix(in oklab, var(--ttk-brand) 28%, transparent),
+		color-mix(in oklab, var(--ttk-brand) 8%, transparent)
+	);
+	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ttk-brand) 26%, transparent);
+}
+wa-callout.sys-notice {
+	animation: sys-pop 0.3s var(--ttk-spring) both;
+}
+
+/* A rounded glyph tile used beside facts. */
+.sys-glyph {
+	width: 28px;
+	height: 28px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	background: color-mix(in oklab, var(--ttk-brand) 11%, transparent);
+	color: var(--ttk-brand);
+}
+.sys-glyph .icon {
+	width: 15px;
+	height: 15px;
+}
+.sys-glyph.locked {
+	background: color-mix(in oklab, var(--ttk-locked) 14%, transparent);
+	color: var(--ttk-locked);
+}
+
+/* --- a pressed-button switch (All · On · Off, All · Set · Default): text only, the pressed one raised --- */
+
+.sys-seg {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 2px;
+	padding: 3px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+}
+.sys-seg-btn {
+	height: 26px;
+	padding: 0 11px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--wa-color-text-quiet);
+	font: 600 12px/1 var(--wa-font-family-body);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: background 0.18s var(--ttk-ease), color 0.18s var(--ttk-ease);
+}
+.sys-seg-btn:hover {
+	color: var(--wa-color-text-normal);
+}
+.sys-seg-btn[aria-pressed='true'] {
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	box-shadow: inset 0 0 0 1px var(--ttk-hairline), 0 1px 3px color-mix(in oklab, black 22%, transparent);
+}
+.sys-seg-btn:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 1px;
+}
+
+/* --- capabilities: titled groups of tiles; a tile is a head (glyph, name, state, mark), what it does, and while off
+ * the setting that turns it on. A held capability is the one tinted. --- */
+
+.sys-capgroups {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	min-width: 0;
+}
+.sys-capgroup-title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 8px;
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.sys-capgroup-title::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--ttk-hairline);
+}
+.sys-caps {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 232px), 1fr));
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.sys-cap {
+	--tone: var(--wa-color-text-quiet);
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	/* RV-4: the kit's native `li { margin-inline-start: 1.125em }` shifted every tile right of its grid cell. */
+	margin: 0;
+	min-width: 0;
+	padding: 12px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 12px;
+	/* Opaque, in the panel's own colour: a tile's glyph keeps its 3:1 against the tile it sits on (RV-4). */
+	background: var(--ttk-card);
+	color: var(--wa-color-text-normal);
+	transition: transform 0.22s var(--ttk-spring), border-color 0.2s var(--ttk-ease), background 0.2s var(--ttk-ease);
+	animation: sys-pop 0.3s var(--ttk-spring) both;
+}
+.sys-cap:hover,
+.sys-cap:focus-visible {
+	transform: translateY(-1px);
+	border-color: color-mix(in oklab, var(--tone) 45%, var(--ttk-hairline));
+}
+/* RV-13: a tile is a tab stop (its tooltip carries the state and any detail), so keyboard focus draws the kit's ring. */
+.sys-cap:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 2px;
+}
+.sys-cap.on {
+	--tone: var(--ttk-live);
+	border-color: color-mix(in oklab, var(--ttk-live) 30%, transparent);
+	background: color-mix(in oklab, var(--ttk-live) 6%, var(--ttk-card));
+}
+/* C12: a protection that is off on purpose (Chromium without its sandbox) reads as a warning, not as idle. */
+.sys-cap.off.warn {
+	--tone: var(--ttk-locked);
+	border-color: color-mix(in oklab, var(--ttk-locked) 40%, transparent);
+	background: color-mix(in oklab, var(--ttk-locked) 7%, var(--ttk-card));
+}
+.sys-cap.value {
+	--tone: var(--ttk-brand);
+}
+.sys-cap-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+.sys-cap-glyph {
+	width: 34px;
+	height: 34px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 10px;
+	background: color-mix(in oklab, var(--tone) 13%, transparent);
+	color: var(--tone);
+}
+/* RV-4: an off or unreported tile's glyph is quiet but keeps 3:1 against the tile in both themes (WCAG 1.4.11): the
+ * kit's quiet text alone measured 2.97:1 on the light card, so it leans a third of the way to the normal text colour.
+ * The hollow state mark and the words already say "off". */
+.sys-cap.off:not(.warn) .sys-cap-glyph,
+.sys-cap.unknown .sys-cap-glyph {
+	background: color-mix(in oklab, var(--wa-color-text-normal) 6%, transparent);
+	color: color-mix(in oklab, var(--wa-color-text-quiet), var(--wa-color-text-normal) 35%);
+}
+.sys-cap-glyph .icon {
+	width: 17px;
+	height: 17px;
+}
+.sys-cap-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.sys-cap-name {
+	overflow: hidden;
+	font-size: 13px;
+	font-weight: 650;
+	line-height: 1.25;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.sys-cap-words,
+.sys-cap-value {
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.sys-cap.on .sys-cap-words {
+	color: color-mix(in oklab, var(--ttk-live), var(--wa-color-text-normal) 35%);
+}
+.sys-cap.off.warn .sys-cap-words {
+	color: color-mix(in oklab, var(--ttk-locked), var(--wa-color-text-normal) 30%);
+}
+.sys-cap-value {
+	color: var(--wa-color-text-normal);
+	font-size: 13px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+.sys-cap-about {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	line-height: 1.4;
+}
+/* While off: the setting that turns it on, pinned to the tile's foot so a row of tiles lines their hints up. */
+.sys-cap-enable {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 6px;
+	margin-top: auto;
+	padding-top: 8px;
+	border-top: 1px dashed var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+}
+.sys-cap-enable code {
+	padding: 1px 6px;
+	border-radius: 6px;
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-normal);
+	font-family: var(--wa-font-family-code);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+/* FXD-N1: the state mark is drawn here, not taken from the sprite — a glyph in every tile would be the screen's most
+ * repeated one (D-092). Shape tells the states apart, not only colour (WCAG 1.4.1): on is a filled disc, off a ring, a
+ * protection switched off a ring with "!", and an unreported fact a ring with "?". */
+.sys-cap-state {
+	flex: 0 0 auto;
+	box-sizing: border-box;
+	display: grid;
+	place-items: center;
+	width: 10px;
+	height: 10px;
+	border: 1.5px solid var(--tone);
+	border-radius: 50%;
+}
+.sys-cap-state.on {
+	background: var(--tone);
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--tone) 18%, transparent);
+}
+.sys-cap-state.warn,
+.sys-cap-state.unknown {
+	width: 15px;
+	height: 15px;
+	font: 800 9px/1 var(--wa-font-family-body);
+}
+.sys-cap-state.warn::after {
+	content: '!';
+}
+.sys-cap-state.unknown::after {
+	content: '?';
+}
+
+/* --- facts and lists (Network) --- */
+
+.sys-facts {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+/* A fact is its name over its value, the glyph beside both and a copy button at the end: the Network panel lives in
+ * the Overview's side column, where a name and a URL side by side wrapped both mid-word. */
+.sys-fact {
+	display: grid;
+	grid-template-columns: 28px minmax(0, 1fr) auto;
+	grid-template-areas: 'glyph key copy' 'glyph value copy';
+	align-items: center;
+	column-gap: 12px;
+	row-gap: 3px;
+	min-width: 0;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.sys-fact:last-child {
+	border-bottom: 0;
+}
+.sys-fact > .sys-glyph {
+	grid-area: glyph;
+	align-self: start;
+}
+.sys-fact > button {
+	grid-area: copy;
+}
+.sys-fact-key {
+	grid-area: key;
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.sys-fact-value,
+.sys-fact > .sys-entries {
+	grid-area: value;
+}
+.sys-fact-value {
+	min-width: 0;
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+.sys-fact button.ttk-btn.icon-only {
+	--wa-form-control-height: 24px;
+}
+/* No `flex: 1`: inside an origins group (a flex column, stretched to its row by the panel's grid) a growing list
+ * stretched every chip to the group's height. */
+.sys-entries {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	align-content: flex-start;
+	gap: 6px;
+	min-width: 0;
+	margin: 0;
+	padding: 2px 0 0;
+	list-style: none;
+}
+.sys-entry {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	max-width: 100%;
+	min-width: 0;
+	margin: 0;
+	padding: 2px 9px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.sys-entry.none {
+	border-style: dashed;
+	background: transparent;
+	color: var(--wa-color-text-quiet);
+}
+/* An empty list that means everything (the browser's reach): a fact in the held tone, not an absence. */
+.sys-entry.open {
+	border-color: color-mix(in oklab, var(--ttk-live) 35%, transparent);
+	background: color-mix(in oklab, var(--ttk-live) 9%, transparent);
+	color: color-mix(in oklab, var(--ttk-live), var(--wa-color-text-normal) 35%);
+	font-weight: 600;
+}
+/* A tag that qualifies the list (the domain allowlist's scope), after its entries. */
+.sys-entry-extra {
+	display: inline-flex;
+	align-items: center;
+	margin: 0;
+}
+
+/* --- Process: the resident set in words, the bars under it --- */
+
+.sys-resident {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+.sys-resident-key {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+.sys-resident-value {
+	font-size: 18px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+.sys-memory {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+/* --- MCP: tool access, events, protocol, origins --- */
+
+.sys-tool-counts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.sys-count {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+.sys-count-words {
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+}
+.sys-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.sys-chip {
+	--tone: var(--wa-color-text-quiet);
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 10px;
+	border: 1px solid color-mix(in oklab, var(--tone) 30%, transparent);
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--tone) 10%, transparent);
+	color: var(--tone);
+	font-size: 13px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+.sys-chip .icon {
+	width: 14px;
+	height: 14px;
+}
+.sys-chip.accent {
+	--tone: var(--ttk-brand);
+}
+.sys-chip.warn {
+	--tone: var(--ttk-locked);
+}
+.sys-withheld-group {
+	min-width: 0;
+	padding-top: 12px;
+}
+.sys-withheld-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 13px;
+	font-weight: 650;
+}
+.sys-withheld-count {
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--ttk-locked) 14%, transparent);
+	color: color-mix(in oklab, var(--ttk-locked), var(--wa-color-text-normal) 30%);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.sys-withheld-hint {
+	margin: 2px 0 8px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+/* The names in columns: twenty-odd tools read as a block, not as a tower of rows. */
+.sys-withheld {
+	columns: 3 170px;
+	column-gap: 14px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.sys-withheld-item {
+	break-inside: avoid;
+	margin: 0;
+	padding: 3px 0 3px 10px;
+	border-left: 2px solid color-mix(in oklab, var(--ttk-locked) 40%, transparent);
+	font-size: 12px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.sys-withheld-item + .sys-withheld-item {
+	margin-top: 2px;
+}
+.sys-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	min-width: 0;
+}
+/* The event kinds are a vocabulary, not alerts: quiet outlined words, not the kit's filled neutral badge. */
+.sys-tags wa-badge.badge {
+	border: 1px solid var(--ttk-hairline);
+	background: color-mix(in oklab, var(--wa-color-text-normal) 5%, transparent);
+	color: var(--wa-color-text-quiet);
+	font-family: var(--wa-font-family-code);
+	font-weight: 550;
+}
+/* Protocol: the capabilities document's groups as a grid of cards instead of one long column. */
+.sys-protocol-panel .json-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+	align-items: start;
+	gap: 12px;
+}
+.sys-protocol-panel .json-facts > * {
+	min-width: 0;
+	padding: 4px 12px 8px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+}
+.sys-protocol-panel .json-facts > .facts-details {
+	border-top: 1px solid var(--ttk-hairline);
+}
+.sys-protocol-panel .json-facts > .fact-group {
+	padding-top: 10px;
+}
+
+/* --- origins: Process, Effective and the token's overlay — stacked, or side by side on a wide screen --- */
+
+.sys-origin-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+.sys-origin-group + .sys-origin-group {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--ttk-hairline);
+}
+@media (min-width: 1100px) {
+	.sys-origins-panel .panel-body {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 20px;
+	}
+	.sys-origins-panel .sys-origin-group + .sys-origin-group {
+		margin-top: 0;
+		padding-top: 0;
+		padding-left: 20px;
+		border-top: 0;
+		border-left: 1px solid var(--ttk-hairline);
+	}
+}
+.sys-group-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.sys-group-label .dot {
+	margin-left: 2px;
+}
+.sys-origins {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.sys-origin {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	margin: 0;
+	padding: 4px 4px 4px 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+	font-size: 12.5px;
+	animation: sys-pop 0.25s var(--ttk-spring) both;
+}
+.sys-origin .mono {
+	overflow-wrap: anywhere;
+}
+.sys-origin.none {
+	min-height: 34px;
+	border-style: dashed;
+	background: transparent;
+	color: var(--wa-color-text-quiet);
+}
+.sys-origin-add {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.sys-origin-add input {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: 12.5px;
+}
+
+/* --- the Configuration tab: a filter bar, then the catalogue's sections as cards in columns, each card kept whole
+ * (the providers rows among the Agents card's). --- */
+
+.sys-config-tab {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 0;
+}
+.sys-config-bar {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(18px) saturate(1.2);
+}
+.sys-filter {
+	display: flex;
+	flex: 1 1 260px;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	height: 34px;
+	padding: 0 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-quiet);
+}
+.sys-filter:focus-within {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 1px;
+}
+.sys-filter .icon {
+	width: 15px;
+	height: 15px;
+	flex: 0 0 auto;
+}
+/* The kit dresses native inputs; inside the pill the pill is the field. */
+.sys-filter-input {
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--wa-color-text-normal);
+	font: 500 13px/1 var(--wa-font-family-body);
+}
+.sys-config-count {
+	margin-left: auto;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.sys-config-empty {
+	margin: 0;
+	padding: 28px;
+	border: 1px dashed var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	color: var(--wa-color-text-quiet);
+	text-align: center;
+}
+.sys-config-cards {
+	columns: 1;
+	column-gap: 16px;
+}
+@media (min-width: 1000px) {
+	.sys-config-cards {
+		columns: 2;
+	}
+}
+@media (min-width: 1600px) {
+	.sys-config-cards {
+		columns: 3;
+	}
+}
+.sys-config-card {
+	break-inside: avoid;
+	margin-bottom: 16px;
+	padding: 12px 16px 8px;
+	border: 1px solid var(--ttk-glass-border);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-card);
+	box-shadow: var(--ttk-shadow);
+	animation: sys-rise 0.3s var(--ttk-ease) both;
+}
+.sys-config-card .fact-title {
+	margin-bottom: 4px;
+	color: var(--ttk-brand);
+}
+/* The keys are variable names: mono (FE-5). The tags are words; the reach tag's tone is its kit variant. */
+.sys-config-card .fact-key {
+	font-family: var(--wa-font-family-code);
+	font-size: 11.5px;
+}
+.sys-providers {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.sys-provider {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	margin: 0;
+	padding: 4px 9px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+	font-size: 12px;
+}
+.sys-provider .dot {
+	margin-left: auto;
+}
+/* A provider's kind is a word, not an alert: the kit's filled neutral badge read as a white slab in the dark theme. */
+.sys-provider wa-badge.badge {
+	border: 1px solid var(--ttk-hairline);
+	background: color-mix(in oklab, var(--wa-color-text-normal) 6%, transparent);
+	color: var(--wa-color-text-normal);
+	font-family: var(--wa-font-family-code);
+	font-weight: 600;
+}
+
+/* --- the Raw modal: Diagnostics | Capabilities, each a copy button over the JSON --- */
+
+.sys-raw {
+	min-width: 0;
+}
+.sys-raw wa-tab-panel {
+	--padding: 10px 0 0;
+}
+.sys-json {
+	position: relative;
+	min-width: 0;
+}
+.sys-json > button.ttk-btn {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 1;
+	background: var(--ttk-card);
+}
+.sys-json > pre.code {
+	max-height: min(70vh, 720px);
+	margin: 0;
+	overflow: auto;
+}
+
+/* --- the configuration composer drawer --- */
+
+wa-drawer.sys-composer {
+	--size: min(960px, 100vw);
+	--spacing: 18px;
+}
+wa-drawer.sys-composer::part(dialog) {
+	border-left: 1px solid var(--ttk-glass-border);
+	background: var(--ttk-glass-strong);
+	backdrop-filter: blur(22px) saturate(1.3);
+	box-shadow: var(--ttk-shadow-pop);
+}
+wa-drawer.sys-composer::part(header) {
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+wa-drawer.sys-composer::part(footer) {
+	border-top: 1px solid var(--ttk-hairline);
+}
+.sys-composer-title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	font-size: 15px;
+	font-weight: 650;
+}
+.sys-composer-title .icon {
+	color: var(--ttk-brand);
+}
+.sys-composer-body {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 16px;
+	min-width: 0;
+}
+@media (min-width: 1100px) {
+	/* The outputs column holds the diff table, whose keys never wrap: it gets a floor and the overflow scrolls
+	 * inside the panel (F-02). */
+	.sys-composer-body {
+		grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr);
+	}
+	.sys-composer-body > .sys-presets {
+		grid-column: 1 / -1;
+	}
+}
+/* Presets: native radio tiles (the Users scope-tile pattern); the radio stays a real, focusable control. */
+.sys-presets {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.sys-presets-legend {
+	padding: 0;
+	margin-bottom: 4px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+.sys-preset-tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+	gap: 8px;
+}
+.sys-preset {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	min-height: 64px;
+	padding: 10px 12px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-quiet);
+	cursor: pointer;
+	user-select: none;
+	transition: transform 0.22s var(--ttk-spring), border-color 0.2s var(--ttk-ease), background 0.2s var(--ttk-ease),
+		color 0.2s var(--ttk-ease);
+}
+.sys-preset:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--ttk-brand) 35%, transparent);
+	color: var(--wa-color-text-normal);
+}
+.sys-preset:has(.sys-preset-box:checked) {
+	border-color: color-mix(in oklab, var(--ttk-brand) 55%, transparent);
+	background: color-mix(in oklab, var(--ttk-brand) 14%, var(--ttk-card));
+	color: var(--ttk-brand);
+}
+.sys-preset:has(.sys-preset-box:focus-visible) {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 2px;
+}
+.sys-preset-box {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+.sys-preset-name {
+	font-size: 13px;
+	font-weight: 650;
+}
+.sys-preset-hint {
+	font-size: 11.5px;
+	line-height: 1.35;
+}
+/* The settings form: one details group per catalogue section, the schema form inside. */
+.sys-composer-form {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+wa-details.sys-section {
+	--spacing: 10px;
+}
+wa-details.sys-section::part(header) {
+	font-size: 13px;
+	font-weight: 650;
+}
+.sys-section-count {
+	margin-left: 8px;
+	padding: 0 7px;
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--ttk-brand) 14%, transparent);
+	color: var(--ttk-brand);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.sys-composer-form .tc-grid {
+	grid-template-columns: 1fr;
+}
+/* Providers sub-form: a row of worded add buttons, then one card per provider. */
+.sys-provider-add {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.sys-provider-card {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+	gap: 8px;
+	padding: 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-sunken);
+}
+.sys-provider-card .sys-provider-foot {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+}
+.sys-provider-card wa-input::part(form-control-label),
+.sys-provider-card wa-select::part(form-control-label) {
+	font-size: 11.5px;
+	color: var(--wa-color-text-quiet);
+}
+/* Outputs: a tab per artefact, the copy button over the text. */
+.sys-composer-out {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.sys-composer-out wa-tab-panel {
+	--padding: 10px 0 0;
+}
+.sys-composer-out .sys-json > pre.code {
+	max-height: min(60vh, 640px);
+}
+.sys-composer-out .diff {
+	overflow-x: auto;
+}
+.sys-composer-apply {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	margin: 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+}
+.sys-composer-fault {
+	margin: 0;
+}
+
+@keyframes sys-pop {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+}
+@keyframes sys-rise {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+}
+
+@media (max-width: 520px) {
+	.sys-caps {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+	}
+	.sys-capgroups .sys-seg,
+	.sys-config-bar .sys-seg {
+		order: 2;
+	}
+	.sys-config-count {
+		margin-left: 0;
+	}
+}
+
+/* --- Agents (D-152): the model providers beside A2A and the agent runtime --- */
+
+@media (min-width: 1100px) {
+	.sys-agents {
+		grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+	}
+}
+.pv-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+.pv-head-actions {
+	display: flex;
+	gap: 6px;
+}
+/* The two sources of providers (D-153): the operator's file, read-only here, and the store the web app writes. */
+.pv-sources {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+	gap: 8px;
+}
+.pv-source {
+	--tone: var(--wa-color-text-quiet);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	padding: 10px 12px;
+	border: 1px solid color-mix(in oklab, var(--tone) 28%, var(--ttk-hairline));
+	border-radius: var(--ttk-radius-s);
+	background: color-mix(in oklab, var(--tone) 6%, transparent);
+}
+.pv-source.ok {
+	--tone: var(--ttk-live);
+}
+.pv-source.locked {
+	--tone: var(--ttk-locked);
+}
+.pv-source-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.pv-source-title {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 650;
+}
+.pv-source-hint {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	line-height: 1.45;
+}
+.pv-source .pv-file {
+	align-self: flex-start;
+}
+.pv-file {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+	padding: 2px 4px 2px 10px;
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.pv-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+	gap: 10px;
+}
+.pv-card {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: color-mix(in oklab, var(--ttk-card), var(--ttk-canvas) 30%);
+	overflow: hidden;
+	transition: border-color 0.15s;
+}
+.pv-card:hover {
+	border-color: var(--ttk-hairline-strong);
+}
+.pv-card-sub > span {
+	white-space: nowrap;
+}
+.pv-card.default {
+	border-color: color-mix(in oklab, var(--ttk-live) 35%, var(--ttk-hairline));
+}
+.pv-card-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 12px 10px 10px 12px;
+}
+.pv-kind {
+	width: 34px;
+	height: 34px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 9px;
+	background: var(--ttk-gradient);
+	color: white;
+	font-size: 12.5px;
+	font-weight: 750;
+	letter-spacing: 0.02em;
+}
+.pv-kind.anthropic {
+	background: linear-gradient(135deg, var(--wa-color-orange-50), var(--wa-color-red-50));
+}
+.pv-card-title {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.pv-card-name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-weight: 650;
+	font-size: 14px;
+}
+.pv-card-name > span:first-child {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.pv-card-sub {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+.pv-reach {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.pv-reach.warn {
+	color: var(--ttk-locked);
+}
+.pv-card-actions {
+	display: flex;
+	gap: 2px;
+}
+.pv-card-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 0 12px 12px;
+}
+.pv-endpoint {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 4px 4px 4px 10px;
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+}
+.pv-endpoint code {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--wa-color-text-normal);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.pv-endpoint .icon {
+	width: 14px;
+	height: 14px;
+}
+.pv-models {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+.pv-model {
+	padding: 2px 8px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: 999px;
+	font-size: 11.5px;
+}
+.pv-model.on {
+	border-color: color-mix(in oklab, var(--ttk-live) 45%, transparent);
+	background: color-mix(in oklab, var(--ttk-live) 10%, transparent);
+	color: var(--ttk-live);
+}
+.pv-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 12px;
+	padding-top: 8px;
+	border-top: 1px solid var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+}
+.pv-key-source {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.pv-key-source .icon {
+	width: 12px;
+	height: 12px;
+}
+.pv-key-source.none {
+	color: var(--wa-color-text-quiet);
+}
+
+/* The side panels: a name over its value. */
+.pv-side-body {
+	display: flex;
+	flex-direction: column;
+}
+.pv-fact {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+	padding: 8px 0;
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.pv-fact:last-child {
+	border-bottom: 0;
+}
+.pv-fact-name {
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	font-weight: 600;
+}
+.pv-fact-value {
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+.pv-copy {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.pv-copy > span {
+	flex: 1;
+	min-width: 0;
+}
+.pv-state {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+.pv-state.off {
+	color: var(--wa-color-text-quiet);
+	font-weight: 500;
+}
+.pv-skills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.pv-code {
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: var(--ttk-sunken);
+	font: 11.5px var(--wa-font-family-code);
+}
+
+/* --- the provider editor --- */
+
+wa-dialog.modal.pv-modal {
+	--width: min(680px, 96vw);
+}
+.pv-form {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.pv-presets {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.pv-presets-label {
+	margin-right: 4px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+button.pv-preset {
+	all: unset;
+	box-sizing: border-box;
+	padding: 4px 11px;
+	border: 1px solid var(--ttk-hairline-strong);
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+button.pv-preset:hover {
+	border-color: color-mix(in oklab, var(--ttk-brand) 50%, transparent);
+	background: var(--ttk-selected);
+}
+button.pv-preset:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 1px;
+}
+.pv-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+.pv-field,
+.pv-toggle {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+}
+.pv-field.wide,
+.pv-toggle.wide {
+	grid-column: 1 / -1;
+}
+.pv-label {
+	font-size: 12px;
+	font-weight: 650;
+}
+.pv-hint {
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	line-height: 1.4;
+}
+.pv-input {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 34px;
+	padding: 6px 10px;
+	border: 1px solid var(--ttk-hairline-strong);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-normal);
+	font: 13px var(--wa-font-family-body);
+}
+textarea.pv-input {
+	resize: vertical;
+	font-family: var(--wa-font-family-code);
+	font-size: 12.5px;
+}
+.pv-input:focus {
+	outline: none;
+	border-color: color-mix(in oklab, var(--ttk-brand) 60%, transparent);
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--ttk-brand) 16%, transparent);
+}
+.pv-input:read-only {
+	color: var(--wa-color-text-quiet);
+}
+.pv-key {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+}
+.pv-key-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+.pv-key-now {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.pv-key-now .icon {
+	width: 13px;
+	height: 13px;
+}
+.pv-key .segmented {
+	align-self: flex-start;
+}
+.pv-warn {
+	color: var(--ttk-locked);
+	font-size: 12px;
+}
+.pv-toggle {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	font-size: 12.5px;
+}
+.pv-check {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--ttk-brand);
+}
+.pv-advanced {
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+}
+.pv-advanced > summary {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	padding: 10px 12px;
+	cursor: pointer;
+	font-size: 12.5px;
+	font-weight: 650;
+	list-style: none;
+}
+.pv-advanced > summary::-webkit-details-marker {
+	display: none;
+}
+.pv-advanced > summary > span {
+	flex: 1;
+	text-align: left;
+}
+.pv-advanced[open] > summary {
+	border-bottom: 1px solid var(--ttk-hairline);
+}
+.pv-advanced > .pv-grid {
+	padding: 12px;
+}
+.pv-error {
+	padding: 8px 12px;
+	border: 1px solid color-mix(in oklab, var(--ttk-danger) 40%, transparent);
+	border-radius: var(--ttk-radius-s);
+	background: color-mix(in oklab, var(--ttk-danger) 9%, transparent);
+	color: var(--ttk-danger);
+	font-size: 12.5px;
+}
+.pv-empty {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 22px 16px;
+	border: 1px dashed var(--ttk-hairline-strong);
+	border-radius: var(--ttk-radius);
+	text-align: center;
+}
+.pv-empty-title {
+	font-weight: 650;
+}
+.pv-empty-hint {
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+}
+.pv-key-now {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.pv-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+@media (max-width: 600px) {
+	.pv-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.pv-card-head {
+		flex-wrap: wrap;
+	}
+}
+
+/* D-154: the memory panel's embedder picker fills its fact row. */
+.pv-fact .pv-input {
+	width: 100%;
+}
+
+/* --- D-158: the provider editor's model fetch --- */
+
+.pv-label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.pv-fetched {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+}
+.pv-fetched-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+.pv-fetched-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	max-height: 168px;
+	overflow-y: auto;
+}
+button.pv-fetched-chip {
+	all: unset;
+	box-sizing: border-box;
+	max-width: 100%;
+	padding: 3px 9px;
+	border: 1px dashed var(--ttk-hairline-strong);
+	border-radius: 999px;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+button.pv-fetched-chip[aria-pressed='true'] {
+	border-style: solid;
+	border-color: color-mix(in oklab, var(--ttk-brand) 50%, transparent);
+	background: var(--ttk-selected);
+	color: var(--ttk-brand-ink);
+}
+button.pv-fetched-chip:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 1px;
+}
+
+/* --- D-158: the agents (System › Agents, and the Agents screen's side panel) --- */
+
+.ag-roster,
+.ag-roster-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.ag-roster-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 10px 8px 10px 10px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: color-mix(in oklab, var(--ttk-card), var(--ttk-canvas) 30%);
+	transition: border-color 0.15s;
+}
+.ag-roster-row:hover {
+	border-color: var(--ttk-hairline-strong);
+}
+.ag-roster-mark.builtin {
+	background: var(--ttk-gradient);
+}
+.ag-roster-mark.profile {
+	background: linear-gradient(135deg, var(--wa-color-green-50), var(--wa-color-cyan-50));
+}
+.ag-roster-mark.acp {
+	background: linear-gradient(135deg, var(--wa-color-purple-50), var(--wa-color-pink-50));
+}
+.ag-roster-mark.peer {
+	background: linear-gradient(135deg, var(--wa-color-gray-50), var(--wa-color-blue-50));
+}
+.ag-roster-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.ag-roster-name {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+	font-weight: 650;
+}
+.ag-roster-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	min-width: 0;
+}
+.ag-set-form {
+	min-width: min(440px, 80vw);
+}
+.ag-set-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 10px 12px 12px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+}
+.ag-set-group > legend {
+	padding: 0 4px;
+}
+.ag-set-toggle {
+	align-items: flex-start;
+}
+.ag-set-toggle .pv-check {
+	margin-top: 2px;
+}
+.ag-set-toggle.na {
+	opacity: 0.55;
+}
+.ag-set-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.ag-set-name {
+	font-weight: 650;
+}

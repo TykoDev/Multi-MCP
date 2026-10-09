@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!--
+The corpus had no <frameset> anywhere: tests/fixtures/pages/frames/ was iframe cases only.
+Deliberately shaped like statbank.dk - a narrow navigation column and a wide content column, both
+same-origin - so the live replay in S5 exercises the same code path this corpus page pins.
+
+A <frameset> document has NO <body>. That is the whole reason this page is hand-written static HTML
+rather than emitted by a helper: every shell helper in this repo appends one, and a <body> makes the
+<frameset> inert (the browser drops the frames and renders an empty document instead).
+
+FRAMESET-TOP-SENTINEL-2B8E is the TOP document's marker and appears nowhere else in the corpus. A
+refusal, or a read of a child frame, that carries it has returned the wrong document (I-FH-1, C-7).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Frameset FRAMESET-TOP-SENTINEL-2B8E</title>
+</head>
+<frameset cols="220,*">
+<frame name="menu" src="frameset_menu.html" title="statistics menu">
+<frame name="content" src="frameset_content.html" title="statistics table">
+<noframes>
+<p>FRAMESET-TOP-SENTINEL-2B8E - this browser does not render frames.</p>
+</noframes>
+</frameset>
+</html>

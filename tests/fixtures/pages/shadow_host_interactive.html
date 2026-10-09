@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Interactive Shadow Host</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+custom-button,custom-toggle{display:inline-block;padding:6px 10px;border:1px solid #333;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+<h1>Shadow host that is itself interactive</h1>
+
+<custom-button id="cb1" role="button" tabindex="0" aria-label="Custom button one"></custom-button>
+
+<custom-toggle id="ct1" role="switch" tabindex="0" aria-checked="false" aria-label="Custom toggle"></custom-toggle>
+
+<button id="host-in-button" type="button">Native button hosting shadow</button>
+
+<a id="anchor-host" href="#target" title="Anchor hosting shadow"></a>
+
+<p>Tail text.</p>
+</main>
+<script>
+(function () {
+  var cb = document.getElementById('cb1');
+  cb.attachShadow({ mode: 'open' }).innerHTML =
+    '<span>Custom button label</span><button id="inner-cb-button" type="button">inner</button>';
+
+  var ct = document.getElementById('ct1');
+  ct.attachShadow({ mode: 'closed' }).innerHTML =
+    '<span>Toggle off</span>';
+
+  var hb = document.getElementById('host-in-button');
+  hb.attachShadow({ mode: 'open' }).innerHTML = '<slot></slot><span> (shadowed)</span>';
+
+  var ah = document.getElementById('anchor-host');
+  ah.attachShadow({ mode: 'open' }).innerHTML = '<span>anchor shadow text</span>';
+})();
+</script>
+</body>
+</html>

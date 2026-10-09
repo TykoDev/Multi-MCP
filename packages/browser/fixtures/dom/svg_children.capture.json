@@ -1,0 +1,3191 @@
+{
+	"rootSessionId": "F7D45324C1CB9ADE8DBC1B48EAA0459E",
+	"sessions": [
+		{
+			"targetId": "8FC2B84EA77EE28FCDDF0AEC70A812D0",
+			"sessionId": "F7D45324C1CB9ADE8DBC1B48EAA0459E",
+			"frameId": "8FC2B84EA77EE28FCDDF0AEC70A812D0",
+			"url": "http://127.0.0.1:38111/svg_children.html",
+			"devicePixelRatio": 1,
+			"layoutMetrics": {
+				"scrollX": 0,
+				"scrollY": 0,
+				"viewportWidth": 1280,
+				"viewportHeight": 900,
+				"contentWidth": 1280,
+				"contentHeight": 900
+			},
+			"document": {
+				"nodeId": 1,
+				"backendNodeId": 2,
+				"nodeType": 9,
+				"nodeName": "#document",
+				"localName": "",
+				"nodeValue": "",
+				"childNodeCount": 2,
+				"children": [
+					{
+						"nodeId": 2,
+						"parentId": 1,
+						"backendNodeId": 3,
+						"nodeType": 10,
+						"nodeName": "html",
+						"localName": "",
+						"nodeValue": "",
+						"publicId": "",
+						"systemId": ""
+					},
+					{
+						"nodeId": 3,
+						"parentId": 1,
+						"backendNodeId": 4,
+						"nodeType": 1,
+						"nodeName": "HTML",
+						"localName": "html",
+						"nodeValue": "",
+						"childNodeCount": 2,
+						"children": [
+							{
+								"nodeId": 4,
+								"parentId": 3,
+								"backendNodeId": 5,
+								"nodeType": 1,
+								"nodeName": "HEAD",
+								"localName": "head",
+								"nodeValue": "",
+								"childNodeCount": 3,
+								"children": [
+									{
+										"nodeId": 5,
+										"parentId": 4,
+										"backendNodeId": 6,
+										"nodeType": 1,
+										"nodeName": "META",
+										"localName": "meta",
+										"nodeValue": "",
+										"childNodeCount": 0,
+										"children": [],
+										"attributes": [
+											"charset",
+											"utf-8"
+										]
+									},
+									{
+										"nodeId": 6,
+										"parentId": 4,
+										"backendNodeId": 7,
+										"nodeType": 1,
+										"nodeName": "TITLE",
+										"localName": "title",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 7,
+												"parentId": 6,
+												"backendNodeId": 8,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "SVG With Children"
+											}
+										],
+										"attributes": []
+									},
+									{
+										"nodeId": 8,
+										"parentId": 4,
+										"backendNodeId": 9,
+										"nodeType": 1,
+										"nodeName": "STYLE",
+										"localName": "style",
+										"nodeValue": "",
+										"childNodeCount": 1,
+										"children": [
+											{
+												"nodeId": 9,
+												"parentId": 8,
+												"backendNodeId": 10,
+												"nodeType": 3,
+												"nodeName": "#text",
+												"localName": "",
+												"nodeValue": "\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\nsvg{border:1px solid #333;display:block;margin-bottom:12px}\n"
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							},
+							{
+								"nodeId": 10,
+								"parentId": 3,
+								"backendNodeId": 11,
+								"nodeType": 1,
+								"nodeName": "BODY",
+								"localName": "body",
+								"nodeValue": "",
+								"childNodeCount": 1,
+								"children": [
+									{
+										"nodeId": 11,
+										"parentId": 10,
+										"backendNodeId": 12,
+										"nodeType": 1,
+										"nodeName": "MAIN",
+										"localName": "main",
+										"nodeValue": "",
+										"childNodeCount": 4,
+										"children": [
+											{
+												"nodeId": 12,
+												"parentId": 11,
+												"backendNodeId": 13,
+												"nodeType": 1,
+												"nodeName": "H1",
+												"localName": "h1",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 13,
+														"parentId": 12,
+														"backendNodeId": 14,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "SVG with children"
+													}
+												],
+												"attributes": []
+											},
+											{
+												"nodeId": 14,
+												"parentId": 11,
+												"backendNodeId": 15,
+												"nodeType": 1,
+												"nodeName": "svg",
+												"localName": "svg",
+												"nodeValue": "",
+												"childNodeCount": 6,
+												"children": [
+													{
+														"nodeId": 15,
+														"parentId": 14,
+														"backendNodeId": 16,
+														"nodeType": 1,
+														"nodeName": "title",
+														"localName": "title",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 16,
+																"parentId": 15,
+																"backendNodeId": 17,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "Plain decorative svg"
+															}
+														],
+														"attributes": [],
+														"isSVG": true
+													},
+													{
+														"nodeId": 17,
+														"parentId": 14,
+														"backendNodeId": 18,
+														"nodeType": 1,
+														"nodeName": "desc",
+														"localName": "desc",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 18,
+																"parentId": 17,
+																"backendNodeId": 19,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "A rectangle, a circle and some text."
+															}
+														],
+														"attributes": [],
+														"isSVG": true
+													},
+													{
+														"nodeId": 19,
+														"parentId": 14,
+														"backendNodeId": 20,
+														"nodeType": 1,
+														"nodeName": "rect",
+														"localName": "rect",
+														"nodeValue": "",
+														"childNodeCount": 0,
+														"children": [],
+														"attributes": [
+															"id",
+															"svg-rect",
+															"x",
+															"10",
+															"y",
+															"10",
+															"width",
+															"80",
+															"height",
+															"40",
+															"fill",
+															"#8ab"
+														],
+														"isSVG": true
+													},
+													{
+														"nodeId": 20,
+														"parentId": 14,
+														"backendNodeId": 21,
+														"nodeType": 1,
+														"nodeName": "circle",
+														"localName": "circle",
+														"nodeValue": "",
+														"childNodeCount": 0,
+														"children": [],
+														"attributes": [
+															"id",
+															"svg-circle",
+															"cx",
+															"150",
+															"cy",
+															"40",
+															"r",
+															"25",
+															"fill",
+															"#ba8"
+														],
+														"isSVG": true
+													},
+													{
+														"nodeId": 21,
+														"parentId": 14,
+														"backendNodeId": 22,
+														"nodeType": 1,
+														"nodeName": "text",
+														"localName": "text",
+														"nodeValue": "",
+														"childNodeCount": 1,
+														"children": [
+															{
+																"nodeId": 22,
+																"parentId": 21,
+																"backendNodeId": 23,
+																"nodeType": 3,
+																"nodeName": "#text",
+																"localName": "",
+																"nodeValue": "svg text child"
+															}
+														],
+														"attributes": [
+															"id",
+															"svg-text",
+															"x",
+															"10",
+															"y",
+															"90"
+														],
+														"isSVG": true
+													},
+													{
+														"nodeId": 23,
+														"parentId": 14,
+														"backendNodeId": 24,
+														"nodeType": 1,
+														"nodeName": "g",
+														"localName": "g",
+														"nodeValue": "",
+														"childNodeCount": 2,
+														"children": [
+															{
+																"nodeId": 24,
+																"parentId": 23,
+																"backendNodeId": 25,
+																"nodeType": 1,
+																"nodeName": "line",
+																"localName": "line",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"x1",
+																	"10",
+																	"y1",
+																	"100",
+																	"x2",
+																	"230",
+																	"y2",
+																	"100",
+																	"stroke",
+																	"#333"
+																],
+																"isSVG": true
+															},
+															{
+																"nodeId": 25,
+																"parentId": 23,
+																"backendNodeId": 26,
+																"nodeType": 1,
+																"nodeName": "path",
+																"localName": "path",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"id",
+																	"svg-path",
+																	"d",
+																	"M 120 60 L 140 100 L 100 100 Z",
+																	"fill",
+																	"#8b8"
+																],
+																"isSVG": true
+															}
+														],
+														"attributes": [
+															"id",
+															"svg-group"
+														],
+														"isSVG": true
+													}
+												],
+												"attributes": [
+													"id",
+													"plain-svg",
+													"width",
+													"240",
+													"height",
+													"120",
+													"viewBox",
+													"0 0 240 120",
+													"xmlns",
+													"http://www.w3.org/2000/svg"
+												],
+												"isSVG": true
+											},
+											{
+												"nodeId": 26,
+												"parentId": 11,
+												"backendNodeId": 27,
+												"nodeType": 1,
+												"nodeName": "svg",
+												"localName": "svg",
+												"nodeValue": "",
+												"childNodeCount": 2,
+												"children": [
+													{
+														"nodeId": 27,
+														"parentId": 26,
+														"backendNodeId": 28,
+														"nodeType": 1,
+														"nodeName": "a",
+														"localName": "a",
+														"nodeValue": "",
+														"childNodeCount": 2,
+														"children": [
+															{
+																"nodeId": 28,
+																"parentId": 27,
+																"backendNodeId": 29,
+																"nodeType": 1,
+																"nodeName": "rect",
+																"localName": "rect",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"x",
+																	"10",
+																	"y",
+																	"10",
+																	"width",
+																	"90",
+																	"height",
+																	"40",
+																	"fill",
+																	"#cde"
+																],
+																"isSVG": true
+															},
+															{
+																"nodeId": 29,
+																"parentId": 27,
+																"backendNodeId": 30,
+																"nodeType": 1,
+																"nodeName": "text",
+																"localName": "text",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 30,
+																		"parentId": 29,
+																		"backendNodeId": 31,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "svg link"
+																	}
+																],
+																"attributes": [
+																	"x",
+																	"16",
+																	"y",
+																	"35"
+																],
+																"isSVG": true
+															}
+														],
+														"attributes": [
+															"id",
+															"svg-link",
+															"href",
+															"#svg-target",
+															"aria-label",
+															"Svg anchor"
+														],
+														"isSVG": true
+													},
+													{
+														"nodeId": 31,
+														"parentId": 26,
+														"backendNodeId": 32,
+														"nodeType": 1,
+														"nodeName": "g",
+														"localName": "g",
+														"nodeValue": "",
+														"childNodeCount": 2,
+														"children": [
+															{
+																"nodeId": 32,
+																"parentId": 31,
+																"backendNodeId": 33,
+																"nodeType": 1,
+																"nodeName": "rect",
+																"localName": "rect",
+																"nodeValue": "",
+																"childNodeCount": 0,
+																"children": [],
+																"attributes": [
+																	"x",
+																	"120",
+																	"y",
+																	"10",
+																	"width",
+																	"100",
+																	"height",
+																	"40",
+																	"fill",
+																	"#edc"
+																],
+																"isSVG": true
+															},
+															{
+																"nodeId": 33,
+																"parentId": 31,
+																"backendNodeId": 34,
+																"nodeType": 1,
+																"nodeName": "text",
+																"localName": "text",
+																"nodeValue": "",
+																"childNodeCount": 1,
+																"children": [
+																	{
+																		"nodeId": 34,
+																		"parentId": 33,
+																		"backendNodeId": 35,
+																		"nodeType": 3,
+																		"nodeName": "#text",
+																		"localName": "",
+																		"nodeValue": "svg button"
+																	}
+																],
+																"attributes": [
+																	"x",
+																	"128",
+																	"y",
+																	"35"
+																],
+																"isSVG": true
+															}
+														],
+														"attributes": [
+															"id",
+															"svg-clickable",
+															"role",
+															"button",
+															"tabindex",
+															"0",
+															"aria-label",
+															"Svg button group"
+														],
+														"isSVG": true
+													}
+												],
+												"attributes": [
+													"id",
+													"interactive-svg",
+													"width",
+													"240",
+													"height",
+													"120",
+													"viewBox",
+													"0 0 240 120",
+													"role",
+													"img",
+													"aria-label",
+													"Interactive svg",
+													"xmlns",
+													"http://www.w3.org/2000/svg"
+												],
+												"isSVG": true
+											},
+											{
+												"nodeId": 35,
+												"parentId": 11,
+												"backendNodeId": 36,
+												"nodeType": 1,
+												"nodeName": "BUTTON",
+												"localName": "button",
+												"nodeValue": "",
+												"childNodeCount": 1,
+												"children": [
+													{
+														"nodeId": 36,
+														"parentId": 35,
+														"backendNodeId": 37,
+														"nodeType": 3,
+														"nodeName": "#text",
+														"localName": "",
+														"nodeValue": "After the SVGs"
+													}
+												],
+												"attributes": [
+													"type",
+													"button",
+													"id",
+													"after-svg"
+												]
+											}
+										],
+										"attributes": []
+									}
+								],
+								"attributes": []
+							}
+						],
+						"attributes": [
+							"lang",
+							"en"
+						],
+						"frameId": "8FC2B84EA77EE28FCDDF0AEC70A812D0"
+					}
+				],
+				"documentURL": "http://127.0.0.1:38111/svg_children.html",
+				"baseURL": "http://127.0.0.1:38111/svg_children.html",
+				"xmlVersion": "",
+				"compatibilityMode": "NoQuirksMode"
+			},
+			"snapshot": {
+				"documents": [
+					{
+						"documentURL": 0,
+						"title": 1,
+						"baseURL": 0,
+						"contentLanguage": -1,
+						"encodingName": 2,
+						"publicId": -1,
+						"systemId": -1,
+						"frameId": 3,
+						"nodes": {
+							"parentIndex": [
+								-1,
+								0,
+								0,
+								2,
+								3,
+								3,
+								3,
+								3,
+								7,
+								3,
+								3,
+								10,
+								3,
+								2,
+								2,
+								14,
+								14,
+								16,
+								16,
+								18,
+								16,
+								16,
+								21,
+								21,
+								23,
+								21,
+								21,
+								26,
+								21,
+								21,
+								21,
+								21,
+								21,
+								21,
+								33,
+								21,
+								21,
+								36,
+								36,
+								36,
+								36,
+								36,
+								21,
+								16,
+								16,
+								44,
+								44,
+								46,
+								46,
+								46,
+								46,
+								50,
+								46,
+								44,
+								44,
+								54,
+								54,
+								54,
+								54,
+								58,
+								54,
+								44,
+								16,
+								16,
+								63,
+								16,
+								14
+							],
+							"nodeType": [
+								9,
+								10,
+								1,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								3,
+								1,
+								3,
+								1,
+								3,
+								1,
+								3,
+								3,
+								3,
+								3,
+								1,
+								3,
+								3,
+								3
+							],
+							"shadowRootType": {
+								"index": [],
+								"value": []
+							},
+							"nodeName": [
+								4,
+								5,
+								6,
+								15,
+								16,
+								18,
+								16,
+								21,
+								16,
+								16,
+								22,
+								16,
+								16,
+								16,
+								24,
+								16,
+								25,
+								16,
+								27,
+								16,
+								16,
+								30,
+								16,
+								43,
+								16,
+								16,
+								45,
+								16,
+								16,
+								47,
+								16,
+								57,
+								16,
+								65,
+								16,
+								16,
+								69,
+								16,
+								72,
+								16,
+								81,
+								16,
+								16,
+								16,
+								30,
+								16,
+								91,
+								16,
+								47,
+								16,
+								65,
+								16,
+								16,
+								16,
+								69,
+								16,
+								47,
+								16,
+								65,
+								16,
+								16,
+								16,
+								16,
+								109,
+								16,
+								16,
+								16
+							],
+							"nodeValue": [
+								-1,
+								-1,
+								-1,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								1,
+								17,
+								-1,
+								23,
+								17,
+								17,
+								-1,
+								17,
+								-1,
+								17,
+								-1,
+								28,
+								29,
+								-1,
+								42,
+								-1,
+								44,
+								42,
+								-1,
+								46,
+								42,
+								-1,
+								42,
+								-1,
+								42,
+								-1,
+								68,
+								42,
+								-1,
+								71,
+								-1,
+								71,
+								-1,
+								42,
+								17,
+								29,
+								-1,
+								42,
+								-1,
+								71,
+								-1,
+								71,
+								-1,
+								100,
+								42,
+								42,
+								-1,
+								71,
+								-1,
+								71,
+								-1,
+								108,
+								42,
+								17,
+								29,
+								-1,
+								115,
+								17,
+								116
+							],
+							"backendNodeId": [
+								2,
+								3,
+								4,
+								5,
+								38,
+								6,
+								39,
+								7,
+								8,
+								40,
+								9,
+								10,
+								41,
+								42,
+								11,
+								43,
+								12,
+								44,
+								13,
+								14,
+								45,
+								15,
+								46,
+								16,
+								17,
+								47,
+								18,
+								19,
+								48,
+								20,
+								49,
+								21,
+								50,
+								22,
+								23,
+								51,
+								24,
+								52,
+								25,
+								53,
+								26,
+								54,
+								55,
+								56,
+								27,
+								57,
+								28,
+								58,
+								29,
+								59,
+								30,
+								31,
+								60,
+								61,
+								32,
+								62,
+								33,
+								63,
+								34,
+								35,
+								64,
+								65,
+								66,
+								36,
+								37,
+								67,
+								68
+							],
+							"attributes": [
+								[],
+								[],
+								[
+									7,
+									8
+								],
+								[],
+								[],
+								[
+									19,
+									20
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									32,
+									33,
+									34,
+									35,
+									36,
+									37,
+									38,
+									39,
+									40
+								],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[],
+								[
+									31,
+									48,
+									49,
+									50,
+									51,
+									50,
+									33,
+									52,
+									35,
+									53,
+									54,
+									55
+								],
+								[],
+								[
+									31,
+									58,
+									59,
+									60,
+									61,
+									53,
+									62,
+									63,
+									54,
+									64
+								],
+								[],
+								[
+									31,
+									66,
+									49,
+									50,
+									51,
+									67
+								],
+								[],
+								[],
+								[
+									31,
+									70
+								],
+								[],
+								[
+									73,
+									50,
+									74,
+									75,
+									76,
+									77,
+									78,
+									75,
+									79,
+									80
+								],
+								[],
+								[
+									31,
+									82,
+									83,
+									84,
+									54,
+									85
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									86,
+									33,
+									34,
+									35,
+									36,
+									37,
+									38,
+									87,
+									88,
+									89,
+									90,
+									39,
+									40
+								],
+								[],
+								[
+									31,
+									92,
+									93,
+									94,
+									89,
+									95
+								],
+								[],
+								[
+									49,
+									50,
+									51,
+									50,
+									33,
+									67,
+									35,
+									53,
+									54,
+									97
+								],
+								[],
+								[
+									49,
+									98,
+									51,
+									99
+								],
+								[],
+								[],
+								[],
+								[
+									31,
+									101,
+									87,
+									102,
+									103,
+									104,
+									89,
+									105
+								],
+								[],
+								[
+									49,
+									36,
+									51,
+									50,
+									33,
+									75,
+									35,
+									53,
+									54,
+									106
+								],
+								[],
+								[
+									49,
+									107,
+									51,
+									99
+								],
+								[],
+								[],
+								[],
+								[],
+								[
+									110,
+									102,
+									31,
+									111
+								],
+								[],
+								[],
+								[]
+							],
+							"textValue": {
+								"index": [],
+								"value": []
+							},
+							"inputValue": {
+								"index": [],
+								"value": []
+							},
+							"inputChecked": {
+								"index": []
+							},
+							"optionSelected": {
+								"index": []
+							},
+							"contentDocumentIndex": {
+								"index": [],
+								"value": []
+							},
+							"pseudoType": {
+								"index": [],
+								"value": []
+							},
+							"pseudoIdentifier": {
+								"index": [],
+								"value": []
+							},
+							"isClickable": {
+								"index": [
+									46
+								]
+							},
+							"currentSourceURL": {
+								"index": [],
+								"value": []
+							},
+							"originURL": {
+								"index": [],
+								"value": []
+							}
+						},
+						"layout": {
+							"nodeIndex": [
+								0,
+								2,
+								14,
+								16,
+								18,
+								19,
+								21,
+								29,
+								31,
+								33,
+								34,
+								36,
+								38,
+								40,
+								44,
+								46,
+								48,
+								50,
+								51,
+								54,
+								56,
+								58,
+								59,
+								63,
+								64,
+								65
+							],
+							"styles": [
+								[],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									14
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									41,
+									41,
+									41,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									41,
+									41,
+									41,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									96,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									96,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									96,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									96,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									56,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								],
+								[
+									112,
+									10,
+									11,
+									10,
+									10,
+									10,
+									113,
+									12,
+									13,
+									114
+								],
+								[
+									112,
+									10,
+									11,
+									10,
+									10,
+									10,
+									113,
+									12,
+									13,
+									114
+								],
+								[
+									9,
+									10,
+									11,
+									10,
+									10,
+									10,
+									12,
+									12,
+									13,
+									26
+								]
+							],
+							"bounds": [
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									385.6875
+								],
+								[
+									0,
+									0,
+									1280,
+									385.6875
+								],
+								[
+									0,
+									0,
+									1280,
+									385.6875
+								],
+								[
+									12,
+									30.75,
+									1256,
+									39.1875
+								],
+								[
+									12,
+									33.75,
+									261.71875,
+									33
+								],
+								[
+									12,
+									88.6875,
+									240,
+									120
+								],
+								[
+									23.828125,
+									99.515625,
+									78.671875,
+									39.34375
+								],
+								[
+									136.90625,
+									104.4375,
+									49.1875,
+									49.171875
+								],
+								[
+									23.828125,
+									165.1875,
+									105.9375,
+									16
+								],
+								[
+									23.828125,
+									165.171875,
+									105.9375,
+									16.03125
+								],
+								[
+									23.328125,
+									148.6875,
+									217.34375,
+									39.828125
+								],
+								[
+									23.328125,
+									187.515625,
+									217.34375,
+									1
+								],
+								[
+									112.328125,
+									148.6875,
+									39.34375,
+									39.34375
+								],
+								[
+									12,
+									220.6875,
+									240,
+									120
+								],
+								[
+									23.828125,
+									231.515625,
+									88.515625,
+									39.34375
+								],
+								[
+									23.828125,
+									231.515625,
+									88.515625,
+									39.34375
+								],
+								[
+									29.71875,
+									243.09375,
+									60.984375,
+									16.015625
+								],
+								[
+									29.71875,
+									243.078125,
+									60.5625,
+									16.046875
+								],
+								[
+									132,
+									231.515625,
+									98.34375,
+									39.34375
+								],
+								[
+									132,
+									231.515625,
+									98.34375,
+									39.34375
+								],
+								[
+									139.859375,
+									243.09375,
+									75.671875,
+									16.015625
+								],
+								[
+									139.859375,
+									243.078125,
+									75.6875,
+									16.046875
+								],
+								[
+									12,
+									352.6875,
+									104.90625,
+									21
+								],
+								[
+									20,
+									355.6875,
+									88.90625,
+									15
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								]
+							],
+							"text": [
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								28,
+								-1,
+								-1,
+								-1,
+								-1,
+								68,
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								-1,
+								100,
+								-1,
+								-1,
+								-1,
+								108,
+								-1,
+								115,
+								17
+							],
+							"stackingContexts": {
+								"index": [
+									0,
+									1
+								]
+							},
+							"paintOrders": [
+								0,
+								1,
+								1,
+								1,
+								1,
+								1,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								2,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								3,
+								1,
+								1,
+								1
+							],
+							"offsetRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									12,
+									31,
+									1256,
+									39
+								],
+								[],
+								[
+									12,
+									89,
+									240,
+									120
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									89,
+									118,
+									93
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									221,
+									240,
+									120
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									221,
+									78,
+									38
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									12,
+									221,
+									205,
+									38
+								],
+								[],
+								[
+									12,
+									353,
+									105,
+									21
+								],
+								[],
+								[]
+							],
+							"scrollRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									0,
+									0,
+									238,
+									118
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									118,
+									93
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									238,
+									118
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									78,
+									38
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									205,
+									38
+								],
+								[],
+								[
+									0,
+									0,
+									101,
+									17
+								],
+								[],
+								[]
+							],
+							"clientRects": [
+								[],
+								[
+									0,
+									0,
+									1280,
+									900
+								],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									0,
+									0,
+									1280,
+									386
+								],
+								[
+									0,
+									0,
+									1256,
+									39
+								],
+								[],
+								[
+									1,
+									1,
+									238,
+									118
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									118,
+									93
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									1,
+									1,
+									238,
+									118
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									78,
+									38
+								],
+								[],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									0,
+									0
+								],
+								[
+									0,
+									0,
+									205,
+									38
+								],
+								[],
+								[
+									2,
+									2,
+									101,
+									17
+								],
+								[],
+								[]
+							]
+						},
+						"textBoxes": {
+							"layoutIndex": [
+								5,
+								10,
+								18,
+								22,
+								24
+							],
+							"bounds": [
+								[
+									12,
+									33.75,
+									261.71875,
+									33
+								],
+								[
+									23.828125,
+									165.171875,
+									104.171875,
+									15.75
+								],
+								[
+									29.71875,
+									243.078125,
+									59.546875,
+									15.75
+								],
+								[
+									139.859375,
+									243.078125,
+									74.40625,
+									15.75
+								],
+								[
+									20,
+									355.6875,
+									88.90625,
+									15
+								]
+							],
+							"start": [
+								0,
+								0,
+								0,
+								0,
+								0
+							],
+							"length": [
+								17,
+								14,
+								8,
+								10,
+								14
+							]
+						},
+						"scrollOffsetX": 0,
+						"scrollOffsetY": 0,
+						"contentWidth": 1280,
+						"contentHeight": 900
+					}
+				],
+				"strings": [
+					"http://127.0.0.1:38111/svg_children.html",
+					"SVG With Children",
+					"UTF-8",
+					"8FC2B84EA77EE28FCDDF0AEC70A812D0",
+					"#document",
+					"html",
+					"HTML",
+					"lang",
+					"en",
+					"block",
+					"visible",
+					"1",
+					"auto",
+					"static",
+					"rgb(255, 255, 255)",
+					"HEAD",
+					"#text",
+					"\n",
+					"META",
+					"charset",
+					"utf-8",
+					"TITLE",
+					"STYLE",
+					"\n*{transition:none!important;animation:none!important;box-sizing:border-box}\nhtml,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}\nmain{padding:12px}\nsvg{border:1px solid #333;display:block;margin-bottom:12px}\n",
+					"BODY",
+					"MAIN",
+					"rgba(0, 0, 0, 0)",
+					"H1",
+					"SVG with children",
+					"\n\n",
+					"svg",
+					"id",
+					"plain-svg",
+					"width",
+					"240",
+					"height",
+					"120",
+					"viewBox",
+					"0 0 240 120",
+					"xmlns",
+					"http://www.w3.org/2000/svg",
+					"hidden",
+					"\n  ",
+					"title",
+					"Plain decorative svg",
+					"desc",
+					"A rectangle, a circle and some text.",
+					"rect",
+					"svg-rect",
+					"x",
+					"10",
+					"y",
+					"80",
+					"40",
+					"fill",
+					"#8ab",
+					"inline",
+					"circle",
+					"svg-circle",
+					"cx",
+					"150",
+					"cy",
+					"r",
+					"25",
+					"#ba8",
+					"text",
+					"svg-text",
+					"90",
+					"svg text child",
+					"g",
+					"svg-group",
+					"\n    ",
+					"line",
+					"x1",
+					"y1",
+					"100",
+					"x2",
+					"230",
+					"y2",
+					"stroke",
+					"#333",
+					"path",
+					"svg-path",
+					"d",
+					"M 120 60 L 140 100 L 100 100 Z",
+					"#8b8",
+					"interactive-svg",
+					"role",
+					"img",
+					"aria-label",
+					"Interactive svg",
+					"a",
+					"svg-link",
+					"href",
+					"#svg-target",
+					"Svg anchor",
+					"pointer",
+					"#cde",
+					"16",
+					"35",
+					"svg link",
+					"svg-clickable",
+					"button",
+					"tabindex",
+					"0",
+					"Svg button group",
+					"#edc",
+					"128",
+					"svg button",
+					"BUTTON",
+					"type",
+					"after-svg",
+					"inline-block",
+					"default",
+					"rgb(240, 240, 240)",
+					"After the SVGs",
+					"\n\n\n"
+				]
+			},
+			"axNodes": [
+				{
+					"nodeId": "2",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "RootWebArea"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 144
+					},
+					"name": {
+						"type": "computedString",
+						"value": "SVG With Children",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label",
+								"superseded": true
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "SVG With Children"
+								},
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/svg_children.html"
+							}
+						}
+					],
+					"childIds": [
+						"4"
+					],
+					"backendDOMNodeId": 2,
+					"frameId": "8FC2B84EA77EE28FCDDF0AEC70A812D0"
+				},
+				{
+					"nodeId": "4",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "2",
+					"childIds": [
+						"11"
+					],
+					"backendDOMNodeId": 4
+				},
+				{
+					"nodeId": "11",
+					"ignored": true,
+					"ignoredReasons": [
+						{
+							"name": "uninteresting",
+							"value": {
+								"type": "boolean",
+								"value": true
+							}
+						}
+					],
+					"role": {
+						"type": "role",
+						"value": "none"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 0
+					},
+					"parentId": "4",
+					"childIds": [
+						"12"
+					],
+					"backendDOMNodeId": 11
+				},
+				{
+					"nodeId": "12",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "main"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 118
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "11",
+					"childIds": [
+						"13",
+						"15",
+						"27",
+						"36"
+					],
+					"backendDOMNodeId": 12
+				},
+				{
+					"nodeId": "13",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "heading"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 96
+					},
+					"name": {
+						"type": "computedString",
+						"value": "SVG with children",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "SVG with children"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "level",
+							"value": {
+								"type": "integer",
+								"value": 1
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"14"
+					],
+					"backendDOMNodeId": 13
+				},
+				{
+					"nodeId": "15",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "SvgRoot"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 162
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Plain decorative svg",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"value": {
+									"type": "computedString",
+									"value": "Plain decorative svg"
+								},
+								"nativeSource": "title"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"description": {
+						"type": "computedString",
+						"value": "A rectangle, a circle and some text."
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"22"
+					],
+					"backendDOMNodeId": 15
+				},
+				{
+					"nodeId": "27",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "image"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 99
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Interactive svg",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"value": {
+									"type": "computedString",
+									"value": "Interactive svg"
+								},
+								"attribute": "aria-label",
+								"attributeValue": {
+									"type": "string",
+									"value": "Interactive svg"
+								}
+							},
+							{
+								"type": "relatedElement",
+								"superseded": true,
+								"nativeSource": "title"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "12",
+					"childIds": [
+						"28",
+						"32"
+					],
+					"backendDOMNodeId": 27
+				},
+				{
+					"nodeId": "36",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "After the SVGs",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "label"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "After the SVGs"
+								}
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "invalid",
+							"value": {
+								"type": "token",
+								"value": "false"
+							}
+						},
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "12",
+					"childIds": [
+						"37"
+					],
+					"backendDOMNodeId": 36
+				},
+				{
+					"nodeId": "14",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "SVG with children",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "SVG with children"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "13",
+					"childIds": [
+						"-1000000002"
+					],
+					"backendDOMNodeId": 14
+				},
+				{
+					"nodeId": "22",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "15",
+					"childIds": [
+						"23"
+					],
+					"backendDOMNodeId": 22
+				},
+				{
+					"nodeId": "28",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "link"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 110
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Svg anchor",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"value": {
+									"type": "computedString",
+									"value": "Svg anchor"
+								},
+								"attribute": "aria-label",
+								"attributeValue": {
+									"type": "string",
+									"value": "Svg anchor"
+								}
+							},
+							{
+								"type": "relatedElement",
+								"superseded": true,
+								"nativeSource": "title"
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "svg link"
+								},
+								"superseded": true
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						},
+						{
+							"name": "url",
+							"value": {
+								"type": "string",
+								"value": "http://127.0.0.1:38111/svg_children.html#svg-target"
+							}
+						}
+					],
+					"parentId": "27",
+					"childIds": [
+						"30"
+					],
+					"backendDOMNodeId": 28
+				},
+				{
+					"nodeId": "32",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "button"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 9
+					},
+					"name": {
+						"type": "computedString",
+						"value": "Svg button group",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"value": {
+									"type": "computedString",
+									"value": "Svg button group"
+								},
+								"attribute": "aria-label",
+								"attributeValue": {
+									"type": "string",
+									"value": "Svg button group"
+								}
+							},
+							{
+								"type": "relatedElement",
+								"superseded": true,
+								"nativeSource": "title"
+							},
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "svg button"
+								},
+								"superseded": true
+							},
+							{
+								"type": "attribute",
+								"attribute": "title",
+								"superseded": true
+							}
+						]
+					},
+					"properties": [
+						{
+							"name": "focusable",
+							"value": {
+								"type": "booleanOrUndefined",
+								"value": true
+							}
+						}
+					],
+					"parentId": "27",
+					"childIds": [
+						"34"
+					],
+					"backendDOMNodeId": 32
+				},
+				{
+					"nodeId": "37",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "After the SVGs",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "After the SVGs"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "36",
+					"childIds": [
+						"-1000000006"
+					],
+					"backendDOMNodeId": 37
+				},
+				{
+					"nodeId": "-1000000002",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "SVG with children"
+					},
+					"properties": [],
+					"parentId": "14",
+					"childIds": []
+				},
+				{
+					"nodeId": "23",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "svg text child",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "svg text child"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "22",
+					"childIds": [
+						"-1000000003"
+					],
+					"backendDOMNodeId": 23
+				},
+				{
+					"nodeId": "30",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "28",
+					"childIds": [
+						"31"
+					],
+					"backendDOMNodeId": 30
+				},
+				{
+					"nodeId": "34",
+					"ignored": false,
+					"role": {
+						"type": "role",
+						"value": "generic"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 88
+					},
+					"name": {
+						"type": "computedString",
+						"value": "",
+						"sources": [
+							{
+								"type": "relatedElement",
+								"attribute": "aria-labelledby"
+							},
+							{
+								"type": "attribute",
+								"attribute": "aria-label"
+							},
+							{
+								"type": "relatedElement",
+								"nativeSource": "title"
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "32",
+					"childIds": [
+						"35"
+					],
+					"backendDOMNodeId": 34
+				},
+				{
+					"nodeId": "-1000000006",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "After the SVGs"
+					},
+					"properties": [],
+					"parentId": "37",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000003",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "svg text child"
+					},
+					"properties": [],
+					"parentId": "23",
+					"childIds": []
+				},
+				{
+					"nodeId": "31",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "svg link",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "svg link"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "30",
+					"childIds": [
+						"-1000000004"
+					],
+					"backendDOMNodeId": 31
+				},
+				{
+					"nodeId": "35",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "StaticText"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 158
+					},
+					"name": {
+						"type": "computedString",
+						"value": "svg button",
+						"sources": [
+							{
+								"type": "contents",
+								"value": {
+									"type": "computedString",
+									"value": "svg button"
+								}
+							}
+						]
+					},
+					"properties": [],
+					"parentId": "34",
+					"childIds": [
+						"-1000000005"
+					],
+					"backendDOMNodeId": 35
+				},
+				{
+					"nodeId": "-1000000004",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "svg link"
+					},
+					"properties": [],
+					"parentId": "31",
+					"childIds": []
+				},
+				{
+					"nodeId": "-1000000005",
+					"ignored": false,
+					"role": {
+						"type": "internalRole",
+						"value": "InlineTextBox"
+					},
+					"chromeRole": {
+						"type": "internalRole",
+						"value": 101
+					},
+					"name": {
+						"type": "computedString",
+						"value": "svg button"
+					},
+					"properties": [],
+					"parentId": "35",
+					"childIds": []
+				}
+			],
+			"listeners": {
+				"frames": [
+					{
+						"frame": "",
+						"total": 25,
+						"scanned": 25,
+						"hits": []
+					}
+				],
+				"truncated": false
+			}
+		}
+	],
+	"warnings": []
+}

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OOPIF Selector-Index Collision</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+#ioc-hosts button{display:inline-block;width:100px;margin:1px;font:11px/1.2 monospace}
+iframe{border:1px solid #333;width:520px;height:400px;display:block;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>OOPIF index collision</h1>
+<div id="ioc-hosts"><button type="button" id="hc-b01">Host 01</button><button type="button" id="hc-b02">Host 02</button><button type="button" id="hc-b03">Host 03</button><button type="button" id="hc-b04">Host 04</button><button type="button" id="hc-b05">Host 05</button><button type="button" id="hc-b06">Host 06</button><button type="button" id="hc-b07">Host 07</button><button type="button" id="hc-b08">Host 08</button><button type="button" id="hc-b09">Host 09</button><button type="button" id="hc-b10">Host 10</button><button type="button" id="hc-b11">Host 11</button><button type="button" id="hc-b12">Host 12</button><button type="button" id="hc-b13">Host 13</button><button type="button" id="hc-b14">Host 14</button><button type="button" id="hc-b15">Host 15</button><button type="button" id="hc-b16">Host 16</button><button type="button" id="hc-b17">Host 17</button><button type="button" id="hc-b18">Host 18</button><button type="button" id="hc-b19">Host 19</button><button type="button" id="hc-b20">Host 20</button><button type="button" id="hc-b21">Host 21</button><button type="button" id="hc-b22">Host 22</button><button type="button" id="hc-b23">Host 23</button><button type="button" id="hc-b24">Host 24</button><button type="button" id="hc-b25">Host 25</button><button type="button" id="hc-b26">Host 26</button><button type="button" id="hc-b27">Host 27</button><button type="button" id="hc-b28">Host 28</button><button type="button" id="hc-b29">Host 29</button><button type="button" id="hc-b30">Host 30</button><button type="button" id="hc-b31">Host 31</button><button type="button" id="hc-b32">Host 32</button><button type="button" id="hc-b33">Host 33</button><button type="button" id="hc-b34">Host 34</button><button type="button" id="hc-b35">Host 35</button><button type="button" id="hc-b36">Host 36</button><button type="button" id="hc-b37">Host 37</button><button type="button" id="hc-b38">Host 38</button><button type="button" id="hc-b39">Host 39</button><button type="button" id="hc-b40">Host 40</button><button type="button" id="hc-b41">Host 41</button><button type="button" id="hc-b42">Host 42</button><button type="button" id="hc-b43">Host 43</button><button type="button" id="hc-b44">Host 44</button><button type="button" id="hc-b45">Host 45</button><button type="button" id="hc-b46">Host 46</button><button type="button" id="hc-b47">Host 47</button><button type="button" id="hc-b48">Host 48</button><button type="button" id="hc-b49">Host 49</button><button type="button" id="hc-b50">Host 50</button><button type="button" id="hc-b51">Host 51</button><button type="button" id="hc-b52">Host 52</button><button type="button" id="hc-b53">Host 53</button><button type="button" id="hc-b54">Host 54</button><button type="button" id="hc-b55">Host 55</button><button type="button" id="hc-b56">Host 56</button><button type="button" id="hc-b57">Host 57</button><button type="button" id="hc-b58">Host 58</button><button type="button" id="hc-b59">Host 59</button><button type="button" id="hc-b60">Host 60</button><button type="button" id="hc-b61">Host 61</button><button type="button" id="hc-b62">Host 62</button><button type="button" id="hc-b63">Host 63</button><button type="button" id="hc-b64">Host 64</button><button type="button" id="hc-b65">Host 65</button><button type="button" id="hc-b66">Host 66</button><button type="button" id="hc-b67">Host 67</button><button type="button" id="hc-b68">Host 68</button><button type="button" id="hc-b69">Host 69</button><button type="button" id="hc-b70">Host 70</button></div>
+<iframe id="ioc-frame" title="collision frame" src="http://localhost:38112/frames/frame_collision_child.html"></iframe>
+<button type="button" id="ioc-zz-last"></button>
+</main>
+</body>
+</html>

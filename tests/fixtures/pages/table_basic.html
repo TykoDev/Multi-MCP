@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Table</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+table{border-collapse:collapse;margin-bottom:16px}
+th,td{border:1px solid #666;padding:4px 8px;text-align:left}
+</style>
+</head>
+<body>
+<main>
+<h1>Tables</h1>
+
+<table id="data-table">
+  <caption>Quarterly figures</caption>
+  <thead>
+    <tr><th scope="col">Region</th><th scope="col">Q1</th><th scope="col">Q2</th><th scope="col">Action</th></tr>
+  </thead>
+  <tbody>
+    <tr><th scope="row">North</th><td>120</td><td>134</td><td><button type="button" id="row-north">Edit north</button></td></tr>
+    <tr><th scope="row">South</th><td>98</td><td>101</td><td><button type="button" id="row-south">Edit south</button></td></tr>
+    <tr><th scope="row">East</th><td>142</td><td>139</td><td><a href="#east" id="row-east" title="Edit east">edit</a></td></tr>
+  </tbody>
+  <tfoot>
+    <tr><th scope="row">Total</th><td>360</td><td>374</td><td></td></tr>
+  </tfoot>
+</table>
+
+<table id="aria-grid" role="grid" aria-label="Aria grid">
+  <tr role="row"><td role="gridcell" tabindex="0">Cell 1,1</td><td role="gridcell" tabindex="-1">Cell 1,2</td></tr>
+  <tr role="row"><td role="gridcell" tabindex="-1">Cell 2,1</td><td role="gridcell" tabindex="-1"><input type="text" id="grid-input" name="gridInput" value="in-cell"></td></tr>
+</table>
+
+<table id="layout-table" role="presentation">
+  <tr><td>Layout cell A</td><td>Layout cell B</td></tr>
+</table>
+</main>
+</body>
+</html>

@@ -1,0 +1,7 @@
+[500]<button />
+	Main
+|scroll element[600]<iframe /> (scroll)
+	[701]<button />
+		Inner A
+	[700]<button />
+		Inner B

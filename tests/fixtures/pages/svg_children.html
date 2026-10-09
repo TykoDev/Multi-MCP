@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SVG With Children</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+svg{border:1px solid #333;display:block;margin-bottom:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>SVG with children</h1>
+
+<svg id="plain-svg" width="240" height="120" viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg">
+  <title>Plain decorative svg</title>
+  <desc>A rectangle, a circle and some text.</desc>
+  <rect id="svg-rect" x="10" y="10" width="80" height="40" fill="#8ab"></rect>
+  <circle id="svg-circle" cx="150" cy="40" r="25" fill="#ba8"></circle>
+  <text id="svg-text" x="10" y="90">svg text child</text>
+  <g id="svg-group">
+    <line x1="10" y1="100" x2="230" y2="100" stroke="#333"></line>
+    <path id="svg-path" d="M 120 60 L 140 100 L 100 100 Z" fill="#8b8"></path>
+  </g>
+</svg>
+
+<svg id="interactive-svg" width="240" height="120" viewBox="0 0 240 120" role="img" aria-label="Interactive svg" xmlns="http://www.w3.org/2000/svg">
+  <a id="svg-link" href="#svg-target" aria-label="Svg anchor">
+    <rect x="10" y="10" width="90" height="40" fill="#cde"></rect>
+    <text x="16" y="35">svg link</text>
+  </a>
+  <g id="svg-clickable" role="button" tabindex="0" aria-label="Svg button group">
+    <rect x="120" y="10" width="100" height="40" fill="#edc"></rect>
+    <text x="128" y="35">svg button</text>
+  </g>
+</svg>
+
+<button type="button" id="after-svg">After the SVGs</button>
+</main>
+</body>
+</html>

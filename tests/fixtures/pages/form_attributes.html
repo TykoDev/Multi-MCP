@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Form Attribute Rules</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+label{display:block;margin-top:8px}
+fieldset{margin:10px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Attribute emission rules</h1>
+
+<form id="attr-form" name="attrForm" action="#" method="get">
+
+<fieldset>
+<legend>HTML5 date and time inputs</legend>
+<label for="f-date">Date</label>
+<input id="f-date" name="fDate" type="date" min="2020-01-01" max="2030-12-31" step="1">
+
+<label for="f-time">Time</label>
+<input id="f-time" name="fTime" type="time" min="08:00" max="18:00" step="900">
+
+<label for="f-datetime">Datetime local</label>
+<input id="f-datetime" name="fDatetime" type="datetime-local" min="2020-01-01T00:00" max="2030-12-31T23:59">
+
+<label for="f-month">Month</label>
+<input id="f-month" name="fMonth" type="month" min="2020-01" max="2030-12">
+
+<label for="f-week">Week</label>
+<input id="f-week" name="fWeek" type="week" min="2020-W01" max="2030-W52">
+
+<label for="f-tel">Telephone</label>
+<input id="f-tel" name="fTel" type="tel" pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}" placeholder="123-456-7890" autocomplete="tel" inputmode="tel">
+</fieldset>
+
+<fieldset>
+<legend>Password (value must never be emitted)</legend>
+<label for="f-password">Password</label>
+<input id="f-password" name="fPassword" type="password" value="P4ssw0rd-SENTINEL-DO-NOT-LEAK-9f3a2b" autocomplete="current-password" aria-label="Account password" minlength="8" maxlength="64" required>
+
+<label for="f-password-empty">Password (empty)</label>
+<input id="f-password-empty" name="fPasswordEmpty" type="password" placeholder="enter password" aria-describedby="pw-help">
+<span id="pw-help">At least eight characters.</span>
+</fieldset>
+
+<fieldset>
+<legend>ARIA attributes</legend>
+<input id="f-aria" name="fAria" type="text"
+       role="textbox"
+       aria-label="Aria labelled text field"
+       aria-required="true"
+       aria-invalid="false"
+       aria-describedby="pw-help"
+       aria-placeholder="aria placeholder text"
+       aria-keyshortcuts="Alt+A"
+       aria-haspopup="listbox"
+       aria-expanded="false"
+       aria-controls="aria-listbox-target"
+       aria-autocomplete="list">
+
+<div id="aria-listbox-target" role="listbox" aria-label="Attribute demo listbox" tabindex="0">
+  <div role="option" id="opt-a" aria-selected="true">Option A</div>
+  <div role="option" id="opt-b" aria-selected="false">Option B</div>
+</div>
+
+<div id="f-live" role="status" aria-live="polite" aria-busy="false">Live region content</div>
+
+<div id="f-meter" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42" aria-valuetext="forty two percent" aria-label="Demo slider">slider</div>
+</fieldset>
+
+<fieldset>
+<legend>Long attribute values (&gt;100 chars) and duplicates</legend>
+<input id="f-long" name="fLong" type="text"
+       title="This title attribute is deliberately far longer than one hundred characters so that the hundred character truncation rule with the trailing ellipsis is exercised end to end by the recorder."
+       placeholder="This placeholder is also deliberately far longer than one hundred characters so that truncation applies to more than a single attribute on the same element."
+       value="short-value"
+       aria-label="Aria label that is also longer than one hundred characters in order to check that every emitted attribute value is capped independently of the others.">
+
+<input id="f-dupe" name="duplicated-attribute-value" type="text"
+       title="duplicated-attribute-value"
+       placeholder="duplicated-attribute-value"
+       aria-label="duplicated-attribute-value"
+       value="duplicated-attribute-value"
+       alt="duplicated-attribute-value">
+
+<input id="f-dupe-short" name="abc" type="text" title="abc" placeholder="abc" aria-label="abc" value="abc">
+
+<button type="button" id="f-text-equals-label" title="Save changes" aria-label="Save changes">Save changes</button>
+</fieldset>
+
+<fieldset>
+<legend>Redundancy cleanup cases</legend>
+<button id="f-role-eq-tag" type="button" role="button">role equals tag</button>
+<a id="f-link-role" href="#x" role="link" title="role equals tag anchor">anchor role link</a>
+<input id="f-invalid-false" name="fInvalidFalse" type="text" aria-invalid="false" required="false">
+<input id="f-required-empty" name="fRequiredEmpty" type="text" required="">
+<div id="f-editable" contenteditable="true" role="textbox" aria-label="Editable region">editable content</div>
+</fieldset>
+
+<fieldset>
+<legend>Other whitelisted attributes</legend>
+<input id="f-file" name="fFile" type="file" accept=".png,.jpg,.pdf" multiple>
+<input id="f-list" name="fList" type="text" list="f-datalist" autocomplete="off">
+<datalist id="f-datalist">
+  <option value="alpha"></option>
+  <option value="beta"></option>
+</datalist>
+<input id="f-range" name="fRange" type="range" min="0" max="10" step="2" value="4">
+<input id="f-number" name="fNumber" type="number" min="1" max="99" step="1" value="7" inputmode="numeric">
+<input id="f-empty-value" name="fEmptyValue" type="text" value="" title="">
+<button id="f-submit" type="submit">Submit</button>
+</fieldset>
+
+</form>
+</main>
+</body>
+</html>

@@ -1,0 +1,11 @@
+|SHADOW(open)|[977]<custom-button />
+	Open Shadow
+		[978]<button />
+			Click
+	Shadow End
+Closed Shadow
+	Secret panel
+	[981]<button />
+		OK
+Shadow End
+|SHADOW(open)|*[990]<input type=range compound_components=(name=Value,role=slider) />

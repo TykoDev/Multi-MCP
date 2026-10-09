@@ -1,0 +1,35 @@
+# D-108: the image of the Docker workspace backend's per-workspace containers
+# (TTK_SANDBOX_WORKSPACE_IMAGE, default tykotech-sandbox-workspace:0.2.0). Opt-in, with
+# docker-compose.sandbox-docker.yml; the bubblewrap image (docker/Dockerfile.sandbox) stays the default.
+#
+#   docker build -f docker/Dockerfile.sandbox-workspace -t tykotech-sandbox-workspace:0.2.0 .
+#
+# The same toolchain as the bubblewrap sandbox image, minus bubblewrap (the container is the cage): Deno, git,
+# Python with pip, Node.js with npm, curl, CA certificates and util-linux (setsid, which the exec wrapper starts
+# every command with); socat turns the registry proxy's unix socket into 127.0.0.1:3128. No service code, no
+# secrets. The sandbox service creates each container from a fixed, validated body
+# (packages/sandbox/src/docker_spec.ts): uid 1993, read-only root, no network, every capability dropped.
+#
+# Two stages, because a workspace container's environment is the cage's BASE_ENV and nothing else: the Deno image
+# sets DENO_DIR=/deno-dir/ (read-only here; Deno's cache belongs in the workspace's home, as in a cage), and its
+# tini entrypoint would wrap `sleep infinity` under Docker's own init. Only the binary is taken from it.
+# Same Deno release and Debian (trixie) as the bubblewrap image; digests pinned (integration reconciles the Deno
+# digest with the other images').
+FROM denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432 AS deno
+
+FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    socat git python3 python3-pip nodejs npm curl ca-certificates util-linux \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=deno /usr/bin/deno /usr/bin/deno
+# The cage's own identity files: user `sandbox` (1993) with home /home/sandbox, and a files-only name service
+# (the container has no network to ask DNS on).
+COPY packages/sandbox/cage/etc/passwd packages/sandbox/cage/etc/group packages/sandbox/cage/etc/nsswitch.conf /etc/
+# Mount points exist in the image: the root is read-only at run time.
+RUN chmod 0644 /etc/passwd /etc/group /etc/nsswitch.conf \
+    && mkdir -p /workspace /home/sandbox /run/harbour \
+    && chown 1993:1993 /workspace /home/sandbox /run/harbour
+USER 1993:1993
+WORKDIR /workspace
+ENTRYPOINT []
+CMD ["sleep", "infinity"]

@@ -1,0 +1,45 @@
+{
+	"name": "scroll_containers",
+	"pins": "§6.4 |scroll element[idx]| (interactive) vs bare |scroll element| (not interactive), the '(X.X pages above, Y.Y pages below)' suffix, and a horizontal-only container carrying ONLY '(horizontal NN%)'",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{
+						"tag": "DIV",
+						"id": 1520,
+						"attrs": { "role": "listbox" },
+						"ax": { "role": "listbox" },
+						"scrollable": true,
+						"client": [0, 0, 100, 100],
+						"scroll": [0, 20, 100, 260]
+					},
+					{
+						"tag": "DIV",
+						"id": 1521,
+						"scrollable": true,
+						"client": [0, 0, 100, 100],
+						"scroll": [0, 110, 100, 300]
+					},
+					{
+						"tag": "DIV",
+						"id": 1522,
+						"scrollable": true,
+						"client": [0, 0, 100, 100],
+						"scroll": [50, 0, 200, 100]
+					},
+					{
+						"tag": "DIV",
+						"id": 1523,
+						"scrollable": true,
+						"client": [0, 0, 100, 100],
+						"scroll": [0, 0, 100, 100],
+						"children": [{ "text": "not really scrollable" }]
+					}
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Details, Dialog and Popover</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+details{border:1px solid #666;padding:6px;margin:8px 0;width:420px}
+dialog{border:1px solid #333;padding:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Disclosure widgets</h1>
+
+<details id="details-closed">
+  <summary id="summary-closed">Closed disclosure summary</summary>
+  <p>Hidden detail body.</p>
+  <button type="button" id="closed-detail-button">Button inside closed details</button>
+</details>
+
+<details id="details-open" open>
+  <summary id="summary-open">Open disclosure summary</summary>
+  <p>Visible detail body.</p>
+  <button type="button" id="open-detail-button">Button inside open details</button>
+</details>
+
+<dialog id="dialog-closed">
+  <p>Closed dialog body.</p>
+  <button type="button" id="dialog-closed-button">Button inside closed dialog</button>
+</dialog>
+
+<dialog id="dialog-open" open>
+  <p>Open non-modal dialog body.</p>
+  <button type="button" id="dialog-open-button">Button inside open dialog</button>
+  <form method="dialog"><button type="submit" id="dialog-close-submit">Close</button></form>
+</dialog>
+
+<button type="button" id="popover-trigger" popovertarget="popover-panel">Toggle popover</button>
+<div id="popover-panel" popover>
+  <p>Popover contents.</p>
+  <button type="button" id="popover-inner-button">Button inside popover</button>
+</div>
+
+<button type="button" id="tail-control">Tail control</button>
+</main>
+</body>
+</html>

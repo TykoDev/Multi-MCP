@@ -1,0 +1,37 @@
+{
+	"name": "basic_page",
+	"pins": "§6.4 base line forms: [Start of page]/[End of page], bare text nodes, [idx] tag lines, structural pass-through depth",
+	"options": { "pixelsAbove": 0, "pixelsBelow": 0 },
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{ "text": "Welcome" },
+					{ "text": "x" },
+					{ "text": "   \n  " },
+					{ "tag": "H1", "children": [{ "text": "Store" }] },
+					{
+						"tag": "BUTTON",
+						"id": 1423,
+						"attrs": { "type": "submit" },
+						"children": [{ "text": "Go" }]
+					},
+					{ "tag": "A", "id": 1301, "attrs": { "href": "/home", "title": "Home" } },
+					{
+						"tag": "INPUT",
+						"id": 1500,
+						"attrs": { "type": "text", "name": "q", "placeholder": "Search" }
+					},
+					{
+						"tag": "DIV",
+						"children": [
+							{ "tag": "SPAN", "children": [{ "text": "nested text" }] }
+						]
+					}
+				]
+			}
+		]
+	}
+}

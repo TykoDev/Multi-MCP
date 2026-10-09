@@ -1,0 +1,19 @@
+# External ACP agents are operator-supplied at the exact launch path below (D-066).
+# No model/runtime or model key is baked into this private service.
+# C13 (D-103): pinned by digest to the gateway images' Deno. denoland/deno:2.9.7 and debian-2.9.7 are the same
+# multi-arch index; resolved 2026-10-04.
+FROM denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends util-linux procps && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /opt/agents /agent-workspace /app && chown -R deno:deno /opt/agents /agent-workspace /app
+WORKDIR /app
+COPY --chown=deno:deno deno.json deno.lock ./
+COPY --chown=deno:deno packages ./packages
+COPY --chown=deno:deno scripts ./scripts
+RUN deno cache --frozen scripts/agent_runner.ts scripts/agent_healthcheck.ts
+USER deno
+EXPOSE 8789
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 CMD ["deno", "run", "--deny-ffi", "--allow-net=127.0.0.1:8789", "scripts/agent_healthcheck.ts"]
+# The operator can derive this image to install their agent. Additional executables
+# require an explicitly updated matrix, never a blanket allow-run grant.
+CMD ["deno", "run", "--deny-ffi", "--allow-net=0.0.0.0:8789", "--allow-env=TTK_AGENT_COMMANDS_FILE,TTK_AGENT_BRIDGE_TOKEN_FILE", "--allow-read=/app,/run/secrets,/opt/agents,/agent-workspace", "--allow-run=/opt/agents/agent,/usr/bin/setsid,/usr/bin/kill", "scripts/agent_runner.ts"]

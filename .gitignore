@@ -1,0 +1,38 @@
+# Deno
+/coverage/
+*.lcov
+/node_modules/
+
+# Build output
+/dist/
+/packages/web/dist/
+
+# Test scratch
+/tests/.scratch/
+
+# Local data directory (TTK_DATA_DIR=data for dev, stdio and seed)
+/data/
+
+# Secrets: never committed
+/secrets/*
+!/secrets/.gitkeep
+!/secrets/README.md
+.env
+
+# Real-model test endpoint config (holds an API key; see scripts/model_endpoint.ts)
+/openai_compatible_api
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Agent tooling (local state; .claude/settings.json is shared and committed)
+/.codex/
+/.playwright-mcp/
+/.claude/settings.local.json
+/.claude/scheduled_tasks.lock
+
+# Python bytecode
+__pycache__/
+*.pyc

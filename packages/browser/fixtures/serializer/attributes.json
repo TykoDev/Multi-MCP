@@ -1,0 +1,118 @@
+{
+	"name": "attributes",
+	"pins": "§6.5 end to end: password scrubbing, AX-value override, format/expected_format hints (format mirrored into placeholder), role/type/invalid/required/aria-expanded cleanups, empty values dropped, >5-char dedupe where a protected key claims the value, 100-char cap, compound_components",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{
+						"tag": "INPUT",
+						"id": 10,
+						"attrs": { "type": "password", "name": "pw", "value": "hunter2" },
+						"ax": { "props": { "valuetext": "hunter2 live" } }
+					},
+					{
+						"tag": "INPUT",
+						"id": 11,
+						"attrs": {
+							"type": "text",
+							"name": "pw2",
+							"value": "s3cret",
+							"autocomplete": "new-password"
+						}
+					},
+					{
+						"tag": "INPUT",
+						"id": 12,
+						"attrs": { "type": "text", "name": "city", "value": "stale dom value" },
+						"ax": { "props": { "valuetext": "Berlin" } }
+					},
+					{ "tag": "INPUT", "id": 13, "attrs": { "type": "date", "name": "when" } },
+					{
+						"tag": "INPUT",
+						"id": 14,
+						"attrs": { "type": "text", "class": "form-control datepicker", "name": "d1" }
+					},
+					{
+						"tag": "INPUT",
+						"id": 15,
+						"attrs": {
+							"type": "text",
+							"class": "js-date-picker",
+							"data-date-format": "dd.mm.yyyy",
+							"name": "d2"
+						}
+					},
+					{
+						"tag": "INPUT",
+						"id": 16,
+						"attrs": { "type": "text", "uib-datepicker-popup": "dd-MMMM-yyyy", "name": "d3" }
+					},
+					{ "tag": "BUTTON", "id": 17, "attrs": { "type": "button", "role": "button", "id": "save" } },
+					{
+						"tag": "BUTTON",
+						"id": 18,
+						"attrs": { "aria-expanded": "false" },
+						"ax": {
+							"props": { "expanded": true, "invalid": false, "required": false }
+						}
+					},
+					{
+						"tag": "BUTTON",
+						"id": 19,
+						"attrs": { "aria-label": "Submit order", "title": "Submit order" },
+						"ax": { "name": "Submit order" },
+						"children": [{ "text": "Submit order" }]
+					},
+					{
+						"tag": "BUTTON",
+						"id": 20,
+						"attrs": {
+							"id": "duplicate-value",
+							"name": "duplicate-value",
+							"title": "duplicate-value",
+							"alt": "duplicate-value"
+						}
+					},
+					{ "tag": "BUTTON", "id": 21, "attrs": { "id": "abc", "name": "abc" } },
+					{
+						"tag": "BUTTON",
+						"id": 22,
+						"attrs": {
+							"title": "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
+						}
+					},
+					{ "tag": "BUTTON", "id": 23, "attrs": { "aria-label": "" }, "children": [{ "text": "Icon" }] },
+					{
+						"tag": "DIV",
+						"id": 24,
+						"ax": { "role": "slider", "name": "Volume" },
+						"compound": [
+							{
+								"name": "Volume",
+								"role": "slider",
+								"min": "0",
+								"max": "10",
+								"current": "3",
+								"count": "11",
+								"options": "a|b|c",
+								"format": "int"
+							}
+						]
+					},
+					{
+						"tag": "SELECT",
+						"id": 25,
+						"attrs": { "name": "size" },
+						"ax": { "props": { "valuetext": "Large" } },
+						"children": [
+							{ "tag": "OPTION", "attrs": { "value": "l" }, "children": [{ "text": "Large" }] }
+						]
+					}
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  check:
+    name: fmt · lint · types · unit
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.9.7'
+      # The lockfile is authoritative in CI; a drifted dependency fails here
+      # rather than in a release.
+      - run: deno install --frozen
+      - run: deno task fmt:check
+      - run: deno task lint
+      - run: deno task check
+      # The task table itself. Two defects shipped in it (E-29, E-30) that no
+      # amount of reading catches and five lines of parsing does — and this runs
+      # on all three platforms because the hazards are shell- and OS-shaped.
+      - run: deno task gate:tasks
+      - run: deno task test:unit
+
+  browser:
+    name: real browser
+    runs-on: ubuntu-latest
+    env:
+      # An unmet precondition becomes a registered *failing* test rather than a
+      # loud skip: a leg that provisions a browser and then runs nothing is the
+      # exact failure the tier support exists to prevent.
+      BUA_REQUIRE_BROWSER: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.9.7'
+      # ffmpeg unlocks the recording suite (R7); without it that suite skips
+      # loudly and the same ground is covered by the container leg.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: deno install --frozen
+      - run: deno task build:web
+      # No model endpoint is configured here, so the two real-model legs skip
+      # with a line naming what they wanted. To run them, give this job
+      # TTK_MODEL_BASE_URL/TTK_MODEL_NAME (plus TTK_MODEL_API_KEY if the endpoint
+      # needs one) — the tier derives its own --allow-net from whichever endpoint
+      # resolves, so nothing else here has to change.
+      - run: deno task test:browser
+      - run: deno task test:stdio
+
+  coverage:
+    name: coverage gate
+    runs-on: ubuntu-latest
+    env:
+      BUA_REQUIRE_BROWSER: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.9.7'
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: deno install --frozen
+      - run: deno task build:web
+      # Merges the tiers on LCOV. `deno coverage` does not union across runs
+      # (E-25), so pointing both tiers at one directory would *understate* the
+      # result — the more you test, the worse it would look.
+      - run: deno task cov
+
+  compile:
+    name: single binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.9.7'
+      - run: deno install --frozen
+      - run: deno task build:web
+      # Compiles for the host and then *runs* it: everything that breaks in a
+      # compiled binary is invisible until it runs.
+      - run: deno task test:compile
+
+  container:
+    name: container
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # C2 (D-103): each shape gets its own tag and names its shape to the verifier. Both legs used to build
+        # `tykotech-mcp:ci`, and the verifier inferred the shape from a `:slim` suffix that tag never had — so the
+        # slim leg was judged against the bundled image's permission matrix and could not pass.
+        include:
+          - shape: bundled
+            dockerfile: Dockerfile
+            tag: tykotech-mcp:ci
+          - shape: slim
+            dockerfile: Dockerfile.slim
+            tag: tykotech-mcp:ci-slim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.9.7'
+      - run: docker build -f ${{ matrix.dockerfile }} -t ${{ matrix.tag }} .
+      - run: deno run --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts ${{ matrix.tag }} --shape ${{ matrix.shape }}
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.9.7'
+      - run: deno install --frozen
+      - run: deno audit

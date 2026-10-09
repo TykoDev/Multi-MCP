@@ -1,0 +1,44 @@
+{
+	"name": "paint_order",
+	"pins": "§6.3 paint-order occlusion: a later-painting opaque overlay suppresses what it covers, but never its own subtree or its ancestors",
+	"tree": {
+		"tag": "HTML",
+		"children": [
+			{
+				"tag": "BODY",
+				"children": [
+					{
+						"tag": "DIV",
+						"id": 900,
+						"rect": [0, 0, 1000, 1000],
+						"paintOrder": 50,
+						"styles": { "background-color": "rgb(0, 0, 0)" },
+						"children": [
+							{
+								"tag": "BUTTON",
+								"id": 901,
+								"rect": [20, 20, 80, 30],
+								"paintOrder": 60,
+								"children": [{ "text": "Continue" }]
+							}
+						]
+					},
+					{
+						"tag": "BUTTON",
+						"id": 800,
+						"rect": [10, 10, 100, 30],
+						"paintOrder": 10,
+						"children": [{ "text": "Under the modal" }]
+					},
+					{
+						"tag": "BUTTON",
+						"id": 801,
+						"rect": [1200, 10, 100, 30],
+						"paintOrder": 10,
+						"children": [{ "text": "Outside" }]
+					}
+				]
+			}
+		]
+	}
+}

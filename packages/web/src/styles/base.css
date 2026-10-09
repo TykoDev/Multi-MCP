@@ -1,0 +1,126 @@
+/* Document base: the ambient backdrop, typography, glyphs, focus and motion. */
+
+[hidden] {
+	display: none !important;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	min-height: 0;
+	overflow: hidden;
+	background: var(--ttk-canvas);
+	color: var(--wa-color-text-normal);
+	font-family: var(--wa-font-family-body);
+	font-size: var(--wa-font-size-s);
+	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* The ambient light: two soft brand-tinted glows behind everything. Decorative only. */
+body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(1100px 620px at -8% -18%, var(--ttk-ambient-1), transparent 62%),
+		radial-gradient(900px 560px at 108% -10%, var(--ttk-ambient-2), transparent 60%);
+}
+
+#app {
+	position: relative;
+	z-index: 1;
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-2) transparent;
+}
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--border-2);
+	background-clip: content-box;
+	border: 3px solid transparent;
+	border-radius: 10px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::selection {
+	background: color-mix(in oklab, var(--ttk-brand) 35%, transparent);
+}
+
+:focus-visible {
+	outline: 2px solid var(--wa-color-focus);
+	outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	margin: 0;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+p {
+	margin: 0;
+}
+
+kbd {
+	display: inline-flex;
+	align-items: center;
+	height: 20px;
+	padding: 0 6px;
+	border: 1px solid var(--ttk-hairline);
+	border-bottom-width: 2px;
+	border-radius: 6px;
+	background: var(--ttk-sunken);
+	color: var(--wa-color-text-quiet);
+	font: 600 11px/1 var(--wa-font-family-body);
+}
+
+/* Glyphs: one size, stroke from the sprite, colour from the text beside it. */
+.icon {
+	width: 16px;
+	height: 16px;
+	flex: 0 0 auto;
+	stroke-width: 2;
+	vertical-align: -3px;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+	}
+}

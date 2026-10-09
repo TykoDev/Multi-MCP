@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Canvas Element</title>
+<style>
+*{transition:none!important;animation:none!important;box-sizing:border-box}
+html,body{margin:0;padding:0;font:14px/1.4 monospace;background:#fff;color:#000}
+main{padding:12px}
+canvas{border:1px solid #333;display:block;margin-bottom:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>Canvas</h1>
+
+<canvas id="plain-canvas" width="240" height="120">Fallback text for plain canvas</canvas>
+
+<canvas id="interactive-canvas" width="240" height="120" tabindex="0" role="img" aria-label="Interactive canvas surface">
+  <button type="button" id="canvas-fallback-button">Canvas fallback button</button>
+</canvas>
+
+<canvas id="zero-canvas" width="0" height="0"></canvas>
+
+<button type="button" id="after-canvas">After the canvases</button>
+</main>
+<script>
+(function () {
+  // Deterministic drawing: no randomness, no timers.
+  var c = document.getElementById('plain-canvas').getContext('2d');
+  c.fillStyle = '#cde';
+  c.fillRect(10, 10, 100, 50);
+  c.strokeStyle = '#333';
+  c.strokeRect(120, 10, 100, 50);
+  c.fillStyle = '#000';
+  c.fillText('canvas pixels', 12, 90);
+
+  var d = document.getElementById('interactive-canvas').getContext('2d');
+  d.fillStyle = '#edc';
+  d.fillRect(0, 0, 240, 120);
+})();
+</script>
+</body>
+</html>
