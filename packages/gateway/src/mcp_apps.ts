@@ -3,11 +3,12 @@
  *
  * Two jobs, both behind `TTK_MCP_APPS`:
  *
- * 1. **The embed documents.** `scripts/build_embed.ts` writes `dist/embed_live.html` and `dist/embed_a2ui.html`,
- *    each one self-contained HTML file whose meta CSP pins its one inline script and one inline style by hash and
- *    leaves `connect-src` as the placeholder {@linkcode CONNECT_SRC_PLACEHOLDER}. They are read here once, through
- *    the resolver the static SPA uses, and the placeholder becomes the WebSocket origin of `TTK_PUBLIC_URL` — the
- *    only place an embed may connect to, and the same value `_meta.ui.csp.connectDomains` declares to the host.
+ * 1. **The embed documents.** `scripts/build_embed.ts` writes `dist/embed_live.html`, `dist/embed_a2ui.html` and
+ *    `dist/embed_terminal.html`, each one self-contained HTML file whose meta CSP pins its one inline script and one
+ *    inline style by hash and leaves `connect-src` as the placeholder {@linkcode CONNECT_SRC_PLACEHOLDER}. They are
+ *    read here once, through the resolver the static SPA uses, and the placeholder becomes the WebSocket origin of
+ *    `TTK_PUBLIC_URL` — the only place an embed may connect to, and the same value `_meta.ui.csp.connectDomains`
+ *    declares to the host.
  *    A missing document refuses startup: a deployment that turned the feature on must not offer tools whose embed
  *    cannot load.
  * 2. **The embed ticket.** `browser_live_ticket` mints through the same core the REST route uses
@@ -40,17 +41,20 @@ import { TICKET_TTL_MS, type TicketStore } from './tickets.ts';
 
 /** The live-view embed, as `scripts/build_embed.ts` names it in `packages/web/dist`. */
 export const EMBED_LIVE_FILE = 'embed_live.html';
-/** The read-only A2UI embed. */
+/** The A2UI embed. */
 export const EMBED_A2UI_FILE = 'embed_a2ui.html';
+/** The terminal embed. */
+export const EMBED_TERMINAL_FILE = 'embed_terminal.html';
 /** The token the build leaves in each embed's meta CSP for the gateway to replace with its socket origin. */
 export const CONNECT_SRC_PLACEHOLDER = '__TTK_CONNECT_SRC__';
 /** Every embed ticket's life: the unbound default, though an embed ticket is always bound (design §2.20). */
 export const EMBED_TICKET_TTL_MS = TICKET_TTL_MS;
 
-/** The two documents, placeholder already replaced. */
+/** The embed documents, placeholder already replaced. */
 export interface EmbedDocuments {
 	readonly liveViewHtml: string;
 	readonly a2uiHtml: string;
+	readonly terminalHtml: string;
 }
 
 /**
@@ -92,7 +96,11 @@ export function loadEmbedDocuments(publicUrl: URL, root?: string): EmbedDocument
 		}
 		return html.replaceAll(CONNECT_SRC_PLACEHOLDER, connect);
 	};
-	return { liveViewHtml: read(EMBED_LIVE_FILE), a2uiHtml: read(EMBED_A2UI_FILE) };
+	return {
+		liveViewHtml: read(EMBED_LIVE_FILE),
+		a2uiHtml: read(EMBED_A2UI_FILE),
+		terminalHtml: read(EMBED_TERMINAL_FILE),
+	};
 }
 
 export interface McpAppsOptions {
@@ -132,6 +140,46 @@ function refusalOf(
 	}
 }
 
+/** What {@linkcode embedOriginGate} reads: the Apps settings in force, the allowed origins and the per-token overlay. */
+export interface EmbedOriginGateOptions {
+	readonly settings: NonNullable<Config['mcpApps']>;
+	readonly allowedOrigins: Config['allowedOrigins'];
+	readonly origins: Pick<OriginOverlay, 'forToken'>;
+}
+
+/**
+ * The origin admission every MCP Apps embed ticket passes — the live view's and the terminal and surface streams'
+ * (`embed_streams.ts`) — so the rule cannot drift between them. Throws `invalid-arguments` for an origin that may not
+ * hold a ticket for `principal`; returns for one that may.
+ */
+export function embedOriginGate(options: EmbedOriginGateOptions): (principal: string, origin: string) => void {
+	const { settings, allowedOrigins, origins } = options;
+	return (principal: string, origin: string): void => {
+		// The origin must be one the operator listed for Apps hosts AND one this credential's overlay still allows: the
+		// overlay is a narrowing the REST mint already honours at the front door, and a tool call has no Origin header
+		// for that door to read, so it is applied to the binding instead (F10).
+		//
+		// D-150: with no list, any origin of the `TTK_MCP_APPS_ORIGINS` form (https, or http on a loopback host) stands
+		// in for "listed", and the effective allowed origins alone decide — `TTK_ALLOWED_ORIGINS` by hostname, or the
+		// overlay's exact origins when it has any, which is the admission the socket upgrade applies before a ticket is
+		// looked at. The ticket is still bound to exactly this origin, single-use and 30 s, so naming an origin the
+		// host's sandbox does not present yields a ticket no socket can redeem. `isAppsOrigin` also keeps an empty
+		// string out: `originAllowed` passes a missing Origin header, which a binding must never be.
+		const effective = effectiveOrigins(allowedOrigins, origins.forToken(principal));
+		const listed = settings.origins.length === 0 ? isAppsOrigin(origin) : settings.origins.includes(origin);
+		if (!listed || !originAllowed(origin, effective)) {
+			throw new ToolError(
+				'invalid-arguments',
+				`origin ${JSON.stringify(origin.slice(0, 256))} is not admitted: ` +
+					(settings.origins.length === 0
+						? 'it must be an https origin (http only on a loopback host) whose hostname TTK_ALLOWED_ORIGINS ' +
+							'admits, and allowed for this credential'
+						: 'it must be listed in TTK_MCP_APPS_ORIGINS and allowed for this credential'),
+			);
+		}
+	};
+}
+
 /**
  * The deployment's MCP Apps, or `undefined` when `TTK_MCP_APPS` is off — the value `McpDeps.mcpApps` takes, so
  * `undefined` keeps every tool's availability, `tools/list` and the resource list exactly as they were.
@@ -169,6 +217,8 @@ export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined 
 		return holderNameOf({ kind: 'api-key', id: input.principal, scopes: input.scopes }, keyRecords());
 	};
 
+	const admitOrigin = embedOriginGate({ settings, allowedOrigins: config.allowedOrigins, origins });
+
 	const mint = (input: EmbedTicketInput): EmbedTicket => {
 		if (input.mode === 'control' && settings.mode !== 'control') {
 			throw new ToolError(
@@ -176,28 +226,7 @@ export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined 
 				'taking control from an MCP Apps embed needs TTK_MCP_APPS=control on this deployment',
 			);
 		}
-		// The origin must be one the operator listed for Apps hosts AND one this credential's overlay still allows: the
-		// overlay is a narrowing the REST mint already honours at the front door, and a tool call has no Origin header
-		// for that door to read, so it is applied to the binding instead (F10).
-		//
-		// D-150: with no list, any origin of the `TTK_MCP_APPS_ORIGINS` form (https, or http on a loopback host) stands
-		// in for "listed", and the effective allowed origins alone decide — `TTK_ALLOWED_ORIGINS` by hostname, or the
-		// overlay's exact origins when it has any, which is the admission the socket upgrade applies before a ticket is
-		// looked at. The ticket is still bound to exactly this origin, single-use and 30 s, so naming an origin the
-		// host's sandbox does not present yields a ticket no socket can redeem. `isAppsOrigin` also keeps an empty
-		// string out: `originAllowed` passes a missing Origin header, which a binding must never be.
-		const effective = effectiveOrigins(config.allowedOrigins, origins.forToken(input.principal));
-		const listed = settings.origins.length === 0 ? isAppsOrigin(input.origin) : settings.origins.includes(input.origin);
-		if (!listed || !originAllowed(input.origin, effective)) {
-			throw new ToolError(
-				'invalid-arguments',
-				`origin ${JSON.stringify(input.origin.slice(0, 256))} is not admitted: ` +
-					(settings.origins.length === 0
-						? 'it must be an https origin (http only on a loopback host) whose hostname TTK_ALLOWED_ORIGINS ' +
-							'admits, and allowed for this credential'
-						: 'it must be listed in TTK_MCP_APPS_ORIGINS and allowed for this credential'),
-			);
-		}
+		admitOrigin(input.principal, input.origin);
 		const sessionId = input.sessionId ?? DEFAULT_SESSION_ID;
 		const minted = mintLiveTicket({ registry, tickets, keyRecords }, {
 			principal: { id: input.principal, scopes: input.scopes, holderName: holderOf(input) },
@@ -225,6 +254,7 @@ export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined 
 		mode: settings.mode,
 		liveViewHtml: embeds.liveViewHtml,
 		a2uiHtml: embeds.a2uiHtml,
+		terminalHtml: embeds.terminalHtml,
 		connectDomains: [socketBase],
 		...(settings.domain === null ? {} : { domain: settings.domain }),
 		// Empty (D-150): no fixed list; the mint above admits by the effective allowed origins instead.

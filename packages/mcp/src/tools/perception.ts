@@ -378,6 +378,11 @@ export async function performSearch(
 
 	let searchId: string | null = null;
 	try {
+		// Chromium's DOM agent searches only a document it has been asked for: on a page no tool has read since it
+		// loaded, `performSearch` finds nothing, so `browser_wait_for`'s `selector` and `text` timed out against a page
+		// that matched (and `getSearchResults` has no nodeIds to hand back). A depth-0 request is one cheap round trip;
+		// scroll-to-text (`default_action_scroll.ts`) makes the same call for the same reason.
+		await client.send.DOM.getDocument({ depth: 0 }, sessionId);
 		const started = await client.send.DOM.performSearch({ query, includeUserAgentShadowDOM: false }, sessionId);
 		searchId = started.searchId;
 		const count = started.resultCount;

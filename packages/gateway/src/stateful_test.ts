@@ -401,3 +401,174 @@ Deno.test('C8: TTK_MCP_STATEFUL with TTK_CLUSTER_KV is refused at startup, namin
 	assertEquals(loadConfig({ TTK_CLUSTER_KV: 'tests/.scratch/kv' }).cluster?.kvPath, 'tests/.scratch/kv');
 	assertEquals(loadConfig({ TTK_MCP_STATEFUL: 'false', TTK_CLUSTER_KV: 'tests/.scratch/kv' }).mcpStateful, false);
 });
+
+// --- change push: a restart, a scope change, a revoked credential -------------------------------------------------
+
+/** A mount over a real catalog, driven directly, with each request's credential chosen by the caller. */
+async function pushFixture(options: {
+	persistPath?: string;
+	currentScopes?: (authInfo: { scopes: string[] }) => readonly string[] | null | undefined;
+} = {}) {
+	const { createBuildServer, SessionRegistry } = await import('@tykotech/mcp');
+	const { StatefulMount } = await import('./stateful.ts');
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const make = () =>
+		new StatefulMount({
+			buildServer: createBuildServer({ registry, version: 'test' }),
+			logger: createLogger({ level: 'error', write: () => {} }),
+			...(options.persistPath === undefined ? {} : { persistPath: options.persistPath }),
+			...(options.currentScopes === undefined ? {} : { currentScopes: options.currentScopes as never }),
+		});
+	const auth = (scopes: string[], clientId = 'alice') => ({
+		authInfo: { token: 't', clientId, scopes, expiresAt: 4_102_444_800, extra: {} },
+	});
+	const request = (
+		mount: InstanceType<typeof StatefulMount>,
+		scopes: string[],
+		body: unknown,
+		session?: string,
+		clientId?: string,
+	) =>
+		mount.fetch(
+			new Request('http://127.0.0.1/mcp', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					accept: 'application/json, text/event-stream',
+					...(session === undefined ? {} : { [SESSION_HEADER]: session, 'mcp-protocol-version': '2025-06-18' }),
+				},
+				body: JSON.stringify(body),
+			}),
+			{ ...auth(scopes, clientId), parsedBody: body },
+		);
+	const stream = (mount: InstanceType<typeof StatefulMount>, scopes: string[], session: string, clientId?: string) =>
+		mount.fetch(
+			new Request('http://127.0.0.1/mcp', {
+				headers: { accept: 'text/event-stream', [SESSION_HEADER]: session, 'mcp-protocol-version': '2025-06-18' },
+			}),
+			auth(scopes, clientId),
+		);
+	const tools = async (mount: InstanceType<typeof StatefulMount>, scopes: string[], session: string) => {
+		const result = await resultOf(
+			await request(mount, scopes, { jsonrpc: '2.0', id: 9, method: 'tools/list' }, session),
+		);
+		return (result.tools as Array<{ name: string }>).map((tool) => tool.name);
+	};
+	return { registry, make, request, stream, tools };
+}
+
+/** Reads a stream until `needle` arrives or `ms` pass; returns what it read, then stops reading. */
+async function readUntil(response: Response, needle: string, ms = 3_000): Promise<string> {
+	const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+	let text = '';
+	const deadline = Date.now() + ms;
+	while (Date.now() < deadline && !text.includes(needle)) {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const next = await Promise.race([
+			reader.read(),
+			new Promise<{ value?: string; done: boolean }>((r) => timer = setTimeout(() => r({ done: false }), 100)),
+		]);
+		clearTimeout(timer);
+		if (next.value) text += next.value;
+		if (next.done) break;
+	}
+	await reader.cancel().catch(() => {});
+	return text;
+}
+
+const READ = ['mcp:invoke', 'view:watch'];
+const WIDER = ['mcp:invoke', 'view:watch', 'evaluate'];
+
+Deno.test('push: after a restart the session is restored for its principal and told to re-list its tools', async () => {
+	await Deno.mkdir('tests/.scratch', { recursive: true });
+	const dir = await Deno.makeTempDir({ dir: 'tests/.scratch' });
+	const f = await pushFixture({ persistPath: `${dir}/mcp/sessions.json` });
+	const before = f.make();
+	let after: ReturnType<typeof f.make> | undefined;
+	try {
+		const init = await f.request(before, READ, LEGACY_INITIALIZE);
+		const session = init.headers.get(SESSION_HEADER)!;
+		await init.body?.cancel();
+		await before.close();
+		const stored = await Deno.readTextFile(`${dir}/mcp/sessions.json`);
+		assertStringIncludes(stored, session);
+		assert(!stored.includes('"token"') && !stored.includes('view:watch'), 'no token or scope is written');
+
+		// The "deploy": a new process, the same data directory.
+		after = f.make();
+		// Another principal presenting the id learns nothing.
+		assertEquals((await f.stream(after, READ, session, 'mallory')).status, 404);
+		const opened = await f.stream(after, READ, session);
+		assertEquals(opened.status, 200);
+		assertEquals(opened.headers.get(SESSION_HEADER), session);
+		const pushed = await readUntil(opened, 'notifications/resources/list_changed');
+		assertStringIncludes(pushed, 'notifications/tools/list_changed');
+		// The client re-lists on the restored session, served by the new process.
+		assert((await f.tools(after, READ, session)).includes('browser_get_state'));
+		assertEquals(after.ids(), [session]);
+	} finally {
+		await before.close();
+		await after?.close();
+		await f.registry.shutdown('test');
+		await Deno.remove(dir, { recursive: true }).catch(() => {});
+	}
+});
+
+Deno.test('push: a request carrying other scopes rebuilds the session; its open stream is told to re-list', async () => {
+	const f = await pushFixture();
+	const mount = f.make();
+	try {
+		const init = await f.request(mount, READ, LEGACY_INITIALIZE);
+		const session = init.headers.get(SESSION_HEADER)!;
+		await init.body?.cancel();
+		assert(!(await f.tools(mount, READ, session)).includes('browser_evaluate'));
+		const stream = await f.stream(mount, READ, session);
+		assertEquals(stream.status, 200);
+		// The credential gained `evaluate`: the next request is served by a session built for it.
+		const widened = await f.tools(mount, WIDER, session);
+		assert(widened.includes('browser_evaluate'), 'the rebuilt session registers the new scope’s tool');
+		assertStringIncludes(await readUntil(stream, 'tools/list_changed'), 'notifications/tools/list_changed');
+		assertEquals(mount.ids(), [session], 'the same id, one session');
+		// Another principal still cannot use it.
+		const foreign = await f.request(mount, WIDER, { jsonrpc: '2.0', id: 3, method: 'tools/list' }, session, 'mallory');
+		assertEquals(foreign.status, 404);
+	} finally {
+		await mount.close();
+		await f.registry.shutdown('test');
+	}
+});
+
+Deno.test('push: a credential change rebuilds sessions whose scopes moved, and closes those whose credential is gone', async () => {
+	let held: readonly string[] | null = READ;
+	const f = await pushFixture({ currentScopes: () => held });
+	const mount = f.make();
+	try {
+		const init = await f.request(mount, READ, LEGACY_INITIALIZE);
+		const session = init.headers.get(SESSION_HEADER)!;
+		await init.body?.cancel();
+		const stream = await f.stream(mount, READ, session);
+		// Unchanged: nothing happens.
+		await mount.refreshCredentials();
+		assertEquals(mount.ids(), [session]);
+		// An administrator granted `evaluate`: the client hears it at once, without making a request.
+		held = WIDER;
+		await mount.refreshCredentials();
+		assertStringIncludes(await readUntil(stream, 'tools/list_changed'), 'notifications/tools/list_changed');
+		assert((await f.tools(mount, WIDER, session)).includes('browser_evaluate'));
+		// The key was removed: the session ends, and its id is unknown from then on.
+		held = null;
+		await mount.refreshCredentials();
+		assertEquals(mount.ids(), []);
+		const gone = await f.request(mount, WIDER, { jsonrpc: '2.0', id: 4, method: 'tools/list' }, session);
+		assertEquals(gone.status, 404);
+	} finally {
+		await mount.close();
+		await f.registry.shutdown('test');
+	}
+});
+
+Deno.test('TTK_MCP_STATEFUL: on by default, off by default in a cluster, refused only when named there', () => {
+	assertEquals(loadConfig({}).mcpStateful, true);
+	assertEquals(loadConfig({ TTK_CLUSTER_KV: 'tests/.scratch/kv', TTK_NODE_URL: 'http://n1:8787' }).mcpStateful, false);
+	assertEquals(loadConfig({ TTK_MCP_STATEFUL: 'false' }).mcpStateful, false);
+});

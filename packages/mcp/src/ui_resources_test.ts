@@ -20,6 +20,7 @@ import {
 	A2UI_SURFACE_UI_URI,
 	LIVE_VIEW_UI_URI,
 	resourceUiMeta,
+	TERMINAL_UI_URI,
 	TOOL_UI,
 	toolUiMeta,
 	UI_RESOURCE_MIME,
@@ -31,6 +32,7 @@ const ERAS = [LEGACY, MODERN] as const;
 
 const LIVE_HTML = '<!doctype html><title>live</title><p>live embed</p>';
 const A2UI_HTML = '<!doctype html><title>a2ui</title><p>a2ui embed</p>';
+const TERMINAL_HTML = '<!doctype html><title>terminal</title><p>terminal embed</p>';
 const TICKET = 'lvt_secret-looking-ticket-value';
 
 function apps(overrides: Partial<McpAppsDeps> = {}, seen: EmbedTicketInput[] = []): McpAppsDeps {
@@ -38,6 +40,7 @@ function apps(overrides: Partial<McpAppsDeps> = {}, seen: EmbedTicketInput[] = [
 		mode: 'watch',
 		liveViewHtml: LIVE_HTML,
 		a2uiHtml: A2UI_HTML,
+		terminalHtml: TERMINAL_HTML,
 		connectDomains: ['wss://gw.example.test'],
 		domain: 'abc123.host.example',
 		origins: ['https://abc123.host.example'],
@@ -119,12 +122,18 @@ interface ListedResource {
 	_meta?: Record<string, unknown>;
 }
 
-/** A deployment with the A2UI tool composed, so its `_meta` link can be seen too. */
+/** A deployment with the A2UI, shell-session and stream ticket tools composed, so their `_meta` links show too. */
 function depsWith(sessions: SessionRegistry, mcpApps?: McpAppsDeps): McpDeps {
+	const none = (): Promise<Record<string, unknown>> => Promise.resolve({});
 	return {
 		registry: sessions,
 		version: '0.0.0-test',
-		extraTools: extensionTools({ a2ui_publish: () => Promise.resolve({}) }),
+		extraTools: extensionTools({
+			a2ui_publish: none,
+			a2ui_surface_ticket: none,
+			sandbox_session_open: none,
+			sandbox_session_ticket: none,
+		}),
 		...(mcpApps === undefined ? {} : { mcpApps }),
 	};
 }
@@ -184,7 +193,9 @@ for (const era of ERAS) {
 				assertEquals(tool._meta?.ui, { resourceUri: ui.resourceUri, visibility: [...ui.visibility] });
 				assertEquals(tool._meta?.['ui/resourceUri'], ui.resourceUri, 'the legacy key rides along');
 			}
-			assertEquals((byName.get('browser_live_ticket')?._meta?.ui as { visibility: string[] }).visibility, ['app']);
+			for (const ticket of ['browser_live_ticket', 'a2ui_surface_ticket', 'sandbox_session_ticket']) {
+				assertEquals((byName.get(ticket)?._meta?.ui as { visibility: string[] }).visibility, ['app'], ticket);
+			}
 			// No other tool is linked to an embed.
 			for (const tool of tools) if (!TOOL_UI.has(tool.name)) assertEquals(tool._meta, undefined, tool.name);
 
@@ -192,7 +203,7 @@ for (const era of ERAS) {
 				resources: ListedResource[];
 			};
 			const ui = resources.filter((resource) => resource.uri.startsWith('ui://'));
-			assertEquals(ui.map((resource) => resource.uri).sort(), [A2UI_SURFACE_UI_URI, LIVE_VIEW_UI_URI]);
+			assertEquals(ui.map((resource) => resource.uri).sort(), [A2UI_SURFACE_UI_URI, LIVE_VIEW_UI_URI, TERMINAL_UI_URI]);
 			const expectedMeta = resourceUiMeta(deployment);
 			for (const resource of ui) {
 				assertEquals(resource.mimeType, UI_RESOURCE_MIME);
@@ -211,7 +222,13 @@ for (const era of ERAS) {
 				},
 			});
 
-			for (const [uri, html] of [[LIVE_VIEW_UI_URI, LIVE_HTML], [A2UI_SURFACE_UI_URI, A2UI_HTML]] as const) {
+			for (
+				const [uri, html] of [
+					[LIVE_VIEW_UI_URI, LIVE_HTML],
+					[A2UI_SURFACE_UI_URI, A2UI_HTML],
+					[TERMINAL_UI_URI, TERMINAL_HTML],
+				] as const
+			) {
 				const { contents } = await rpc(handler, era, 'resources/read', { uri }, EVERY_SCOPE, uri) as {
 					contents: Array<{ uri: string; mimeType: string; text: string; _meta?: Record<string, unknown> }>;
 				};

@@ -7,6 +7,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **MCP Apps streams for the terminal and A2UI surfaces.** `sandbox_session_open` now opens a terminal embed
+  (`ui://tykotech/terminal`) whose **Attach** streams the shell session's output and feeds typed lines to it; the A2UI
+  embed gains **Follow live**, which renders every new revision of the surface. Both use the live view's transport: a 30
+  s single-use ticket bound to the embed's origin, minted by the new app-only tools `sandbox_session_ticket` and
+  `a2ui_surface_ticket`, redeemed by `/live/terminal/{id}/ws` and `/live/surface/{id}/ws`.
+
+- **Sessions: memory per browser session, Active and Idle, Close.** For an administrator the Sessions tab shows the
+  container, the browser sessions and the gateway heap against their limits, and lists sessions as Active or Idle (with
+  when each closes); every card shows its browser's private memory — Chromium's own memory dump over CDP — and a Close
+  button, and the Idle group closes all its sessions at once. `GET /api/v1/system/usage`; `TTK_MEMORY_LIMIT` (the limit
+  the meters use). Compose gives the gateway container `mem_limit: ${TTK_GATEWAY_MEMORY:-1536m}` and a heap of
+  `${TTK_GATEWAY_HEAP_MB:-1024}` MiB.
+- **Screen stylesheets load with their screens.** `dist/app.css` holds the shell, the shared components and the three
+  first-paint screens (23.5 KB gzip, from 41.3 KB); each lazy screen's rules are `dist/screens/*.css`, applied with its
+  chunk. The first-paint stylesheet budget is 50 KB gzip (D-159).
+- **MCP change push: clients re-list their tools after a deploy or a scope change.** 2025-era clients (pi, most hosts)
+  now get stateful sessions by default (`TTK_MCP_STATEFUL` defaults on; off in a cluster), whose standalone stream
+  carries `notifications/tools/list_changed`. Session records (id, principal, the client's handshake; no token or scope)
+  survive a restart in `<TTK_DATA_DIR>/mcp/sessions.json`, so after a deploy the reconnecting client's session is
+  restored and told to re-list. A scope change (an edited account, a reloaded key file, a removed key) rebuilds that
+  credential's sessions and pushes the same notification; a revoked credential closes them. A session now answers only
+  the principal that opened it.
+- **Workspaces: Files & shell and Surfaces tabs, and a task icon.** An open workspace switches between its files and
+  shell and its surfaces in place (`#/workspaces/<id>[/surfaces]`); the header's task icon counts the agent tasks that
+  used the workspace (`GET /api/v1/agent/tasks?workspace_id=`) and opens them on Agents › Tasks, filtered.
+- **Agents: one task per conversation, and a Tasks tab with run histories.** Every request in the Agents chat starts a
+  task with its own id and the chat moves to it (`#/agents/chat/<task>`), instead of one long thread of every task. The
+  new **Tasks** tab (`#/agents/tasks[/<task>]`) lists every task beside its run history: facts, request, answer,
+  artifacts and the run log. The run log is new on the server too: each task keeps a bounded, redacted record of its
+  provider requests (timing, token usage, stop reason, errors), tool calls with arguments and results, ACP updates, peer
+  requests and state changes, persisted with the task (`GET /api/v1/agent/tasks/{id}/log`; 300 entries, 128 KiB).
+- **A2UI surfaces belong to a workspace.** `createSurface` takes an optional `workspaceId`, and
+  `PATCH /api/v1/a2ui/surfaces/{id}` attaches or detaches one. Surfaces moved from the Agents screen to their workspace
+  in **Sessions › Workspaces**, with New surface, Detach, Delete, and Attach here for surfaces in no workspace.
+- **A2UI computed text: `formatString` and `formatNumber`.** The v0.9 catalog functions compute a text from the
+  surface's data model on the page — `${/pointer}` interpolation, nested for lookups — so a Slider or TextField visibly
+  drives the rest of a surface. The current specification's basic catalog id (`…/v0_9/catalogs/basic/catalog.json`) is
+  accepted like the older one.
+- **Workspaces screen: a file and folder tree.** Opening a workspace lists every file and folder it holds (folders
+  first, `.git` hidden); a folder lists on its first expand, a click opens a file, and the tree follows saves and shell
+  commands. Keyboard and screen-reader support follow the WAI-ARIA tree pattern. Files no longer have to be opened by
+  typing their path.
+
+### Fixed
+
+- **A surface's "Try it" controls did nothing visible.** A Slider moved its own value only: nothing in the catalog could
+  compute another component's text from it. With `formatString`/`formatNumber` a bound input now drives computed text on
+  the page.
+
+- **`a2ui_publish` refused specification clients with `message: Invalid input`.** A message sent as JSON text, without
+  `version`, or naming the A2UI basic catalog's id now publishes; a refusal names the field and the expectation of the
+  closest message shape instead of `Invalid input`.
+- **`a2ui_delete` and `a2ui_publish` on a missing surface answered
+  `file-unavailable … check the service
+  configuration`.** They now answer
+  `invalid-arguments: you have no A2UI surface "<id>"`, and store refusals (duplicate surface, cyclic tree, surface
+  limit) carry their own words.
+- **`browser_wait_for` with `selector` or `text` never matched a page no tool had read yet.** Chromium's DOM agent
+  searches only a document it has been asked for, so a wait straight after a navigation timed out against a page that
+  matched. The search now requests the document first (`browser_find` and `browser_verify_locator` share it).
+- **`browser_verify_locator` with a bare `id`, `testid` or `name` value counted plain-text matches.**
+  `{kind: "id", value: "username"}` went to the browser search as the word `username` (4 matches on a login page); a
+  bare value now means its selector (`#username`, `[data-testid="…"]`, `[name="…"]`). The selectors
+  `browser_locator_candidates` emits pass unchanged.
+- **A read-only browser tool with no default session answered `no session with id default`**, which read as a broken
+  server next to a parameter described as "created on first use". It now says the default session is created by the
+  first tool that opens a page, and that the read-only tool never creates one (same `unknown-session` code).
+- **Every tool: a value sent as JSON text where the schema wants a number, boolean, object or array** (`{"limit": "5"}`)
+  is read as the value it spells and validated again, instead of failing with `expected number, received string`.
+
 ### Breaking
 
 - **Secrets rest only encrypted, in `<TTK_DATA_DIR>/ttk.db` (D-154).** Set `TTK_DB_KEY_FILE` (32 bytes;

@@ -144,17 +144,14 @@ Deno.test('web: only theme.ts writes storage, and it keeps only ttk.theme and tt
 			'THEME_STORAGE_KEY, theme',
 			'DOCK_STORAGE_KEY, state',
 			'AGENTS_SIDE_STORAGE_KEY, state',
-			'CHAT_SINCE_STORAGE_KEY, digits',
 		],
-		'display preferences write four keys, each only a literal union or (D-158) decimal digits',
+		'display preferences write three keys, each only a literal union',
 	);
-	const { AGENTS_SIDE_STORAGE_KEY, CHAT_SINCE_STORAGE_KEY, DOCK_STORAGE_KEY, THEME_STORAGE_KEY, THEMES } = await import(
-		'./theme.ts'
-	);
+	const { AGENTS_SIDE_STORAGE_KEY, DOCK_STORAGE_KEY, THEME_STORAGE_KEY, THEMES } = await import('./theme.ts');
 	assertEquals(
-		[THEME_STORAGE_KEY, DOCK_STORAGE_KEY, AGENTS_SIDE_STORAGE_KEY, CHAT_SINCE_STORAGE_KEY],
-		['ttk.theme', 'ttk.dock', 'ttk.agents.side', 'ttk.agents.chat'],
-		'the only four keys the SPA writes',
+		[THEME_STORAGE_KEY, DOCK_STORAGE_KEY, AGENTS_SIDE_STORAGE_KEY],
+		['ttk.theme', 'ttk.dock', 'ttk.agents.side'],
+		'the only three keys the SPA writes',
 	);
 	assertEquals(THEMES.map((entry) => entry.id), ['dark', 'shade', 'light', 'dawn'], 'D-152: four theme literals');
 	assertStringIncludes(theme, "return value === 'dark' || value === 'shade' || value === 'light' || value === 'dawn';");
@@ -518,7 +515,25 @@ Deno.test({
 		for (const name of files) js += await gzipSize(Deno.readFileSync(new URL(name, DIST)));
 		const css = await gzipSize(Deno.readFileSync(new URL('app.css', DIST)));
 		assert(js < 160 * 1024, `first-paint JavaScript is ${Math.round(js / 1024)} KB gzip, over 160 KB`);
-		assert(css < 40 * 1024, `the stylesheet is ${Math.round(css / 1024)} KB gzip, over 40 KB`);
+		// D-159: 50 KB, up from D-090's 40 KB; the lazy screens' rules no longer count — they load with their screens.
+		assert(css < 50 * 1024, `the stylesheet is ${Math.round(css / 1024)} KB gzip, over 50 KB`);
+		// D-159: every sheet a screen names is built, and none of them is part of the first paint.
+		const { SCREEN_SHEETS } = await import('./styles.ts');
+		for (const sheet of new Set(Object.values(SCREEN_SHEETS).flat())) {
+			const built = Deno.readFileSync(new URL(`screens/${sheet}.css`, DIST));
+			assert(
+				built.byteLength > 1000 && built.byteLength < 150 * 1024,
+				`screens/${sheet}.css is ${built.byteLength} bytes`,
+			);
+		}
+		const firstPaintCss = new TextDecoder().decode(Deno.readFileSync(new URL('app.css', DIST)));
+		for (const lazyOnly of ['.rx-layout', '.ag-turn', '.sys-grid', '.acct-grid', '.tk-timeline']) {
+			assert(!firstPaintCss.includes(lazyOnly), `${lazyOnly} is a lazy screen's rule, in the first paint`);
+		}
+		assert(
+			firstPaintCss.includes('.acct-form') && firstPaintCss.includes('.lib-field'),
+			'first-paint dialogs keep their rules',
+		);
 	},
 });
 
@@ -638,8 +653,8 @@ Deno.test('web: Resources is a workbench — a roomy pane, toggles each on its o
 
 // --- MCP Apps embeds (R9, D-134 – D-136) -------------------------------------------------------------------------
 
-/** The two embed documents `scripts/build_embed.ts` writes. */
-const EMBEDS = ['embed_live.html', 'embed_a2ui.html'] as const;
+/** The embed documents `scripts/build_embed.ts` writes. */
+const EMBEDS = ['embed_live.html', 'embed_a2ui.html', 'embed_terminal.html'] as const;
 
 async function sha256Source(text: string): Promise<string> {
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -698,7 +713,15 @@ Deno.test('web (AC40, F17): build:web bundles the embeds in the task, chained wi
 	const build = tasks['build:web'] ?? '';
 	assert(!build.includes('--allow-run'), 'build:web must not grant --allow-run');
 	assert(!/;|\|\|/.test(build), 'build:web chains its steps with && only');
-	for (const step of ['src/embed_live.ts', 'src/embed_a2ui.ts', 'src/styles/embed.css', 'scripts/build_embed.ts']) {
+	for (
+		const step of [
+			'src/embed_live.ts',
+			'src/embed_a2ui.ts',
+			'src/embed_terminal.ts',
+			'src/styles/embed.css',
+			'scripts/build_embed.ts',
+		]
+	) {
 		assertStringIncludes(build, step);
 	}
 	// The embed step holds what the icon step holds, and no more.
@@ -801,7 +824,7 @@ Deno.test('web (R9): the bridge accepts messages from its host window only, and 
 
 Deno.test('web (R9): the embeds never talk to the model, never fetch, and never write storage', async () => {
 	const sources = new Map((await bundleSources()).map(({ name, code }) => [name, code]));
-	for (const name of ['embed_bridge.ts', 'embed_live.ts', 'embed_a2ui.ts']) {
+	for (const name of ['embed_bridge.ts', 'embed_live.ts', 'embed_a2ui.ts', 'embed_terminal.ts', 'embed_stream.ts']) {
 		const code = sources.get(name) ?? '';
 		assert(code !== '', `${name} is a top-level source, so the bundle rules above scan it`);
 		assert(!/ui\/update-model-context|'ui\/message'/.test(code), `${name} sends to the model`);
@@ -812,6 +835,15 @@ Deno.test('web (R9): the embeds never talk to the model, never fetch, and never 
 	const main = live.slice(live.indexOf('function main('));
 	const tail = main.slice(main.lastIndexOf('app.append(shell);'));
 	assert(!tail.includes('open('), 'nothing at load opens a socket');
+	// The terminal and surface streams open on their own press too: only a click handler starts one.
+	for (const name of ['embed_terminal.ts', 'embed_a2ui.ts']) {
+		const code = sources.get(name) ?? '';
+		const starts = [...code.matchAll(/stream\.start\(\)/g)].length;
+		assertEquals(starts, 1, `${name}: one place starts the stream`);
+		const handler = code.slice(code.lastIndexOf('on(', code.indexOf('stream.start()')), code.indexOf('stream.start()'));
+		assertStringIncludes(handler, "'click'", `${name}: the stream starts from a click`);
+		assert(!code.includes('new WebSocket'), `${name}: sockets are opened by embed_stream.ts alone`);
+	}
 });
 
 /** One `{ … }` block of a stylesheet by its exact selector, or '' when it has none. */
@@ -852,7 +884,7 @@ Deno.test("web (RV-1): the embed's primary label reads at 4.5:1 on its fill in e
 });
 
 Deno.test('web (K-5, RV-9): the SPA entry and both embeds turn off Zod’s eval probe before anything builds a schema', async () => {
-	for (const entry of ['app.ts', 'embed_live.ts', 'embed_a2ui.ts']) {
+	for (const entry of ['app.ts', 'embed_live.ts', 'embed_a2ui.ts', 'embed_terminal.ts']) {
 		const code = await Deno.readTextFile(new URL(entry, import.meta.url));
 		// Module evaluation follows import order: the first import is the one evaluated before every schema.
 		const first = /^import\s[^;]*?'([^']+)';/m.exec(code)?.[1];

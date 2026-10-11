@@ -8,8 +8,15 @@
  * One action, one home (D-092): the header holds "new session" (and, for an
  * admin with sessions open, "close all"); the list polls, so there is no
  * refresh; the default session is the Live View tab (D-147).
+ *
+ * Memory (admin, `GET /api/v1/system/usage`): a panel of three meters — the container's use against its limit, the
+ * browser sessions' private memory against the same limit with their count against `TTK_MAX_SESSIONS`, and the
+ * gateway's heap against its limit — and the sessions in two groups, **Active** (watched, held, or used in the last
+ * five minutes) and **Idle** (with when the reaper closes each), every card showing its browser's private memory and
+ * a Close button. The Idle group closes all its sessions in one confirmed step. Figures update in place each poll.
  */
-import { api, ApiError, type Overview, type SessionSummary } from './api.ts';
+import { api, ApiError, type Overview, type SessionSummary, type SystemMemory } from './api.ts';
+import { activityOf, duration, meterTone, share } from './session_activity.ts';
 import { clear, el, mount, on } from './dom.ts';
 import { icon, type IconName } from './icons.ts';
 import { onLeave } from './lifecycle.ts';
@@ -22,6 +29,7 @@ import {
 	copyButton,
 	dot,
 	empty,
+	formatBytes,
 	iconButton,
 	imageOf,
 	messageOf,
@@ -75,9 +83,92 @@ function fact(glyph: IconName, value: number, meaning: string): HTMLElement {
 export function sessionsView(navigate: Navigate): void {
 	const watchRoute = (id: string): string => `#/view/${encodeURIComponent(id)}`;
 
-	const list = el('div', { class: 'sc-grid', 'aria-busy': 'true' }, [
-		...Array.from({ length: 3 }, () => el('wa-skeleton', { class: 'sc-skeleton', effect: 'sheen' })),
+	const list = el('div', { class: 'sc-groups', 'aria-busy': 'true' }, [
+		el('div', { class: 'sc-grid' }, [
+			...Array.from({ length: 3 }, () => el('wa-skeleton', { class: 'sc-skeleton', effect: 'sheen' })),
+		]),
 	]);
+	/** The last memory answer, or `null` (not an admin, an older server, or not read yet). */
+	let memory: SystemMemory | null = null;
+	/** Per card: repaints its memory row and idle line from the latest answer, without rebuilding the card. */
+	const cardPainters = new Map<string, () => void>();
+
+	// --- the memory panel: three meters against the limits -------------------------------------------------------
+	const memoryPanel = el('section', { class: 'sc-mem', 'aria-label': 'Memory', hidden: true });
+	/** One meter: a label, the figure, and a bar filled to its share of the limit, coloured by how full it is. */
+	function meter(
+		label: string,
+		glyph: IconName,
+		used: number | null,
+		limit: number | null,
+		detail: string,
+	): HTMLElement {
+		const fraction = share(used, limit);
+		const figure = used === null
+			? 'not measured'
+			: limit === null
+			? formatBytes(used)
+			: `${formatBytes(used)} of ${formatBytes(limit)}`;
+		const bar = el('span', { class: `sc-meter-fill ${meterTone(fraction)}` });
+		bar.style.setProperty('--fill', `${Math.round(fraction * 1000) / 10}%`);
+		return el('div', { class: 'sc-meter', 'data-tip': detail }, [
+			el('div', { class: 'sc-meter-head' }, [
+				icon(glyph),
+				el('span', { class: 'sc-meter-label', text: label }),
+				el('span', { class: 'grow' }),
+				el('span', { class: 'sc-meter-figure mono', text: figure }),
+			]),
+			el('span', {
+				class: 'sc-meter-bar',
+				role: 'meter',
+				'aria-label': `${label}: ${figure}`,
+				'aria-valuemin': '0',
+				'aria-valuemax': '100',
+				'aria-valuenow': String(Math.round(fraction * 100)),
+			}, [bar]),
+		]);
+	}
+	function paintMemoryPanel(): void {
+		if (memory === null) {
+			memoryPanel.hidden = true;
+			return;
+		}
+		const { container, gateway, limits } = memory;
+		const count = memory.sessions.length;
+		const limit = container.limit_bytes;
+		memoryPanel.hidden = false;
+		memoryPanel.replaceChildren(
+			meter(
+				'Container',
+				'disk',
+				container.used_bytes,
+				limit,
+				limit === null
+					? 'No container limit is configured (TTK_MEMORY_LIMIT, from TTK_GATEWAY_MEMORY in Compose)'
+					: 'Estimated use of the gateway container — the server plus every browser — against its limit',
+			),
+			meter(
+				`Browser sessions · ${count} of ${limits.max_sessions}`,
+				'globe',
+				memory.measured ? memory.browsers_private_bytes : null,
+				limit,
+				memory.measured
+					? `Private memory of every session's Chromium processes, from Chromium's own memory dump; sessions idle for ${
+						duration(limits.session_ttl_s)
+					} close by themselves`
+					: 'The browsers did not answer a memory dump yet',
+			),
+			meter(
+				'Gateway heap',
+				'gauge',
+				gateway.heap_used_bytes,
+				gateway.heap_limit_bytes,
+				`The server's JavaScript heap (${formatBytes(gateway.heap_total_bytes)} reserved, ${
+					formatBytes(gateway.rss_bytes)
+				} resident) against its limit (TTK_GATEWAY_HEAP_MB)`,
+			),
+		);
+	}
 	const noticeText = el('span');
 	const noticeGlyph = icon('shield-alert');
 	noticeGlyph.setAttribute('slot', 'icon');
@@ -170,6 +261,7 @@ export function sessionsView(navigate: Navigate): void {
 
 	const screen = [
 		dashboard.node,
+		memoryPanel,
 		createForm,
 		notice,
 		list,
@@ -249,6 +341,50 @@ export function sessionsView(navigate: Navigate): void {
 				el('span', { class: 'sc-owner-name', text: owner.name }),
 			]),
 		];
+		// The memory row and the idle line repaint in place from each memory answer.
+		const memFigure = el('span', { class: 'sc-mem-figure mono' });
+		const memFill = el('span', { class: 'sc-meter-fill ok' });
+		const memRow = el('div', { class: 'sc-mem-row', hidden: true }, [
+			icon('gauge'),
+			el('span', { class: 'sc-meter-bar small' }, [memFill]),
+			memFigure,
+		]);
+		const idleLine = el('span', { class: 'sc-idle' });
+		const closeVisible = confirmButton(
+			{ label: 'Close', icon: 'power', small: true },
+			async () => {
+				await api.closeSession(id);
+				toast(`Session ${id} closed`, 'ok');
+				await load();
+			},
+		);
+		closeVisible.classList.add('sc-close');
+		cardPainters.set(id, () => {
+			const entry = memory?.sessions.find((item) => item.session_id === id);
+			const activity = activityOf(session, entry);
+			idleLine.textContent = activity.active
+				? activity.reason
+				: activity.closesIn === null
+				? `Idle ${duration(activity.idleSeconds)}`
+				: `Idle ${duration(activity.idleSeconds)} · closes in ${duration(activity.closesIn)}`;
+			idleLine.setAttribute('data-tip', activity.reason);
+			const used = entry?.memory ?? null;
+			memRow.hidden = memory === null;
+			if (memory === null) return;
+			const limit = memory.container.limit_bytes;
+			const fraction = share(used?.private_bytes, limit ?? memory.browsers_private_bytes);
+			memFill.className = `sc-meter-fill ${meterTone(share(used?.private_bytes, limit))}`;
+			memFill.style.setProperty('--fill', `${Math.round(fraction * 1000) / 10}%`);
+			memFigure.textContent = used === null ? 'not measured' : formatBytes(used.private_bytes);
+			memRow.setAttribute(
+				'data-tip',
+				used === null
+					? "This browser's memory is not measured here"
+					: `${formatBytes(used.private_bytes)} private across ${used.processes} Chromium processes${
+						limit === null ? '' : ` · ${Math.round(share(used.private_bytes, limit) * 100)} % of the container's limit`
+					}`,
+			);
+		});
 		const node = el(
 			'article',
 			{ class: `sc-card ${held ? 'locked' : watched ? 'live' : 'idle'}`, 'aria-label': name },
@@ -268,6 +404,8 @@ export function sessionsView(navigate: Navigate): void {
 						el('span', { class: 'grow' }),
 						used,
 					]),
+					memRow,
+					el('div', { class: 'sc-card-foot' }, [idleLine, el('span', { class: 'grow' }), closeVisible]),
 				]),
 			],
 		);
@@ -299,7 +437,10 @@ export function sessionsView(navigate: Navigate): void {
 		updateStats(sessions);
 		setDockBadge('sessions', sessions.length);
 		registerSessions(sessions);
-		// Re-rendering an unchanged list would restart its entrance animation every poll.
+		const activeOf = (session: SessionSummary): boolean =>
+			activityOf(session, memory?.sessions.find((item) => item.session_id === session.session_id)).active;
+		// Re-rendering an unchanged list would restart its entrance animation every poll; memory and idle time repaint
+		// in place, so only what moves a card (or between the groups) rebuilds the list.
 		const next = JSON.stringify(
 			sessions.map((s) => [
 				s.session_id,
@@ -309,11 +450,16 @@ export function sessionsView(navigate: Navigate): void {
 				s.human_has_control,
 				s.last_used_at,
 				s.owner,
+				activeOf(s),
 			]),
 		);
-		if (next === signature) return;
+		if (next === signature) {
+			for (const paint of cardPainters.values()) paint();
+			return;
+		}
 		signature = next;
 		clear(list);
+		cardPainters.clear();
 		list.removeAttribute('aria-busy');
 		if (sessions.length === 0) {
 			list.append(
@@ -326,12 +472,45 @@ export function sessionsView(navigate: Navigate): void {
 			);
 			return;
 		}
-		sessions.forEach((session, index) => list.append(card(session, index)));
+		const active = sessions.filter(activeOf);
+		const idle = sessions.filter((session) => !activeOf(session));
+		const group = (title: string, members: SessionSummary[], extra: Node[] = []): HTMLElement =>
+			el('section', { class: 'sc-group', 'aria-label': `${title} sessions` }, [
+				el('div', { class: 'sc-group-head' }, [
+					el('h2', { class: 'sc-group-title', text: title }),
+					el('span', { class: 'sc-group-count', text: String(members.length) }),
+					el('span', { class: 'grow' }),
+					...extra,
+				]),
+				members.length === 0
+					? el('p', {
+						class: 'sc-group-empty',
+						text: title === 'Active' ? 'No session is in use right now.' : 'No idle session.',
+					})
+					: el('div', { class: 'sc-grid' }, members.map((session, index) => card(session, index))),
+			]);
+		const closeIdle = confirmButton(
+			{ label: `Close idle sessions (${idle.length})`, icon: 'power', small: true },
+			async () => {
+				const results = await Promise.allSettled(idle.map((session) => api.closeSession(session.session_id)));
+				const closed = results.filter((result) => result.status === 'fulfilled').length;
+				toast(closed === 1 ? '1 idle session closed' : `${closed} idle sessions closed`, 'ok');
+				await load();
+			},
+		);
+		list.append(group('Active', active), group('Idle', idle, idle.length === 0 ? [] : [closeIdle]));
+		for (const paint of cardPainters.values()) paint();
 	}
 
 	async function load(): Promise<void> {
 		try {
-			const { sessions } = await api.listSessions();
+			const [{ sessions }, measured] = await Promise.all([
+				api.listSessions(),
+				// The memory figures accompany the list; an older server or a refusal leaves the list without them.
+				api.systemMemory().catch(() => null),
+			]);
+			memory = measured;
+			paintMemoryPanel();
 			notice.hidden = true;
 			render(sessions);
 		} catch (cause) {

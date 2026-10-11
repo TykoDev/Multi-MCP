@@ -2,18 +2,28 @@
  * The Workspaces screen (D-076): coding workspaces in the sandbox, their files, and a live shell per workspace — the
  * third tab of Sessions (D-147).
  *
- * Files go through `sandbox_read` / `sandbox_write`; the shell is a server-sent event stream over the gateway's
+ * Files: a tree of every file and folder in the workspace (`workspace_tree.ts`, over `sandbox_list` with a path) opens
+ * a file on a click; the path field stays for creating a new one. Files go through `sandbox_read` / `sandbox_write`;
+ * the tree refreshes after a save, after each shell command and on the screen's poll, since any of them can add files.
+ * The shell is a server-sent event stream over the gateway's
  * session routes with a line input underneath. Line mode, no terminal emulation: what the shell prints is appended
  * as text, and each command is sent with its newline.
  *
  * Presentation (D-089): a rail of workspace cards (terminal glyph, name, age, live dot); the chosen workspace below
  * with icon actions (diff, delete confirmed in a popover) and a `wa-split-panel` of editor and shell. The shell's
  * state is a dot, its network an icon toggle; the words are tooltips.
+ *
+ * An open workspace has two views as tabs in the Agents tabs' look: **Files & shell** (`#/workspaces/<id>`) and
+ * **Surfaces** (`#/workspaces/<id>/surfaces`, `workspace_surfaces.ts`: the interfaces agents published for it,
+ * rendered live, with the ones in no workspace offered to attach). The tabs switch in place, so the shell's session
+ * and the editor survive. A task icon in the header counts the agent tasks that touched the workspace
+ * (`GET /api/v1/agent/tasks?workspace_id=`) and opens them on Agents › Tasks.
  */
 import { api, ApiError, getUser, streamEvents } from './api.ts';
 import { clear, el, mount, on } from './dom.ts';
 import { icon } from './icons.ts';
 import { onLeave } from './lifecycle.ts';
+import { type WorkspaceSurfaces, workspaceSurfaces } from './workspace_surfaces.ts';
 import { invoke } from './mcp.ts';
 import { clearCommands, registerCommands } from './palette.ts';
 import {
@@ -34,6 +44,8 @@ import {
 	toast,
 } from './ui.ts';
 import { rememberWorkspace, sessionTabs } from './session_tabs.ts';
+import { tasksRoute } from './agent_tabs.ts';
+import { fileTree, type TreeListing } from './workspace_tree.ts';
 import { type Navigate, renderShell } from './shell.ts';
 
 interface Workspace {
@@ -74,21 +86,50 @@ function diffView(patch: string): HTMLElement {
 	return pre;
 }
 
+/** A workspace's two views: its files beside the shell, and the A2UI surfaces agents published for it. */
+type WorkspaceView = 'files' | 'surfaces';
+
+/** The route of one workspace's view: `#/workspaces/<id>` for its files, `#/workspaces/<id>/surfaces`. */
+export function workspaceRoute(workspaceId: string, view: WorkspaceView): string {
+	return `#/workspaces/${encodeURIComponent(workspaceId)}${view === 'surfaces' ? '/surfaces' : ''}`;
+}
+
+/** The workspace and view a route parameter names (`<id>` or `<id>/surfaces`). */
+export function parseWorkspaceParam(param: string | undefined): { id: string | undefined; view: WorkspaceView } {
+	if (param === undefined || param === '') return { id: undefined, view: 'files' };
+	const [id, view] = param.split('/');
+	return { id: id === undefined || id === '' ? undefined : id, view: view === 'surfaces' ? 'surfaces' : 'files' };
+}
+
 export function workspacesView(navigate: Navigate, initial?: string): void {
+	const route = parseWorkspaceParam(initial);
+	/** The view each opened workspace shows: the route's at first, then whichever the person last chose. */
+	let view: WorkspaceView = route.view;
 	const rail = el('div', { class: 'ws-rail', role: 'group', 'aria-label': 'Workspaces' }, [skeleton(1)]);
 	const detail = el('section', { class: 'ws-detail', 'aria-label': 'Workspace' }, [
 		empty('workspace', 'Select a workspace', 'Or create one to start coding in a cage.'),
 	]);
 	const can = getUser()?.scopes.includes('sandbox:execute') === true;
-	let selected: string | undefined = initial;
+	let selected: string | undefined = route.id;
 	/** The workspace the detail shows; a refresh leaves it (and its shell) alone. */
 	let shown: string | null = null;
 	/** The workspace whose live session this screen is following, for its card's dot. */
 	let live: string | null = null;
 	let controller: AbortController | null = null;
+	/** Lists the shown workspace's file tree again; set while a workspace is open. */
+	let refreshShownTree: (() => void) | null = null;
+	/** Counts the tasks that touched the shown workspace again; set while a workspace is open. */
+	let refreshTaskCount: (() => void) | null = null;
+	/** The shown workspace's surfaces panel, stopped (renders released) whenever the workspace changes or goes. */
+	let surfaces: WorkspaceSurfaces | null = null;
+	const dropSurfaces = (): void => {
+		surfaces?.stop();
+		surfaces = null;
+	};
 	let alive = true;
 	onLeave(() => {
 		alive = false;
+		dropSurfaces();
 		controller?.abort();
 		clearCommands('workspaces');
 	});
@@ -186,7 +227,10 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 		controller?.abort();
 		controller = null;
 		live = null;
-		globalThis.history.replaceState(null, '', `#/workspaces/${encodeURIComponent(workspace.workspace_id)}`);
+		refreshShownTree = null;
+		refreshTaskCount = null;
+		dropSurfaces();
+		globalThis.history.replaceState(null, '', workspaceRoute(workspace.workspace_id, view));
 		paintCards();
 		clear(detail);
 		detail.hidden = false;
@@ -209,22 +253,51 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 		});
 		const readBtn = iconButton('folder-open', 'Open file', undefined, { small: true });
 		const writeBtn = iconButton('save', 'Save file', undefined, { small: true, variant: 'primary' });
+		const tree = fileTree({
+			list: (path) =>
+				tool<TreeListing>('sandbox_list', {
+					workspace_id: workspace.workspace_id,
+					...(path === '' ? {} : { path }),
+				}),
+			onOpen: (path) => {
+				pathInput.value = path;
+				readBtn.click();
+			},
+			messageOf,
+		});
+		/** One refresh at a time, shortly after the change that asked for it (a command may still be writing). */
+		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+		const refreshSoon = (delay = 1_200): void => {
+			if (refreshTimer !== null) clearTimeout(refreshTimer);
+			refreshTimer = setTimeout(() => {
+				refreshTimer = null;
+				if (alive && shown === workspace.workspace_id) void tree.refresh();
+			}, delay);
+		};
+		// D-092: the screen polls, so there is no refresh button; the poll lists the tree again too (files an agent adds).
+		refreshShownTree = () => void tree.refresh();
 		on(readBtn, 'click', () =>
 			void busy(readBtn, async () => {
+				const path = pathInput.value.trim();
 				const { content } = await tool<{ content: string }>('sandbox_read', {
 					workspace_id: workspace.workspace_id,
-					path: pathInput.value.trim(),
+					path,
 				});
 				editor.value = content;
+				tree.select(path);
 			}).catch((cause) => toast(messageOf(cause), 'error')));
 		on(writeBtn, 'click', () =>
 			void busy(writeBtn, async () => {
+				const path = pathInput.value.trim();
 				await tool('sandbox_write', {
 					workspace_id: workspace.workspace_id,
-					path: pathInput.value.trim(),
+					path,
 					content: editor.value,
 				});
-				toast(`${pathInput.value.trim()} saved`, 'ok');
+				toast(`${path} saved`, 'ok');
+				// A new file (or folder in its path) appears in the tree, selected.
+				await tree.refresh();
+				tree.select(path);
 			}).catch((cause) => toast(messageOf(cause), 'error')));
 		// Enter in the path opens the file, as the open button does.
 		on(pathInput, 'keydown', (event) => {
@@ -297,6 +370,7 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 						'muted',
 					);
 					ended();
+					refreshSoon(0);
 				}
 			}, own.signal).catch((cause) => {
 				if (!own.signal.aborted) {
@@ -360,6 +434,8 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 				historyAt = history.length;
 				append(`$ ${line}\n`, 'cmd');
 				api.sandboxSessionInput(sessionId, `${line}\n`).catch((cause) => toast(messageOf(cause), 'error'));
+				// A command can create, move or delete files: the tree follows shortly after.
+				refreshSoon();
 			}
 		});
 
@@ -371,6 +447,9 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 				toast('Workspace deleted', 'ok');
 				selected = undefined;
 				shown = null;
+				refreshShownTree = null;
+				refreshTaskCount = null;
+				dropSurfaces();
 				rememberWorkspace(null);
 				controller?.abort();
 				live = null;
@@ -394,7 +473,13 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 				readBtn,
 				writeBtn,
 			]),
-			editor,
+			el('div', { class: 'ws-files' }, [
+				el('nav', { class: 'ws-tree-pane', 'aria-label': 'Workspace files' }, [
+					el('div', { class: 'ws-tree-head' }, [el('span', { class: 'ws-tree-title', text: 'Files' })]),
+					tree.element,
+				]),
+				editor,
+			]),
 		]);
 		const shell = el('section', { class: 'ws-pane ws-shell-pane', slot: 'end', 'aria-label': 'Shell' }, [
 			el('div', { class: 'ws-bar' }, [
@@ -415,6 +500,85 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 			]),
 		]);
 
+		// --- the views: files and shell, or surfaces — tabs in the Agents tabs' look, switched in place --------------
+		// In place, not by route: the shell's live session and the editor's unsaved text survive the switch; the address
+		// follows with `replaceState`, so a reload or a shared link opens the same view.
+		const split = el('wa-split-panel', { class: 'ws-split', position: 55 }, [
+			editorPane,
+			el('span', { class: 'ws-grip', slot: 'divider', 'aria-hidden': 'true' }, [icon('grip')]),
+			shell,
+		]);
+		const surfaceCount = el('span', { class: 'ws-tab-count', hidden: true });
+		surfaces = workspaceSurfaces(workspace.workspace_id, {
+			onCount: (count) => {
+				surfaceCount.hidden = count === 0;
+				surfaceCount.textContent = String(count);
+				surfacesTab.setAttribute('aria-label', count === 1 ? 'Surfaces · 1' : `Surfaces · ${count}`);
+			},
+		});
+		const filesView = el('div', { class: 'ws-view', 'data-view': 'files' }, [split]);
+		const surfacesView = el('div', { class: 'ws-view', 'data-view': 'surfaces' }, [surfaces.node]);
+		const tab = (id: WorkspaceView, label: string, glyph: 'file-code' | 'surface', extra: Node[] = []) =>
+			el('a', { class: 'page-tab', href: workspaceRoute(workspace.workspace_id, id), 'data-tab': id }, [
+				icon(glyph),
+				el('span', { class: 'page-tab-label', text: label }),
+				...extra,
+			]);
+		const filesTab = tab('files', 'Files & shell', 'file-code');
+		const surfacesTab = tab('surfaces', 'Surfaces', 'surface', [surfaceCount]);
+		const show = (next: WorkspaceView): void => {
+			view = next;
+			for (const [node, id] of [[filesTab, 'files'], [surfacesTab, 'surfaces']] as const) {
+				node.classList.toggle('active', id === next);
+				if (id === next) node.setAttribute('aria-current', 'page');
+				else node.removeAttribute('aria-current');
+			}
+			filesView.hidden = next !== 'files';
+			surfacesView.hidden = next !== 'surfaces';
+			globalThis.history.replaceState(null, '', workspaceRoute(workspace.workspace_id, next));
+		};
+		for (const [node, id] of [[filesTab, 'files'], [surfacesTab, 'surfaces']] as const) {
+			on(node, 'click', (event) => {
+				event.preventDefault();
+				show(id);
+			});
+		}
+		const viewTabs = el('nav', { class: 'page-tabs ws-tabs', 'aria-label': 'Workspace views' }, [
+			filesTab,
+			surfacesTab,
+		]);
+
+		// --- the tasks that used this workspace: one icon, its count, and the way to their run histories -------------
+		const taskCount = el('span', { class: 'ws-task-count', 'aria-hidden': 'true', hidden: true });
+		const tasksButton = iconButton(
+			'list-checks',
+			'Agent tasks that used this workspace',
+			() => navigate(tasksRoute(null, workspace.workspace_id)),
+			{ small: true },
+		);
+		tasksButton.classList.add('ws-tasks');
+		tasksButton.append(taskCount);
+		tasksButton.hidden = true;
+		const countTasks = (): void => {
+			api.listAgentTasks(workspace.workspace_id).then(({ tasks }) => {
+				if (shown !== workspace.workspace_id) return;
+				const words = tasks.length === 0
+					? 'No agent task has used this workspace yet'
+					: tasks.length === 1
+					? '1 agent task used this workspace: open its run history'
+					: `${tasks.length} agent tasks used this workspace: open their run histories`;
+				tasksButton.hidden = false;
+				tasksButton.setAttribute('aria-label', words);
+				tasksButton.setAttribute('data-tip', words);
+				taskCount.hidden = tasks.length === 0;
+				taskCount.textContent = tasks.length > 99 ? '99+' : String(tasks.length);
+			}).catch(() => {
+				// Without agent:invoke there are no tasks to show: the icon stays away.
+				tasksButton.hidden = true;
+			});
+		};
+		refreshTaskCount = countTasks;
+
 		detail.append(
 			el('header', { class: 'ws-head' }, [
 				el('div', { class: 'ws-head-glyph', 'aria-hidden': 'true' }, [icon('workspace')]),
@@ -429,14 +593,15 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 						),
 					]),
 				]),
-				el('div', { class: 'ws-head-actions' }, [diff, remove]),
+				viewTabs,
+				el('div', { class: 'ws-head-actions' }, [tasksButton, diff, remove]),
 			]),
-			el('wa-split-panel', { class: 'ws-split', position: 55 }, [
-				editorPane,
-				el('span', { class: 'ws-grip', slot: 'divider', 'aria-hidden': 'true' }, [icon('grip')]),
-				shell,
-			]),
+			filesView,
+			surfacesView,
 		);
+		show(view);
+		countTasks();
+		void tree.refresh();
 	}
 
 	function createDialog(): void {
@@ -503,5 +668,9 @@ export function workspacesView(navigate: Navigate, initial?: string): void {
 	}, [rail, detail]));
 	void load();
 	// No refresh button (D-092): workspaces an agent creates appear on their own.
-	poll(rail, 10_000, () => void load());
+	poll(rail, 10_000, () => {
+		void load();
+		refreshShownTree?.();
+		refreshTaskCount?.();
+	});
 }

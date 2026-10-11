@@ -1,13 +1,13 @@
 # MCP tools
 
-The server defines **100 tools**: **57 browser tools**, 18 library tools and 25 extension tools. Each caller sees only
+The server defines **102 tools**: **57 browser tools**, 18 library tools and 27 extension tools. Each caller sees only
 what its scopes and the deployment allow; everything else is listed with a reason in `tools_withheld` (resource
 `ttk://capabilities`).
 
 | Credential                        | Tools in the default Compose stack |
 | --------------------------------- | ---------------------------------- |
 | Default grant (no `scopes` named) | 65                                 |
-| Every scope                       | 98                                 |
+| Every scope                       | 100                                |
 
 The two never offered by default: `agent_delegate` (needs `TTK_AGENT_PEERS_FILE`) and `agent_prompt` (needs the ACP
 bridge).
@@ -128,11 +128,20 @@ Results arrive inside `{ result }`.
 | `agent_peers`, `agent_delegate`                                 | `agent:invoke`    | List A2A peers; delegate a message to one.                                 |
 | `agent_prompt`                                                  | `agent:invoke`    | Start a task on the external ACP agent.                                    |
 | `a2ui_publish`, `a2ui_delete`                                   | `a2ui:publish`    | Publish or delete an A2UI v0.9 surface. `a2ui_delete` asks.                |
+| `sandbox_session_ticket`⁷                                       | `sandbox:execute` | Mint the terminal embed's single-use socket ticket (app-only).             |
+| `a2ui_surface_ticket`⁷                                          | `a2ui:publish`    | Mint the surface embed's single-use socket ticket (app-only).              |
 | `memory_search`, `memory_list`                                  | `files:read`      | Similarity search over your memory collections.                            |
 | `memory_save`, `memory_delete`                                  | `files:write`     | Save up to 32 items; delete items or a collection. `memory_delete` asks.   |
 
 Sandbox tools need the sandbox service (`TTK_SANDBOX_URL`) and are withheld while it is unreachable. Memory tools need
-`TTK_DATA_DIR`. `sandbox_clone` needs `TTK_SANDBOX_GIT_HOSTS` or remotes on the sandbox service.
+`TTK_DATA_DIR`. `sandbox_clone` needs `TTK_SANDBOX_GIT_HOSTS` or remotes on the sandbox service. ⁷ `TTK_MCP_APPS`
+`watch` or `control`, HTTP only; hosts keep these from the model (see [MCP Apps](mcp-protocol.md#mcp-apps)).
+
+**Argument spellings.** A value the schema refuses only because it arrived as JSON text — an object, array, number or
+boolean sent as a string, such as `{"limit": "5"}` or a stringified `message` — is read as the value it spells and
+validated again; text that spells nothing, or a value that is still wrong, is refused with the field named.
+`a2ui_publish` also accepts a message without `version` (read as `v0.9`) and the A2UI basic catalog's own id
+(`https://a2ui.org/specification/v0_9/basic_catalog.json`, read as the local catalog).
 
 ## Behaviour common to all tools
 

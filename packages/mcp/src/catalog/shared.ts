@@ -128,6 +128,13 @@ export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
 	 * "no data directory" and "no encoder" cases.
 	 */
 	readonly unavailableDetail?: (state: ToolAvailability) => string | undefined;
+	/**
+	 * Rewrites a call's raw arguments before the schema sees them, for spellings a published wire format allows and the
+	 * schema does not (`a2ui_publish`: a message without `version`, the A2UI basic catalog's own id). It must only map
+	 * an alternative spelling onto the canonical one: the schema still decides what is valid, and the advertised JSON
+	 * Schema stays the canonical form. Must not throw; anything it does not recognize is returned unchanged.
+	 */
+	readonly normalizeArguments?: (args: unknown) => unknown;
 	readonly handler: (args: z.infer<S>, ctx: ToolContext) => Promise<ToolResult>;
 }
 

@@ -6,6 +6,7 @@
  * boot. See SPECS/BACKEND.md §4.
  */
 import * as z from 'zod';
+import { parseMemorySize } from './browser_memory.ts';
 import { parseSecrets, type SecretEntry, type SessionOwnership } from '@tykotech/mcp';
 import { NODE_ROLES, type NodeRole } from './cluster.ts';
 import { type ExpansionConfig, expansionConfig } from './expansion_config.ts';
@@ -175,6 +176,12 @@ export interface Config {
 	readonly limits: {
 		readonly maxSessions: number;
 		readonly sessionTtlMs: number;
+		/**
+		 * The container's memory limit in bytes, `TTK_MEMORY_LIMIT` (Compose fills it from the value it gives
+		 * `mem_limit`); `null` when unset. Display only — the Sessions screen's meters measure against it; Deno cannot
+		 * read cgroup without `--allow-all`, so the server is told rather than asking.
+		 */
+		readonly memoryLimitBytes: number | null;
 		readonly maxViewersPerSession: number;
 		readonly castQuality: number;
 		readonly rateRpm: number;
@@ -341,6 +348,7 @@ export const ENV_NAMES = [
 	'TTK_CHROMIUM_NO_SANDBOX',
 	'TTK_HEADLESS',
 	'TTK_MAX_SESSIONS',
+	'TTK_MEMORY_LIMIT',
 	'TTK_SESSION_TTL_S',
 	'TTK_LOGIN_TTL_S',
 	'TTK_MAX_VIEWERS',
@@ -443,6 +451,20 @@ function int(env: Env, name: string, fallback: number, min: number, max: number)
 		throw new ConfigError(name, `expected an integer in [${min}, ${max}], got ${JSON.stringify(raw)}`);
 	}
 	return value;
+}
+
+/** `TTK_MEMORY_LIMIT`: a size as Compose writes one (`1536m`, `1.5g`, bytes), or `null` when unset. */
+function memoryLimit(env: Env): number | null {
+	const raw = env.TTK_MEMORY_LIMIT?.trim();
+	if (raw === undefined || raw === '') return null;
+	const bytes = parseMemorySize(raw);
+	if (bytes === null || bytes < 64 * 1024 * 1024) {
+		throw new ConfigError(
+			'TTK_MEMORY_LIMIT',
+			`expected a size of at least 64m (e.g. 1536m, 1.5g), got ${JSON.stringify(raw)}`,
+		);
+	}
+	return bytes;
 }
 
 function bool(env: Env, name: string, fallback: boolean): boolean {
@@ -1060,8 +1082,12 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): Config {
 	// to whichever node holds the *browser* session — so a 2025-era client's next request can land on a node that has
 	// never heard of its `Mcp-Session-Id`. Refused at startup, where the operator can still pick one, rather than
 	// left to fail per request at runtime.
-	const mcpStateful = bool(env, 'TTK_MCP_STATEFUL', false);
-	if (mcpStateful && cluster !== null) {
+	// Default on outside a cluster: a 2025-era client (pi, most hosts) hears `tools/list_changed` only on a session's
+	// standalone stream, so without one it never learns that a deploy or a scope change moved its tools. Unset in a
+	// cluster it resolves off; named `true` there it is refused, as before.
+	const mcpStatefulSet = env.TTK_MCP_STATEFUL !== undefined && env.TTK_MCP_STATEFUL.trim() !== '';
+	const mcpStateful = bool(env, 'TTK_MCP_STATEFUL', cluster === null);
+	if (mcpStateful && mcpStatefulSet && cluster !== null) {
 		throw new ConfigError(
 			'TTK_MCP_STATEFUL',
 			'the stateful transport pins a client to one process and cannot run in a cluster; ' +
@@ -1213,6 +1239,7 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): Config {
 		limits: {
 			maxSessions: int(env, 'TTK_MAX_SESSIONS', 8, 1, 128),
 			sessionTtlMs: ttlSeconds * 1000,
+			memoryLimitBytes: memoryLimit(env),
 			maxViewersPerSession: int(env, 'TTK_MAX_VIEWERS', 4, 1, 64),
 			castQuality: int(env, 'TTK_CAST_QUALITY', 60, 1, 100),
 			rateRpm: int(env, 'TTK_RATE_RPM', 120, 1, 100_000),

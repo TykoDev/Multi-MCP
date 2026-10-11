@@ -20,8 +20,9 @@ export const SAMPLING_TOOLS: ReadonlySet<string> = new Set(['browser_run_task', 
  *
  * - The sampling tools need the calling client's model, which a task does not have.
  * - `agent_run_tool` itself: a task that only queues another task buys nothing and spends a slot.
- * - `browser_request_human`, `browser_live_view`, `browser_live_ticket`: each hands something to the person or host
- *   at the other end of *this* call (an elicitation, an embed, a ticket bound to the caller's app origin).
+ * - `browser_request_human`, `browser_live_view`, `browser_live_ticket`, and the MCP Apps stream tickets
+ *   `sandbox_session_ticket` / `a2ui_surface_ticket`: each hands something to the person or host at the other end of
+ *   *this* call (an elicitation, an embed, a ticket bound to the caller's app origin).
  * - The confirmation set (G5): a client able to confirm must not be able to route a destructive tool around its
  *   human by wrapping it in a task, whose executor has no MCP context to ask through.
  * - `browser_file_link` (review R1-5 / R2-5): its signed URL is a bearer credential for its life (D-119: it goes only
@@ -40,6 +41,8 @@ export const NOT_TASKABLE: ReadonlySet<string> = new Set([
 	'browser_request_human',
 	'browser_live_view',
 	'browser_live_ticket',
+	'sandbox_session_ticket',
+	'a2ui_surface_ticket',
 	'browser_file_link',
 	...CONFIRM_TOOL_NAMES,
 ]);

@@ -572,8 +572,7 @@ fieldset.tc-nested {
 	width: 18px;
 	height: 18px;
 }
-.tc-tabs,
-.rx-tabs {
+.tc-tabs {
 	--indicator-color: var(--ttk-brand);
 	--track-color: var(--ttk-hairline);
 	min-width: 0;
@@ -581,8 +580,7 @@ fieldset.tc-nested {
 .tc-tabs wa-tab-panel {
 	--padding: 12px 0 0;
 }
-.tc-tabs wa-tab::part(tab),
-.rx-tabs wa-tab::part(tab) {
+.tc-tabs wa-tab::part(tab) {
 	gap: 6px;
 	padding: 8px 12px;
 }
@@ -843,8 +841,7 @@ fieldset.tc-nested {
 	opacity: 0.85;
 }
 
-.rx-templates,
-.rx-prompts {
+.rx-templates {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;

@@ -306,6 +306,24 @@ export type ParsedLocator =
 	| { kind: 'label'; label: string };
 
 /**
+ * The selector a bare `id`, `testid` or `name` value means. `browser_locator_candidates` emits these kinds as full
+ * selectors (`#username`, `[data-testid="x"]`, `input[name="q"]`) and those pass unchanged; a caller that writes the
+ * bare attribute value (`{kind: 'id', value: 'username'}`) means the same element, but the bare text went to
+ * `DOM.performSearch`, which also matches plain text, and counted every element mentioning the word instead.
+ */
+function selectorOfBare(kind: 'testid' | 'id' | 'name', value: string): string {
+	const bare = value.trim();
+	switch (kind) {
+		case 'id':
+			return bare.startsWith('#') || bare.startsWith('[') ? value : idSelector(bare);
+		case 'testid':
+			return bare.startsWith('[') ? value : `[data-testid="${escapeAttribute(bare)}"]`;
+		case 'name':
+			return bare.includes('[') ? value : `[name="${escapeAttribute(bare)}"]`;
+	}
+}
+
+/**
  * Parses `{kind, value}` into its kind's own syntax, refusing a malformed value as a caller error:
  * an `aria` string that is not `role=…[name="…"]`, a `label=`/`text=` value without its prefix, an
  * empty selector. A CSS selector is not validated here — the browser is the matcher, and a selector
@@ -319,7 +337,7 @@ export function parseLocator(kind: LocatorKind, value: string): ParsedLocator {
 		case 'name':
 		case 'css': {
 			if (value.trim() === '') throw malformed('the selector is empty');
-			return { kind, selector: value };
+			return { kind, selector: kind === 'css' ? value : selectorOfBare(kind, value) };
 		}
 		case 'text': {
 			if (!value.startsWith('text=') || value.length === 'text='.length) throw malformed('expected text=…');

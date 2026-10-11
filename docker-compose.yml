@@ -29,6 +29,8 @@ services:
       - ttk-sandbox-token:/run/secrets/ttk-sandbox-token:ro
     # Chromium's default 64 MB /dev/shm kills tabs mid-navigation.
     shm_size: '1gb'
+    # The server and every browser session it launches share this limit (Sessions shows each session's share).
+    mem_limit: '${TTK_GATEWAY_MEMORY:-1536m}'
     security_opt:
       # Chromium's setuid sandbox helper needs this profile. no-new-privileges is deliberately absent:
       # it would block the helper's setuid step, and the Chromium sandbox is the point.
@@ -45,6 +47,10 @@ services:
       TTK_ADMIN_USER_FILE: /run/secrets/ttk_admin_user
       TTK_DB_KEY_FILE: /run/secrets/ttk_db_key
       TTK_LOG_LEVEL: info
+      # The server's JavaScript heap limit; Chromium's memory is outside it, inside mem_limit above.
+      DENO_V8_FLAGS: '--max-old-space-size=${TTK_GATEWAY_HEAP_MB:-1024}'
+      # The container's limit, told to the server for the Sessions screen's memory meters (it cannot read cgroup).
+      TTK_MEMORY_LIMIT: '${TTK_GATEWAY_MEMORY:-1536m}'
       # The coding sandbox, on the internal network. Its tools need the sandbox:execute scope.
       TTK_SANDBOX_URL: http://sandbox:8080
       TTK_SANDBOX_TOKEN_FILE: /run/secrets/ttk-sandbox-token/token

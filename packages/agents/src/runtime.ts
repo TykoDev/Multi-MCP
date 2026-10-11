@@ -246,6 +246,95 @@ export interface AgentTask extends Record<string, unknown> {
 	metadata?: AgentTaskMetadata;
 }
 
+/** What a run-log entry records. */
+export type RunLogKind =
+	| 'received'
+	| 'state'
+	| 'model_request'
+	| 'tool_call'
+	| 'tool_result'
+	| 'acp'
+	| 'peer_request'
+	| 'artifact'
+	| 'truncated';
+
+/**
+ * One entry of a task's run log: when (`at`, ISO 8601), what (`kind`), and the facts of it — a provider request's
+ * timing and usage, a tool call's name and (redacted, clipped) arguments, a state change. The log is what happened
+ * inside a run, kept after it: the live event stream shows the same events but only to whoever was listening.
+ * Never a message sent to a provider, a key or a credential.
+ */
+export interface RunLogEntry extends Record<string, unknown> {
+	readonly at: string;
+	readonly kind: RunLogKind;
+}
+
+/** A task's run log as `runLog` answers it: the task's times, its entries oldest first, and whether it was cut. */
+export interface RunLog {
+	readonly created_at: string;
+	readonly finished_at?: string;
+	readonly entries: RunLogEntry[];
+	readonly truncated: boolean;
+}
+
+/** The run log's bounds per task: entries, and serialized bytes. Past either, one `truncated` entry ends it. */
+export const RUN_LOG_MAX_ENTRIES = 300;
+export const RUN_LOG_MAX_BYTES = 128 * 1024;
+/** What one logged argument object or result text may take before it is clipped. */
+export const RUN_LOG_VALUE_LIMIT = 4 * 1024;
+
+const RUN_LOG_KINDS: ReadonlySet<string> = new Set<RunLogKind>([
+	'received',
+	'state',
+	'model_request',
+	'tool_call',
+	'tool_result',
+	'acp',
+	'peer_request',
+	'artifact',
+	'truncated',
+]);
+
+/** A value as the run log keeps it: itself while its JSON fits {@linkcode RUN_LOG_VALUE_LIMIT}, else a marker. */
+function logValue(value: unknown): unknown {
+	const json = JSON.stringify(value ?? null);
+	return json.length <= RUN_LOG_VALUE_LIMIT ? value : { truncated: true, bytes: json.length };
+}
+
+/** Text as the run log keeps it: at most {@linkcode RUN_LOG_VALUE_LIMIT} characters, marked when cut. */
+function logText(text: string): string {
+	return text.length <= RUN_LOG_VALUE_LIMIT ? text : `${text.slice(0, RUN_LOG_VALUE_LIMIT)}… [${text.length} chars]`;
+}
+
+/** A tool result as the run log keeps it: its text content joined, else its JSON. */
+function toolText(result: Record<string, unknown>): string {
+	const texts = Array.isArray(result.content)
+		? result.content.flatMap((item) =>
+			item !== null && typeof item === 'object' && item.type === 'text' && typeof item.text === 'string'
+				? [item.text as string]
+				: []
+		)
+		: [];
+	return texts.length > 0 ? texts.join('\n') : JSON.stringify(result) ?? '';
+}
+
+/** A stored run log re-read: well-formed entries only, within today's bounds. */
+function storedLog(value: unknown): RunLogEntry[] {
+	if (!Array.isArray(value)) return [];
+	const entries: RunLogEntry[] = [];
+	let bytes = 0;
+	for (const item of value.slice(0, RUN_LOG_MAX_ENTRIES + 1)) {
+		if (
+			item === null || typeof item !== 'object' || Array.isArray(item) || typeof item.at !== 'string' ||
+			typeof item.kind !== 'string' || !RUN_LOG_KINDS.has(item.kind)
+		) continue;
+		bytes += JSON.stringify(item).length;
+		if (bytes > RUN_LOG_MAX_BYTES + 1024) break;
+		entries.push(item as RunLogEntry);
+	}
+	return entries;
+}
+
 interface TaskRecord {
 	owner: string;
 	scopes: ReadonlySet<string>;
@@ -266,6 +355,10 @@ interface TaskRecord {
 	permission?: { id: string; params: Record<string, unknown>; expires: number };
 	/** A11: at most {@linkcode MAX_PUSH_CONFIGS_PER_TASK}; persisted with the task and dropped with it. */
 	push: PushConfig[];
+	/** The run log, oldest first, bounded by {@linkcode RUN_LOG_MAX_ENTRIES} and {@linkcode RUN_LOG_MAX_BYTES}. */
+	log: RunLogEntry[];
+	/** The serialized size of `log`, kept so a bound check never re-serializes it. */
+	logBytes: number;
 }
 
 /**
@@ -287,6 +380,8 @@ interface StoredTask {
 	push?: PushConfig[];
 	/** D-154: configs whose token could not be restored (withheld for want of a key, or not opening); dropped. */
 	unrestorable?: number;
+	/** The run log; absent on a task written before it existed. */
+	log?: RunLogEntry[];
 }
 
 /** One push config as `tasks.json` holds it (D-154): the token sealed, or withheld — never plain text. */
@@ -366,6 +461,7 @@ function storedTask(value: unknown, sealer: SecretSealer | undefined): StoredTas
 			task: task as AgentTask,
 			push,
 			...(unrestorable === 0 ? {} : { unrestorable }),
+			log: storedLog(entry.log),
 		};
 	} catch {
 		return null;
@@ -562,6 +658,7 @@ export class AgentRuntime {
 			...(record.finished === undefined ? {} : { finished: record.finished }),
 			task: record.task,
 			...(record.push.length ? { push: record.push.map((config) => this.#storedPush(record.task.id, config)) } : {}),
+			...(record.log.length ? { log: record.log } : {}),
 		}));
 		const idempotency: [string, string][] = [...this.#byMessage].filter(([, id]) => this.#tasks.has(id));
 		return { version: 1, tasks, idempotency };
@@ -630,6 +727,8 @@ export class AgentRuntime {
 				timeoutMs: 0,
 				run: () => Promise.resolve(),
 				push,
+				log: entry.log ?? [],
+				logBytes: (entry.log ?? []).reduce((sum, item) => sum + JSON.stringify(item).length, 0),
 			};
 			this.#tasks.set(entry.task.id, record);
 			if (record.finished === undefined && !terminal(record.task.status.state)) interrupted.push(record);
@@ -736,6 +835,19 @@ export class AgentRuntime {
 		const copy = structuredClone(event);
 		for (const listener of record.listeners) listener.push(copy);
 	}
+	/** Appends to the task's run log within its bounds; the entry that would cross one becomes `truncated`, once. */
+	#log(record: TaskRecord, kind: RunLogKind, facts: Record<string, unknown> = {}): void {
+		if (record.log.at(-1)?.kind === 'truncated') return;
+		const entry: RunLogEntry = { at: new Date().toISOString(), kind, ...facts };
+		const bytes = JSON.stringify(entry).length;
+		if (record.log.length >= RUN_LOG_MAX_ENTRIES - 1 || record.logBytes + bytes > RUN_LOG_MAX_BYTES) {
+			record.log.push({ at: entry.at, kind: 'truncated' });
+		} else {
+			record.log.push(entry);
+			record.logBytes += bytes;
+		}
+		this.#changed();
+	}
 	#state(record: TaskRecord, state: string, text?: string): void {
 		if (terminal(record.task.status.state)) return;
 		record.task.status = {
@@ -756,6 +868,7 @@ export class AgentRuntime {
 		const update = {
 			statusUpdate: { taskId: record.task.id, contextId: record.task.contextId, status: record.task.status },
 		};
+		this.#log(record, 'state', { state, ...(text ? { text: logText(text) } : {}) });
 		this.#emit(record, update);
 		// A11: a webhook hears every state change, never at shutdown (the restart reports it instead, see #restore).
 		if (!this.#closed) this.#push?.deliver(record.task.id, record.push, structuredClone(update));
@@ -773,6 +886,7 @@ export class AgentRuntime {
 		const bytes = new TextEncoder().encode(JSON.stringify([...record.task.artifacts, artifact])).length;
 		if (bytes > 1024 * 1024) throw new AgentError(-32603, 'Agent output exceeds artifact budget');
 		record.task.artifacts.push(artifact);
+		this.#log(record, 'artifact', { name, parts: parts.length, bytes: JSON.stringify(parts).length });
 		this.#emit(record, {
 			artifactUpdate: { taskId: record.task.id, contextId: record.task.contextId, artifact, lastChunk: true },
 		});
@@ -896,6 +1010,7 @@ export class AgentRuntime {
 		metadata: AgentTaskMetadata,
 		execute: (record: TaskRecord) => Promise<void>,
 		push?: unknown,
+		via?: 'a2a',
 	): AgentTask {
 		if (this.#closed) throw new AgentError(-32603, 'Agent runtime closed');
 		if (!scopes.has('agent:invoke')) throw new AgentError(-32600, 'agent:invoke scope required');
@@ -945,8 +1060,18 @@ export class AgentRuntime {
 			timeoutMs,
 			run: () => execute(record),
 			push: webhook === undefined ? [] : [webhook],
+			log: [],
+			logBytes: 0,
 		};
 		this.#tasks.set(id, record);
+		// Where the request came in and what will run it; the request itself is the task's history.
+		const { kind: taskKind, ...backend } = metadata;
+		this.#log(record, 'received', {
+			task_kind: taskKind,
+			...backend,
+			...(via === undefined ? {} : { via }),
+			parts: message.parts.length,
+		});
 		this.#byMessage.set(key, id);
 		try {
 			this.options.onTaskCreated?.(id);
@@ -1111,29 +1236,47 @@ export class AgentRuntime {
 				model: backend.model,
 				...(profile === undefined ? {} : { agent: profile.id }),
 			};
-		return this.#create(owner, scopes, credential, message, timeoutMs, metadata, async (record) => {
-			const dataParts = message.parts.filter((part) => part.data !== undefined);
-			if (dataParts.length) {
-				for (const part of dataParts) {
-					record.controller.signal.throwIfAborted();
-					// GW-1: every invocation re-reads the credential's CURRENT scopes. A key narrowed or revoked
-					// while this task waited or ran never lends the task its submit-time authority.
-					const rights = this.#authorized(record);
-					if (!rights.has('mcp:invoke')) throw new AgentError(-32600, MCP_INVOKE_SCOPE_REQUIRED);
-					const data = object(part.data);
-					const result = await this.options.invoke(
-						identifier(data.tool),
-						object(data.arguments ?? {}),
-						owner,
-						rights,
-						record.controller.signal,
-					);
-					this.#artifact(record, [{ data: result }]);
-					if (result.isError === true) throw new AgentError(-32603, 'Tool execution returned an error');
-				}
-			} else if (backend === 'acp') await this.#prompt(record, message);
-			else await this.#model(record, message, backend!, profile);
-		}, options.push);
+		return this.#create(
+			owner,
+			scopes,
+			credential,
+			message,
+			timeoutMs,
+			metadata,
+			async (record) => {
+				const dataParts = message.parts.filter((part) => part.data !== undefined);
+				if (dataParts.length) {
+					for (const part of dataParts) {
+						record.controller.signal.throwIfAborted();
+						// GW-1: every invocation re-reads the credential's CURRENT scopes. A key narrowed or revoked
+						// while this task waited or ran never lends the task its submit-time authority.
+						const rights = this.#authorized(record);
+						if (!rights.has('mcp:invoke')) throw new AgentError(-32600, MCP_INVOKE_SCOPE_REQUIRED);
+						const data = object(part.data);
+						const started = performance.now();
+						this.#log(record, 'tool_call', { name: String(data.tool), arguments: logValue(data.arguments ?? {}) });
+						const result = await this.options.invoke(
+							identifier(data.tool),
+							object(data.arguments ?? {}),
+							owner,
+							rights,
+							record.controller.signal,
+						);
+						this.#log(record, 'tool_result', {
+							name: String(data.tool),
+							isError: result.isError === true,
+							duration_ms: Math.round(performance.now() - started),
+							text: logText(toolText(result)),
+						});
+						this.#artifact(record, [{ data: result }]);
+						if (result.isError === true) throw new AgentError(-32603, 'Tool execution returned an error');
+					}
+				} else if (backend === 'acp') await this.#prompt(record, message);
+				else await this.#model(record, message, backend!, profile);
+			},
+			options.push,
+			options.via,
+		);
 	}
 
 	/** An agent text part: appended to the response and emitted to subscribers as the ACP path emits chunks. */
@@ -1216,6 +1359,13 @@ export class AgentRuntime {
 			},
 			emitData: (event: ModelEvent): void => {
 				if (terminal(record.task.status.state)) return;
+				this.#log(record, event.kind, {
+					step: event.step,
+					name: event.name,
+					isError: event.isError,
+					...(event.arguments === undefined ? {} : { arguments: logValue(event.arguments) }),
+					...(event.text === undefined ? {} : { text: logText(event.text) }),
+				});
 				this.#emit(record, {
 					statusUpdate: {
 						taskId: record.task.id,
@@ -1238,6 +1388,7 @@ export class AgentRuntime {
 				record.task.metadata = { ...record.task.metadata!, steps, usage };
 				this.#changed();
 			},
+			request: (request): void => this.#log(record, 'model_request', { provider: backend.provider, ...request }),
 		});
 		if (parts.length) {
 			this.#artifact(record, parts, 'agent-response');
@@ -1339,6 +1490,13 @@ export class AgentRuntime {
 							let json = JSON.stringify(update);
 							for (const secret of secrets) json = json.split(secret).join('[REDACTED]');
 							if (json.length <= 16_384) {
+								const forwarded = JSON.parse(json) as Record<string, unknown>;
+								this.#log(record, 'acp', {
+									update: String(update.sessionUpdate),
+									...(typeof forwarded.title === 'string' ? { title: logText(forwarded.title) } : {}),
+									...(typeof forwarded.status === 'string' ? { status: forwarded.status } : {}),
+									detail: logValue(forwarded),
+								});
 								this.#emit(record, {
 									statusUpdate: {
 										taskId: record.task.id,
@@ -1458,6 +1616,19 @@ export class AgentRuntime {
 		task.history = historyLength === 0 ? [] : task.history.slice(-Math.min(historyLength, 100));
 		return task;
 	}
+	/**
+	 * The task's run log: its creation and finish times and what happened inside the run, oldest first. Owner-only,
+	 * like every read; another owner's id is not found.
+	 */
+	runLog(owner: string, id: string): RunLog {
+		const record = this.#record(owner, id);
+		return {
+			created_at: new Date(record.created).toISOString(),
+			...(record.finished === undefined ? {} : { finished_at: new Date(record.finished).toISOString() }),
+			entries: structuredClone(record.log),
+			truncated: record.log.at(-1)?.kind === 'truncated',
+		};
+	}
 	/** Most recent status first; only the authenticated principal's tasks exist here. */
 	list(owner: string): AgentTask[] {
 		return [...this.#tasks.values()].filter((record) => record.owner === owner).map((record) =>
@@ -1556,7 +1727,10 @@ export class AgentRuntime {
 		const timeoutMs = this.options.taskTimeoutMs ?? TEXT_TASK_TIMEOUT_MS;
 		return this.#create(owner, scopes, credential, message, timeoutMs, { kind: 'delegation' }, async (record) => {
 			this.#authorized(record);
+			const started = performance.now();
+			this.#log(record, 'peer_request', { peer: peerId });
 			const result = await peer.send(message, record.controller.signal);
+			this.#log(record, 'peer_request', { peer: peerId, duration_ms: Math.round(performance.now() - started) });
 			this.#artifact(record, [{ data: result }], 'delegated-task');
 		});
 	}

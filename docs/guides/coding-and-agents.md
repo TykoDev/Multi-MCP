@@ -52,7 +52,7 @@ Each command runs in a fresh bubblewrap cage: new namespaces, no capabilities, e
 - **Docker backend.** Hosts that forbid unprivileged user namespaces can run one hardened container per workspace with
   `docker-compose.sandbox-docker.yml` (gives the sandbox service the Docker socket, which is root on the host).
 
-The web app's **Sessions › Workspaces** tab offers an editor, diff and shell over these tools.
+The web app's **Sessions › Workspaces** tab offers a file tree, an editor, diff and shell over these tools.
 
 ## Tasks
 
@@ -196,11 +196,19 @@ only if its `mcp_servers` entry matches `TTK_AGENT_MCP_URL` exactly. Permission 
 
 ## A2UI surfaces
 
-Small declarative UIs owned by their publisher, shown on the Agents screen (Surfaces) and, with MCP Apps, inside the
-host. Publish one A2UI v0.9 message at a time with `a2ui_publish`:
+Small declarative UIs owned by their publisher, shown under their coding workspace in **Sessions › Workspaces** and,
+with MCP Apps, inside the host. Publish one A2UI v0.9 message at a time with `a2ui_publish`; `workspaceId` (optional, a
+`sandbox_create` workspace id) says which workspace the surface belongs to:
 
 ```json
-{ "version": "v0.9", "createSurface": { "surfaceId": "build", "catalogId": "https://tykotech.eu/a2ui/catalog/v0.9" } }
+{
+	"version": "v0.9",
+	"createSurface": {
+		"surfaceId": "build",
+		"catalogId": "https://tykotech.eu/a2ui/catalog/v0.9",
+		"workspaceId": "2276732b-a79d-436f-9cea-1a80b68a06b2"
+	}
+}
 ```
 
 ```json
@@ -221,6 +229,41 @@ Components: `Column`, `Row`, `List`, `Card`, `Tabs`, `Modal`, `Divider`, `Text`,
 sandboxed iframe, no scripts). Media are `data:` URLs or `ttk://share/` paths, never remote URLs. Buttons act only
 through `cancelTask`, `permissionDecision` or operator actions declared in `TTK_A2UI_ACTIONS`. Limits: 256 components,
 32 surfaces per owner.
+
+A text, label or title may be computed on the page from the surface's data model with the v0.9 catalog functions
+`formatString` and `formatNumber`, so an input visibly drives the rest of the surface without a round trip:
+
+```json
+[
+	{ "id": "n", "component": "Slider", "label": "Number", "min": 1, "max": 3999, "value": { "path": "/number" } },
+	{
+		"id": "out",
+		"component": "Text",
+		"text": { "call": "formatString", "args": { "value": "${/number} = ${/roman/${/number}}" } }
+	},
+	{
+		"id": "fmt",
+		"component": "Text",
+		"text": { "call": "formatNumber", "args": { "value": { "path": "/number" }, "decimals": 2 } }
+	}
+]
+```
+
+`${/pointer}` reads the data model; nested expressions resolve first, so a table in the model (`/roman` above, an array
+indexed by number) works as a lookup; `\${` is a literal `${`. Nothing else is evaluated: no other functions, and a
+value typed into the model is never read as an expression.
+
+In the web app a surface without a workspace is listed under any open workspace with **Attach here**; an attached one
+can be detached there (`PATCH /api/v1/a2ui/surfaces/{id}` with `{ "workspaceId": <id> | null }`).
+
+A message may also arrive as JSON text, without `version`, or naming the A2UI basic catalog
+(`https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`, or the older `…/v0_9/basic_catalog.json`); each
+means the message above. A refusal names the field (`message.createSurface.catalogId: …`) or the cause
+(`you have no A2UI surface "x": create it first …`). In an MCP Apps host the surface renders under the tool call;
+**Follow live** keeps it current as later messages publish.
+
+With MCP Apps, `sandbox_session_open` shows a terminal under the tool call: **Attach** streams the session's output and
+lets the person type lines into the shell, alongside `sandbox_session_input` / `sandbox_session_read`.
 
 ## Troubleshooting
 

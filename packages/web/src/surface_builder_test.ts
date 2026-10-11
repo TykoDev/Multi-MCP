@@ -171,7 +171,7 @@ Deno.test('surface_builder: the theme fields become a createSurface.theme, or no
 
 Deno.test('surface_builder: the one New-surface action is constructed once in the screen (D-092)', async () => {
 	// The home it is offered in is decided by `newSurfaceHome`; a second construction would be a second home.
-	const view = await Deno.readTextFile(new URL('./agent_view.ts', import.meta.url));
+	const view = await Deno.readTextFile(new URL('./workspace_surfaces.ts', import.meta.url));
 	assertEquals(view.match(/label: 'New surface'/g)?.length, 1, 'one New surface button');
 	assert(view.includes('newSurfaceHome('), 'the screen asks where it lives');
 	assert(!view.includes("iconButton('plus', 'Publish a declarative surface'"), 'the old publish toggle is gone');
@@ -195,9 +195,9 @@ Deno.test('surface_builder: close() takes the drawer out of the document at once
 	});
 });
 
-Deno.test('surface_builder: the screen closes an open builder when it stops (BUG-2)', async () => {
-	const view = await Deno.readTextFile(new URL('./agent_view.ts', import.meta.url));
-	const stop = view.slice(view.indexOf('const stop = ('), view.indexOf('onLeave(stop)'));
-	assert(stop.includes('builder?.close()'), 'stop() closes the builder drawer');
+Deno.test('surface_builder: the surfaces panel closes an open builder when it stops (BUG-2)', async () => {
+	const view = await Deno.readTextFile(new URL('./workspace_surfaces.ts', import.meta.url));
+	const stop = view.slice(view.indexOf('stop: (): void => {'));
+	assert(stop.slice(0, stop.indexOf('},')).includes('builder?.close()'), 'stop() closes the builder drawer');
 	assert(view.includes('let builder:'), 'one module-level handle');
 });

@@ -436,3 +436,130 @@ wa-skeleton.sc-skeleton {
 		opacity: 0;
 	}
 }
+
+/* --- memory: the three meters against the limits, the Active and Idle groups, each card's share --- */
+
+.sc-mem {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+	gap: 12px;
+	margin-bottom: 16px;
+}
+.sc-mem[hidden] {
+	display: none;
+}
+.sc-meter {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-card);
+	box-shadow: var(--ttk-shadow);
+}
+.sc-meter-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+.sc-meter-figure {
+	color: var(--wa-color-text-normal);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.sc-meter-bar {
+	position: relative;
+	display: block;
+	height: 8px;
+	border-radius: 999px;
+	background: var(--ttk-hairline);
+	overflow: hidden;
+}
+.sc-meter-bar.small {
+	flex: 1;
+	height: 6px;
+}
+.sc-meter-fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: var(--fill, 0%);
+	border-radius: inherit;
+	background: var(--ttk-live);
+	transition: width 0.4s var(--ttk-ease);
+}
+.sc-meter-fill.warn {
+	background: var(--ttk-locked);
+}
+.sc-meter-fill.danger {
+	background: var(--ttk-danger);
+}
+.sc-groups {
+	display: flex;
+	flex-direction: column;
+	gap: 22px;
+}
+.sc-group {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.sc-group-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 30px;
+}
+.sc-group-title {
+	margin: 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.sc-group-count {
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-weight: 650;
+}
+.sc-group-empty {
+	margin: 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 12.5px;
+}
+.sc-mem-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--wa-color-text-quiet);
+}
+.sc-mem-row[hidden] {
+	display: none;
+}
+.sc-mem-figure {
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+.sc-card-foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--ttk-hairline);
+}
+.sc-idle {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}

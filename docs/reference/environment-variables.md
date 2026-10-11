@@ -73,6 +73,7 @@ another program.
 | `TTK_HEADLESS`              | true                        | Run Chromium headless.                                                                                           |
 | `TTK_MAX_SESSIONS`          | 8 (1–128)                   | Concurrent browser sessions.                                                                                     |
 | `TTK_SESSION_TTL_S`         | 1800 (10–86400)             | Idle seconds before a session is closed; a session with a viewer is never closed for idleness.                   |
+| `TTK_MEMORY_LIMIT`          | unset                       | The container's memory limit (1536m, 1.5g); the Sessions screen's memory meters measure against it.              |
 | `TTK_SECRETS`               | none                        | Inline JSON object of browser secrets; prefer the file form.                                                     |
 | `TTK_SECRETS_FILE`          | none                        | File holding the browser secrets a model references by name; values are never returned.                          |
 
@@ -113,14 +114,14 @@ Add the MCP host's sandbox hostname to `TTK_ALLOWED_ORIGINS`, or its embeds cann
 
 ## Limits and transport
 
-| Variable                  | Default        | Meaning                                                                             |
-| ------------------------- | -------------- | ----------------------------------------------------------------------------------- |
-| `TTK_RATE_RPM`            | 120 (1–100000) | Requests per minute per principal; the burst is a third of this.                    |
-| `TTK_MCP_STATEFUL`        | false          | Also serve 2025-era clients on a stateful mount with Mcp-Session-Id.                |
-| `TTK_MAX_BODY_KB`         | 256            | Largest request body on the API routes, in KiB.                                     |
-| `TTK_METRICS`             | false          | Serves Prometheus metrics at GET /metrics to metrics:read or admin.                 |
-| `TTK_CONFIRM_DESTRUCTIVE` | true           | Ask a client that declared form elicitation to confirm the seven destructive tools. |
-| `TTK_HUMAN_HANDOFF`       | true           | Offers browser_request_human, which hands out live-view links.                      |
+| Variable                  | Default        | Meaning                                                                                    |
+| ------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `TTK_RATE_RPM`            | 120 (1–100000) | Requests per minute per principal; the burst is a third of this.                           |
+| `TTK_MCP_STATEFUL`        | true           | Serve 2025-era clients a stateful session (Mcp-Session-Id, change push); off in a cluster. |
+| `TTK_MAX_BODY_KB`         | 256            | Largest request body on the API routes, in KiB.                                            |
+| `TTK_METRICS`             | false          | Serves Prometheus metrics at GET /metrics to metrics:read or admin.                        |
+| `TTK_CONFIRM_DESTRUCTIVE` | true           | Ask a client that declared form elicitation to confirm the seven destructive tools.        |
+| `TTK_HUMAN_HANDOFF`       | true           | Offers browser_request_human, which hands out live-view links.                             |
 
 ## Logging
 
@@ -199,11 +200,13 @@ Bundled image only. With `OTEL_DENO=true`, startup is refused unless every endpo
 
 Compose interpolation only (`.env`); the server never reads these.
 
-| Variable                 | Default                     | Meaning                                                                             |
-| ------------------------ | --------------------------- | ----------------------------------------------------------------------------------- |
-| `TTK_BIND`               | 127.0.0.1                   | Host address the container port is published on; 0.0.0.0 exposes it on the network. |
-| `TTK_AGENT_RUNNER_IMAGE` | tykotech-agent-runner:0.2.0 | The derived runner image that contains your ACP agent.                              |
-| `TTK_SANDBOX_DOCKER_GID` | 0                           | The group that owns the Docker socket on the host, for the docker sandbox overlay.  |
+| Variable                 | Default                     | Meaning                                                                              |
+| ------------------------ | --------------------------- | ------------------------------------------------------------------------------------ |
+| `TTK_BIND`               | 127.0.0.1                   | Host address the container port is published on; 0.0.0.0 exposes it on the network.  |
+| `TTK_AGENT_RUNNER_IMAGE` | tykotech-agent-runner:0.2.0 | The derived runner image that contains your ACP agent.                               |
+| `TTK_SANDBOX_DOCKER_GID` | 0                           | The group that owns the Docker socket on the host, for the docker sandbox overlay.   |
+| `TTK_GATEWAY_MEMORY`     | 1536m                       | Memory limit of the gateway container: the server and every browser session it runs. |
+| `TTK_GATEWAY_HEAP_MB`    | 768                         | The gateway's JavaScript heap limit in MiB (DENO_V8_FLAGS --max-old-space-size).     |
 
 ## Browser-layer variables
 

@@ -3,7 +3,7 @@
  *
  * Routes: `#/connect`, `#/sessions`, `#/view/:sessionId`,
  * `#/resources[/:uri | /:group[/:rest]]` (`resources_route.ts` tells the two
- * apart), `#/workspaces[/:id]`, `#/agents`, `#/users`,
+ * apart), `#/workspaces[/:id]`, `#/agents[/chat/:task]`, `#/agents/tasks[/:task]`, `#/users`,
  * `#/system[/mcp|/agents|/config]`; `#/library[/:tab]` redirects to
  * `#/resources/:tab` and `#/tools[/:name]` to `#/resources/tools[/:name]` (D-152). Sessions, the viewer and
  * the workspaces are the three tabs of the Sessions section (D-147), each still
@@ -17,10 +17,12 @@
  */
 // First, before any chunk builds a schema: Zod's `new Function` probe is a CSP report under the page policy (K-5).
 import './jitless.ts';
+import { agentRoute } from './agent_tabs.ts';
 import { isSignedIn, loadUser, onUnauthorized, restoreSession } from './api.ts';
 import { leaveScreen, signOut } from './lifecycle.ts';
 import { installPalette } from './palette.ts';
 import { initTheme } from './theme.ts';
+import { withSheets } from './styles.ts';
 import { installTooltips, messageOf, toast } from './ui.ts';
 import { connectView, sessionsView, viewerView } from './views.ts';
 
@@ -85,17 +87,26 @@ function render(): void {
 	}
 	if (hash === '#/resources' || hash.startsWith('#/resources/')) {
 		lazy(
-			() => import('./resources_view.ts'),
+			() => withSheets(import('./resources_view.ts'), 'resources'),
 			({ resourcesView }) => resourcesView(navigate, param(hash, '#/resources/')),
 		);
 		return;
 	}
-	if (hash === '#/agents') {
-		lazy(() => import('./agent_view.ts'), ({ agentView }) => agentView(navigate));
+	// The Agents section's two tabs (`agent_tabs.ts`): the chat of one task, and the Tasks list with run histories.
+	const agents = agentRoute(hash);
+	if (agents !== null) {
+		if (agents.tab === 'tasks') {
+			lazy(
+				() => withSheets(import('./tasks_view.ts'), 'tasks'),
+				({ tasksView }) => tasksView(navigate, agents.taskId, agents.workspace),
+			);
+		} else {lazy(() =>
+				withSheets(import('./agent_view.ts'), 'agents'), ({ agentView }) =>
+				agentView(navigate, agents.taskId));}
 		return;
 	}
 	if (hash === '#/users') {
-		lazy(() => import('./users_view.ts'), ({ usersView }) => usersView(navigate));
+		lazy(() => withSheets(import('./users_view.ts'), 'users'), ({ usersView }) => usersView(navigate));
 		return;
 	}
 	// The Library screen is absorbed by Resources: its tabs are the Files, Skills and Prompts groups of the one tree.
@@ -110,14 +121,17 @@ function render(): void {
 	// and the entry budget is what keeps the connect screen light.
 	if (hash === '#/workspaces' || hash.startsWith('#/workspaces/')) {
 		lazy(
-			() => import('./workspaces_view.ts'),
+			() => withSheets(import('./workspaces_view.ts'), 'workspaces'),
 			({ workspacesView }) => workspacesView(navigate, param(hash, '#/workspaces/')),
 		);
 		return;
 	}
 	// D-149: the System screen's three tabs are routes of their own (`#/system`, `#/system/mcp`, `#/system/config`).
 	if (hash === '#/system' || hash.startsWith('#/system/')) {
-		lazy(() => import('./system_view.ts'), ({ systemView }) => systemView(navigate, param(hash, '#/system/')));
+		lazy(
+			() => withSheets(import('./system_view.ts'), 'system'),
+			({ systemView }) => systemView(navigate, param(hash, '#/system/')),
+		);
 		return;
 	}
 	connectView(navigate);

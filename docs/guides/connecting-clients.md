@@ -37,8 +37,9 @@ claude mcp add --transport http multi-mcp http://127.0.0.1:8787/mcp --header "Au
 ```
 
 With `TTK_OAUTH_ISSUER` set, clients that support MCP authorization discover the identity provider from the `401`
-challenge; no static header. For `Mcp-Session-Id` sessions or `resources/subscribe`, set `TTK_MCP_STATEFUL=true` (single
-node only).
+challenge; no static header. 2025-era clients get `Mcp-Session-Id` sessions with `resources/subscribe` and are told to
+re-list their tools after a deploy or a scope change ([change push](../reference/mcp-protocol.md#notifications));
+`TTK_MCP_STATEFUL=false` turns sessions off, and a cluster runs without them.
 
 ## stdio
 
@@ -96,7 +97,7 @@ grants loopback network only, so `browser_head` is withheld and only local model
 | Sampling         | `browser_extract_content` and `browser_run_task` run on your model (`sampling.tools` gets tools). |
 | Form elicitation | The seven destructive tools ask for confirmation; `browser_fill_secret` offers permitted secrets. |
 | URL elicitation  | `browser_request_human` shows the live-view link to the user.                                     |
-| MCP Apps         | `browser_live_view` and `a2ui_publish` render inside the host.                                    |
+| MCP Apps         | `browser_live_view`, `a2ui_publish` and `sandbox_session_open` render live inside the host.       |
 
 For MCP Apps, add the host's sandbox hostname to `TTK_ALLOWED_ORIGINS` and serve the gateway on an `https`
 `TTK_PUBLIC_URL` the host can reach.

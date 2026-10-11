@@ -25,6 +25,7 @@
 import { isInputRequiredResult, McpServer, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import type { CallToolResult, ClientCapabilities, ServerContext } from '@modelcontextprotocol/server';
 import type { ToolAvailability, ToolDefinition } from './catalog.ts';
+import { type ArgumentIssue, describeIssues, repairArguments } from './arguments.ts';
 import { CONFIRM_TOOL_NAMES, confirmGate } from './confirm.ts';
 import type { Scope } from './scopes.ts';
 import { ToolError } from './errors.ts';
@@ -156,11 +157,28 @@ export function missingFeature(
 	return undefined;
 }
 
-/** Renders a Zod failure as `<path>: <issue>`, joined; the root path reads `(root)`. */
-function describeIssues(issues: readonly { path: PropertyKey[]; message: string }[]): string {
-	return issues
-		.map((issue) => `${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`)
-		.join('; ');
+/**
+ * Validates a call's raw arguments against the tool's schema: the tool's own `normalizeArguments` first, then the
+ * schema, then — only on a failure — the stringified-value repair (`arguments.ts`), whose output passes the same
+ * schema or is not used. Exported for the task executor, which validates the same way.
+ */
+export function parseArguments(
+	tool: Pick<ToolDefinition, 'inputSchema' | 'normalizeArguments'>,
+	args: unknown,
+): { success: true; data: unknown } | { success: false; message: string } {
+	const raw = tool.normalizeArguments === undefined ? args ?? {} : tool.normalizeArguments(args ?? {});
+	const first = tool.inputSchema.safeParse(raw);
+	if (first.success) return { success: true, data: first.data };
+	const repaired = repairArguments(raw, first.error.issues as readonly ArgumentIssue[], (value) => {
+		// A repaired value is normalized again: the tool's normalization may apply to what the string spelled.
+		const candidate = tool.normalizeArguments === undefined ? value : tool.normalizeArguments(value);
+		const attempt = tool.inputSchema.safeParse(candidate);
+		return attempt.success
+			? { success: true, data: attempt.data }
+			: { success: false, issues: attempt.error.issues as readonly ArgumentIssue[] };
+	});
+	if (repaired.ok) return { success: true, data: repaired.data };
+	return { success: false, message: describeIssues(repaired.issues) };
 }
 
 /**
@@ -261,10 +279,8 @@ export async function dispatchToolCall(
 
 	// G-3: the SDK validates arguments *inside* its own handler and throws, so
 	// this is the only place an argument violation can be given a code.
-	const parsed = tool.inputSchema.safeParse(args ?? {});
-	if (!parsed.success) {
-		return errorResult(new ToolError('invalid-arguments', describeIssues(parsed.error.issues)));
-	}
+	const parsed = parseArguments(tool, args);
+	if (!parsed.success) return errorResult(new ToolError('invalid-arguments', parsed.message));
 
 	// R5 (D-125): a destructive call from a form-capable client waits for its human — after the arguments are known to
 	// be valid, so the message describes a call that could run, and before the heartbeat, so a call parked on a person
@@ -403,7 +419,11 @@ function validateOutput(
 	}
 	const checked = tool.outputSchema.safeParse(call.structuredContent);
 	if (!checked.success) {
-		logger?.warn(`tool ${tool.name} returned a result its schema rejects: ${describeIssues(checked.error.issues)}`);
+		logger?.warn(
+			`tool ${tool.name} returned a result its schema rejects: ${
+				describeIssues(checked.error.issues as readonly ArgumentIssue[])
+			}`,
+		);
 		return errorResult(
 			new ToolError('browser-unavailable', `${tool.name} produced a result its own schema rejects`),
 		);

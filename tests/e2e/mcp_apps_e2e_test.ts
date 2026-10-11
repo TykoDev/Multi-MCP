@@ -416,7 +416,7 @@ Deno.test({
 	name: 'e2e MCP Apps (AC39): an unlisted host origin is refused a ticket, and the A2UI embed renders read-only',
 	ignore,
 	async fn(t) {
-		const { h, host } = await appsHarness();
+		const { h, host, wsOrigin } = await appsHarness();
 		await using _host = host;
 		await using _h = h;
 		await h.callText('browser_navigate', { url: h.site.page('index') });
@@ -556,6 +556,84 @@ Deno.test({
 				assertEquals(embed.sockets, []);
 				assertEquals(await embed.violations(), []);
 				assertEquals(host.relayed, ['browser_live_ticket'], 'the A2UI embed called no tool');
+			} finally {
+				embed.stop();
+			}
+		});
+
+		await t.step('A2UI: Follow live streams each new revision over a ticketed socket, and the removal', async () => {
+			const current = await h.call('a2ui_publish', {
+				message: { version: 'v0.9', updateDataModel: { surfaceId: 'review', path: '/name', value: 'Grace' } },
+			});
+			assertEquals(current.isError, undefined, JSON.stringify(current.content));
+			const embed = await observedEmbed(h, host, driver, 'a2ui');
+			try {
+				await embed.deliver({ content: current.content, structuredContent: current.structuredContent });
+				const caption = () => embed.inEmbed<string>('document.querySelector(".e-caption").textContent');
+				await until(async () => (await caption()).includes('revision') || undefined, 'the surface');
+				const before = await caption();
+				// No socket until the press.
+				assertEquals(embed.sockets, []);
+				await embed.inEmbed('document.querySelector(".e-btn.primary").click(); true');
+				await until(
+					async () =>
+						(await embed.inEmbed<string>('document.querySelector(".e-dot").className')).includes('live') ||
+						undefined,
+					'the stream going live',
+				);
+				assertEquals(embed.sockets, [`${wsOrigin}/live/surface/review/ws`]);
+				assert(host.relayed.includes('a2ui_surface_ticket'), 'the ticket was minted through the host');
+				// The agent publishes; the embed draws it without another tool result.
+				await h.call('a2ui_publish', {
+					message: {
+						version: 'v0.9',
+						updateComponents: {
+							surfaceId: 'review',
+							components: [{ id: 'title', component: 'Text', text: 'Quarterly review (live)', variant: 'h2' }],
+						},
+					},
+				});
+				await until(
+					async () =>
+						(await embed.inEmbed<boolean>(
+							'[...document.querySelectorAll(".a2ui-text")].some((n) => n.textContent === "Quarterly review (live)")',
+						)) || undefined,
+					'the live revision',
+				);
+				assert((await caption()) !== before, 'the caption names the new revision');
+				await h.call('a2ui_delete', { surface_id: 'review' });
+				await until(
+					async () =>
+						(await embed.inEmbed<string>('document.querySelector(".e-message-text").textContent')).includes(
+							'was removed',
+						) || undefined,
+					'the removal',
+				);
+				assertEquals(await embed.violations(), []);
+			} finally {
+				embed.stop();
+			}
+		});
+
+		await t.step('terminal: the embed renders a session under CSP and opens nothing before Attach', async () => {
+			const embed = await observedEmbed(h, host, driver, 'terminal');
+			try {
+				await embed.deliver({
+					content: [{ type: 'text', text: '{}' }],
+					structuredContent: {
+						result: { session_id: '00000000-0000-4000-8000-000000000009', created_at: '2026-10-11T00:00:00Z' },
+					},
+				});
+				await until(
+					async () =>
+						(await embed.inEmbed<string | null>(
+							'document.querySelector(".e-btn.primary:not([hidden])")?.textContent ?? null',
+						)) ?? undefined,
+					'the Attach button',
+				);
+				assertStringIncludes(await embed.inEmbed<string>('document.querySelector(".e-origin").textContent'), '0009');
+				assertEquals(embed.sockets, []);
+				assertEquals(await embed.violations(), []);
 			} finally {
 				embed.stop();
 			}

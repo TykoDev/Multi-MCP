@@ -77,7 +77,10 @@ cookie-authenticated change needs the own origin and `x-ttk-csrf`.
 
 Sockets open with single-use tickets bound to principal, session and mode. Watching and controlling are separate scopes;
 input needs the takeover lock. Viewers per session and long-lived connections per principal are capped. MCP Apps embeds
-are hash-pinned documents whose only connect source is the gateway's socket origin.
+are hash-pinned documents whose only connect source is the gateway's socket origin. The terminal and surface embed
+sockets take the same kind of ticket — single-use, 30 s, bound to the embed's origin, the stream kind and the target,
+minted only for a session or surface the caller owns — and re-check the minting credential on the gateway's horizon; the
+surface stream is read-only, and the terminal accepts input only because its ticket needs `sandbox:execute`.
 
 ## Coding workspaces
 

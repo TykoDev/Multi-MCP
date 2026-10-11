@@ -382,6 +382,8 @@ export interface AgentTaskMetadata {
 /** A2A task data shown to its authenticated owner only. */
 export interface AgentTaskSummary {
 	id: string;
+	/** The A2A context the task belongs to. */
+	contextId?: string;
 	status: { state: string; timestamp: string; message?: { parts: Array<{ text?: string }> } };
 	artifacts: Array<{ name?: string; parts?: Array<{ text?: string; data?: unknown }> }>;
 	/** The conversation, newest last: the request first, then decisions and (E-5) the agent's own reply. */
@@ -393,6 +395,25 @@ export interface AgentTaskSummary {
 		params: { options?: Array<{ optionId: string; name: string; kind: string }>; toolCall?: { title?: string } };
 		expires: number;
 	};
+}
+
+/**
+ * One entry of a task's run log (`GET /api/v1/agent/tasks/{id}/log`): when, what, and its facts — a provider request's
+ * `step`/`model`/`duration_ms`/`usage`/`stop`/`tool_calls`/`error`, a tool call's `name`/`arguments`, a result's
+ * `text`/`isError`, a state change's `state`/`text`. Unknown facts are shown as they are.
+ */
+export interface RunLogEntry {
+	at: string;
+	kind: string;
+	[fact: string]: unknown;
+}
+
+/** A task's run history: its times and its run log, oldest first; `truncated` once the log reached its bound. */
+export interface RunLog {
+	created_at: string;
+	finished_at?: string;
+	entries: RunLogEntry[];
+	truncated: boolean;
 }
 
 /** One A2A message part the composer sends: text, or a structured `{tool, arguments}` data part. */
@@ -577,6 +598,22 @@ export interface CreateAgentTaskBody {
 	model?: string;
 	/** D-156: a built-in profile id (`sloplord`). */
 	agent?: string;
+}
+
+/** `GET /api/v1/system/usage`: what Sessions › Sessions shows — each browser's memory against the limits. */
+export interface SystemMemory {
+	/** False while no browser has answered a memory dump: every browser figure is then `null`. */
+	measured: boolean;
+	container: { limit_bytes: number | null; used_bytes: number | null };
+	gateway: { rss_bytes: number; heap_used_bytes: number; heap_total_bytes: number; heap_limit_bytes: number };
+	browsers_private_bytes: number;
+	limits: { max_sessions: number; session_ttl_s: number };
+	sessions: Array<{
+		session_id: string;
+		idle_seconds: number;
+		idle_timeout_s: number;
+		memory: { private_bytes: number; processes: number } | null;
+	}>;
 }
 
 export interface SystemDiagnostics {
@@ -823,17 +860,24 @@ export const api = {
 			body: JSON.stringify(sessionId === undefined ? {} : { session_id: sessionId }),
 		}),
 	diagnostics: () => request<SystemDiagnostics>('/api/v1/system/diagnostics'),
+	systemMemory: () => request<SystemMemory>('/api/v1/system/usage'),
 	origins: () => request<OriginsInfo>('/api/v1/live/origins'),
 	setOrigins: (origins: string[]) =>
 		request<OriginsInfo>('/api/v1/live/origins', { method: 'PUT', body: JSON.stringify({ origins }) }),
 	sessionFilePath: (sessionId: string, fileId: string) =>
 		`/api/v1/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(fileId)}`,
 	agentTaskEventsPath: (taskId: string) => `/api/v1/agent/tasks/${encodeURIComponent(taskId)}/events`,
-	listAgentTasks: () => request<{ tasks: AgentTaskSummary[] }>('/api/v1/agent/tasks'),
+	/** Your tasks, newest first; with `workspace`, only those that touched that coding workspace. */
+	listAgentTasks: (workspace?: string) =>
+		request<{ tasks: AgentTaskSummary[] }>(
+			`/api/v1/agent/tasks${workspace === undefined ? '' : `?workspace_id=${encodeURIComponent(workspace)}`}`,
+		),
 	getAgentTask: (taskId: string) =>
 		request<{ task: AgentTaskSummary; permission?: AgentTaskSummary['permission'] }>(
 			`/api/v1/agent/tasks/${encodeURIComponent(taskId)}`,
 		),
+	/** The task's run history: its times and the bounded run log (provider requests, tool calls, states). */
+	getAgentTaskLog: (taskId: string) => request<RunLog>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}/log`),
 	cancelAgentTask: (taskId: string) =>
 		request<unknown>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST', body: '{}' }),
 	decideAgentPermission: (taskId: string, permissionId: string, optionId?: string) =>
@@ -892,6 +936,12 @@ export const api = {
 	listSurfaces: () => request<{ surfaces: A2uiSurface[] }>('/api/v1/a2ui/surfaces'),
 	publishSurface: (message: unknown) =>
 		request<unknown>('/api/v1/a2ui/surfaces', { method: 'POST', body: JSON.stringify(message) }),
+	/** Attaches a surface to a coding workspace, or detaches it with `null`. */
+	attachSurface: (surfaceId: string, workspaceId: string | null) =>
+		request<{ surface: A2uiSurface }>(`/api/v1/a2ui/surfaces/${encodeURIComponent(surfaceId)}`, {
+			method: 'PATCH',
+			body: JSON.stringify({ workspaceId }),
+		}),
 	deleteSurface: (surfaceId: string) =>
 		request<unknown>(`/api/v1/a2ui/surfaces/${encodeURIComponent(surfaceId)}`, { method: 'DELETE' }),
 	surfaceAction: (event: A2uiAction) =>

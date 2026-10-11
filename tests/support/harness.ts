@@ -53,6 +53,8 @@ export interface HarnessOptions {
 	readonly label?: string;
 	/** Extra/overriding `TTK_*` configuration. */
 	readonly env?: Readonly<Record<string, string | undefined>>;
+	/** Resolved secret-file contents by variable (`TTK_SANDBOX_TOKEN`), as the CLI hands them to `loadConfig`. */
+	readonly secrets?: Readonly<Record<string, string>>;
 	/** Registers a `sampling/createMessage` handler on the client. */
 	readonly sampling?: SamplingResponder;
 	/** Skips connecting the MCP client (for auth-shape tests). */
@@ -135,7 +137,7 @@ export async function harness(options: HarnessOptions = {}): Promise<Harness> {
 		// test passes `TTK_SESSION_OWNERSHIP` itself. The other D-150 defaults (handoff, links, MCP Apps) stay as shipped.
 		TTK_SESSION_OWNERSHIP: 'shared',
 		...options.env,
-	});
+	}, options.secrets === undefined ? {} : { secrets: options.secrets });
 	const gateway = await startGateway({
 		config,
 		version: '0.1.0-e2e',

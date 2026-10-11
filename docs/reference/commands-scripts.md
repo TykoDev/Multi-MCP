@@ -35,7 +35,7 @@ Every task names exact permissions, `--deny-ffi` first; `gate:tasks` enforces th
 | `stdio`                                                             | `stdio` with `dev`'s grants.                                                                   |
 | `serve:cluster`                                                     | `serve` with `--unstable-kv`.                                                                  |
 | `acp`                                                               | `acp`.                                                                                         |
-| `build:web`                                                         | Bundle the web UI and the two MCP Apps embeds into `packages/web/dist`.                        |
+| `build:web`                                                         | Bundle the web UI and the three MCP Apps embeds into `packages/web/dist`.                      |
 | `compile`                                                           | Single binary in `dist/` with baked permissions (`scripts/compile.ts`; run `build:web` first). |
 | `build:image`, `build:image:slim`                                   | `tykotech-mcp:0.2.0`, `tykotech-mcp:slim`.                                                     |
 | `ok`                                                                | Pre-commit gate: `fmt:check`, `lint`, `check`, `gate:tasks`, `gate:lock`, `test:unit`.         |

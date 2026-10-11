@@ -205,6 +205,12 @@
 					"isSecret": false
 				},
 				{
+					"name": "TTK_MEMORY_LIMIT",
+					"description": "The container's memory limit (1536m, 1.5g), which the Sessions screen's memory meters measure against (default unset).",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
 					"name": "TTK_SESSION_TTL_S",
 					"description": "Idle seconds before a session is closed, 10 to 86400 (default 1800).",
 					"isRequired": false,

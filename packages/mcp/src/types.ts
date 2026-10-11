@@ -164,6 +164,8 @@ export interface McpAppsDeps {
 	readonly liveViewHtml: string;
 	/** The self-contained `ui://tykotech/a2ui-surface` document. */
 	readonly a2uiHtml: string;
+	/** The self-contained `ui://tykotech/terminal` document. */
+	readonly terminalHtml: string;
 	/** `_meta.ui.csp.connectDomains`: the socket origin the embed may reach. */
 	readonly connectDomains: readonly string[];
 	/** `_meta.ui.domain` (`TTK_MCP_APPS_DOMAIN`), when the operator set one. */
@@ -180,6 +182,12 @@ export interface McpAppsDeps {
 export interface ToolContext {
 	/** New resource owner includes the trusted authentication realm (D-068). */
 	readonly extensionPrincipal?: string;
+	/**
+	 * The principal id an extension action's caller authenticated as, kept beside the owner that replaces
+	 * {@linkcode principal} in an extension action's context: the per-principal connection ceiling and the per-token
+	 * origin overlay count the id, not the owner (the MCP Apps stream tickets, `embed_streams.ts`). Set only there.
+	 */
+	readonly callerPrincipal?: string;
 	/**
 	 * Cancellation of this call: the MCP request's own signal (a client's `notifications/cancelled`, D-079), a
 	 * task or stdio bridge's, or both. A long-running handler passes it on to whatever it waits for.

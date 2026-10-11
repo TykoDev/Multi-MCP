@@ -45,7 +45,7 @@ flowchart LR
 | `sandbox` | The coding-sandbox service and the client the gateway uses.                                                        |
 | `agents`  | Task runtime, A2A server and peer client, ACP client, the built-in model agent.                                    |
 | `gateway` | Hono app: auth, `/mcp`, REST, live view, recorder, event streams, users, `ttk.db`, vault, memory, cluster routing. |
-| `web`     | The control-plane single-page app and the two MCP Apps embeds.                                                     |
+| `web`     | The control-plane single-page app and the three MCP Apps embeds (live view, surface, terminal).                    |
 | `cli`     | Composition root: `serve`, `stdio`, `acp`, `setup`, `seed`, `doctor`, `healthcheck`, `version`.                    |
 
 ## A tool call

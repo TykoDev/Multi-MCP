@@ -155,6 +155,21 @@ export function toolTaskParts(tool: string, args: Record<string, unknown>): Agen
 	return [{ data: { tool, arguments: args } }];
 }
 
+/**
+ * The id of the task a submission created, from whichever envelope answered it: `POST /api/v1/agent/tasks`
+ * (`{ task }`), the A2A `SendMessage` result (`{ task }` or the task itself), or `agent_delegate`'s `{ result }`
+ * (`{ result: { task } }` or `{ result: <task> }`). `null` when none of them holds a task.
+ */
+export function submittedTaskId(result: unknown): string | null {
+	let value: unknown = result;
+	for (let depth = 0; depth < 4 && value !== null && typeof value === 'object'; depth++) {
+		const record = value as Record<string, unknown>;
+		if (typeof record.id === 'string' && typeof record.status === 'object' && record.status !== null) return record.id;
+		value = record.task ?? record.result;
+	}
+	return null;
+}
+
 /** The arguments of `agent_delegate`. */
 export function delegateArgs(peer: string, message: string): { peer: string; message: string } {
 	return { peer, message };
@@ -191,7 +206,8 @@ export interface ComposerDeps {
 	readonly sendParts: (parts: AgentMessagePart[]) => Promise<unknown>;
 	readonly delegate: (args: { peer: string; message: string }) => Promise<unknown>;
 	/** After a task was accepted. */
-	readonly onSubmitted: () => void;
+	/** After a submission is accepted, with what the server answered (the new task, in one of three envelopes). */
+	readonly onSubmitted: (result: unknown) => void;
 	/** The screen's live region: what the composer says goes there. */
 	readonly status: HTMLElement;
 }
@@ -593,9 +609,9 @@ export function taskComposer(
 			toast(messageOf(cause), 'error');
 			return;
 		}
-		void busy(submit, work).then(() => {
+		void busy(submit, work).then((result) => {
 			done();
-			deps.onSubmitted();
+			deps.onSubmitted(result);
 		}).catch((cause) => {
 			say(messageOf(cause));
 			toast(messageOf(cause), 'error');

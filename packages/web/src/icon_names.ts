@@ -59,6 +59,9 @@ export const ICONS = {
 	pen: 'pencil',
 	undo: 'rotate-ccw',
 	history: 'rotate-ccw',
+	// The Tasks view's run history: a request arriving, and a log cut at its bound.
+	inbox: 'inbox',
+	scissors: 'scissors',
 	filter: 'funnel',
 	'list-filter': 'list-filter',
 	command: 'command',

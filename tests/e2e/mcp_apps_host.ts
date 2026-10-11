@@ -24,11 +24,12 @@
  */
 import type { Client } from '@modelcontextprotocol/client';
 
-export type EmbedKind = 'live' | 'a2ui';
+export type EmbedKind = 'live' | 'a2ui' | 'terminal';
 
 const VIEW_URIS: Readonly<Record<EmbedKind, string>> = {
 	live: 'ui://tykotech/live-view',
 	a2ui: 'ui://tykotech/a2ui-surface',
+	terminal: 'ui://tykotech/terminal',
 };
 
 export interface AppsHost extends AsyncDisposable {
@@ -250,7 +251,7 @@ export function startAppsHost(): AppsHost {
 				const ui = (tool._meta as { ui?: { visibility?: string[] } } | undefined)?.ui;
 				if (ui?.visibility !== undefined) visibility.set(tool.name, ui.visibility);
 			}
-			for (const kind of ['live', 'a2ui'] as const) {
+			for (const kind of ['live', 'a2ui', 'terminal'] as const) {
 				const read = await target.client.readResource({ uri: VIEW_URIS[kind] });
 				const content = read.contents[0] as { text?: string; _meta?: { ui?: { csp?: { connectDomains?: string[] } } } };
 				if (typeof content?.text !== 'string') throw new Error(`no document for ${VIEW_URIS[kind]}`);

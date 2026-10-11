@@ -1,6 +1,6 @@
 /** Optional service catalogs, kept separate from the frozen browser catalog (D-064). */
 import * as z from 'zod';
-import { A2uiMessageSchema, A2uiThemeSchema } from '@tykotech/wire';
+import { A2uiMessageSchema, A2uiThemeSchema, normalizeA2uiMessage } from '@tykotech/wire';
 import type { ToolAvailability, ToolDefinition, ToolHints } from './catalog.ts';
 import { untilAborted } from './cancel.ts';
 import { ToolError } from './errors.ts';
@@ -133,6 +133,14 @@ const a2uiSurface = z.looseObject({
 	theme: A2uiThemeSchema.optional(),
 });
 const a2uiRemoved = z.looseObject({ removed: z.literal(true), surfaceId: z.string() });
+/** What an MCP Apps stream ticket tool returns: the embed spends it on its socket, once, within 30 s. */
+const embedStreamTicket = z.looseObject({
+	ticket: z.string(),
+	ws_url: z.string(),
+	id: z.string().describe('the session or surface the ticket opens'),
+	expires_in: z.number().int().min(0),
+	origin_bound: z.string(),
+});
 
 // D-154: the agents' vector memory. The store (`packages/gateway/src/memory.ts`) owns these bounds and judges them
 // again; they are repeated here so a model reads them in the schema, and `memory_test.ts` pins the two equal.
@@ -196,6 +204,9 @@ export const EXTENSION_OUTPUT: Readonly<Record<string, z.ZodType>> = {
 	// `deleteSurface` arrives through a2ui_publish too, and answers like a2ui_delete.
 	a2ui_publish: z.union([z.looseObject({ surface: a2uiSurface }), a2uiRemoved]),
 	a2ui_delete: a2uiRemoved,
+	// MCP Apps streams (`embed_streams.ts` in the gateway): a single-use ticket for the embed's socket.
+	sandbox_session_ticket: embedStreamTicket,
+	a2ui_surface_ticket: embedStreamTicket,
 	...MEMORY_OUTPUT,
 };
 
@@ -204,6 +215,29 @@ const SANDBOX_EXEC_DEFAULT_TIMEOUT_MS = 300_000;
 
 /** Why a sandbox tool is withheld while its service is down (D-082). */
 const SANDBOX_DOWN = 'the coding sandbox is not reachable right now; try again shortly';
+
+/** The refusal an MCP Apps stream ticket tool gives while the operator has not turned MCP Apps on. */
+function appsOff(name: string): () => string {
+	return () => `${name} needs MCP Apps, which is off on this deployment; set TTK_MCP_APPS=watch or control`;
+}
+
+/** The terminal ticket: MCP Apps on and the sandbox reachable. */
+const TERMINAL_TICKET_GATE = {
+	available: (state: ToolAvailability): boolean => state.mcpApps === true && state.services?.sandbox !== false,
+	unavailableDetail: (state: ToolAvailability): string =>
+		state.mcpApps !== true ? appsOff('sandbox_session_ticket')() : SANDBOX_DOWN,
+};
+
+/** The surface ticket: MCP Apps on. */
+const SURFACE_TICKET_GATE = {
+	available: (state: ToolAvailability): boolean => state.mcpApps === true,
+	unavailableDetail: appsOff('a2ui_surface_ticket'),
+};
+
+/** The embed origin a stream ticket is bound to, as the live-view ticket takes it. */
+const embedOrigin = z.string().max(256).describe(
+	'The embed’s origin, scheme://host[:port], as its socket will send it.',
+);
 
 /**
  * R12 (design §2.3, §2.4): `sandbox_clone` is offered only while the sandbox is up **and** its `/healthz` says it
@@ -286,6 +320,8 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		hints?: ToolHints,
 		/** R12: a gate of the tool's own in place of its service's health alone (`sandbox_clone`). */
 		gate?: Pick<ToolDefinition, 'available' | 'unavailableDetail'>,
+		/** A rewrite of alternative argument spellings onto the schema's own (`a2ui_publish`). */
+		normalizeArguments?: ToolDefinition['normalizeArguments'],
 	): void => {
 		const action = actions[name];
 		if (action === undefined) return;
@@ -302,6 +338,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 			scope,
 			mutates,
 			...(hints === undefined ? {} : { hints }),
+			...(normalizeArguments === undefined ? {} : { normalizeArguments }),
 			...(gate !== undefined ? gate : service === null ? {} : {
 				available: (state: ToolAvailability) => state.services?.[service] !== false,
 				unavailableDetail: () =>
@@ -323,6 +360,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 							action(args as Record<string, unknown>, {
 								...ctx,
 								principal: ctx.extensionPrincipal ?? ctx.principal,
+								callerPrincipal: ctx.principal,
 							}),
 							ctx.signal,
 						),
@@ -497,6 +535,21 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		'sandbox:execute',
 		true,
 	);
+	// MCP Apps: the terminal embed's socket ticket. App-only (`ui_resources.ts`); not a model tool.
+	add(
+		'sandbox_session_ticket',
+		'For the embedded terminal: mints a single-use ticket that lives 30 seconds for the WebSocket that streams ' +
+			'one of your live shell sessions and feeds it input; it redeems only from origin, the embed’s own origin, ' +
+			'which must be one this deployment admits for MCP Apps. Hosts keep this tool from the model.',
+		z.object({
+			session_id: workspace,
+			origin: embedOrigin,
+		}).strict(),
+		'sandbox:execute',
+		false,
+		undefined,
+		TERMINAL_TICKET_GATE,
+	);
 	add(
 		'agent_peers',
 		'List configured A2A peer identifiers; credentials remain private.',
@@ -580,12 +633,25 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		'a2ui_publish',
 		'Publish validated A2UI v0.9 messages to your UI surfaces using the local component catalog: the v0.9 basic ' +
 			'catalog (media as base64 data: URLs or ttk://share/ paths) plus Html, a document shown only in a sandboxed ' +
-			'frame. createSurface may carry a theme (primaryColor, font, radius, density).',
+			'frame. createSurface may carry a theme (primaryColor, font, radius, density) and a workspaceId (the ' +
+			'sandbox_create workspace the surface belongs to; the control plane shows it under that workspace). A ' +
+			'dynamic text may be computed on the page from the data model: {call: "formatString", args: {value: ' +
+			'"${/n} = ${/table/${/n}}"}} interpolates pointers (nested ones first, so a lookup table works) and ' +
+			'{call: "formatNumber", args: {value: {path: "/n"}, decimals?, grouping?}} formats a number, so an input ' +
+			'bound to /n visibly drives them.',
 		z.object({
 			message: A2uiMessageSchema,
 		}).strict(),
 		'a2ui:publish',
 		true,
+		undefined,
+		undefined,
+		// Clients written against the A2UI specification omit `version` or name the basic catalog's own id; both mean
+		// this message, and the schema still judges it (`normalizeA2uiMessage`).
+		(args) =>
+			typeof args === 'object' && args !== null && !Array.isArray(args) && 'message' in args
+				? { ...args, message: normalizeA2uiMessage((args as { message: unknown }).message) }
+				: args,
 	);
 	add(
 		'a2ui_delete',
@@ -594,6 +660,22 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		'a2ui:publish',
 		true,
 		{ destructive: true, idempotent: true },
+	);
+	// MCP Apps: the surface embed's socket ticket, so the embed follows the surface live. App-only; read-only stream.
+	add(
+		'a2ui_surface_ticket',
+		'For the embedded agent surface: mints a single-use ticket that lives 30 seconds for the WebSocket that ' +
+			'streams every new revision of one of your A2UI surfaces, read-only; it redeems only from origin, the ' +
+			'embed’s own origin, which must be one this deployment admits for MCP Apps. Hosts keep this tool from the ' +
+			'model.',
+		z.object({
+			surface_id: z.string().min(1).max(128),
+			origin: embedOrigin,
+		}).strict(),
+		'a2ui:publish',
+		false,
+		undefined,
+		SURFACE_TICKET_GATE,
 	);
 	// D-154: vector memory on the data volume, so the library's scopes (D-075): reading is `files:read`, changing it
 	// `files:write`. Owned like a workspace, so it is an extension tool and not a library one. No service gate: there is

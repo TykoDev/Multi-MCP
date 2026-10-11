@@ -434,6 +434,13 @@ export const SETTINGS: readonly Setting[] = [
 		explain: 'Idle seconds before a session is closed; a session with a viewer is never closed for idleness.',
 	}),
 	S({
+		name: 'TTK_MEMORY_LIMIT',
+		section: 'browser',
+		kind: 'text',
+		default: 'unset',
+		explain: "The container's memory limit (1536m, 1.5g); the Sessions screen's memory meters measure against it.",
+	}),
+	S({
 		name: 'TTK_SECRETS',
 		section: 'browser',
 		kind: 'text',
@@ -562,8 +569,8 @@ export const SETTINGS: readonly Setting[] = [
 		name: 'TTK_MCP_STATEFUL',
 		section: 'limits',
 		kind: 'boolean',
-		default: 'false',
-		explain: 'Also serve 2025-era clients on a stateful mount with Mcp-Session-Id.',
+		default: 'true',
+		explain: 'Serve 2025-era clients a stateful session (Mcp-Session-Id, change push); off in a cluster.',
 	}),
 	S({
 		name: 'TTK_MAX_BODY_KB',
@@ -893,6 +900,20 @@ export const SETTINGS: readonly Setting[] = [
 		kind: 'integer',
 		default: '0',
 		explain: 'The group that owns the Docker socket on the host, for the docker sandbox overlay.',
+	}),
+	S({
+		name: 'TTK_GATEWAY_MEMORY',
+		section: 'compose',
+		kind: 'text',
+		default: '1536m',
+		explain: 'Memory limit of the gateway container: the server and every browser session it runs.',
+	}),
+	S({
+		name: 'TTK_GATEWAY_HEAP_MB',
+		section: 'compose',
+		kind: 'integer',
+		default: '1024',
+		explain: "The gateway's JavaScript heap limit in MiB (DENO_V8_FLAGS --max-old-space-size).",
 	}),
 ];
 

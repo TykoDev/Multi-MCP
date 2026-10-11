@@ -5,9 +5,12 @@ import {
 	a2uiChildren,
 	A2uiComponentSchema,
 	A2uiMessageSchema,
+	interpolateA2uiString,
+	normalizeA2uiMessage,
 	parseA2uiMediaUrl,
 	pointerSegments,
 	readA2uiPointer,
+	resolveA2uiValue,
 	updateA2uiModel,
 	validateA2uiJson,
 	validateA2uiTree,
@@ -266,5 +269,107 @@ Deno.test('D-111: tabs and modals are adjacency — cycles, depth and the render
 			{ id: 'root', component: 'Tabs', tabs },
 			{ id: 'wide', component: 'List', children: Array.from({ length: 16 }, (_, n) => `leaf${n}`) },
 		])
+	);
+});
+
+Deno.test("A2UI: the specification's spellings normalize onto the local message, and nothing else changes", () => {
+	const basic = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+	assertEquals(normalizeA2uiMessage({ createSurface: { surfaceId: 's', catalogId: basic } }), {
+		version: 'v0.9',
+		createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID },
+	});
+	assertEquals(normalizeA2uiMessage({ version: '0.9', deleteSurface: { surfaceId: 's' } }), {
+		version: 'v0.9',
+		deleteSurface: { surfaceId: 's' },
+	});
+	assertEquals(normalizeA2uiMessage({ createSurface: { surfaceId: 's' } }), {
+		version: 'v0.9',
+		createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID },
+	});
+	// Every normalized message is one the schema admits.
+	A2uiMessageSchema.parse(normalizeA2uiMessage({ updateDataModel: { surfaceId: 's', path: '/x', value: 1 } }));
+	// Another version, another catalog, two operations and non-objects are left for the schema to refuse.
+	const other = { version: 'v0.8', createSurface: { surfaceId: 's', catalogId: 'https://example.test/c.json' } };
+	assertEquals(normalizeA2uiMessage(other), other);
+	const two = { createSurface: { surfaceId: 's' }, deleteSurface: { surfaceId: 's' } };
+	assertEquals(normalizeA2uiMessage(two), two);
+	assertEquals(normalizeA2uiMessage('text'), 'text');
+	assertEquals(normalizeA2uiMessage(null), null);
+});
+
+Deno.test('formatString interpolates pointers, nested ones first, and never re-reads what it substituted', () => {
+	const model = {
+		number: 2026,
+		roman: ['', 'I'],
+		table: { MMXXVI: 2026 },
+		typed: '${/secret}',
+		secret: 'no',
+		list: [1, 2],
+	};
+	(model.roman as string[])[2026] = 'MMXXVI';
+	assertEquals(interpolateA2uiString('${/number} = ${/roman/${/number}}', model), '2026 = MMXXVI');
+	assertEquals(interpolateA2uiString('${table/${/roman/2026}}', model), '2026', 'a relative path reads from the root');
+	assertEquals(interpolateA2uiString('you typed ${/typed}', model), 'you typed ${/secret}');
+	assertEquals(interpolateA2uiString('\\${/number} costs ${/missing}!', model), '${/number} costs !');
+	assertEquals(interpolateA2uiString('${/list}', model), '[1,2]');
+	assertEquals(interpolateA2uiString('${/__proto__} ${not a pointer//}', model), ' ');
+	assertEquals(interpolateA2uiString('unclosed ${/number', model), 'unclosed 2026');
+	// Nesting deeper than the bound is left as text rather than recursing without end.
+	assertEquals(interpolateA2uiString('${'.repeat(20) + '/number' + '}'.repeat(20), model).length > 0, true);
+});
+
+Deno.test('resolveA2uiValue: bindings read, formatString and formatNumber compute, literals pass through', () => {
+	const model = { n: 1234.5, d: 1, g: false, name: 'Ada' };
+	assertEquals(resolveA2uiValue({ path: '/name' }, model), 'Ada');
+	assertEquals(resolveA2uiValue('plain', model), 'plain');
+	assertEquals(resolveA2uiValue({ call: 'formatString', args: { value: 'Hi ${/name}' } }, model), 'Hi Ada');
+	assertEquals(resolveA2uiValue({ call: 'formatString', args: { value: { path: '/name' } } }, model), 'Ada');
+	assertEquals(
+		resolveA2uiValue({ call: 'formatNumber', args: { value: { path: '/n' }, decimals: 2 } }, model, 'en-US'),
+		'1,234.50',
+	);
+	assertEquals(
+		resolveA2uiValue(
+			{ call: 'formatNumber', args: { value: { path: '/n' }, decimals: { path: '/d' }, grouping: { path: '/g' } } },
+			model,
+			'en-US',
+		),
+		'1234.5',
+	);
+	assertEquals(resolveA2uiValue({ call: 'formatNumber', args: { value: { path: '/name' } } }, model), '');
+	for (
+		const text of [
+			{ call: 'formatString', args: { value: 'x' }, returnType: 'string' },
+			{ call: 'formatNumber', args: { value: 3, decimals: 0, grouping: true } },
+		]
+	) assertEquals(A2uiComponentSchema.safeParse({ id: 't', component: 'Text', text }).success, true);
+	for (
+		const text of [
+			{ call: 'formatString', args: { value: 'x', extra: 1 } },
+			{ call: 'formatNumber', args: {} },
+			{ call: 'formatDate', args: { value: 'x' } },
+		]
+	) assertEquals(A2uiComponentSchema.safeParse({ id: 't', component: 'Text', text }).success, false);
+});
+
+Deno.test('createSurface takes an optional workspaceId (a UUID) and the current spec catalog id', () => {
+	const workspaceId = '2276732b-a79d-436f-9cea-1a80b68a06b2';
+	const ok = A2uiMessageSchema.safeParse({
+		version: 'v0.9',
+		createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID, workspaceId },
+	});
+	assertEquals(ok.success, true);
+	assertEquals(
+		A2uiMessageSchema.safeParse({
+			version: 'v0.9',
+			createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID, workspaceId: '../etc' },
+		}).success,
+		false,
+	);
+	assertEquals(
+		normalizeA2uiMessage({
+			createSurface: { surfaceId: 's', catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json' },
+		}),
+		{ version: 'v0.9', createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID } },
 	);
 });

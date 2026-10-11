@@ -1044,3 +1044,117 @@ button.ttk-btn.menu-trigger .menu-caret {
 .menu-item-gate {
 	display: block;
 }
+
+/* The dialog forms the first paint can open — the own-password dialog from the account popover (`acct-*`) and the
+ * kit's labelled fields (`lib-*`, `ui.ts`). They lived in the Users and Resources stylesheets, which load with
+ * their screens now (`styles.ts`), so they are here, in the stylesheet every page has. */
+
+.lib-form {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.lib-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+.lib-field-glyph {
+	position: absolute;
+	left: 11px;
+	z-index: 1;
+	display: grid;
+	place-items: center;
+	color: var(--wa-color-text-quiet);
+	pointer-events: none;
+	transition: color 0.2s var(--ttk-ease);
+}
+.lib-field > input {
+	flex: 1;
+	min-width: 0;
+	padding-left: 36px;
+}
+.lib-field:focus-within .lib-field-glyph {
+	color: var(--ttk-brand);
+}
+.lib-field.lib-field-area {
+	align-items: stretch;
+}
+.lib-field.lib-field-area .lib-field-glyph {
+	top: 11px;
+}
+.lib-field.lib-field-area > textarea {
+	padding-left: 36px;
+}
+.lib-form-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.acct-form {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 0;
+}
+.acct-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+.acct-label {
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+.acct-input {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+.acct-input > .icon {
+	position: absolute;
+	left: 11px;
+	z-index: 1;
+	color: var(--wa-color-text-quiet);
+	pointer-events: none;
+}
+.acct-input > input {
+	flex: 1;
+	width: 100%;
+	min-width: 0;
+	margin: 0;
+	padding-left: 34px;
+}
+.acct-input:has(> button) > input {
+	padding-right: 40px;
+}
+.acct-input > button.ttk-btn {
+	position: absolute;
+	right: 4px;
+}
+.acct-form-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding-top: 2px;
+}
+.acct-me {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+.acct-name {
+	min-width: 0;
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 650;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}

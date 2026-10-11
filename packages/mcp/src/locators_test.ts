@@ -17,6 +17,8 @@ import {
 	MAX_CSS_SEGMENTS,
 	MAX_TEXT_LOCATOR_CHARS,
 	ownTextOf,
+	parseLocator,
+	searchQueryOf,
 	testIdOf,
 } from './locators.ts';
 import { observe } from './observe.ts';
@@ -212,4 +214,20 @@ Deno.test('locators: a bare element with a click listener has no candidate at al
 	const root = element({ nodeName: 'BODY' });
 	const div = element({ nodeName: 'DIV', hasJsClickListener: true }, root);
 	assertEquals(locatorCandidates(div, buildDocumentIndex(root)), []);
+});
+
+Deno.test('locators: a bare id, testid or name value means its selector; a full selector passes unchanged', () => {
+	const query = (kind: 'id' | 'testid' | 'name' | 'css', value: string) => searchQueryOf(parseLocator(kind, value));
+	// The bare attribute value used to reach DOM.performSearch as plain text, which counts every mention of the word.
+	assertEquals(query('id', 'username'), '#username');
+	assertEquals(query('id', '1st'), '[id="1st"]');
+	assertEquals(query('testid', 'submit'), '[data-testid="submit"]');
+	assertEquals(query('name', 'q'), '[name="q"]');
+	assertEquals(query('name', 'say "hi"'), '[name="say \\"hi\\""]');
+	// What browser_locator_candidates emits, and CSS, are untouched.
+	assertEquals(query('id', '#username'), '#username');
+	assertEquals(query('id', '[id="1st"]'), '[id="1st"]');
+	assertEquals(query('testid', '[data-testid="submit"]'), '[data-testid="submit"]');
+	assertEquals(query('name', 'input[name="q"]'), 'input[name="q"]');
+	assertEquals(query('css', 'username'), 'username');
 });

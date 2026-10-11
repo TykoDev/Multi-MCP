@@ -86,7 +86,8 @@ function find<K extends A2uiComponent['component']>(
 	return component !== undefined && component.component === kind ? component as Of<K> : null;
 }
 /** The static text of a Text or Button, `null` when it is a model binding. */
-function textOf(value: string | { path: string } | undefined): string | null {
+/** A literal text, or `null` for a binding or a computed (`formatString`/`formatNumber`) one a template cannot edit. */
+function textOf(value: unknown): string | null {
 	return typeof value === 'string' ? value : null;
 }
 function textComponent(id: string, text: string, variant?: Of<'Text'>['variant']): Of<'Text'> {

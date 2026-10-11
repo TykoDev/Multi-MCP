@@ -72,6 +72,31 @@ Deno.test('expansion gateway: bearer and explicit scopes precede protocols, task
 				(newer.created_at === older.created_at && newer.id.localeCompare(older.id) > 0),
 			'newest-created first, ties by id',
 		);
+		// `?workspace_id=`: only the tasks whose request, history, artifacts or run log name that workspace.
+		const workspace = '2276732b-a79d-436f-9cea-1a80b68a06b2';
+		const touching = {
+			...rpc,
+			id: 3,
+			params: {
+				message: {
+					messageId: 'touch-workspace',
+					role: 'ROLE_USER',
+					parts: [{ data: { tool: 'browser_list_sessions', arguments: {}, note: `for ${workspace}` } }],
+				},
+			},
+		};
+		const third = (await (await request('/a2a', alice.key, touching)).json()).result.task;
+		const filtered = (await (await request(`/api/v1/agent/tasks?workspace_id=${workspace.toUpperCase()}`, alice.key))
+			.json()).tasks as { id: string }[];
+		assertEquals(filtered.map((entry) => entry.id), [third.id]);
+		assertEquals(
+			(await (await request(`/api/v1/agent/tasks?workspace_id=${workspace}`, bob.key)).json()).tasks,
+			[],
+			'another owner’s tasks never match',
+		);
+		const malformed = await request('/api/v1/agent/tasks?workspace_id=../x', alice.key);
+		assertEquals(malformed.status, 400);
+		await malformed.body?.cancel();
 		const foreign = await request(`/api/v1/agent/tasks/${task.id}`, bob.key);
 		assertEquals(foreign.status, 404);
 		await foreign.body?.cancel();

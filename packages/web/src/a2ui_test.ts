@@ -19,7 +19,7 @@ import {
 	SHARE_CONCURRENCY,
 	textOn,
 } from './a2ui.ts';
-import { chatTurns, newChatSince, releaseSurfaces } from './agent_view.ts';
+import { inWorkspace, releaseSurfaces, surfacesFor } from './workspace_surfaces.ts';
 
 /** The least favourable light and dark surfaces the renderer derives inks against (`a2ui.ts`). */
 const LIGHT_SURFACE = '#e4e5e9';
@@ -522,14 +522,14 @@ Deno.test('R3-4: leaving the Agents screen (or a failed load) releases every sur
 		assertEquals(nodes.size, 0, 'forgotten, so the next load renders afresh');
 		assertEquals(revoked.length, 2, 'both object URLs revoked');
 		assert(share.requests.every((request) => request.signal.aborted), 'every read aborted');
-		// The screen calls it from both places: its teardown, and the failed-load branch before the placeholder.
-		const view = await Deno.readTextFile(new URL('./agent_view.ts', import.meta.url));
-		const stop = view.slice(view.indexOf('const stop = (): void => {'));
-		assert(stop.slice(0, stop.indexOf('};')).includes('releaseSurfaces(surfaceNodes'), 'stop releases the surfaces');
-		const failed = view.slice(view.indexOf("surfaceResult.status === 'fulfilled'"));
+		// The panel calls it from both places: its teardown, and the failed-load branch before the placeholder.
+		const view = await Deno.readTextFile(new URL('./workspace_surfaces.ts', import.meta.url));
+		const stop = view.slice(view.indexOf('stop: (): void => {'));
+		assert(stop.slice(0, stop.indexOf('},')).includes('releaseSurfaces(surfaceNodes'), 'stop releases the surfaces');
+		const failed = view.slice(view.indexOf('} catch (cause) {', view.indexOf('async function load(')));
 		assert(
 			failed.indexOf('releaseSurfaces(surfaceNodes') !== -1 &&
-				failed.indexOf('releaseSurfaces(surfaceNodes') < failed.indexOf('Surfaces unavailable'),
+				failed.indexOf('releaseSurfaces(surfaceNodes') < failed.indexOf('list.replaceChildren()'),
 			'a failed load releases before it replaces',
 		);
 	} finally {
@@ -709,23 +709,67 @@ Deno.test('RV-6: kit-free, a share Image is the media note, and every caption si
 	releaseA2uiSurface(spa as unknown as Element);
 });
 
-Deno.test('agents (D-158): New chat hides the turns created up to the newest one, by server time; null shows all', () => {
-	const task = (id: string, created_at?: string) => ({
-		id,
-		contextId: 'c',
-		status: { state: 'TASK_STATE_COMPLETED', timestamp: '2026-10-09T10:00:00.000Z' },
-		artifacts: [],
-		history: [],
-		...(created_at === undefined ? {} : { created_at }),
+Deno.test('workspace surfaces: a surface is shown under its workspace, loose ones are offered, the builder creates in it', () => {
+	const surface = (surfaceId: string, workspaceId?: string): A2uiSurface => ({
+		surfaceId,
+		catalogId: A2UI_CATALOG_ID,
+		revision: 1,
+		components: [],
+		dataModel: {},
+		...(workspaceId === undefined ? {} : { workspaceId }),
 	});
-	const tasks = [task('a', '2026-10-09T09:00:00.000Z'), task('b', '2026-10-09T09:30:00.000Z')];
-	const since = newChatSince(tasks);
-	assertEquals(since, Date.parse('2026-10-09T09:30:00.000Z'));
-	assertEquals(chatTurns(tasks, since), []);
-	const later = [...tasks, task('c', '2026-10-09T09:30:00.001Z')];
-	assertEquals(chatTurns(later, since).map((entry) => entry.id), ['c']);
-	assertEquals(chatTurns(later, null).length, 3);
-	assertEquals(newChatSince([]), null);
-	// A task without created_at falls back to its status time.
-	assertEquals(chatTurns([task('d')], since).map((entry) => entry.id), ['d']);
+	const here = '2276732b-a79d-436f-9cea-1a80b68a06b2';
+	const there = '6d1527ec-24ea-437f-8905-933b447a6f61';
+	const split = surfacesFor([surface('a', here), surface('b', there), surface('c'), surface('d', here)], here);
+	assertEquals(split.attached.map((entry) => entry.surfaceId), ['a', 'd']);
+	assertEquals(split.loose.map((entry) => entry.surfaceId), ['c']);
+	assertEquals(
+		inWorkspace({ version: 'v0.9', createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID } }, here),
+		{ version: 'v0.9', createSurface: { workspaceId: here, surfaceId: 's', catalogId: A2UI_CATALOG_ID } },
+	);
+	// A message naming its own workspace keeps it; other operations pass through untouched.
+	const own = { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID, workspaceId: there } };
+	assertEquals((inWorkspace(own, here) as typeof own).createSurface.workspaceId, there);
+	const update = { version: 'v0.9', updateDataModel: { surfaceId: 's', value: {} } };
+	assertEquals(inWorkspace(update, here), update);
+});
+
+Deno.test('formatString and formatNumber: a Slider and a TextField drive computed text and a lookup on the page', () => {
+	const roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+	const root = withDocument(() =>
+		renderA2uiSurface(
+			surface([
+				{ id: 'root', component: 'Column', children: ['n', 'shown', 'typed', 'back', 'money'] },
+				{ id: 'n', component: 'Slider', label: 'Number', min: 1, max: 7, step: 1, value: { path: '/number' } },
+				{
+					id: 'shown',
+					component: 'Text',
+					text: { call: 'formatString', args: { value: '${/number} = ${/roman/${/number}}' } },
+				},
+				{ id: 'typed', component: 'TextField', label: 'Numeral', value: { path: '/numeral' } },
+				{ id: 'back', component: 'Text', text: { call: 'formatString', args: { value: '${/arabic/${/numeral}}' } } },
+				{
+					id: 'money',
+					component: 'Text',
+					text: { call: 'formatNumber', args: { value: { path: '/number' }, decimals: 2, grouping: false } },
+				},
+			], { dataModel: { number: 4, roman, arabic: { IV: 4, VI: 6 }, numeral: 'IV' } }),
+			() => Promise.resolve(),
+		) as unknown as FakeElement
+	);
+	const texts = () => byClass(root, 'a2ui-text').map((node) => node.textContent);
+	assertEquals(texts()[0], '4 = IV');
+	assertEquals(texts()[1], '4');
+	assertStringIncludes(texts()[2]!, '4');
+	const range = byClass(root, 'a2ui-range')[0]!;
+	range.value = '6';
+	withDocument(() => range.fire('input'));
+	assertEquals(texts()[0], '6 = VI', 'moving the slider recomputes the text bound to it');
+	const field = byClass(root, 'a2ui-input')[0]!;
+	field.value = 'VI';
+	withDocument(() => field.fire('input'));
+	assertEquals(texts()[1], '6', 'typing a numeral looks it up');
+	field.value = 'nope';
+	withDocument(() => field.fire('input'));
+	assertEquals(texts()[1], '', 'a numeral the table does not hold reads as nothing');
 });

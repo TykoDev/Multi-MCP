@@ -1,11 +1,11 @@
 /**
- * Writes the two MCP Apps embed documents (R9, design §2.20, D-135): `packages/web/dist/embed_live.html` and
- * `packages/web/dist/embed_a2ui.html`.
+ * Writes the MCP Apps embed documents (R9, design §2.20, D-135): `packages/web/dist/embed_live.html`,
+ * `packages/web/dist/embed_a2ui.html` and `packages/web/dist/embed_terminal.html`.
  *
- * Part of `deno task build:web`, after the task has bundled `embed_live.ts`, `embed_a2ui.ts` and `styles/embed.css`
- * into `dist/embed-src/` (the bundler runs in the task, so this script needs no `--allow-run` — F17; it holds the
- * grants `build_icons.ts` holds). Each document is self-contained, because an MCP Apps host frames it in a sandbox
- * origin from which nothing of ours is fetchable (no CORS, ever):
+ * Part of `deno task build:web`, after the task has bundled `embed_live.ts`, `embed_a2ui.ts`, `embed_terminal.ts`
+ * and `styles/embed.css` into `dist/embed-src/` (the bundler runs in the task, so this script needs no `--allow-run`
+ * — F17; it holds the grants `build_icons.ts` holds). Each document is self-contained, because an MCP Apps host frames
+ * it in a sandbox origin from which nothing of ours is fetchable (no CORS, ever):
  *
  * - **one inline `<script type="module">` and one inline `<style>`**, each pinned by its SHA-256 in a meta CSP —
  *   `default-src 'none'; script-src 'sha256-…'; style-src 'sha256-…'; img-src blob: data:; connect-src
@@ -113,6 +113,7 @@ if (import.meta.main) {
 		const [entry, out, title] of [
 			['embed_live.js', 'embed_live.html', 'TykoTech live view'],
 			['embed_a2ui.js', 'embed_a2ui.html', 'TykoTech agent surface'],
+			['embed_terminal.js', 'embed_terminal.html', 'TykoTech terminal'],
 		] as const
 	) {
 		const script = await Deno.readTextFile(new URL(entry, SOURCES));

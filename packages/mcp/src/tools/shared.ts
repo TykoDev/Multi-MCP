@@ -190,7 +190,17 @@ export function peekSession(ctx: ToolContext, sessionId: string | undefined): Se
 	const id = sessionId ?? DEFAULT_SESSION_ID;
 	// R8 (D-128): in `owner` mode another owner's session is not found, and `default` is the caller's own.
 	const record = ctx.registry.peekFor(sessionId, ctx.access);
-	if (record === undefined) throw new ToolError('unknown-session', `no session with id ${id}`);
+	if (record === undefined) {
+		// A read-only tool never launches a browser, so "the default session, created on first use" (the parameter's own
+		// description) is not created here: say so, or a caller reads `no session with id default` as a broken server.
+		throw new ToolError(
+			'unknown-session',
+			sessionId === undefined
+				? 'you have no default session yet: it is created by the first tool that opens a page (browser_navigate); ' +
+					'this tool only reads a session and never creates one'
+				: `no session with id ${id}`,
+		);
+	}
 	// The record's own id: in `owner` mode `default` names `default-<ulid>`, which is what has to be kept alive.
 	ctx.registry.touch(record.id);
 	return record;

@@ -8,6 +8,7 @@ import {
 	A2uiComponentSchema,
 	A2uiMessageSchema,
 	type A2uiSurface,
+	normalizeA2uiMessage,
 	readA2uiPointer,
 	updateA2uiModel,
 	validateA2uiJson,
@@ -15,6 +16,7 @@ import {
 } from '@tykotech/wire';
 import { DurableJsonFile } from '@tykotech/agents';
 import type { Context, Hono } from 'hono';
+import * as z from 'zod';
 import type { AppVariables } from './app.ts';
 import { HttpProblem, problemResponse } from './problem.ts';
 
@@ -80,6 +82,7 @@ function storedSurface(value: unknown): { owner: string; snapshot: A2uiSurface }
 				surfaceId: stored.surfaceId,
 				catalogId: stored.catalogId,
 				...(stored.theme === undefined ? {} : { theme: stored.theme }),
+				...(stored.workspaceId === undefined ? {} : { workspaceId: stored.workspaceId }),
 			},
 		});
 		if (!('createSurface' in message)) return null;
@@ -88,7 +91,7 @@ function storedSurface(value: unknown): { owner: string; snapshot: A2uiSurface }
 		if (!Object.hasOwn(stored, 'dataModel')) return null;
 		const components = A2uiComponentSchema.array().max(256).parse(stored.components);
 		validateA2uiTree(components);
-		const { surfaceId, catalogId, theme } = message.createSurface;
+		const { surfaceId, catalogId, theme, workspaceId } = message.createSurface;
 		const rebuilt: A2uiSurface = {
 			surfaceId,
 			catalogId,
@@ -96,6 +99,7 @@ function storedSurface(value: unknown): { owner: string; snapshot: A2uiSurface }
 			components,
 			dataModel: stored.dataModel,
 			...(theme === undefined ? {} : { theme }),
+			...(workspaceId === undefined ? {} : { workspaceId }),
 		};
 		return { owner, snapshot: rebuilt };
 	} catch {
@@ -108,10 +112,24 @@ interface Subscriber {
 	dispose: () => void;
 }
 
+/** One per-surface watcher (the MCP Apps surface stream, `embed_streams.ts`). */
+interface SurfaceWatcher {
+	readonly owner: string;
+	readonly surfaceId: string;
+	readonly onChange: (surface: A2uiSurface | null) => void;
+	/** The revision last delivered, so an owner's change to another surface is not re-sent. */
+	revision: number;
+}
+
+/** Surface watchers in the whole store and per owner; the embed stream is also capped per principal upstream. */
+export const A2UI_MAX_WATCHERS = 64;
+export const A2UI_MAX_WATCHERS_PER_OWNER = 8;
+
 /** Owns surfaces, one-shot action registrations and bounded snapshot subscriptions. */
 export class A2uiStore {
 	#surfaces = new Map<string, OwnedSurface>();
 	#subscribers = new Set<Subscriber>();
+	#watchers = new Set<SurfaceWatcher>();
 	#closed = false;
 	#revision = 0;
 	readonly #file: DurableJsonFile | undefined;
@@ -181,7 +199,8 @@ export class A2uiStore {
 	publish(principal: string, input: unknown): Record<string, unknown> {
 		if (this.#closed) throw new HttpProblem('invalid-request', 'A2UI store is closed');
 		validateA2uiJson(input);
-		const message = A2uiMessageSchema.parse(input);
+		// The specification's own spellings (no `version`, the basic catalog's id) mean the local catalog's message.
+		const message = A2uiMessageSchema.parse(normalizeA2uiMessage(input));
 		if ('deleteSurface' in message) return this.delete(principal, message.deleteSurface.surfaceId);
 		let owned: OwnedSurface;
 		if ('createSurface' in message) {
@@ -207,6 +226,9 @@ export class A2uiStore {
 					dataModel: {},
 					// D-111: the closed theme travels with the surface; the SPA maps it onto kit tokens.
 					...(message.createSurface.theme === undefined ? {} : { theme: message.createSurface.theme }),
+					...(message.createSurface.workspaceId === undefined
+						? {}
+						: { workspaceId: message.createSurface.workspaceId }),
 				},
 				actions: new Map(),
 			};
@@ -234,6 +256,28 @@ export class A2uiStore {
 		this.#emit(principal);
 		this.#changed();
 		return { surface: structuredClone(owned.snapshot) };
+	}
+	/**
+	 * Attaches an owned surface to a coding workspace, or detaches it with `null`, as a new revision; components, data
+	 * and theme stay as they are. The id is only a label the control plane groups by — it grants nothing, so it is
+	 * checked for shape (a UUID, as `sandbox_create` issues) and not looked up. Registered actions are dropped like on
+	 * every other revision: they were authorized against the previous one.
+	 */
+	attach(principal: string, surfaceId: string, workspaceId: unknown): Record<string, unknown> {
+		if (this.#closed) throw new HttpProblem('invalid-request', 'A2UI store is closed');
+		if (workspaceId !== null && !z.uuid().safeParse(workspaceId).success) {
+			throw new HttpProblem('invalid-request', 'workspaceId must be a workspace id (a UUID) or null');
+		}
+		const owned = this.#owned(principal, surfaceId);
+		const snapshot = structuredClone(owned.snapshot);
+		if (workspaceId === null) delete snapshot.workspaceId;
+		else snapshot.workspaceId = workspaceId as string;
+		snapshot.revision = ++this.#revision;
+		owned.snapshot = snapshot;
+		owned.actions.clear();
+		this.#emit(principal);
+		this.#changed();
+		return { surface: structuredClone(snapshot) };
 	}
 	/** Registers an action after the trusted runtime has verified the referenced target. */
 	registerAction(principal: string, surfaceId: string, componentId: string, name: string, binding: A2uiBinding): void {
@@ -264,6 +308,46 @@ export class A2uiStore {
 		const component = this.#owned(principal, surfaceId).snapshot.components.find((value) => value.id === componentId);
 		if (component?.component !== 'Html') throw new HttpProblem('not-found');
 		return component.html;
+	}
+	/** A fresh copy of one owned surface, without its action registrations; not found for any other owner. */
+	get(principal: string, surfaceId: string): A2uiSurface {
+		return structuredClone(this.#owned(principal, surfaceId).snapshot);
+	}
+	/**
+	 * Watches one owned surface: `onChange` receives a fresh snapshot each time its revision moves, and `null` once it
+	 * is deleted (or the store closes), after which the watch is over. Read-only — a watcher gains no action
+	 * authority. Throws `not-found` for a surface the owner does not have and `rate-limited` past the watcher caps.
+	 */
+	watch(principal: string, surfaceId: string, onChange: (surface: A2uiSurface | null) => void): () => void {
+		const current = this.#owned(principal, surfaceId);
+		if (
+			this.#closed || this.#watchers.size >= A2UI_MAX_WATCHERS ||
+			[...this.#watchers].filter((watcher) => watcher.owner === principal).length >= A2UI_MAX_WATCHERS_PER_OWNER
+		) {
+			throw new HttpProblem('rate-limited', 'A2UI surface watch limit reached');
+		}
+		const watcher: SurfaceWatcher = { owner: principal, surfaceId, onChange, revision: current.snapshot.revision };
+		this.#watchers.add(watcher);
+		return () => {
+			this.#watchers.delete(watcher);
+		};
+	}
+	#notifyWatchers(principal: string): void {
+		for (const watcher of [...this.#watchers]) {
+			if (watcher.owner !== principal) continue;
+			const surface = this.#surfaces.get(JSON.stringify([principal, watcher.surfaceId]));
+			try {
+				if (surface === undefined) {
+					this.#watchers.delete(watcher);
+					watcher.onChange(null);
+				} else if (surface.snapshot.revision !== watcher.revision) {
+					watcher.revision = surface.snapshot.revision;
+					watcher.onChange(structuredClone(surface.snapshot));
+				}
+			} catch {
+				// A watcher's failure is its own (a closed socket); it never fails the change that notified it.
+			}
+		}
 	}
 	/** Returns fresh owner-only snapshots. */
 	list(principal: string): Record<string, unknown> {
@@ -302,6 +386,7 @@ export class A2uiStore {
 		return new TextEncoder().encode(`event: surfaces\ndata: ${JSON.stringify(this.list(principal))}\n\n`);
 	}
 	#emit(principal: string): void {
+		this.#notifyWatchers(principal);
 		for (const subscriber of this.#subscribers) {
 			if (subscriber.owner !== principal) continue;
 			if ((subscriber.controller.desiredSize ?? 0) <= 0) {
@@ -356,6 +441,12 @@ export class A2uiStore {
 		const final = this.#closed || this.#file === undefined ? undefined : structuredClone(this.#document());
 		this.#final ??= final;
 		this.#closed = true;
+		for (const watcher of [...this.#watchers]) {
+			this.#watchers.delete(watcher);
+			try {
+				watcher.onChange(null);
+			} catch { /* the watcher's socket is already gone */ }
+		}
 		for (const subscriber of this.#subscribers) {
 			subscriber.controller.close();
 			subscriber.dispose();
@@ -609,6 +700,26 @@ export function attachA2uiRoutes(
 					),
 					{ headers: A2UI_HTML_HEADERS },
 				)),
+	);
+	// A surface's workspace: `{ workspaceId: <uuid> | null }`, nothing else. Publishing is the scope that changes a surface.
+	app.patch(
+		'/api/v1/a2ui/surfaces/:id',
+		requires('a2ui:publish'),
+		(ctx) =>
+			respond(ctx, async () => {
+				const body = await read(ctx.req.raw);
+				if (
+					body === null || typeof body !== 'object' || Array.isArray(body) ||
+					Object.keys(body).join() !== 'workspaceId'
+				) throw new HttpProblem('invalid-request', 'Expected { "workspaceId": <workspace id> | null }');
+				return ctx.json(
+					store.attach(
+						expansionOwner(ctx.get('principal')),
+						ctx.req.param('id') ?? '',
+						(body as { workspaceId: unknown }).workspaceId,
+					),
+				);
+			}),
 	);
 	app.delete(
 		'/api/v1/a2ui/surfaces/:id',

@@ -141,7 +141,30 @@ const pointer = z.string().refine((value) => {
 	}
 }, 'Invalid data pointer');
 const binding = z.strictObject({ path: pointer });
-const dynamicText = z.union([z.string().max(65536), binding]);
+const dynamicNumber = z.union([z.number(), binding]);
+const dynamicBoolean = z.union([z.boolean(), binding]);
+/**
+ * The v0.9 basic catalog's client-side string functions, the two a display needs: `formatString` interpolates
+ * `${/pointer}` expressions (nested ones resolve innermost first, so `${/table/${/key}}` is a lookup), and
+ * `formatNumber` formats a number. They compute on the page from the surface's own data model, so a bound input
+ * (a Slider, a TextField) visibly drives other components without a round trip. Evaluated by
+ * {@linkcode resolveA2uiValue}; nothing else in the catalog's function list is offered.
+ */
+const formatStringCall = z.strictObject({
+	call: z.literal('formatString'),
+	args: z.strictObject({ value: z.union([z.string().max(65536), binding]) }),
+	returnType: z.literal('string').optional(),
+});
+const formatNumberCall = z.strictObject({
+	call: z.literal('formatNumber'),
+	args: z.strictObject({
+		value: dynamicNumber,
+		decimals: dynamicNumber.optional(),
+		grouping: dynamicBoolean.optional(),
+	}),
+	returnType: z.literal('string').optional(),
+});
+const dynamicText = z.union([z.string().max(65536), binding, formatStringCall, formatNumberCall]);
 const event = z.strictObject({ name: id, context: z.record(z.string(), z.unknown()).optional() });
 const base = { id };
 const children = z.array(id).max(256);
@@ -264,6 +287,11 @@ export const A2uiMessageSchema = z.union([
 			surfaceId: id,
 			catalogId: z.literal(A2UI_CATALOG_ID),
 			theme: A2uiThemeSchema.optional(),
+			/**
+			 * TykoTech extension: the coding workspace (`sandbox_create`'s `workspace_id`) the surface belongs to. The
+			 * control plane shows a surface under its workspace; a surface without one waits there to be attached.
+			 */
+			workspaceId: z.uuid().optional(),
 		}),
 	}),
 	z.strictObject({
@@ -277,6 +305,44 @@ export const A2uiMessageSchema = z.union([
 	z.strictObject({ version: z.literal('v0.9'), deleteSurface: z.strictObject({ surfaceId: id }) }),
 ]);
 export type A2uiMessage = z.infer<typeof A2uiMessageSchema>;
+
+/**
+ * The A2UI project's own ids for the v0.9 basic catalog. The local catalog is that catalog plus `Html`, so a client
+ * written against the specification — which names the basic catalog (`catalogs/basic/catalog.json` in the current
+ * specification tree, `basic_catalog.json` before it) — means the local one; it is stored as
+ * {@linkcode A2UI_CATALOG_ID} either way.
+ */
+const BASIC_CATALOG_ID =
+	/^https:\/\/a2ui\.org\/specification\/v0_9\/(?:(?:basic|standard)_catalog(?:_definition)?\.json|catalogs\/basic\/catalog\.json)$/;
+
+const A2UI_OPERATIONS = ['createSurface', 'updateComponents', 'updateDataModel', 'deleteSurface'] as const;
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Maps the spellings of an A2UI v0.9 message that the specification's clients send onto the one
+ * {@linkcode A2uiMessageSchema} admits, and changes nothing else: a message naming exactly one operation gains
+ * `version: "v0.9"` when it has none (and `"0.9"` reads as `"v0.9"`), and a `createSurface` with no `catalogId` or
+ * with the basic catalog's own id names {@linkcode A2UI_CATALOG_ID}. The schema still decides validity; anything
+ * else, including a different version or catalog, is returned unchanged and refused there. Never throws.
+ */
+export function normalizeA2uiMessage(input: unknown): unknown {
+	if (!plainObject(input)) return input;
+	const operations = A2UI_OPERATIONS.filter((operation) => Object.hasOwn(input, operation));
+	if (operations.length !== 1) return input;
+	let message: Record<string, unknown> = input;
+	if (!Object.hasOwn(message, 'version') || message.version === '0.9') message = { ...message, version: 'v0.9' };
+	const create = message.createSurface;
+	if (operations[0] === 'createSurface' && plainObject(create)) {
+		const catalogId = create.catalogId;
+		if (catalogId === undefined || (typeof catalogId === 'string' && BASIC_CATALOG_ID.test(catalogId))) {
+			message = { ...message, createSurface: { ...create, catalogId: A2UI_CATALOG_ID } };
+		}
+	}
+	return message;
+}
 export const A2uiActionSchema = z.strictObject({
 	version: z.literal('v0.9'),
 	action: z.strictObject({
@@ -297,6 +363,8 @@ export interface A2uiSurface {
 	dataModel: unknown;
 	/** D-111: the `createSurface.theme` the surface was created with, when it had one. */
 	theme?: A2uiTheme;
+	/** The coding workspace the surface belongs to (`createSurface.workspaceId`, or attached later); absent: none. */
+	workspaceId?: string;
 	/** Trusted server registration keys; unregistered buttons remain disabled. */
 	availableActions?: string[];
 }
@@ -307,6 +375,91 @@ export function readA2uiPointer(model: unknown, path: string): unknown {
 	for (const key of pointerSegments(path)) {
 		if (typeof value !== 'object' || value === null || !Object.hasOwn(value, key)) return undefined;
 		value = (value as Record<string, unknown>)[key];
+	}
+	return value;
+}
+
+/** How deep `${…}` expressions may nest in one `formatString`, and how long its result may grow. */
+const INTERPOLATION_DEPTH = 8;
+const INTERPOLATION_LIMIT = 65536;
+
+/** A data-model value as interpolated text: strings as they are, other JSON as JSON, nothing as empty. */
+function interpolated(value: unknown): string {
+	if (value === undefined || value === null) return '';
+	return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
+/**
+ * `formatString`'s interpolation. `${expression}` is replaced by the value at the pointer it names (a relative path
+ * reads from the root: this catalog has no collection scopes), nested expressions first; `\${` is a literal `${`.
+ * An expression that is not a pointer, or does not resolve, interpolates nothing. A substituted value is never
+ * scanned again, so text a person typed into the model cannot inject expressions.
+ */
+export function interpolateA2uiString(template: string, model: unknown): string {
+	let at = 0;
+	function run(depth: number, closing: boolean): string {
+		let out = '';
+		while (at < template.length) {
+			const char = template[at]!;
+			if (char === '\\' && template.startsWith('${', at + 1)) {
+				out += '${';
+				at += 3;
+			} else if (char === '$' && template[at + 1] === '{' && depth < INTERPOLATION_DEPTH) {
+				at += 2;
+				const expression = run(depth + 1, true).trim();
+				let value: unknown;
+				try {
+					value = readA2uiPointer(model, expression.startsWith('/') ? expression : `/${expression}`);
+				} catch {
+					value = undefined;
+				}
+				out += interpolated(value);
+			} else if (char === '}' && closing) {
+				at++;
+				return out;
+			} else {
+				out += char;
+				at++;
+			}
+			if (out.length > INTERPOLATION_LIMIT) return out.slice(0, INTERPOLATION_LIMIT);
+		}
+		return out;
+	}
+	return run(0, false);
+}
+
+/**
+ * A dynamic value as the renderer shows it: a `{ path }` binding reads the model, a `formatString` or
+ * `formatNumber` call computes its string (`locale` for the number format; the page's own by default), and a literal
+ * is itself.
+ */
+export function resolveA2uiValue(value: unknown, model: unknown, locale?: string): unknown {
+	if (typeof value !== 'object' || value === null) return value;
+	const record = value as Record<string, unknown>;
+	if (typeof record.path === 'string' && Object.keys(record).length === 1) {
+		try {
+			return readA2uiPointer(model, record.path);
+		} catch {
+			return undefined;
+		}
+	}
+	const args = typeof record.args === 'object' && record.args !== null ? record.args as Record<string, unknown> : {};
+	if (record.call === 'formatString') {
+		const template = resolveA2uiValue(args.value, model, locale);
+		return typeof template === 'string' ? interpolateA2uiString(template, model) : interpolated(template);
+	}
+	if (record.call === 'formatNumber') {
+		const number = Number(resolveA2uiValue(args.value, model, locale));
+		if (!Number.isFinite(number)) return '';
+		const decimals = resolveA2uiValue(args.decimals, model, locale);
+		const grouping = resolveA2uiValue(args.grouping, model, locale);
+		const digits = typeof decimals === 'number' && Number.isFinite(decimals)
+			? Math.min(20, Math.max(0, Math.trunc(decimals)))
+			: undefined;
+		return new Intl.NumberFormat(locale, {
+			useGrouping: grouping !== false,
+			...(digits === undefined ? {} : { minimumFractionDigits: digits, maximumFractionDigits: digits }),
+		}).format(number);
 	}
 	return value;
 }

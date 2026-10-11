@@ -520,3 +520,61 @@ Deno.test('D-111: Html is served only by its route — owner-bound, agent:invoke
 		store.close();
 	}
 });
+
+Deno.test('a surface belongs to a workspace: created with one, attached and detached over PATCH, kept across a restart', async () => {
+	const dir = `tests/.scratch/a2ui-${crypto.randomUUID()}`;
+	const path = `${dir}/agents/surfaces.json`;
+	const workspaceId = '2276732b-a79d-436f-9cea-1a80b68a06b2';
+	const store = new A2uiStore({ persistPath: path });
+	let restored: A2uiStore | undefined;
+	try {
+		const app = new Hono<{ Variables: AppVariables }>();
+		app.use('*', async (ctx, next) => {
+			ctx.set('requestId', 'test');
+			ctx.set('principal', {
+				id: ctx.req.header('x-owner') ?? 'alice',
+				kind: 'api-key',
+				scopes: new Set(ctx.req.header('x-scopes')?.split(',') ?? []) as AppVariables['principal']['scopes'],
+			});
+			await next();
+		});
+		attachA2uiRoutes(app, store);
+		const post = async (message: unknown): Promise<A2uiSurface> =>
+			(await (await app.request('/api/v1/a2ui/surfaces', {
+				method: 'POST',
+				headers: { 'x-scopes': 'a2ui:publish' },
+				body: JSON.stringify(message),
+			})).json()).surface as A2uiSurface;
+		const created = await post({
+			version: 'v0.9',
+			createSurface: { surfaceId: 'board', catalogId: A2UI_CATALOG_ID, workspaceId },
+		});
+		assertEquals(created.workspaceId, workspaceId);
+		await post({ version: 'v0.9', createSurface: { surfaceId: 'loose', catalogId: A2UI_CATALOG_ID } });
+		const patch = (id: string, body: unknown, headers: Record<string, string> = { 'x-scopes': 'a2ui:publish' }) =>
+			app.request(`/api/v1/a2ui/surfaces/${id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+
+		assertEquals((await patch('loose', { workspaceId }, { 'x-scopes': 'agent:invoke' })).status, 403);
+		assertEquals((await patch('loose', { workspaceId: 'not-a-uuid' })).status, 400);
+		assertEquals((await patch('loose', { workspaceId, extra: 1 })).status, 400);
+		assertEquals((await patch('loose', { workspaceId }, { 'x-scopes': 'a2ui:publish', 'x-owner': 'bob' })).status, 404);
+		const attached = await patch('loose', { workspaceId });
+		assertEquals(attached.status, 200);
+		const surface = (await attached.json()).surface as A2uiSurface;
+		assertEquals(surface.workspaceId, workspaceId);
+		assertEquals(surface.revision > created.revision, true, 'attaching is a new revision');
+		const detached = (await (await patch('board', { workspaceId: null })).json()).surface as A2uiSurface;
+		assertEquals('workspaceId' in detached, false);
+
+		await store.close();
+		restored = new A2uiStore({ persistPath: path });
+		const owner = [...JSON.parse(await Deno.readTextFile(path)).surfaces][0].owner as string;
+		const byId = new Map((restored.list(owner).surfaces as A2uiSurface[]).map((entry) => [entry.surfaceId, entry]));
+		assertEquals(byId.get('loose')?.workspaceId, workspaceId);
+		assertEquals(byId.get('board')?.workspaceId, undefined);
+	} finally {
+		await store.close();
+		await restored?.close();
+		await Deno.remove(dir, { recursive: true }).catch(() => {});
+	}
+});

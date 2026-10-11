@@ -17,6 +17,7 @@ import {
 	createMcpApps,
 	EMBED_A2UI_FILE,
 	EMBED_LIVE_FILE,
+	EMBED_TERMINAL_FILE,
 	EMBED_TICKET_TTL_MS,
 	loadEmbedDocuments,
 	socketOrigin,
@@ -32,7 +33,9 @@ const BASE_ENV = {
 } as const;
 
 /** A web root holding two synthetic embeds, built the way `build_embed.ts` leaves the placeholder. */
-async function embedRoot(files: readonly string[] = [EMBED_LIVE_FILE, EMBED_A2UI_FILE]): Promise<string> {
+async function embedRoot(
+	files: readonly string[] = [EMBED_LIVE_FILE, EMBED_A2UI_FILE, EMBED_TERMINAL_FILE],
+): Promise<string> {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const root = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'embeds-' });
 	await Deno.mkdir(join(root, 'dist'));
@@ -281,7 +284,7 @@ function mintFixture(options: {
 		origins: { forToken: () => options.overlay ?? [] },
 		keyRecords: () => options.records ?? [],
 		logger: { warn: (message) => warnings.push(message), info: (message) => infos.push(message) },
-		embeds: { liveViewHtml: 'live', a2uiHtml: 'a2ui' },
+		embeds: { liveViewHtml: 'live', a2uiHtml: 'a2ui', terminalHtml: 'terminal' },
 	});
 	assert(apps !== undefined);
 	const all: ReadonlySet<Scope> = new Set<Scope>(['mcp:invoke', 'view:watch', 'view:control']);

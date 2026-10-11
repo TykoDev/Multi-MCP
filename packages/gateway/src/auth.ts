@@ -488,6 +488,14 @@ export class VerifierChain implements OAuthTokenVerifier {
 		};
 	}
 
+	/**
+	 * An account's scopes were edited: nothing ends, but every listener re-reads what its credentials hold — the MCP
+	 * sessions above all, which register tools by scope and must tell their clients to re-list.
+	 */
+	scopesChanged(): void {
+		this.#notify();
+	}
+
 	#notify(): void {
 		for (const listener of [...this.#listeners]) {
 			try {

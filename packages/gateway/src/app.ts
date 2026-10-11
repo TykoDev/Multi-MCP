@@ -55,10 +55,11 @@ import { effectiveOrigins, MAX_TOKEN_ORIGINS, normalizeTokenOrigin, originAllowe
 import { Recorder } from './recorder.ts';
 import { createTelemetry, type Telemetry } from './telemetry.ts';
 import { StatefulMount, wantsStatefulSession } from './stateful.ts';
+import { BrowserMemoryCache, type DumpClient, gatewayMemory } from './browser_memory.ts';
 import { type Cluster, FORWARDED_HEADER } from './cluster.ts';
 import { fanOut, firstFound, forward, Router } from './routing.ts';
 import { attachStatic } from './static.ts';
-import { createMcpApps, type EmbedDocuments, loadEmbedDocuments } from './mcp_apps.ts';
+import { createMcpApps, type EmbedDocuments, embedOriginGate, loadEmbedDocuments, socketOrigin } from './mcp_apps.ts';
 import { attachExpansionRoutes, createExpansionServices } from './expansion.ts';
 import { MODEL_PROVIDERS_BODY_BYTES, ModelProvidersAdmin } from './model_providers_admin.ts';
 import { AGENT_SETTINGS_BODY_BYTES, AgentSettingsStore } from './agent_settings.ts';
@@ -478,6 +479,14 @@ export function createGatewayApp(deps: GatewayDeps): GatewayApp {
 			...(deps.memory === undefined ? {} : { memory: deps.memory }),
 			// D-158: read at every use, so a change on System › Agents applies to the next task.
 			agents: () => agentSettings.current(),
+			// MCP Apps streams for the terminal and surface embeds: the live view's origin gate and connection ceiling.
+			...(mcpApps === undefined || appsSettings === null ? {} : {
+				embeds: {
+					socketBase: socketOrigin(config.publicUrl),
+					admitOrigin: embedOriginGate({ settings: appsSettings, allowedOrigins: config.allowedOrigins, origins }),
+					connections: eventStreams,
+				},
+			}),
 			// D-154: push webhook tokens are sealed in `agents/tasks.json` with a subkey of the vault key, or never written.
 			...(config.dbKey === null ? {} : { sealer: syncSealer(config.dbKey, 'a2a-push') }),
 			...(deps.permissions === undefined ? {} : { permissions: deps.permissions }),
@@ -499,17 +508,39 @@ export function createGatewayApp(deps: GatewayDeps): GatewayApp {
 		...(expansion.applyModelProviders === undefined ? {} : { apply: expansion.applyModelProviders }),
 		views: () => expansion.modelProviders.providers,
 	});
-	const unlisten = verifier.onCredentialsChanged(() => {
-		expansion.runtime.reauthorize();
-		expansion.streams.revalidateAll();
-	});
 	const buildServer = createBuildServer({ ...coreDeps, extraTools: expansion.tools });
 	const handler = createMcpHandler(buildServer, { legacy: 'stateless' });
 
-	// R8: the opt-in stateful path, for 2025-era clients that need an
-	// `Mcp-Session-Id` and a standalone stream. Same factory, so both mounts
-	// serve identical tools and identical policy.
-	const stateful = config.mcpStateful ? new StatefulMount({ buildServer, logger, registry }) : null;
+	// R8: the stateful path, for 2025-era clients that need an `Mcp-Session-Id` and a standalone stream — the only
+	// way such a client hears that its tools changed. Same factory, so both mounts serve identical tools and policy.
+	// Its session records survive a restart, so a client is told to re-list after a deploy.
+	/** Each browser session's last memory dump (Sessions › Sessions), refreshed at most every 15 s per session. */
+	const browserMemory = new BrowserMemoryCache();
+	const stateful = config.mcpStateful
+		? new StatefulMount({
+			buildServer,
+			logger,
+			registry,
+			...(config.dataDir === null ? {} : { persistPath: `${config.dataDir}/mcp/sessions.json` }),
+			currentScopes: (authInfo) => {
+				const principal = principalFromAuthInfo(authInfo);
+				// An OAuth token is not retained, so its scopes cannot be re-read: the client's next request decides.
+				if (principal.kind === 'oauth') return undefined;
+				const held = verifier.authorizeTask(expansionOwner(principal), new Set(SCOPES), principal.credential);
+				return held === null ? null : [...held];
+			},
+		})
+		: null;
+
+	const unlisten = verifier.onCredentialsChanged(() => {
+		expansion.runtime.reauthorize();
+		expansion.streams.revalidateAll();
+		expansion.embedStreams?.revalidateAll();
+		// A credential's scopes decide which tools exist for it: a 2026 client re-lists (its next server is built
+		// with the scopes it holds now), and every 2025 session re-reads its own and is rebuilt or closed.
+		handler.notify.toolsChanged();
+		void stateful?.refreshCredentials().catch((cause) => logger.warn(`MCP sessions not refreshed: ${String(cause)}`));
+	});
 
 	// D-082: a service coming or going changes which tools exist. Per-request servers read the live state on their
 	// next build, so stateless clients are told to re-list; long-lived sessions re-evaluate their own registrations.
@@ -889,6 +920,42 @@ export function createGatewayApp(deps: GatewayDeps): GatewayApp {
 		});
 	});
 
+	// The memory an operator can act on (Sessions › Sessions): each visible session's browser (Chromium's own memory
+	// dump over the session's CDP connection, cached per session), the gateway's heap against its limit, and the
+	// container's configured limit. Admin, like the session list it accompanies.
+	app.get('/api/v1/system/usage', async (c: Context) => {
+		const denied = requireScope(c, 'admin');
+		if (denied !== null) return denied;
+		const access = sessionAccessOf(c.get('principal') as Principal);
+		const now = Date.now();
+		const records = registry.visibleTo(access);
+		browserMemory.retain(new Set(registry.records.map((record) => record.id)));
+		const sessions = await Promise.all(records.map(async (record) => ({
+			session_id: record.id,
+			idle_seconds: Math.max(0, Math.round((now - record.lastUsedAt) / 1000)),
+			idle_timeout_s: Math.round((record.idleTimeoutMs ?? registry.sessionTtlMs) / 1000),
+			memory: await browserMemory.get(record.id, record.session.cdpClient as DumpClient | null),
+		})));
+		const gateway = gatewayMemory();
+		const browsers = sessions.reduce((sum, session) => sum + (session.memory?.private_bytes ?? 0), 0);
+		return c.json(
+			{
+				container: {
+					limit_bytes: config.limits.memoryLimitBytes,
+					// The container holds the gateway and its browsers and nothing else.
+					used_bytes: gateway.rss_bytes + browsers,
+				},
+				gateway,
+				browsers_private_bytes: browsers,
+				measured: sessions.length === 0 || sessions.some((session) => session.memory !== null),
+				limits: { max_sessions: config.limits.maxSessions, session_ttl_s: Math.round(registry.sessionTtlMs / 1000) },
+				sessions,
+			},
+			200,
+			{ 'cache-control': 'no-store' },
+		);
+	});
+
 	app.delete('/api/v1/sessions/:sessionId', async (c: Context) => {
 		const denied = requireScope(c, 'admin');
 		if (denied !== null) return denied;
@@ -1254,6 +1321,8 @@ export function createGatewayApp(deps: GatewayDeps): GatewayApp {
 		}
 		try {
 			const user = await verifier.users.update(username, { scopes: body.scopes, disabled: body.disabled });
+			// The account's MCP connections are told now that their tools changed, rather than at their next request.
+			if (body.scopes !== undefined && !user.disabled) verifier.scopesChanged();
 			// A disabled account's open sign-ins end now — those its keys back too (D-146) — and the tasks and streams
 			// under its keys fail with them; a scope change reaches them all on their next request or re-check.
 			if (user.disabled) {
@@ -1862,6 +1931,9 @@ export function createGatewayApp(deps: GatewayDeps): GatewayApp {
 		revalidate: (principal) => verifier.stillAuthorized(principal),
 		...(cluster === undefined ? {} : { cluster }),
 	});
+
+	// --- MCP Apps streams: the terminal and surface embeds' sockets, ticket-gated like the live view -------------
+	expansion.embedStreams?.attach(app);
 
 	// --- live view ---------------------------------------------------------
 	attachLiveView({

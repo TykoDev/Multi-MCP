@@ -632,3 +632,51 @@ body {
 		transition: none !important;
 	}
 }
+
+/* --- the terminal (embed_terminal.ts): a sandbox shell session as text, never as markup ----------------------- */
+.e-term {
+	min-height: 168px;
+	max-height: 420px;
+	margin: 0;
+	padding: 10px 12px;
+	overflow: auto;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-sunken);
+	color: var(--text);
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.e-term:focus-visible {
+	outline: 2px solid var(--ttk-brand);
+	outline-offset: 2px;
+}
+.e-term:empty::before {
+	color: var(--text-dim);
+	content: 'No output yet.';
+}
+.embed.terminal[data-phase='live'] .e-term {
+	border-color: color-mix(in oklab, var(--ttk-live) 55%, transparent);
+}
+.e-term-form {
+	display: flex;
+}
+.e-term-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 6px 10px;
+	border: 1px solid var(--ttk-hairline-2);
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-card);
+	color: var(--text);
+	font-size: 12px;
+}
+.e-term-input:focus-visible {
+	outline: 2px solid var(--ttk-brand);
+	outline-offset: 1px;
+}
+.embed.terminal .e-notice {
+	color: var(--text-dim);
+}

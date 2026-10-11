@@ -26,16 +26,17 @@ flowchart LR
 
 ## Health and system
 
-| Route                                        | Scope                     | Purpose                                                                                                                                             |
-| -------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /healthz`                               | public                    | `{ status, version, sessions }`. Answers while draining.                                                                                            |
-| `GET /metrics`                               | `metrics:read` or `admin` | Prometheus text. Only with `TTK_METRICS=true` (else `404`).                                                                                         |
-| `GET /api/v1/overview`                       | any credential            | Counts and byte totals of what the caller can read (sessions, files, skills, memory, tasks …). Sections the caller lacks the scope for are omitted. |
-| `GET /api/v1/system/diagnostics`             | `admin`                   | Uptime, memory, sessions and the effective configuration (no secrets).                                                                              |
-| `GET`, `PUT /api/v1/system/model-providers`  | `admin`                   | Read or replace the model providers in `ttk.db`. Keys are write-only: `{ mode: "keep" \| "set" \| "none" }`.                                        |
-| `POST /api/v1/system/model-providers/models` | `admin`                   | List the models a saved provider's host serves.                                                                                                     |
-| `GET`, `PUT /api/v1/system/agents`           | `admin`                   | Per-agent settings: default model, A2A, ACP, A2UI and memory switches.                                                                              |
-| `GET`, `PUT /api/v1/system/memory`           | `admin`                   | Default embedder for new memory collections, and totals.                                                                                            |
+| Route                                        | Scope                     | Purpose                                                                                                                                                               |
+| -------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /healthz`                               | public                    | `{ status, version, sessions }`. Answers while draining.                                                                                                              |
+| `GET /metrics`                               | `metrics:read` or `admin` | Prometheus text. Only with `TTK_METRICS=true` (else `404`).                                                                                                           |
+| `GET /api/v1/overview`                       | any credential            | Counts and byte totals of what the caller can read (sessions, files, skills, memory, tasks …). Sections the caller lacks the scope for are omitted.                   |
+| `GET /api/v1/system/diagnostics`             | `admin`                   | Uptime, memory, sessions and the effective configuration (no secrets).                                                                                                |
+| `GET /api/v1/system/usage`                   | `admin`                   | Each visible session's browser memory (Chromium's own dump, cached 15 s) and idle time, the gateway heap against its limit, the container limit (`TTK_MEMORY_LIMIT`). |
+| `GET`, `PUT /api/v1/system/model-providers`  | `admin`                   | Read or replace the model providers in `ttk.db`. Keys are write-only: `{ mode: "keep" \| "set" \| "none" }`.                                                          |
+| `POST /api/v1/system/model-providers/models` | `admin`                   | List the models a saved provider's host serves.                                                                                                                       |
+| `GET`, `PUT /api/v1/system/agents`           | `admin`                   | Per-agent settings: default model, A2A, ACP, A2UI and memory switches.                                                                                                |
+| `GET`, `PUT /api/v1/system/memory`           | `admin`                   | Default embedder for new memory collections, and totals.                                                                                                              |
 
 ## Sign-in
 
@@ -111,19 +112,20 @@ Need `sandbox:execute` and a configured sandbox. Workspaces and files go through
 
 ## Agents and A2A
 
-| Route                                                    | Scope          | Purpose                                                                                                        |
-| -------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------- |
-| `GET /.well-known/agent-card.json`                       | public         | The A2A 1.0 agent card ("Multi-MCP agent").                                                                    |
-| `POST /a2a`                                              | `agent:invoke` | A2A JSON-RPC (`A2A-Version: 1.0` header).                                                                      |
-| `/a2a/v1/*`                                              | `agent:invoke` | A2A HTTP+JSON binding (below).                                                                                 |
-| `GET /a2a/agents/sloplord/.well-known/agent-card.json`   | public         | SlopLord's card.                                                                                               |
-| `POST /a2a/agents/sloplord`, `/a2a/agents/sloplord/v1/*` | `agent:invoke` | SlopLord over JSON-RPC and HTTP+JSON.                                                                          |
-| `GET`, `POST /api/v1/agent/tasks`                        | `agent:invoke` | List your tasks; start a text task `{ message, provider?, model?, agent? }` (a provider needs `model:invoke`). |
-| `GET /api/v1/agent/tasks/{id}`                           | `agent:invoke` | A task and any pending permission request.                                                                     |
-| `POST /api/v1/agent/tasks/{id}/cancel`                   | `agent:invoke` | Cancel a task.                                                                                                 |
-| `POST /api/v1/agent/tasks/{id}/permission`               | `agent:invoke` | Answer an ACP permission request: `{ permissionId, optionId? }`.                                               |
-| `GET /api/v1/agent/tasks/{id}/events`                    | `agent:invoke` | SSE task events.                                                                                               |
-| `GET /api/v1/agent/providers`                            | `agent:invoke` | Providers, models and built-in agents you can target (no keys or URLs).                                        |
+| Route                                                    | Scope          | Purpose                                                                                                                                                                   |
+| -------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /.well-known/agent-card.json`                       | public         | The A2A 1.0 agent card ("Multi-MCP agent").                                                                                                                               |
+| `POST /a2a`                                              | `agent:invoke` | A2A JSON-RPC (`A2A-Version: 1.0` header).                                                                                                                                 |
+| `/a2a/v1/*`                                              | `agent:invoke` | A2A HTTP+JSON binding (below).                                                                                                                                            |
+| `GET /a2a/agents/sloplord/.well-known/agent-card.json`   | public         | SlopLord's card.                                                                                                                                                          |
+| `POST /a2a/agents/sloplord`, `/a2a/agents/sloplord/v1/*` | `agent:invoke` | SlopLord over JSON-RPC and HTTP+JSON.                                                                                                                                     |
+| `GET`, `POST /api/v1/agent/tasks`                        | `agent:invoke` | List your tasks (`?workspace_id=` keeps those that touched that workspace); start a text task `{ message, provider?, model?, agent? }` (a provider needs `model:invoke`). |
+| `GET /api/v1/agent/tasks/{id}`                           | `agent:invoke` | A task and any pending permission request.                                                                                                                                |
+| `GET /api/v1/agent/tasks/{id}/log`                       | `agent:invoke` | The run history: `created_at`, `finished_at`, the run log (provider requests, tool calls, states), `truncated`.                                                           |
+| `POST /api/v1/agent/tasks/{id}/cancel`                   | `agent:invoke` | Cancel a task.                                                                                                                                                            |
+| `POST /api/v1/agent/tasks/{id}/permission`               | `agent:invoke` | Answer an ACP permission request: `{ permissionId, optionId? }`.                                                                                                          |
+| `GET /api/v1/agent/tasks/{id}/events`                    | `agent:invoke` | SSE task events.                                                                                                                                                          |
+| `GET /api/v1/agent/providers`                            | `agent:invoke` | Providers, models and built-in agents you can target (no keys or URLs).                                                                                                   |
 
 A2A HTTP+JSON binding (same under `/a2a/agents/sloplord/v1`, without `extendedAgentCard`):
 
@@ -142,14 +144,15 @@ re-check the credential every 5 minutes and end after 30.
 
 ## A2UI surfaces
 
-| Route                                                      | Scope          | Purpose                                          |
-| ---------------------------------------------------------- | -------------- | ------------------------------------------------ |
-| `GET /api/v1/a2ui/surfaces`                                | `agent:invoke` | Your surfaces.                                   |
-| `POST /api/v1/a2ui/surfaces`                               | `a2ui:publish` | Apply one A2UI v0.9 message.                     |
-| `DELETE /api/v1/a2ui/surfaces/{id}`                        | `a2ui:publish` | Delete a surface.                                |
-| `GET /api/v1/a2ui/surfaces/{surfaceId}/html/{componentId}` | `agent:invoke` | An `Html` component, served under a sandbox CSP. |
-| `GET /api/v1/a2ui/events`                                  | `agent:invoke` | SSE: the full surface list on every change.      |
-| `GET`, `POST /api/v1/a2ui/actions`                         | `agent:invoke` | List bindable action names; press a button.      |
+| Route                                                      | Scope          | Purpose                                             |
+| ---------------------------------------------------------- | -------------- | --------------------------------------------------- |
+| `GET /api/v1/a2ui/surfaces`                                | `agent:invoke` | Your surfaces.                                      |
+| `POST /api/v1/a2ui/surfaces`                               | `a2ui:publish` | Apply one A2UI v0.9 message.                        |
+| `PATCH /api/v1/a2ui/surfaces/{id}`                         | `a2ui:publish` | Attach to a workspace: `{ workspaceId }` or `null`. |
+| `DELETE /api/v1/a2ui/surfaces/{id}`                        | `a2ui:publish` | Delete a surface.                                   |
+| `GET /api/v1/a2ui/surfaces/{surfaceId}/html/{componentId}` | `agent:invoke` | An `Html` component, served under a sandbox CSP.    |
+| `GET /api/v1/a2ui/events`                                  | `agent:invoke` | SSE: the full surface list on every change.         |
+| `GET`, `POST /api/v1/a2ui/actions`                         | `agent:invoke` | List bindable action names; press a button.         |
 
 ## OAuth metadata
 

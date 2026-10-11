@@ -667,3 +667,107 @@ Deno.test('loop: MB3–MB5 — step latency, tasks.json size after a 24-step run
 		await Deno.remove(dir, { recursive: true });
 	}
 });
+
+Deno.test('run log: a model task records its arrival, each provider request, each tool call and its states — and keeps them across a restart', async () => {
+	const fake = startFakeProvider();
+	const dir = await scratch();
+	const log = { calls: [] as [string, Record<string, unknown>][], mutations: 0 };
+	const runtime = runtimeFor(clientFor(fake), { invoke: fakeInvoke(log), persistPath: `${dir}/tasks.json` });
+	let again: AgentRuntime | undefined;
+	try {
+		fake.script = [
+			{ text: '', calls: [{ id: 'c1', name: 'sandbox_list', arguments: { q: 1 } }], usage: { input: 10, output: 2 } },
+			{ text: 'done', usage: { input: 20, output: 3 } },
+		];
+		const task = runtime.submit('alice', scopes, text('list them'));
+		await collect(runtime, 'alice', task.id);
+		const run = runtime.runLog('alice', task.id);
+		assertEquals(run.truncated, false);
+		assert(run.finished_at !== undefined && Date.parse(run.finished_at) >= Date.parse(run.created_at));
+		const kinds = run.entries.map((entry) => entry.kind);
+		assertEquals(kinds, [
+			'received',
+			'state',
+			'model_request',
+			'tool_call',
+			'tool_result',
+			'model_request',
+			'artifact',
+			'state',
+		]);
+		assertEquals(run.entries[0]!.kind === 'received' && run.entries[0]!.provider, 'p');
+		assertEquals(run.entries.filter((entry) => entry.kind === 'state').map((entry) => entry.state), [
+			'TASK_STATE_WORKING',
+			'TASK_STATE_COMPLETED',
+		]);
+		const [first, second] = run.entries.filter((entry) => entry.kind === 'model_request');
+		assertEquals(
+			{ ...first, at: '', duration_ms: 0 },
+			{
+				at: '',
+				kind: 'model_request',
+				provider: 'p',
+				step: 1,
+				model: 'm',
+				duration_ms: 0,
+				tools: TOOLS.length,
+				usage: { input: 10, output: 2 },
+				stop: 'tool_use',
+				tool_calls: 1,
+			},
+		);
+		assertEquals(second!.tool_calls, 0);
+		assertEquals(run.entries.find((entry) => entry.kind === 'tool_call')!.arguments, { q: 1 });
+		assertEquals(run.entries.find((entry) => entry.kind === 'tool_result')!.text, 'sandbox_list ok');
+		assertEquals(JSON.stringify(run).includes(KEY), false, 'no key in the log');
+		// Another owner's id is not found.
+		let refused = false;
+		try {
+			runtime.runLog('bob', task.id);
+		} catch (cause) {
+			refused = cause instanceof AgentError;
+		}
+		assert(refused);
+		await runtime.close();
+		again = runtimeFor(clientFor(fake), { persistPath: `${dir}/tasks.json` });
+		assertEquals(again.runLog('alice', task.id).entries, run.entries);
+	} finally {
+		await runtime.close();
+		await again?.close();
+		await fake.close();
+		await Deno.remove(dir, { recursive: true }).catch(() => {});
+	}
+});
+
+Deno.test('run log: a failing provider request is logged with its error; the log stops at its entry bound with one marker', async () => {
+	const fake = startFakeProvider();
+	const runtime = runtimeFor(clientFor(fake, { maxSteps: 400 }), {
+		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({ content: [{ type: 'text', text: 'ok' }] }),
+	});
+	try {
+		fake.script = [{ status: 400, body: JSON.stringify({ error: { message: 'bad request' } }) }];
+		const failed = runtime.submit('alice', scopes, text('x'));
+		await collect(runtime, 'alice', failed.id);
+		const request = runtime.runLog('alice', failed.id).entries.find((entry) => entry.kind === 'model_request')!;
+		assert(typeof request.error === 'string' && request.error.length > 0, JSON.stringify(request));
+		assertEquals(request.usage, undefined);
+
+		// 150 tool-calling turns: far past the entry bound.
+		fake.script = Array.from({ length: 150 }, (_, n) => ({
+			text: '',
+			calls: [{ id: `c${n}`, name: 'sandbox_list', arguments: {} }],
+			usage: { input: 1, output: 1 },
+		}));
+		fake.script.push({ text: 'end', usage: { input: 1, output: 1 } });
+		const long = runtime.submit('alice', scopes, text('loop'));
+		await collect(runtime, 'alice', long.id);
+		const run = runtime.runLog('alice', long.id);
+		assertEquals(run.truncated, true);
+		assert(run.entries.length <= 300, `${run.entries.length} entries`);
+		assertEquals(run.entries.filter((entry) => entry.kind === 'truncated').length, 1);
+		assertEquals(run.entries.at(-1)!.kind, 'truncated');
+	} finally {
+		await runtime.close();
+		await fake.close();
+	}
+});

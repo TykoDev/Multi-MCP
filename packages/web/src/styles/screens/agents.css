@@ -75,303 +75,207 @@
 		z-index: 20;
 	}
 }
-/* D-158: after a New chat, the one line that brings the earlier turns back. */
-button.ag-earlier {
-	all: unset;
-	box-sizing: border-box;
-	display: flex;
-	width: fit-content;
-	align-items: center;
-	gap: 7px;
-	margin: 4px auto 12px;
-	padding: 5px 12px;
-	border: 1px dashed var(--ttk-hairline-strong);
-	border-radius: 999px;
-	color: var(--wa-color-text-quiet);
-	font-size: 12.5px;
-	font-weight: 600;
-	cursor: pointer;
-}
-button.ag-earlier[hidden] {
-	display: none;
-}
-button.ag-earlier:hover {
-	color: var(--wa-color-text-normal);
-	background: var(--ttk-row-hover);
-}
-button.ag-earlier:focus-visible {
-	outline: 2px solid var(--wa-color-focus);
-	outline-offset: 2px;
-}
-button.ag-earlier .icon {
-	width: 14px;
-	height: 14px;
-}
-/* --- the bar's Tasks and Surfaces toggles (D-152): an icon, a count badge, a popover with the list --- */
+/* --- the task bar: which task this conversation is, and the way to its run history --- */
 
-.ag-bar-item {
-	display: inline-flex;
-}
-button.ttk-btn.ag-bar-btn {
-	position: relative;
-	overflow: visible;
-}
-.ag-bar-count {
-	position: absolute;
-	top: -3px;
-	right: -4px;
-	min-width: 16px;
-	height: 16px;
-	padding: 0 4px;
-	display: grid;
-	place-items: center;
-	border: 2px solid var(--ttk-canvas);
-	border-radius: 999px;
-	background: var(--ttk-hairline-strong);
-	color: var(--wa-color-text-normal);
-	font: 700 9.5px/1 var(--wa-font-family-body);
-	font-variant-numeric: tabular-nums;
-	pointer-events: none;
-}
-.ag-bar-count.live {
-	background: var(--ttk-brand);
-	color: white;
-}
-.ag-pop {
-	--max-width: 380px;
-}
-.ag-pop::part(body) {
-	padding: 0;
-	border: 1px solid var(--ttk-glass-border);
-	border-radius: var(--ttk-radius);
-	background: var(--ttk-glass-strong);
-	backdrop-filter: blur(18px) saturate(1.3);
-	box-shadow: var(--ttk-shadow-pop);
-	overflow: hidden;
-}
-.ag-pop-panel {
-	display: flex;
-	flex-direction: column;
-	width: min(360px, 88vw);
-	max-height: min(60vh, 520px);
-}
-.ag-pop-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-height: 44px;
-	padding: 8px 10px 8px 14px;
-	border-bottom: 1px solid var(--ttk-hairline);
-}
-.ag-pop-head h2 {
-	font-size: 13px;
-	font-weight: 650;
-}
-.ag-dash-empty {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	min-height: 28px;
-	padding: 6px 4px;
-	color: var(--wa-color-text-quiet);
-	font-size: 12.5px;
-}
-/* The popover's list: one row per task or surface, newest first, scrolling inside the popover. */
-.ag-strip {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-	padding: 6px;
-	overflow-y: auto;
-}
-.ag-pill {
-	--tone: var(--wa-color-text-quiet);
-	display: flex;
+.ag-task-bar {
 	flex: 0 0 auto;
+	display: flex;
 	align-items: center;
 	gap: 8px;
 	width: 100%;
-	min-height: 34px;
-	padding: 0 10px 0 6px;
-	border: 1px solid transparent;
-	border-radius: var(--ttk-radius-s);
-	background: transparent;
-	color: var(--wa-color-text-normal);
-	font: 550 12.5px/1.3 var(--wa-font-family-body);
-	text-align: left;
-	cursor: pointer;
-	transition: border-color 0.15s var(--ttk-ease), background 0.15s var(--ttk-ease);
-}
-.ag-pill-when {
-	margin-left: auto;
-	flex: 0 0 auto;
-	color: var(--wa-color-text-quiet);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-.ag-pill:hover {
-	background: var(--ttk-row-hover);
-}
-.ag-pill:focus-visible {
-	outline: 2px solid var(--wa-color-focus);
-	outline-offset: 1px;
-}
-.ag-pill[aria-pressed='true'] {
-	border-color: color-mix(in oklab, var(--tone) 60%, transparent);
-	background: color-mix(in oklab, var(--tone) 15%, transparent);
-}
-.ag-pill.running {
-	--tone: var(--ttk-brand);
-}
-.ag-pill.input,
-.ag-pill.auth {
-	--tone: var(--ttk-locked);
-}
-.ag-pill.done {
-	--tone: var(--ttk-live);
-}
-.ag-pill.failed {
-	--tone: var(--ttk-danger);
-}
-.ag-pill.surface {
-	--tone: var(--ttk-agent);
-	padding-left: 11px;
-}
-.ag-pill .ag-state {
-	width: 20px;
-	height: 20px;
-	box-shadow: none;
-}
-.ag-pill .ag-state .icon {
-	width: 12px;
-	height: 12px;
-}
-.ag-pill .ag-state wa-spinner {
-	font-size: 12px;
-}
-.ag-pill-text {
-	flex: 1;
+	max-width: 880px;
 	min-width: 0;
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-.ag-pill-count {
-	color: var(--wa-color-text-quiet);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-.ag-counters {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 5px;
-	min-width: 0;
-}
-
-/* A glyph and a number; the meaning is the tooltip. */
-.ag-chip {
-	--tone: var(--wa-color-text-quiet);
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	height: 22px;
-	padding: 0 8px;
-	border: 1px solid color-mix(in oklab, var(--tone) 30%, transparent);
-	border-radius: 999px;
-	background: color-mix(in oklab, var(--tone) 10%, transparent);
-	color: var(--tone);
-	font-size: 11.5px;
-	font-weight: 650;
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-	animation: ag-pop 0.3s var(--ttk-spring) both;
-}
-.ag-chip .icon {
-	width: 12px;
-	height: 12px;
-}
-.ag-chip wa-spinner {
-	font-size: 11px;
-	--track-width: 2px;
-	--indicator-color: currentColor;
-}
-.ag-chip.running,
-.ag-chip.accent {
-	--tone: var(--ttk-brand);
-}
-.ag-chip.input {
-	--tone: var(--ttk-locked);
-}
-.ag-chip.done,
-.ag-chip.live {
-	--tone: var(--ttk-live);
-}
-.ag-chip.failed {
-	--tone: var(--ttk-danger);
-}
-
-/* The one New-surface action, in the Surfaces head or its empty line. */
-.ag-surface-actions {
-	display: inline-flex;
-	flex: 0 0 auto;
-}
-.ag-surface-actions:empty {
-	display: none;
-}
-.ag-surface-actions button.ttk-btn.sm,
-.ag-dash-empty button.ttk-btn.sm {
-	--wa-form-control-height: 26px;
-}
-
-/* --- the stage: one surface at a time, above the conversation --- */
-
-.ag-stage {
-	flex: 0 0 auto;
-	max-height: min(48vh, 560px);
-	overflow: auto;
-	border: 1px solid color-mix(in oklab, var(--ttk-agent) 32%, var(--ttk-hairline));
+	margin: 0 auto;
+	padding: 6px 8px 6px 10px;
+	border: 1px solid var(--ttk-hairline);
 	border-radius: var(--ttk-radius);
 	background: var(--ttk-card);
 	box-shadow: var(--ttk-shadow);
 	animation: ag-drop 0.25s var(--ttk-ease) both;
 }
-.ag-surface {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
+.ag-task-bar[hidden] {
+	display: none;
 }
-.ag-surface-head {
-	position: sticky;
-	top: 0;
-	z-index: 1;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-	padding: 8px 8px 8px 14px;
-	border-bottom: 1px solid var(--ttk-hairline);
-	background: var(--ttk-glass-strong);
-	backdrop-filter: blur(12px);
-}
-.ag-surface-id {
+.ag-task-title {
 	min-width: 0;
 	overflow: hidden;
-	font-size: 12.5px;
-	font-weight: 650;
+	font-size: 13px;
+	font-weight: 600;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
-.ag-surface-body {
+.ag-task-id,
+.tk-id {
+	flex: 0 1 auto;
 	min-width: 0;
-	padding: 12px 14px 14px;
+	overflow: hidden;
+	padding: 2px 7px;
+	border-radius: var(--ttk-radius-s);
+	background: var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+@media (max-width: 720px) {
+	.ag-task-id {
+		display: none;
+	}
+}
+
+/* --- Agents › Tasks: the run history (tasks_view.ts) in the Resources frame --- */
+
+/* The workspace filter (from a workspace's task icon): its name, and the way back to every task. */
+.tk-filter {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 10px 10px 0;
+	padding: 3px 3px 3px 10px;
+	border: 1px solid color-mix(in oklab, var(--ttk-brand) 40%, transparent);
+	border-radius: var(--ttk-radius-s);
+	background: color-mix(in oklab, var(--ttk-brand) 10%, transparent);
+	font-size: 12.5px;
+}
+.tk-list-note {
+	margin: 6px 14px 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 11.5px;
+}
+.tk-list-note:empty {
+	display: none;
+}
+.tk-row-mark {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 6px;
+}
+.tk-row-when {
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.tk-state {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+.tk-request {
+	margin: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 13.5px;
+	line-height: 1.55;
+}
+.tk-status {
+	margin: 0;
+	color: var(--wa-color-text-quiet);
+	font-size: 13px;
+}
+.tk-artifact > summary,
+.tk-entry-detail > summary {
+	cursor: pointer;
+	color: var(--wa-color-text-quiet);
+	font-size: 12px;
+	font-weight: 600;
+}
+/* The run log: a rail of glyphs down the left, one row per entry, its detail folded under it. */
+.tk-timeline {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.tk-timeline::before {
+	content: '';
+	position: absolute;
+	top: 12px;
+	bottom: 12px;
+	left: 11px;
+	width: 1px;
+	background: var(--ttk-hairline);
+}
+.tk-entry {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	padding: 4px 6px 4px 0;
+	border-radius: var(--ttk-radius-s);
+}
+.tk-entry-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	min-width: 0;
+}
+.tk-entry-glyph {
+	--tone: var(--wa-color-text-quiet);
+	position: relative;
+	width: 23px;
+	height: 23px;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+	background: var(--ttk-card);
+	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone) 45%, transparent);
+	color: var(--tone);
+}
+.tk-entry-glyph .icon {
+	width: 12px;
+	height: 12px;
+}
+.tk-entry-glyph.ok {
+	--tone: var(--ttk-live);
+}
+.tk-entry-glyph.failed {
+	--tone: var(--ttk-danger);
+}
+.tk-entry.model_request .tk-entry-glyph {
+	--tone: var(--ttk-brand);
+}
+.tk-entry.tool_call .tk-entry-glyph {
+	--tone: var(--ttk-agent);
+}
+.tk-entry-title {
+	font-size: 13px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+.tk-entry-fact {
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: var(--ttk-hairline);
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.tk-entry-time {
+	color: var(--wa-color-text-quiet);
+	font-size: 11px;
+}
+.tk-entry-detail {
+	margin-left: 33px;
+	min-width: 0;
+}
+.tk-entry-detail pre {
+	max-height: 320px;
+	overflow: auto;
 }
 
 /* --- the conversation --- */
 
-/* The conversation takes the height the cards, the stage and the composer leave (a zero basis, so a long thread never
- * squeezes the stage open above it), and scrolls inside it. */
+/* The conversation takes the height the task bar and the composer leave, and scrolls inside it. */
 .ag-thread {
 	flex: 1 1 0;
 	min-height: 120px;

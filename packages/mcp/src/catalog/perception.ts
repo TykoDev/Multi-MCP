@@ -124,8 +124,9 @@ export const PERCEPTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		title: 'Verify a locator',
 		description: 'Ask the browser what a locator matches today. Selector kinds and text go through DOM.performSearch ' +
 			"in the frame's own session (Chromium's own matcher, which also matches the query as plain text); aria and " +
-			"label are counted over the frame's merged accessibility nodes. matches:0 with first:null is a success, not " +
-			'an error. frame_id defaults to the top document.',
+			"label are counted over the frame's merged accessibility nodes. id, testid and name take the selector " +
+			'browser_locator_candidates emits or the bare attribute value (username means #username). matches:0 with ' +
+			'first:null is a success, not an error. frame_id defaults to the top document.',
 		inputSchema: z.object({
 			locator: z.object({ kind: z.enum(LOCATOR_KINDS), value: z.string().min(1).max(1000) }),
 			frame_id: z.string().optional(),

@@ -1363,3 +1363,42 @@ Deno.test('D-143 §3.10 (CR-1 / BUG-6): a model without a provider is -32602 "mo
 		}
 	}
 });
+
+Deno.test('run log: a tool task records the call with its arguments, the result, its duration and the states', async () => {
+	const big = 'x'.repeat(10_000);
+	const runtime = new AgentRuntime({
+		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({ content: [{ type: 'text', text: big }] }),
+	});
+	try {
+		const task = runtime.submit(
+			'alice',
+			scopes,
+			message({
+				parts: [{ data: { tool: 'sandbox_list', arguments: { workspace_id: 'w' } } }],
+			}),
+		);
+		await finished(runtime, 'alice', task.id);
+		const run = runtime.runLog('alice', task.id);
+		assertEquals(run.entries.map((entry) => entry.kind), [
+			'received',
+			'state',
+			'tool_call',
+			'tool_result',
+			'artifact',
+			'state',
+		]);
+		assertEquals(run.entries[0]!.kind === 'received' && run.entries[0]!.via, undefined);
+		const call = run.entries.find((entry) => entry.kind === 'tool_call')!;
+		assertEquals([call.name, call.arguments], ['sandbox_list', { workspace_id: 'w' }]);
+		const result = run.entries.find((entry) => entry.kind === 'tool_result')!;
+		assertEquals(result.isError, false);
+		assert(typeof result.duration_ms === 'number');
+		assert(
+			String(result.text).length < 4200 && String(result.text).endsWith('[10000 chars]'),
+			'a long result is clipped',
+		);
+		assertThrows(() => runtime.runLog('mallory', task.id), AgentError);
+	} finally {
+		await runtime.close();
+	}
+});

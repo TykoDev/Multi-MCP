@@ -82,6 +82,25 @@ export interface ModelTaskContext {
 	readonly emitData: (event: ModelEvent) => void;
 	/** After every provider turn: the step count and the summed usage, for `task.metadata`. */
 	readonly progress: (steps: number, usage: { input: number; output: number }) => void;
+	/**
+	 * After every provider request, answered or failed: what the task's run log records of it. Never the messages
+	 * sent or the key — the step, timing, usage and how the turn ended.
+	 */
+	readonly request?: (request: ModelRequestRecord) => void;
+}
+
+/** One provider request as the run log records it. */
+export interface ModelRequestRecord extends Record<string, unknown> {
+	readonly step: number;
+	readonly model: string;
+	readonly duration_ms: number;
+	/** Tools offered to the model on this request. */
+	readonly tools: number;
+	readonly usage?: { input: number; output: number };
+	readonly stop?: string;
+	readonly tool_calls?: number;
+	/** The failure, as the task's status will word it. */
+	readonly error?: string;
 }
 
 /** How a loop ended without failing: the model finished, or it refused (`TASK_STATE_REJECTED`). */
@@ -162,10 +181,32 @@ export async function runModelTask(ctx: ModelTaskContext): Promise<ModelOutcome>
 		const rights = ctx.authorized();
 		if (!rights.has('model:invoke')) throw new AgentError(-32600, MODEL_INVOKE_SCOPE_REQUIRED);
 		const tools = rights.has('mcp:invoke') ? toolsFor(rights) : [];
-		const turn = await ctx.client.complete(
-			{ model: ctx.model, messages, tools, maxOutputTokens: bounds.maxOutputTokens },
-			ctx.signal,
-		);
+		const started = performance.now();
+		let turn: Awaited<ReturnType<ModelProviderClient['complete']>>;
+		try {
+			turn = await ctx.client.complete(
+				{ model: ctx.model, messages, tools, maxOutputTokens: bounds.maxOutputTokens },
+				ctx.signal,
+			);
+		} catch (cause) {
+			ctx.request?.({
+				step: steps + 1,
+				model: ctx.model,
+				duration_ms: Math.round(performance.now() - started),
+				tools: tools.length,
+				error: clip(redact(cause instanceof Error ? cause.message : String(cause)), 1024),
+			});
+			throw cause;
+		}
+		ctx.request?.({
+			step: steps + 1,
+			model: ctx.model,
+			duration_ms: Math.round(performance.now() - started),
+			tools: tools.length,
+			usage: { ...turn.usage },
+			stop: turn.stop,
+			tool_calls: turn.toolCalls.length,
+		});
 		steps++;
 		usage.input += turn.usage.input;
 		usage.output += turn.usage.output;

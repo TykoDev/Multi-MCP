@@ -82,10 +82,10 @@ def({
 
 ## Tool surface
 
-100 tools: 57 browser catalog tools (`packages/mcp/src/catalog/`), 18 library tools (`library_tools.ts`) and 25
-extension tools (`extension_tools.ts`: sandbox, agents, A2UI, memory). A default key sees 65 in the default Compose
-stack (64 in a plain `docker run` without `TTK_DB_KEY_FILE`, where signed links are off); every scope sees 98.
-`tests/container/verify_container.ts` derives the expected set from the code for each image shape
+102 tools: 57 browser catalog tools (`packages/mcp/src/catalog/`), 18 library tools (`library_tools.ts`) and 27
+extension tools (`extension_tools.ts`: sandbox, agents, A2UI, memory, the MCP Apps stream tickets). A default key sees
+65 in the default Compose stack (64 in a plain `docker run` without `TTK_DB_KEY_FILE`, where signed links are off);
+every scope sees 100. `tests/container/verify_container.ts` derives the expected set from the code for each image shape
 (`--shape
 bundled|slim`).
 

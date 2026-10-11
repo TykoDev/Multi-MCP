@@ -152,33 +152,3 @@ export function setAgentsSideOpen(open: boolean): void {
 		// Not remembered; still applied for this page.
 	}
 }
-
-/**
- * D-158: where this browser's current agent chat starts — a server creation time in milliseconds, under
- * `ttk.agents.chat` as decimal digits only, or absent for the whole history. It hides turns from this browser's view,
- * nothing on the server, and holds nothing else; anything but digits read back is ignored.
- */
-export const CHAT_SINCE_STORAGE_KEY = 'ttk.agents.chat';
-let chatFallback: number | null = null;
-
-export function chatSince(): number | null {
-	try {
-		const value = globalThis.localStorage?.getItem(CHAT_SINCE_STORAGE_KEY) ?? null;
-		if (value !== null && /^\d{1,16}$/.test(value)) return Number(value);
-		if (value === null) return chatFallback;
-	} catch {
-		// Fall through to this page's own choice.
-	}
-	return chatFallback;
-}
-
-export function setChatSince(since: number | null): void {
-	const digits = since === null || !Number.isSafeInteger(since) || since < 0 ? null : String(since);
-	chatFallback = digits === null ? null : since;
-	try {
-		if (digits === null) globalThis.localStorage?.removeItem(CHAT_SINCE_STORAGE_KEY);
-		else globalThis.localStorage?.setItem(CHAT_SINCE_STORAGE_KEY, digits);
-	} catch {
-		// Not remembered; still applied for this page.
-	}
-}

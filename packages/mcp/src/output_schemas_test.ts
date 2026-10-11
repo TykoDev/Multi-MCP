@@ -34,8 +34,9 @@ Deno.test('AC15: every extension and library tool types what is inside its { res
 		),
 		...libraryTools(new LibraryStore({ dataDir: 'tests/.scratch/never-created' })),
 	];
-	// 25 extension (D-154 adds the four memory tools) + 18 library (W2 adds browser_save_to_share).
-	assertEquals(tools.length, 43);
+	// 27 extension (D-154 adds the four memory tools; the MCP Apps stream tickets add two) + 18 library (W2 adds
+	// browser_save_to_share).
+	assertEquals(tools.length, 45);
 	for (const tool of tools) {
 		const schema = z.toJSONSchema(tool.outputSchema) as {
 			properties?: {

@@ -182,6 +182,7 @@ Deno.test('AC14: tools/list annotations equal the §2.9 table for every tool, al
 			mode: 'control',
 			liveViewHtml: '',
 			a2uiHtml: '',
+			terminalHtml: '',
 			connectDomains: [],
 			origins: [],
 			mintTicket: () => Promise.reject(new Error('unused')),

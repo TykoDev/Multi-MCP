@@ -166,6 +166,9 @@ Deno.test('AC14: sampling tools, agent_run_tool, the confirmation set and the hu
 		'browser_request_human',
 		'browser_live_view',
 		'browser_live_ticket',
+		// The MCP Apps stream tickets belong to the embed at the other end of this call, like the live-view ticket.
+		'sandbox_session_ticket',
+		'a2ui_surface_ticket',
 		// Review R1-5 / R2-5: a signed URL is a bearer credential for its life, and a task keeps its result at rest.
 		'browser_file_link',
 		...CONFIRM_TOOL_NAMES,
@@ -185,6 +188,7 @@ function appsStub(asked: EmbedTicketInput[]): McpAppsDeps {
 		mode: 'control',
 		liveViewHtml: 'live',
 		a2uiHtml: 'a2ui',
+		terminalHtml: 'terminal',
 		connectDomains: ['wss://gw.example.test'],
 		origins: ['https://host.example'],
 		mintTicket: (input) => {

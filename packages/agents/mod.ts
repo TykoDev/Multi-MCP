@@ -4,6 +4,9 @@ export {
 	agentMessage,
 	AgentRuntime,
 	INTERRUPTED_BY_RESTART,
+	RUN_LOG_MAX_BYTES,
+	RUN_LOG_MAX_ENTRIES,
+	RUN_LOG_VALUE_LIMIT,
 	SANDBOX_SLOT_WAIT_MS,
 	TASK_RETENTION_MS,
 	TASK_SLOTS,
@@ -21,6 +24,9 @@ export type {
 	AgentTask,
 	AgentTaskMetadata,
 	ModelSelection,
+	RunLog,
+	RunLogEntry,
+	RunLogKind,
 	SecretSealer,
 	ToolInvocation,
 } from './src/runtime.ts';
@@ -58,7 +64,7 @@ export {
 	runModelTask,
 	trimTranscript,
 } from './src/model/loop.ts';
-export type { ModelEvent, ModelOutcome, ModelTaskContext } from './src/model/loop.ts';
+export type { ModelEvent, ModelOutcome, ModelRequestRecord, ModelTaskContext } from './src/model/loop.ts';
 export { redactable, REDACTED, REDACTION_MIN_LENGTH, redactJson, redactor } from './src/model/redact.ts';
 export {
 	MCP_INVOKE_SCOPE_REQUIRED,

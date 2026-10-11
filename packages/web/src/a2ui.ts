@@ -37,7 +37,7 @@ import {
 	type A2uiTheme,
 	A2uiThemeSchema,
 	parseA2uiMediaUrl,
-	readA2uiPointer,
+	resolveA2uiValue,
 	updateA2uiModel,
 	validateA2uiJson,
 	validateA2uiTree,
@@ -326,10 +326,9 @@ export function renderA2uiSurface(
 	const reactive: Array<() => void> = [];
 	const shares = options.fetchShare === undefined ? null : shareLoader(options.fetchShare);
 	const notice = el('p', { class: 'a2ui-notice', role: 'status', 'aria-live': 'polite' });
+	/** A binding reads the model; a `formatString`/`formatNumber` call computes from it (wire `resolveA2uiValue`). */
 	function resolve(value: unknown): unknown {
-		return typeof value === 'object' && value !== null && 'path' in value && typeof value.path === 'string'
-			? readA2uiPointer(model, value.path)
-			: value;
+		return resolveA2uiValue(value, model);
 	}
 	function text(value: unknown): string {
 		const resolved = resolve(value);

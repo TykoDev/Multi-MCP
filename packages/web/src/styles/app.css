@@ -2,7 +2,9 @@
  *
  * `deno task build:web` bundles this file into `dist/app.css`, resolving the imports below. The kit (Web Awesome,
  * MIT) arrives in its own cascade layers, so every unlayered rule in our partials wins over it without specificity
- * games. Our partials, in order: tokens, base, shell, shared components, then each screen. */
+ * games. Our partials, in order: tokens, base, shell, shared components, then the first-paint screens (Connect,
+ * Sessions, Live View). Every other screen's partial is bundled on its own into `dist/screens/` and loaded with the
+ * screen (`styles.ts`, D-159). */
 
 @import 'npm:@awesome.me/webawesome@3.14.0/dist/styles/themes/default.css';
 @import 'npm:@awesome.me/webawesome@3.14.0/dist/styles/native.css';
@@ -17,8 +19,3 @@
 @import './screens/connect.css';
 @import './screens/sessions.css';
 @import './screens/viewer.css';
-@import './screens/tools.css';
-@import './screens/resources.css';
-@import './screens/agents.css';
-@import './screens/users.css';
-@import './screens/system.css';

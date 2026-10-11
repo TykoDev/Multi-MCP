@@ -14,7 +14,7 @@ export type TaskKind = 'text' | 'tool' | 'delegation';
 
 /**
  * D-141 / D-121: every tool a structured task cannot run — the sampling tools (they need the MCP client's model),
- * `agent_run_tool` (a task that only queues a task), the three that hand something to the caller at the other end
+ * `agent_run_tool` (a task that only queues a task), the five that hand something to the caller at the other end
  * of *this* call (an elicitation, an embed, a ticket), `browser_file_link` (a bearer link kept at rest), and the
  * confirmation set (a client able to confirm must not route a destructive tool around its human). A literal rather
  * than an import from the gateway: this file ships in the browser bundle and names nothing of the server's graph.
@@ -26,6 +26,9 @@ export const TASK_EXCLUDED_TOOLS: ReadonlySet<string> = new Set([
 	'browser_request_human',
 	'browser_live_view',
 	'browser_live_ticket',
+	// The MCP Apps stream tickets, like the live-view ticket, belong to the embed at the other end of this call.
+	'sandbox_session_ticket',
+	'a2ui_surface_ticket',
 	'browser_file_link',
 	'browser_close_all',
 	'sandbox_delete',

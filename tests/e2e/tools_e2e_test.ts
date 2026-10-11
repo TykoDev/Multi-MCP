@@ -59,6 +59,27 @@ Deno.test({
 			assert(h.site.hits.includes('/'), `fixture was never requested: ${h.site.hits.join(',')}`);
 		});
 
+		await t.step('browser_wait_for selector and text match a page no tool has read yet', async () => {
+			// Straight after the navigation, before any read: Chromium's DOM agent had no document, and the search found
+			// nothing however long it polled (2026-10-11 report).
+			const selector = await h.callJson<{ met: boolean; after_ms: number }>('browser_wait_for', {
+				until: { selector: 'body' },
+				timeout_ms: 5000,
+			});
+			assertEquals(selector.met, true, 'a selector the page matches is met');
+			assert(selector.after_ms < 2000, `met only after ${selector.after_ms} ms`);
+			const text = await h.callJson<{ met: boolean }>('browser_wait_for', {
+				until: { text: 'TykoTech Fixture Index' },
+				timeout_ms: 5000,
+			});
+			assertEquals(text.met, true, 'text the page contains is met');
+			const missing = await h.callJson<{ met: boolean }>('browser_wait_for', {
+				until: { selector: '#never-on-this-page' },
+				timeout_ms: 600,
+			});
+			assertEquals(missing.met, false, 'a selector the page lacks still times out');
+		});
+
 		await t.step('browser_get_state carries the page text, not just its elements', async () => {
 			const state = await h.callJson<PageState>('browser_get_state', {});
 			assertEquals(state.title, 'TykoTech Fixture Index');

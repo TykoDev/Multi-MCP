@@ -50,6 +50,7 @@ import type { AppVariables } from './app.ts';
 import { expansionOwner, type Principal } from './auth.ts';
 import type { ExpansionConfig } from './expansion_config.ts';
 import { a2aStreamFarewell, A2uiStore, attachA2uiRoutes, StreamGuard } from './a2ui.ts';
+import { type EmbedStreamCaller, EmbedStreams, type EmbedStreamsOptions } from './embed_streams.ts';
 import type { ModelProvidersConfig, ModelProviderSettings, ProviderView } from './model_providers.ts';
 import { HttpProblem, problemResponse } from './problem.ts';
 import { MODEL_EXCLUDED, NOT_TASKABLE, notTaskable } from './taskable.ts';
@@ -98,6 +99,11 @@ export interface ExpansionServices {
 	 * fixed at construction; absent otherwise (stdio without a file), where nothing is managed.
 	 */
 	readonly applyModelProviders?: (next: ModelProvidersConfig) => void;
+	/**
+	 * The MCP Apps terminal and surface streams (`embed_streams.ts`), present when `ExpansionOptions.embeds` is: their
+	 * sockets are attached by the gateway, their tickets minted by `sandbox_session_ticket` and `a2ui_surface_ticket`.
+	 */
+	readonly embedStreams?: EmbedStreams;
 	close(): Promise<void>;
 }
 
@@ -147,6 +153,11 @@ export interface ExpansionOptions {
 	readonly sealer?: SecretSealer;
 	/** D-158: the administrator's per-agent settings, read at every use (`AgentSettingsStore.current`). */
 	readonly agents?: () => AgentSettings;
+	/**
+	 * MCP Apps is on (`TTK_MCP_APPS`): the socket origin, the embed origin gate and the shared connection ceiling the
+	 * terminal and surface streams need. Absent, neither stream nor its ticket tool exists.
+	 */
+	readonly embeds?: Pick<EmbedStreamsOptions, 'socketBase' | 'admitOrigin' | 'connections'>;
 }
 
 /**
@@ -293,6 +304,49 @@ function delegatedMessage(args: Record<string, unknown>): AgentMessage {
 		return { messageId: crypto.randomUUID(), role: 'ROLE_USER', parts: structuredClone(args.parts) };
 	}
 	return message(String(args.message));
+}
+
+/**
+ * The tool error an A2UI store refusal becomes. The store speaks the REST problem vocabulary, whose generic mapping
+ * (`extension_tools.ts`) turned every refusal into "could not complete; check the service configuration" — a missing
+ * surface read as a broken server. Every detail here is the store's or the wire validator's own fixed text (no
+ * upstream service is involved), so it is passed on; a missing surface names what to do instead.
+ */
+export function a2uiToolError(cause: unknown, surfaceId: string | undefined): ToolError {
+	if (cause instanceof ToolError) return cause;
+	if (cause instanceof HttpProblem) {
+		if (cause.slug === 'not-found') {
+			return new ToolError(
+				'invalid-arguments',
+				`you have no A2UI surface ${JSON.stringify(surfaceId ?? '')}: create it first with a2ui_publish ` +
+					'{ version: "v0.9", createSurface: { surfaceId, catalogId } }',
+			);
+		}
+		if (cause.slug === 'rate-limited') {
+			return new ToolError(
+				'feature-unavailable',
+				`${cause.detail ?? 'A2UI surface limit reached'}: delete a surface you no longer need with a2ui_delete`,
+			);
+		}
+		return new ToolError('invalid-arguments', cause.detail ?? 'the A2UI message was refused');
+	}
+	if (cause instanceof z.ZodError) {
+		return new ToolError(
+			'invalid-arguments',
+			cause.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join('; '),
+		);
+	}
+	return new ToolError('invalid-arguments', cause instanceof Error ? cause.message : 'the A2UI message was refused');
+}
+
+/** The surface an A2UI message names, for the refusal's wording. */
+function a2uiSurfaceOf(message: unknown): string | undefined {
+	if (typeof message !== 'object' || message === null) return undefined;
+	for (const operation of Object.values(message as Record<string, unknown>)) {
+		const id = (operation as { surfaceId?: unknown } | null)?.surfaceId;
+		if (typeof id === 'string') return id;
+	}
+	return undefined;
 }
 
 /**
@@ -589,10 +643,20 @@ export function createExpansionServices(
 			Promise.resolve({ task: taskRefusal(() => runtime.get(ctx.principal, String(args.task_id))) }),
 		agent_cancel_task: (args, ctx): Promise<Record<string, unknown>> =>
 			Promise.resolve({ task: taskRefusal(() => runtime.cancel(ctx.principal, String(args.task_id))) }),
-		a2ui_publish: (args, ctx): Promise<Record<string, unknown>> =>
-			Promise.resolve(publish(ctx.principal, args.message)),
-		a2ui_delete: (args, ctx): Promise<Record<string, unknown>> =>
-			Promise.resolve(surfaces.delete(ctx.principal, String(args.surface_id))),
+		a2ui_publish: (args, ctx): Promise<Record<string, unknown>> => {
+			try {
+				return Promise.resolve(publish(ctx.principal, args.message));
+			} catch (cause) {
+				throw a2uiToolError(cause, a2uiSurfaceOf(args.message));
+			}
+		},
+		a2ui_delete: (args, ctx): Promise<Record<string, unknown>> => {
+			try {
+				return Promise.resolve(surfaces.delete(ctx.principal, String(args.surface_id)));
+			} catch (cause) {
+				throw a2uiToolError(cause, String(args.surface_id));
+			}
+		},
 	};
 	if (config.peers.length) {
 		actions.agent_delegate = (args, ctx): Promise<Record<string, unknown>> =>
@@ -646,6 +710,33 @@ export function createExpansionServices(
 	}
 	// D-154: the agents' memory, wherever there is a database to hold it.
 	if (options.memory !== undefined) Object.assign(actions, memoryActions(options.memory));
+	// MCP Apps streams: the terminal of a shell session and the live surface, behind app-only ticket tools.
+	const embedStreams = options.embeds === undefined ? undefined : new EmbedStreams({
+		...options.embeds,
+		surfaces,
+		...(sandbox === undefined ? {} : { sandbox }),
+		...(authorize === undefined ? {} : { authorize }),
+		...(logger === undefined ? {} : { logger }),
+	});
+	if (embedStreams !== undefined) {
+		const callerOf = (ctx: ToolContext): EmbedStreamCaller => {
+			const credential = credentialOf(ctx);
+			return {
+				principal: ctx.callerPrincipal ?? ctx.principal,
+				owner: ctx.principal,
+				scopes: ctx.scopes ?? new Set(),
+				...(credential === undefined ? {} : { credential }),
+			};
+		};
+		if (embedStreams.offers('terminal')) {
+			actions.sandbox_session_ticket = async (args, ctx): Promise<Record<string, unknown>> => ({
+				...await embedStreams.mintTerminal(callerOf(ctx), String(args.session_id), String(args.origin)),
+			});
+		}
+		actions.a2ui_surface_ticket = async (args, ctx): Promise<Record<string, unknown>> => ({
+			...await embedStreams.mintSurface(callerOf(ctx), String(args.surface_id), String(args.origin)),
+		});
+	}
 	tools = extensionTools(actions);
 	const streams = new StreamGuard();
 	/**
@@ -673,6 +764,7 @@ export function createExpansionServices(
 		tools,
 		publish,
 		streams,
+		...(embedStreams === undefined ? {} : { embedStreams }),
 		invocableTools,
 		taskableTools,
 		actionNames,
@@ -691,6 +783,7 @@ export function createExpansionServices(
 		}),
 		close: async (): Promise<void> => {
 			streams.closeAll();
+			embedStreams?.closeAll();
 			// B1: both stores write their state before they let go of it.
 			await Promise.all([surfaces.close(), runtime.close()]);
 		},
@@ -808,10 +901,19 @@ export function attachExpansionRoutes(
 			// D-146 (amendment): newest-created first, ties by id (AG-14's order), each task carrying `created_at`. The
 			// control plane threads an owner's tasks as chat turns, and a task's status timestamp cannot order those — it
 			// moves with every update, so a long-running turn would jump past later ones. Creation never changes.
-			const tasks = services.runtime.listByCreation(expansionOwner(owner(c.get('principal')))).map((entry) => ({
-				...entry.task,
-				created_at: new Date(entry.created).toISOString(),
-			}));
+			const principal = expansionOwner(owner(c.get('principal')));
+			// `?workspace_id=<id>`: the tasks that touched one coding workspace — its id in the request, the history, the
+			// artifacts or the run log (a tool call's arguments, a sandbox_create result). A workspace id is a UUID, so a
+			// textual match names that workspace and no other.
+			const workspace = c.req.query('workspace_id');
+			if (workspace !== undefined && !UUID.test(workspace)) {
+				throw new HttpProblem('invalid-request', 'workspace_id must be a workspace id (a UUID)');
+			}
+			const needle = workspace?.toLowerCase();
+			const tasks = services.runtime.listByCreation(principal).filter((entry) =>
+				needle === undefined || JSON.stringify(entry.task).toLowerCase().includes(needle) ||
+				JSON.stringify(services.runtime.runLog(principal, entry.task.id).entries).toLowerCase().includes(needle)
+			).map((entry) => ({ ...entry.task, created_at: new Date(entry.created).toISOString() }));
 			return c.json({ tasks });
 		} catch (cause) {
 			return failure(cause, c.get('requestId'));
@@ -898,6 +1000,14 @@ export function attachExpansionRoutes(
 			return failure(cause, c.get('requestId'));
 		}
 	});
+	// A task's run history: its times and the bounded, redacted run log (provider requests, tool calls, states).
+	app.get('/api/v1/agent/tasks/:id/log', (c): Response => {
+		try {
+			return c.json(services.runtime.runLog(expansionOwner(owner(c.get('principal'))), c.req.param('id')));
+		} catch (cause) {
+			return failure(cause, c.get('requestId'));
+		}
+	});
 	app.post('/api/v1/agent/tasks/:id/cancel', (c): Response => {
 		try {
 			return c.json({ task: services.runtime.cancel(expansionOwner(owner(c.get('principal'))), c.req.param('id')) });
@@ -957,6 +1067,9 @@ export function attachExpansionRoutes(
 		actionNames: services.actionNames,
 	});
 }
+
+/** A coding workspace id as `sandbox_create` issues it. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** D-143 (§3.4): a `provider`/`model` body value — absent, or a string of at most 64 characters. */
 function selectionText(value: unknown): boolean {

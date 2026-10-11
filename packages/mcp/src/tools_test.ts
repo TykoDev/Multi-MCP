@@ -1072,6 +1072,10 @@ Deno.test('tools: browser_verify_locator discards every DOM search before return
 		const calls: string[] = [];
 		let failGet = false;
 		const dom = {
+			getDocument: () => {
+				calls.push('getDocument');
+				return Promise.resolve({ root: { nodeId: 1 } });
+			},
 			performSearch: () => {
 				calls.push('performSearch');
 				return Promise.resolve({ searchId: 'S1', resultCount: 2 });
@@ -1108,7 +1112,14 @@ Deno.test('tools: browser_verify_locator discards every DOM search before return
 		assertEquals(ok.structuredContent.matches, 2, 'the browser count is reported as the browser gave it');
 		assertEquals(ok.structuredContent.unique, false);
 		assertEquals(ok.structuredContent.first?.label, 'Host page button', 'the first result that maps to an index');
-		assertEquals(calls, ['performSearch', 'getSearchResults', 'describeNode:1', 'describeNode:2', 'discard:S1']);
+		assertEquals(calls, [
+			'getDocument',
+			'performSearch',
+			'getSearchResults',
+			'describeNode:1',
+			'describeNode:2',
+			'discard:S1',
+		]);
 
 		calls.length = 0;
 		failGet = true;
@@ -1117,7 +1128,11 @@ Deno.test('tools: browser_verify_locator discards every DOM search before return
 			ToolError,
 		);
 		assertEquals(error.code, 'browser-unavailable');
-		assertEquals(calls, ['performSearch', 'getSearchResults', 'discard:S1'], 'discarded on the failure path too');
+		assertEquals(
+			calls,
+			['getDocument', 'performSearch', 'getSearchResults', 'discard:S1'],
+			'discarded on the failure path too',
+		);
 	} finally {
 		await h.registry.shutdown();
 	}
@@ -2318,5 +2333,28 @@ Deno.test('SEC-FH-24: an honest page keeps its TRUE length — the clamp floors 
 		assert((payload.length as number) > HTML_LIMIT, 'the fixture stopped exceeding the cap');
 	} finally {
 		await h.registry.shutdown();
+	}
+});
+
+Deno.test('tools: a read-only tool with no default session says why it will not create one', async () => {
+	let launched = 0;
+	const registry = new SessionRegistry({
+		reapIntervalMs: 0,
+		launch: () => {
+			launched += 1;
+			return Promise.resolve(fakeSession().session);
+		},
+	});
+	const ctx: ToolContext = { registry, allowedDomains: [], principal: 'test' };
+	try {
+		const omitted = await assertRejects(() => tools.browserAudit({}, ctx), ToolError);
+		assertEquals(omitted.code, 'unknown-session');
+		assertStringIncludes(omitted.message, 'created by the first tool that opens a page');
+		const named = await assertRejects(() => tools.browserAudit({ session_id: 'nope' }, ctx), ToolError);
+		assertStringIncludes(named.message, 'no session with id nope');
+		assertEquals(named.message.includes('created by'), false, 'a named session keeps the plain refusal');
+		assertEquals(launched, 0, 'reading never launches a browser');
+	} finally {
+		await registry.shutdown();
 	}
 });

@@ -1,9 +1,10 @@
 /**
- * Agents (D-147, D-152): a chat with the agent. The conversation is the screen — every task one turn, the request as
- * the operator's bubble and the agent's answer beside its avatar, permission requests and results inline — with the
- * composer docked under it. Tasks and Surfaces are two icons in the context bar, each with its count, each opening a
- * popover: the task counters and the recent tasks (a click scrolls the conversation to the turn), and the published
- * (A2UI) surfaces (a click opens one on a stage above the thread) with the one New-surface action.
+ * Agents › Chat (D-147, D-152): one task is one conversation. The request is the operator's bubble, the agent's answer
+ * sits beside its avatar, permission requests and results inline, and the composer is docked under it. Every request
+ * the composer sends starts a new task with its own id, and the chat moves to it (`#/agents/chat/<task>`); `#/agents`
+ * is the empty chat that asks what to do. The bar over the conversation names the task — its state, its id with a
+ * copy action — and opens its run history on the Tasks tab (`tasks_view.ts`), where every task is listed. Surfaces
+ * agents publish live with their workspace (Sessions › Workspaces, `workspace_surfaces.ts`).
  *
  * Every route here needs `agent:invoke`, which no other scope implies (D-144) — `admin` included. A credential without
  * it is told so in words, and an administrator is offered to grant the agent scopes to their own account in one step
@@ -11,47 +12,34 @@
  *
  * Each task stays what it was — a question for the coding agent or a model provider, one tool call, or a delegation
  * to a peer — and the composer's kind switch chooses which. State is a glyph and a colour; the words are tooltips.
- *
- * D-158: **New chat** starts an empty conversation: the turns before it leave the thread (one line offers them back)
- * and stay in the Tasks popover; the boundary is this browser's own (a display preference `theme.ts` keeps), and it
- * hides nothing on the server. An administrator's **Agent settings** open in a panel on the right — the System ›
- * Agents tab itself, so the agents, the providers, A2A and the runtime are managed without leaving the chat.
+ * An administrator's **Agent settings** open in a panel on the right — the System › Agents tab itself, so the agents,
+ * the providers, A2A and the runtime are managed without leaving the chat.
  */
-import { type A2uiSurface } from '@tykotech/wire';
 import {
 	answerOf,
 	type ChatTask,
 	extraArtifacts,
-	orderTurns,
 	type Request,
 	requestOf,
 	richText,
 	statusLineOf,
 	titleOf,
 } from './agent_chat.ts';
-import {
-	type AgentTaskSummary,
-	api,
-	ApiError,
-	getUser,
-	loadUser,
-	send as authorizedFetch,
-	setUser,
-	streamEvents,
-} from './api.ts';
-import { clear, el, mount, on } from './dom.ts';
+import { agentTabs, chatRoute, rememberChatTask, tasksRoute } from './agent_tabs.ts';
+import { type AgentTaskSummary, api, ApiError, getUser, loadUser, setUser, streamEvents } from './api.ts';
+import { el, mount, on } from './dom.ts';
 import { onLeave } from './lifecycle.ts';
 import { icon, type IconName } from './icons.ts';
 import { invoke, mcp } from './mcp.ts';
-import { newSurfaceHome, taskComposer } from './task_composer.ts';
+import { submittedTaskId, taskComposer } from './task_composer.ts';
 import { backendChip, KIND_LOOK, taskKindOf } from './task_kinds.ts';
+import { lookOf, stateGlyph, stateLabel, TERMINAL } from './task_states.ts';
 import {
 	badge,
 	brandLogo,
 	busy,
 	button,
 	confirmAt,
-	confirmButton,
 	copyButton,
 	iconButton,
 	jsonView,
@@ -63,129 +51,10 @@ import {
 } from './ui.ts';
 import { type Navigate, renderShell, setDockBadge } from './shell.ts';
 import { agentsTab } from './system_agents.ts';
-import { agentsSideOpen, chatSince, setAgentsSideOpen, setChatSince } from './theme.ts';
-
-/** When a task was created (ms), from the server's `created_at`, else its status time; `NaN` when neither parses. */
-function createdMs(task: ChatTask): number {
-	return Date.parse(task.created_at ?? task.status.timestamp);
-}
-
-/**
- * D-158: the turns of the current chat — every task created after `since` (a server time, so the browser's clock never
- * hides a new turn), or all of them with `null`. A task whose time does not parse stays in.
- */
-export function chatTurns<T extends ChatTask>(tasks: readonly T[], since: number | null): T[] {
-	if (since === null) return [...tasks];
-	return tasks.filter((task) => {
-		const at = createdMs(task);
-		return !Number.isFinite(at) || at > since;
-	});
-}
-
-/** D-158: the boundary a New chat sets: the newest task's creation time, or `null` when there is nothing to hide. */
-export function newChatSince(tasks: readonly ChatTask[]): number | null {
-	const times = tasks.map(createdMs).filter(Number.isFinite);
-	return times.length === 0 ? null : Math.max(...times);
-}
-
-const TERMINAL = ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED', 'TASK_STATE_REJECTED'];
-
-function stateLabel(state: string): string {
-	return state.replace('TASK_STATE_', '').toLowerCase().replaceAll('_', ' ');
-}
-
-/** How a task state looks: a glyph (null: the kit's spinner), a tone class, and the words for its tooltip. */
-interface StateLook {
-	readonly glyph: IconName | null;
-	readonly tone: string;
-	readonly label: string;
-}
-
-const STATES: Readonly<Record<string, StateLook>> = {
-	TASK_STATE_SUBMITTED: { glyph: 'hourglass', tone: 'pending', label: 'Submitted' },
-	TASK_STATE_WORKING: { glyph: null, tone: 'running', label: 'Working' },
-	TASK_STATE_INPUT_REQUIRED: { glyph: 'question', tone: 'input', label: 'Waiting for your decision' },
-	TASK_STATE_AUTH_REQUIRED: { glyph: 'key', tone: 'auth', label: 'Authorization required' },
-	TASK_STATE_COMPLETED: { glyph: 'circle-check', tone: 'done', label: 'Completed' },
-	TASK_STATE_FAILED: { glyph: 'circle-x', tone: 'failed', label: 'Failed' },
-	TASK_STATE_REJECTED: { glyph: 'ban', tone: 'failed', label: 'Rejected' },
-	TASK_STATE_CANCELED: { glyph: 'circle-stop', tone: 'canceled', label: 'Canceled' },
-};
-
-function lookOf(state: string): StateLook {
-	return STATES[state] ?? { glyph: 'circle-dashed', tone: 'pending', label: stateLabel(state) };
-}
-
-/** A task's state as a small glyph; its words are the tooltip and accessible name. */
-function stateGlyph(state: string): HTMLElement {
-	const look = lookOf(state);
-	return el('span', { class: `ag-state ${look.tone}`, role: 'img', 'aria-label': look.label, 'data-tip': look.label }, [
-		look.glyph === null ? el('wa-spinner', { 'aria-hidden': 'true' }) : icon(look.glyph),
-	]);
-}
-
-/**
- * A number whose meaning is its tooltip and accessible name, with a glyph, the kit's spinner, or none (FE-3,
- * D-092: a chip beside a heading that already draws the glyph does not draw it again).
- */
-function countChip(
-	glyph: IconName | 'spinner' | 'none',
-	value: number | string,
-	meaning: string,
-	tone = '',
-): HTMLElement {
-	return el('span', { class: `ag-chip ${tone}`, role: 'img', 'aria-label': meaning, 'data-tip': meaning }, [
-		...(glyph === 'none' ? [] : [glyph === 'spinner' ? el('wa-spinner', { 'aria-hidden': 'true' }) : icon(glyph)]),
-		el('span', { text: String(value) }),
-	]);
-}
-
-/** The task counters in the Tasks card: running, waiting on you, completed, failed. */
-const WAITING = ['input', 'auth'];
-const COUNTERS: ReadonlyArray<readonly [IconName | 'spinner', string, string, (state: string) => boolean]> = [
-	['spinner', 'running', 'running', (state) => !TERMINAL.includes(state) && !WAITING.includes(lookOf(state).tone)],
-	['question', 'input', 'waiting for you', (state) => WAITING.includes(lookOf(state).tone)],
-	['circle-check', 'done', 'completed', (state) => state === 'TASK_STATE_COMPLETED'],
-	['circle-x', 'failed', 'failed', (state) => lookOf(state).tone === 'failed'],
-];
-
-/**
- * One of the bar's compact toggles (D-152): an icon button with a count badge that opens a popover holding `panel`.
- * The popover is the list's one home; the badge is decorative and the count is in the button's accessible name.
- */
-function barToggle(id: string, glyph: IconName, label: string, panel: HTMLElement): {
-	node: HTMLElement;
-	popover: HTMLElement & { open: boolean };
-	paint(count: number, words: string, live?: boolean): void;
-} {
-	const trigger = iconButton(glyph, label);
-	trigger.id = id;
-	trigger.classList.add('ag-bar-btn');
-	trigger.setAttribute('aria-haspopup', 'dialog');
-	const count = el('span', { class: 'ag-bar-count', 'aria-hidden': 'true', hidden: true });
-	trigger.append(count);
-	const popover = el('wa-popover', { class: 'ag-pop', for: id, placement: 'bottom-end' }, [panel]);
-	return {
-		node: el('span', { class: 'ag-bar-item' }, [trigger, popover]),
-		popover,
-		paint(n: number, words: string, live = false) {
-			count.hidden = n === 0;
-			count.textContent = n > 99 ? '99+' : String(n);
-			count.classList.toggle('live', live);
-			const name = n === 0 ? label : `${label} · ${words}`;
-			trigger.setAttribute('aria-label', name);
-			trigger.setAttribute('data-tip', name);
-		},
-	};
-}
+import { agentsSideOpen, setAgentsSideOpen } from './theme.ts';
 
 /** The scopes the agent screen needs, granted together by the admin shortcut; `model:invoke` only when declared. */
 const AGENT_SCOPES = ['agent:invoke', 'a2ui:publish', 'model:invoke'];
-
-/** What a card says while it has nothing to show: one quiet line, and the one action when the card owns it. */
-function quiet(text: string, action?: HTMLElement): HTMLElement {
-	return el('div', { class: 'ag-dash-empty' }, [el('span', { text }), ...(action === undefined ? [] : [action])]);
-}
 
 /** Starters for an empty conversation: each fills the composer, nothing is sent until the operator sends it. */
 const STARTERS: ReadonlyArray<readonly [IconName, string]> = [
@@ -201,78 +70,34 @@ const FOLLOW = 'Follow live events';
 const UNFOLLOW = 'Stop following';
 
 /**
- * R3-4: releases every rendered surface the screen holds — its share reads aborted, its object URLs revoked — and
- * forgets them, so the next render starts from nothing. Run when the screen is left and when a load of the
- * surface list fails (whose placeholder replaces the nodes, which must not stay marked as rendered either).
+ * The chat of one task (`taskId`), or the empty chat that starts a new one (`null`). Owner-only polling uses bearer
+ * headers through `api`; credentials never enter URLs.
  */
-export function releaseSurfaces(
-	nodes: Map<string, { readonly surface: Element }>,
-	release: ((surface: Element) => void) | null,
-): void {
-	if (release !== null) { for (const { surface } of nodes.values()) release(surface); }
-	nodes.clear();
-}
-
-/**
- * BUG-2: the open surface-builder drawer, if any. It lives in `document.body`, outside the screen's nodes, so the
- * screen's `stop()` must close it itself; the handle is module-level because one builder is open at most, across
- * renders of this screen.
- */
-let builder: { close(): void } | null = null;
-
-/** Owner-only polling uses bearer headers through api; credentials never enter URLs. */
-export function agentView(navigate: Navigate): void {
+export function agentView(navigate: Navigate, taskId: string | null = null): void {
+	rememberChatTask(taskId);
 	const status = el('p', { role: 'status', 'aria-live': 'polite', class: 'ag-status' });
-	/** The conversation: one `.ag-turn` per task, oldest first; it scrolls, the composer stays under it. */
+	/** The conversation: the task's one `.ag-turn`, or the welcome; it scrolls, the composer stays under it. */
 	const turns = el('div', { class: 'ag-turns' });
-	// D-158: after a New chat, the one way back to the turns before it.
-	const earlier = el('button', { type: 'button', class: 'ag-earlier', hidden: true });
 	const thread = el('div', { class: 'ag-thread', role: 'log', 'aria-label': 'Conversation' }, [
-		el('div', { class: 'ag-thread-inner' }, [earlier, turns]),
+		el('div', { class: 'ag-thread-inner' }, [turns]),
 	]);
-	turns.append(skeleton(2));
-	// The lists are named groups of buttons: a list role would take the rows' button role away.
-	const taskStrip = el('div', { class: 'ag-strip', role: 'group', 'aria-label': 'Recent tasks' });
-	const counters = el('div', { class: 'ag-counters' });
-	/** The rendered surfaces, one shown at a time on the stage; the strip holds a chip per surface. */
-	const surfaces = el('div', { class: 'ag-surfaces' });
-	const surfaceStrip = el('div', { class: 'ag-strip', role: 'group', 'aria-label': 'Published surfaces' });
-	const surfaceCount = el('span', { class: 'ag-counters' });
-	const stage = el('section', { class: 'ag-stage', 'aria-label': 'Surface', hidden: true }, [surfaces]);
+	turns.append(taskId === null ? el('span') : skeleton(2));
+	/** The bar over the conversation: which task this is, and the way to its run history. */
+	const taskBar = el('div', { class: 'ag-task-bar', hidden: true });
 
 	let active = true;
 	let loading = false;
-	/** D-158: the New-chat boundary (a server time, ms), or `null` for the whole history. */
-	let since: number | null = chatSince();
-	/** Every task as last loaded, so New chat and Show earlier re-render at once rather than at the next poll. */
-	let lastTasks: ChatTask[] = [];
-	/** The next render scrolls the conversation to its end: the first paint, and after the operator sends. */
+	/** The next render scrolls the conversation to its end: the first paint. */
 	let stick = true;
 	let unavailable: string | null = null;
-	/** The Tasks strip as last drawn. */
-	let stripSignature = '';
-	const turnNodes = new Map<string, { node: HTMLElement; signature: string }>();
-	const surfaceNodes = new Map<
-		string,
-		{ node: HTMLElement; chip: HTMLElement; surface: HTMLElement; signature: string }
-	>();
-	/** The surface on the stage, or `null` while the stage is closed. */
-	let shown: string | null = null;
-	/**
-	 * The surfaces this visit has seen, or `null` before the first list. A surface that arrives later — an agent just
-	 * published it — takes the stage, as an assistant shows the interface it made; the first list opens nothing, so the
-	 * conversation stays the screen.
-	 */
-	let known: Set<string> | null = null;
+	let shownSignature = '';
 	/** Live event streams per task, kept across turn re-renders and stopped on leave. */
 	const follows = new Map<string, { controller: AbortController; log: HTMLElement }>();
 	function error(cause: unknown): void {
 		status.textContent = messageOf(cause);
 	}
 
-	// --- the composer: three kinds of task behind one worded switch ---------------------------------------------
-	// Providers are asked once per render of this screen; the tool list is the page's cached `tools/list`; the peers
-	// are asked when the Delegate kind is first shown.
+	// --- the composer: three kinds of task behind one worded switch; each send is a new task ---------------------
 	const composer = taskComposer({
 		providers: () => api.listProviders(),
 		tools: () => mcp.tools(),
@@ -284,33 +109,13 @@ export function agentView(navigate: Navigate): void {
 		createTask: (body) => api.createAgentTask(body),
 		sendParts: (parts) => api.sendAgentMessage(parts),
 		delegate: (args) => invoke('agent_delegate', args),
-		onSubmitted: () => {
-			stick = true;
-			if (active) void load();
+		onSubmitted: (result) => {
+			// A new request is a new task: the chat moves to it, so every task keeps a conversation of its own.
+			const created = submittedTaskId(result);
+			if (created !== null && created !== taskId) navigate(chatRoute(created));
+			else if (active) void load();
 		},
 		status,
-	});
-
-	// --- the surface builder: one "New surface" action, in the card's header or its empty state (D-092) -------------
-	/** `a2ui:publish` on this session; the action is offered nowhere without it. */
-	let canPublish = false;
-	/** The Surfaces strip shows its empty line (which may hold the action). */
-	let surfacesEmpty = false;
-	const newSurface = button({ label: 'New surface', icon: 'plus', variant: 'primary', small: true });
-	const surfaceActions = el('span', { class: 'ag-surface-actions' });
-	on(newSurface, 'click', () => {
-		void busy(newSurface, () => import('./surface_builder.ts')).then((module) => {
-			if (!active) return;
-			builder?.close();
-			builder = module.openSurfaceBuilder({
-				publish: (message) => api.publishSurface(message),
-				actionNames: async () => (await api.listActionNames()).names,
-				fetchShare,
-				onPublished: () => {
-					if (active) void load();
-				},
-			});
-		}).catch(error);
 	});
 
 	/**
@@ -372,31 +177,6 @@ export function agentView(navigate: Navigate): void {
 				: el('p', { class: 'ag-welcome-text', text: 'An administrator grants them on the Users screen.' }),
 		]);
 	}
-
-	// --- the bar: Tasks and Surfaces as compact icons that open their lists (D-152) ------------------------------
-	const tasksToggle = barToggle(
-		'ag-tasks-trigger',
-		'list-checks',
-		'Tasks',
-		el('div', { class: 'ag-pop-panel', 'aria-label': 'Tasks' }, [
-			el('header', { class: 'ag-pop-head' }, [el('h2', { text: 'Tasks' }), counters]),
-			taskStrip,
-		]),
-	);
-	const surfacesToggle = barToggle(
-		'ag-surfaces-trigger',
-		'surface',
-		'Surfaces',
-		el('div', { class: 'ag-pop-panel', 'aria-label': 'Surfaces' }, [
-			el('header', { class: 'ag-pop-head' }, [
-				el('h2', { text: 'Surfaces' }),
-				surfaceCount,
-				el('span', { class: 'grow' }),
-				surfaceActions,
-			]),
-			surfaceStrip,
-		]),
-	);
 
 	function follow(taskId: string, toggle: HTMLButtonElement, log: HTMLElement): void {
 		const existing = follows.get(taskId);
@@ -618,41 +398,6 @@ export function agentView(navigate: Navigate): void {
 		return node;
 	}
 
-	/** Scrolls the conversation to one turn and marks it (a click on its chip in the Tasks strip). */
-	function reveal(taskId: string): void {
-		// D-158: a turn from before a New chat brings the earlier turns back first.
-		if (!turnNodes.has(taskId) && lastTasks.some((task) => task.id === taskId)) {
-			showEarlier();
-			requestAnimationFrame(() => reveal(taskId));
-			return;
-		}
-		const node = turnNodes.get(taskId)?.node;
-		if (node === undefined || !node.isConnected) return;
-		node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		node.focus({ preventScroll: true });
-		node.classList.remove('picked');
-		void node.offsetWidth;
-		node.classList.add('picked');
-	}
-
-	/** D-158: starts an empty conversation; the turns so far stay one click away and in the Tasks popover. */
-	function newChat(): void {
-		since = newChatSince(lastTasks);
-		setChatSince(since);
-		stick = true;
-		renderTasks(lastTasks);
-		status.textContent = 'New chat started.';
-		composer.focus();
-	}
-
-	/** D-158: undoes New chat: every turn is back in the thread. */
-	function showEarlier(): void {
-		since = null;
-		setChatSince(null);
-		renderTasks(lastTasks);
-	}
-	on(earlier, 'click', showEarlier);
-
 	/** The welcome an empty conversation shows: what the agent is, and starters that fill the composer. */
 	function welcome(): HTMLElement {
 		return el('div', { class: 'ag-welcome hello' }, [
@@ -677,199 +422,49 @@ export function agentView(navigate: Navigate): void {
 		]);
 	}
 
-	function renderTasks(all: ChatTask[]): void {
-		lastTasks = all;
-		const values = chatTurns(all, since);
-		const hidden = all.length - values.length;
-		earlier.hidden = hidden === 0;
-		earlier.replaceChildren(
-			icon('history'),
-			el('span', { text: hidden === 1 ? 'Show 1 earlier task' : `Show ${hidden} earlier tasks` }),
+	/** The bar over the conversation: the task's state, its title and id, copy, and its run history. */
+	function paintBar(task: ChatTask): void {
+		const id = el('code', { class: 'ag-task-id mono', text: task.id, 'data-tip': 'Task id' });
+		taskBar.replaceChildren(
+			stateGlyph(task.status.state),
+			el('span', { class: 'ag-task-title', text: titleOf(task, 120), 'data-tip': titleOf(task, 400) }),
+			el('span', { class: 'grow' }),
+			id,
+			copyButton(() => task.id, 'Copy task id'),
+			button({
+				label: 'Run history',
+				icon: 'history',
+				small: true,
+				variant: 'ghost',
+				onClick: () => navigate(tasksRoute(task.id)),
+			}),
 		);
-		const ordered = orderTurns(values);
-		const pinned = stick || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 96;
-		for (const [id, item] of turnNodes) {
-			if (!values.some((task) => task.id === id)) {
-				item.node.remove();
-				turnNodes.delete(id);
-			}
-		}
-		// The placeholders go once the list answers: the loading skeleton, and a "Tasks unavailable" that no longer is.
-		turns.querySelector('.skeleton-group')?.remove();
-		turns.querySelector('.ag-welcome.blocked')?.remove();
-		if (ordered.length === 0) {
-			if (turns.querySelector('.ag-welcome.hello') === null) turns.replaceChildren(welcome());
-		} else turns.querySelector('.ag-welcome.hello')?.remove();
-		ordered.forEach((task, index) => {
-			const signature = JSON.stringify(task);
-			const prior = turnNodes.get(task.id);
-			let node = prior?.node;
-			if (prior?.signature !== signature) {
-				node = turn(task);
-				if (prior) prior.node.replaceWith(node);
-				turnNodes.set(task.id, { node, signature });
-				if (prior !== undefined) status.textContent = `Task updated: ${stateLabel(task.status.state)}.`;
-			}
-			// Keep the DOM in conversation order: a turn that is not where it belongs moves there.
-			const at = turns.children[index];
-			if (node !== undefined && at !== node) turns.insertBefore(node, at ?? null);
-		});
-		if (pinned && ordered.length > 0) {
+		taskBar.hidden = false;
+	}
+
+	/** Draws the one task, re-rendering its turn only when it changed so a tooltip open on it survives the poll. */
+	function renderTask(task: ChatTask): void {
+		const signature = JSON.stringify(task);
+		if (signature === shownSignature) return;
+		const first = shownSignature === '';
+		shownSignature = signature;
+		turns.replaceChildren(turn(task));
+		paintBar(task);
+		if (!first) status.textContent = `Task updated: ${stateLabel(task.status.state)}.`;
+		if (stick) {
 			stick = false;
 			requestAnimationFrame(() => thread.scrollTo({ top: thread.scrollHeight }));
 		}
-		// The strip: newest first, a state glyph and a title each; a click finds the turn. Redrawn only when it changes,
-		// so a tooltip open on a chip survives the poll.
-		// D-158: the strip lists every task, the ones before a New chat included.
-		const everything = orderTurns(all);
-		const strip = JSON.stringify(everything.map((task) => [task.id, task.status.state, titleOf(task, 160)]));
-		if (strip === stripSignature) return;
-		stripSignature = strip;
-		taskStrip.replaceChildren(
-			...(everything.length === 0 ? [quiet('No tasks yet')] : everything.slice().reverse().map((task) => {
-				const chip = el('button', {
-					type: 'button',
-					class: `ag-pill ${lookOf(task.status.state).tone}`,
-					'data-tip': `${lookOf(task.status.state).label} · ${titleOf(task, 160)}`,
-				}, [
-					stateGlyph(task.status.state),
-					el('span', { class: 'ag-pill-text', text: titleOf(task, 60) }),
-					el('wa-relative-time', {
-						class: 'ag-pill-when',
-						date: task.created_at ?? task.status.timestamp,
-						format: 'narrow',
-						sync: true,
-					}),
-				]);
-				on(chip, 'click', () => {
-					tasksToggle.popover.open = false;
-					reveal(task.id);
-				});
-				return chip;
-			})),
-		);
 	}
 
-	function paintCounters(values: AgentTaskSummary[]): void {
-		counters.replaceChildren(
-			...COUNTERS.flatMap(([glyph, tone, words, test]) => {
-				const count = values.filter((task) => test(task.status.state)).length;
-				return count === 0 ? [] : [countChip(glyph, count, `${count} ${words}`, tone)];
-			}),
-		);
-		const open = values.filter((task) => !TERMINAL.includes(task.status.state)).length;
-		setDockBadge('agents', open);
-		tasksToggle.paint(
-			open > 0 ? open : values.length,
-			open > 0 ? `${open} running` : `${values.length} tasks`,
-			open > 0,
-		);
-	}
-
-	/**
-	 * D-111: `ttk://share/` media is read with this screen's own credential and shown from an object URL. The
-	 * renderer reads the body (it bounds the bytes) and owns the signal (it aborts on release), R3-4.
-	 */
-	const fetchShare = (path: string, signal: AbortSignal): Promise<Response> =>
-		authorizedFetch(api.shareFilePath(path), { signal });
-	/** The renderer module once a surface list has needed it; `null` means no surface was ever rendered. */
-	let renderer: typeof import('./a2ui.ts') | null = null;
-
-	/** Puts one surface on the stage, or closes the stage with `null`; the chips say which is shown. */
-	function show(surfaceId: string | null): void {
-		shown = surfaceId !== null && surfaceNodes.has(surfaceId) ? surfaceId : null;
-		stage.hidden = shown === null;
-		for (const [id, item] of surfaceNodes) {
-			item.node.hidden = id !== shown;
-			item.chip.setAttribute('aria-pressed', String(id === shown));
-		}
-	}
-
-	function renderSurfaces(values: A2uiSurface[], a2ui: typeof import('./a2ui.ts')): void {
-		for (const [id, item] of surfaceNodes) {
-			if (!values.some((surface) => surface.surfaceId === id)) {
-				a2ui.releaseA2uiSurface(item.surface);
-				item.node.remove();
-				item.chip.remove();
-				surfaceNodes.delete(id);
-				// Published again under the same id later, it is new again.
-				known?.delete(id);
-			}
-		}
-		const arrived = known === null ? [] : values.filter((surface) => !known!.has(surface.surfaceId));
-		known = new Set([...(known ?? []), ...values.map((surface) => surface.surfaceId)]);
-		// D-092: the one "New surface" action moves between the header and the empty state with the count.
-		const home = newSurfaceHome(values.length, canPublish);
-		surfaceActions.replaceChildren(...(home === 'header' ? [newSurface] : []));
-		if (!values.length && !surfaceNodes.size) {
-			// Rebuilt only when it is not already shown, so the action in it keeps its focus across polls.
-			if (!surfacesEmpty || (home === 'empty') !== surfaceStrip.contains(newSurface)) {
-				surfaceStrip.replaceChildren(quiet('No surfaces yet', home === 'empty' ? newSurface : undefined));
-				surfacesEmpty = true;
-			}
-		} else {
-			if (surfacesEmpty) surfaceStrip.replaceChildren();
-			surfacesEmpty = false;
-		}
-		for (const surface of values) {
-			const signature = JSON.stringify([surface.revision, surface.availableActions]);
-			const prior = surfaceNodes.get(surface.surfaceId);
-			if (prior?.signature === signature) continue;
-			// D-092: quiet until reached for, and it asks first.
-			const remove = confirmButton(
-				{ label: 'Delete surface', icon: 'trash', iconOnly: true, small: true },
-				async () => {
-					await api.deleteSurface(surface.surfaceId);
-					await load();
-				},
-			);
-			remove.classList.add('destructive');
-			const actions = surface.availableActions?.length ?? 0;
-			const rendered = a2ui.renderA2uiSurface(surface, api.surfaceAction, { fetchShare });
-			const node = el('article', { class: 'ag-surface', hidden: surface.surfaceId !== shown }, [
-				el('header', { class: 'ag-surface-head' }, [
-					el('span', { class: 'ag-surface-id mono', text: surface.surfaceId, 'data-tip': surface.surfaceId }),
-					countChip('revision', surface.revision, `Revision ${surface.revision}`),
-					countChip(
-						'control',
-						actions,
-						actions === 1 ? '1 authorized action' : `${actions} authorized actions`,
-						actions > 0 ? 'live' : '',
-					),
-					el('span', { class: 'grow' }),
-					remove,
-					iconButton('x', 'Close surface', () => show(null), { small: true }),
-				]),
-				el('div', { class: 'ag-surface-body' }, [rendered]),
-			]);
-			const chip = prior?.chip ?? el('button', {
-				type: 'button',
-				class: 'ag-pill surface',
-				'aria-pressed': 'false',
-				'data-tip': `Open ${surface.surfaceId}`,
-			}, [el('span', { class: 'ag-pill-text mono', text: surface.surfaceId })]);
-			if (prior === undefined) {
-				on(chip, 'click', () => {
-					surfacesToggle.popover.open = false;
-					show(shown === surface.surfaceId ? null : surface.surfaceId);
-				});
-				surfaceStrip.append(chip);
-			}
-			chip.replaceChildren(
-				el('span', { class: 'ag-pill-text mono', text: surface.surfaceId }),
-				el('span', { class: 'ag-pill-count', text: `r${surface.revision}` }),
-			);
-			if (prior) {
-				a2ui.releaseA2uiSurface(prior.surface);
-				prior.node.replaceWith(node);
-			} else surfaces.append(node);
-			surfaceNodes.set(surface.surfaceId, { node, chip, surface: rendered, signature });
-		}
-		show(arrived.at(-1)?.surfaceId ?? shown);
-		surfaceCount.replaceChildren(
-			...(values.length === 0 ? [] : [countChip('none', values.length, `${values.length} published`, 'accent')]),
-		);
-		surfacesToggle.paint(values.length, `${values.length} published`);
+	/** A placeholder in the conversation: why there is nothing to show. */
+	function blocked(glyph: IconName, title: string, text: string, action?: HTMLElement): HTMLElement {
+		return el('div', { class: 'ag-welcome blocked' }, [
+			el('span', { class: 'ag-orb muted', 'aria-hidden': 'true' }, [icon(glyph)]),
+			el('h2', { class: 'ag-welcome-title', text: title }),
+			el('p', { class: 'ag-welcome-text', text }),
+			...(action === undefined ? [] : [el('div', { class: 'ag-welcome-actions' }, [action])]),
+		]);
 	}
 
 	async function load(): Promise<void> {
@@ -877,60 +472,62 @@ export function agentView(navigate: Navigate): void {
 		loading = true;
 		try {
 			const [settled, user] = await Promise.all([
-				Promise.allSettled([api.listAgentTasks(), api.listSurfaces()]),
+				Promise.allSettled([api.listAgentTasks()]),
 				loadUser(),
 			]);
-			const [taskResult, surfaceResult] = settled;
+			const [listed] = settled;
 			if (!active) return;
-			canPublish = user?.scopes.includes('a2ui:publish') === true;
-			if (taskResult.status === 'fulfilled') {
-				unavailable = null;
-				const values = await Promise.all(taskResult.value.tasks.map(async (task) => {
-					if (task.status.state !== 'TASK_STATE_INPUT_REQUIRED') return task;
-					const detail = await api.getAgentTask(task.id);
-					return { ...task, ...detail.task, permission: detail.permission };
-				}));
-				if (active) {
-					renderTasks(values);
-					paintCounters(values);
-				}
-			} else {
-				const forbidden = taskResult.reason instanceof ApiError && taskResult.reason.status === 403;
-				const reason = forbidden ? 'Needs agent:invoke' : messageOf(taskResult.reason);
+			if (listed.status === 'rejected') {
+				const forbidden = listed.reason instanceof ApiError && listed.reason.status === 403;
+				const reason = forbidden ? 'Needs agent:invoke' : messageOf(listed.reason);
 				if (unavailable !== reason) {
 					unavailable = reason;
-					turnNodes.clear();
+					shownSignature = '';
+					taskBar.hidden = true;
 					turns.replaceChildren(
-						forbidden ? scopeWall(user?.scopes ?? []) : el('div', { class: 'ag-welcome blocked' }, [
-							el('span', { class: 'ag-orb muted', 'aria-hidden': 'true' }, [icon('lock')]),
-							el('h2', { class: 'ag-welcome-title', text: 'Tasks unavailable' }),
-							el('p', { class: 'ag-welcome-text', text: reason }),
-						]),
+						forbidden ? scopeWall(user?.scopes ?? []) : blocked('lock', 'Tasks unavailable', reason),
 					);
 				}
-				taskStrip.replaceChildren(quiet(forbidden ? 'Needs agent:invoke' : 'Tasks unavailable'));
-				stripSignature = '';
-				counters.replaceChildren();
-				tasksToggle.paint(0, '');
 				setDockBadge('agents', null);
+				return;
 			}
-			// The renderer re-validates every surface against the shared A2UI schemas, so it is
-			// loaded with them, on first use, rather than with the app's first paint.
-			if (surfaceResult.status === 'fulfilled') {
-				renderer = await import('./a2ui.ts');
-				if (active) renderSurfaces(surfaceResult.value.surfaces, renderer);
-			} else {
-				releaseSurfaces(surfaceNodes, renderer?.releaseA2uiSurface ?? null);
-				clear(surfaces);
-				show(null);
-				surfacesEmpty = false;
-				surfaceActions.replaceChildren();
-				const forbidden = surfaceResult.reason instanceof ApiError && surfaceResult.reason.status === 403;
-				surfaceStrip.replaceChildren(
-					quiet(forbidden ? 'Needs agent:invoke' : `Surfaces unavailable: ${messageOf(surfaceResult.reason)}`),
+			unavailable = null;
+			const all = listed.value.tasks;
+			setDockBadge('agents', all.filter((task) => !TERMINAL.includes(task.status.state)).length);
+			if (taskId === null) {
+				if (turns.querySelector('.ag-welcome.hello') === null) turns.replaceChildren(welcome());
+				return;
+			}
+			let task: ChatTask | undefined = all.find((entry) => entry.id === taskId);
+			// A pending permission is only in the task's own read; a task missing from the list is asked for directly.
+			if (task === undefined || task.status.state === 'TASK_STATE_INPUT_REQUIRED') {
+				try {
+					const detail = await api.getAgentTask(taskId);
+					task = {
+						...task,
+						...detail.task,
+						...(detail.permission === undefined ? {} : { permission: detail.permission }),
+					};
+				} catch (cause) {
+					if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
+					task = undefined;
+				}
+			}
+			if (!active) return;
+			if (task === undefined) {
+				shownSignature = '';
+				taskBar.hidden = true;
+				turns.replaceChildren(
+					blocked(
+						'circle-dashed',
+						'Task not found',
+						`No task ${taskId} belongs to this account: it may have expired (tasks are kept for a day).`,
+						button({ label: 'All tasks', icon: 'list-checks', onClick: () => navigate(tasksRoute(null)) }),
+					),
 				);
-				surfacesToggle.paint(0, '');
+				return;
 			}
+			renderTask(task);
 		} catch (cause) {
 			if (active) error(cause);
 		} finally {
@@ -943,10 +540,6 @@ export function agentView(navigate: Navigate): void {
 		clearInterval(timer);
 		for (const { controller } of follows.values()) controller.abort();
 		follows.clear();
-		releaseSurfaces(surfaceNodes, renderer?.releaseA2uiSurface ?? null);
-		// BUG-2: the builder drawer is not under the screen's nodes; it goes with the screen.
-		builder?.close();
-		builder = null;
 	};
 	// Not `hashchange`: re-rendering this same route (its rail item) changes no hash (G-1).
 	onLeave(stop);
@@ -980,25 +573,24 @@ export function agentView(navigate: Navigate): void {
 	on(settingsToggle, 'click', () => openSide(side.hasAttribute('hidden')));
 	const admin = getUser()?.scopes.includes('admin') === true;
 	const settings = admin ? [settingsToggle] : [];
-	const newChatButton = iconButton('edit', 'New chat', newChat);
+	const newTask = iconButton('edit', 'New task', () => navigate(chatRoute(null)));
 	mount(renderShell(navigate, {
 		active: 'agents',
 		title: 'Agents',
-		subtitle: 'Chat with the agent, follow its tasks, use the surfaces agents publish',
-		actions: [newChatButton, tasksToggle.node, surfacesToggle.node, ...settings],
+		subtitle: 'Chat with the agent: every request is a task of its own',
+		tabs: agentTabs('chat'),
+		actions: [...(taskId === null ? [] : [newTask]), ...settings],
 		flush: true,
 	}, [
 		el('div', { class: 'ag-layout' }, [
 			el('div', { class: 'ag-chat' }, [
-				stage,
+				taskBar,
 				thread,
 				el('div', { class: 'ag-dock' }, [el('div', { class: 'ag-dock-inner' }, [composer.node])]),
 			]),
 			side,
 		]),
 	]));
-	tasksToggle.paint(0, '');
-	surfacesToggle.paint(0, '');
 	if (admin && agentsSideOpen()) openSide(true);
 	void load();
 }
