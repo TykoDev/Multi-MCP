@@ -1,7 +1,7 @@
 # Deploying to production
 
-One gateway container (plus the sandbox) behind a TLS-terminating reverse proxy. Credentials and the database key come
-from files; state lives in the `ttk-data` volume.
+One gateway container (plus the sandbox and the A2A peer, neither published) behind a TLS-terminating reverse proxy.
+Credentials and the database key come from files; state lives in the `ttk-data` volume.
 
 ```mermaid
 flowchart LR
@@ -15,15 +15,13 @@ flowchart LR
 ## 1. Secrets
 
 ```sh
-deno task setup                                             # secrets/ttk_db_key, ttk_admin_user.json, ttk_api_keys.json, .env
-sudo chgrp 1993 secrets/ttk_* && chmod 0440 secrets/ttk_*   # Linux: containers run as 1993
+deno task setup              # every file in secrets/ (0700 folder, 0644 files the containers can read), and .env
 ```
 
-No sudo? `docker run --rm -v "$PWD/secrets:/s" busybox sh -c 'chgrp 1993 /s/ttk_* && chmod 0440 /s/ttk_*'`.
-
-Give each client its own key with minimal scopes (`deno task doctor --new-key <id> --scopes …`) and append the record to
-`secrets/ttk_api_keys.json`. API keys and browser secrets can come from Vault or 1Password instead (`TTK_API_KEYS_REF`,
-`TTK_SECRETS_REF`).
+The `client` key `setup` prints holds every scope the stack's features need; for production, give each client its own
+key with minimal scopes (`deno task doctor --new-key <id> --scopes … --save`) and narrow or remove `client`. Every file,
+rotation and permission rule: [secrets/README.md](../../secrets/README.md). API keys and browser secrets can come from
+Vault or 1Password instead (`TTK_API_KEYS_REF`, `TTK_SECRETS_REF`).
 
 ## 2. Configure
 
@@ -46,9 +44,8 @@ so serve the web UI only there. Other settings go into `docker-compose.yml` (or 
 | `TTK_METRICS`                                           | off         | `true` serves `/metrics` to a `metrics:read` key.               |
 | `TTK_HUMAN_HANDOFF`, `TTK_SIGNED_LINKS`, `TTK_MCP_APPS` | on          | `false` / `off` to withhold handoff, no-bearer links, MCP Apps. |
 
-Model providers: add them in the web app (System › Agents) or seed them from a file (uncomment
-`TTK_MODEL_PROVIDERS_FILE` and its two `secrets` lines). Every variable:
-[Environment variables](../reference/environment-variables.md).
+Model providers: add them in the web app (System › Agents) or seed them from a file with the
+`docker-compose.providers.yml` overlay. Every variable: [Environment variables](../reference/environment-variables.md).
 
 ## 3. Start
 
@@ -131,7 +128,7 @@ docker compose start tykotech-mcp
 
 ```sh
 git pull
-deno task setup              # creates only what is missing
+deno task setup              # creates only what is missing, repairs modes
 docker compose up -d --build
 ```
 
@@ -139,7 +136,7 @@ Shutdown drains: new work gets `503`, running agent tasks come back failed ("int
 
 ## Checklist
 
-- [ ] Secret files exist, group-readable by uid 1993 (slim image: 1000), mode `0440`.
+- [ ] `deno task setup` has run since the last pull: `secrets/` is `0700`, its files `0644`.
 - [ ] `secrets/ttk_db_key` is backed up apart from `/data`.
 - [ ] Every client key has explicit, minimal scopes; only administrators hold `admin`.
 - [ ] `TTK_PUBLIC_URL` is the HTTPS URL clients use.

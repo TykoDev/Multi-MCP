@@ -31,6 +31,7 @@ import {
 	docker,
 	dockerExecutable,
 	proofTag,
+	writeStackFiles,
 	writeSyntheticAdmin,
 } from '../support/compose_proof.ts';
 
@@ -135,6 +136,8 @@ Deno.serve({ hostname: '0.0.0.0', port: 8080 }, async (request) => {
 `,
 );
 const file = (path: string): string => JSON.stringify(path.replaceAll('\\', '/'));
+// The default stack's placeholders and its A2A peer's token pair, as `deno task setup` writes them.
+const stack = await writeStackFiles(scratch);
 await Deno.writeTextFile(
 	fixture,
 	`services:
@@ -145,6 +148,8 @@ await Deno.writeTextFile(
       TTK_PUBLIC_URL: http://127.0.0.1:8787
   sandbox:
     image: ${images.sandbox}
+  a2a-peer:
+    image: ${images['tykotech-mcp']}
   fake-model:
     image: ${images['tykotech-mcp']}
     command: ['deno', 'run', '--allow-net=0.0.0.0:8080', '/fake/fake_model.ts']
@@ -163,7 +168,7 @@ secrets:
     file: ${file(adminFile)}
   ttk_db_key:
     file: ${file(dbKeyFile)}
-`,
+${stack.secrets}`,
 );
 const compose = [
 	'compose',
@@ -180,8 +185,8 @@ try {
 	// Before anything starts: the tree's images by tag, and every secret file from the scratch folder.
 	assertIsolated(config as ComposeConfig, {
 		scratch,
-		images: { ...images, 'fake-model': images['tykotech-mcp'] },
-		required: ['ttk_admin_user', 'ttk_api_keys', 'ttk_db_key'],
+		images: { ...images, 'a2a-peer': images['tykotech-mcp'], 'fake-model': images['tykotech-mcp'] },
+		required: ['ttk_admin_user', 'ttk_api_keys', 'ttk_db_key', ...stack.names],
 	});
 	// D-154: the vault key reaches the gateway as a secret file, never the environment's value.
 	assertEquals(config.services['tykotech-mcp'].environment.TTK_DB_KEY_FILE, '/run/secrets/ttk_db_key');

@@ -1,9 +1,10 @@
-# Overlay: use a sandbox token file you made instead of the one the sandbox service generates.
+# Overlay: use an operator-held sandbox token, secrets/ttk_sandbox_token, instead of the one the sandbox service
+# generates into the ttk-sandbox-token volume. `deno task setup` writes the file (64 hex characters); rotate it with
+# `deno task setup --only sandbox-token --force`.
 #
-#   deno eval "console.log(crypto.randomUUID() + crypto.randomUUID())" > secrets/ttk_sandbox_token
 #   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
 #
-# The token needs at least 32 non-whitespace characters.
+# A token of your own needs at least 32 non-whitespace characters.
 services:
   tykotech-mcp:
     environment:

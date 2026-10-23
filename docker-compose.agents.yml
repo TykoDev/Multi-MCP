@@ -1,7 +1,12 @@
-# Overlay: the ACP bridge to an external coding agent. Put an ACP executable at /opt/agents/agent
-# (derived image or read-only bind) and create the two secrets below. See docs/guides/agents-and-sandbox.md.
+# Overlay: the ACP bridge to an external coding agent. `deno task setup` writes both secrets below: the bridge token,
+# and secrets/ttk_agent_commands.json describing one agent at /opt/agents/agent. Install that executable in an image
+# derived from docker/Dockerfile.agent-runner (the runner refuses to start without it), name the image in .env, and
+# edit the commands file to match. See docs/guides/coding-and-agents.md#the-acp-agent-bridge.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d --build
+#   TTK_AGENT_RUNNER_IMAGE=my-runner:1 docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d --no-build
+#
+# `--no-build` once the base stack is built: with your own image, `--build` would build this base image under that
+# name, over yours.
 services:
   tykotech-mcp:
     environment:

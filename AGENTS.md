@@ -85,7 +85,8 @@ def({
 102 tools: 57 browser catalog tools (`packages/mcp/src/catalog/`), 18 library tools (`library_tools.ts`) and 27
 extension tools (`extension_tools.ts`: sandbox, agents, A2UI, memory, the MCP Apps stream tickets). A default key sees
 65 in the default Compose stack (64 in a plain `docker run` without `TTK_DB_KEY_FILE`, where signed links are off);
-every scope sees 100. `tests/container/verify_container.ts` derives the expected set from the code for each image shape
+`setup`'s `client` key (the stack scopes) sees 98; every scope sees 101 (`agent_delegate` is on: the stack runs an A2A
+peer). `tests/container/verify_container.ts` derives the expected set from the code for each image shape
 (`--shape
 bundled|slim`).
 
@@ -109,10 +110,10 @@ override; the slim image's compiled binary bakes its permissions (`scripts/compi
 deno.json, deno.lock     workspace, imports, tasks, fmt/lint config; frozen lockfile
 Dockerfile               bundled image (Deno + Chromium + ffmpeg)
 Dockerfile.slim          slim image (compiled binary)
-docker-compose*.yml      gateway + sandbox; overlays for sandbox token, Docker backend, ACP runner
+docker-compose*.yml      gateway + sandbox + A2A peer; overlays: providers file, sandbox token, Docker backend, ACP runner
 docker/                  sandbox, workspace, agent-runner images; seccomp profiles; ttk
 scripts/                 gates, compile, coverage, health checks, grant resolvers
-secrets/                 git-ignored file secrets (see secrets/README.md)
+secrets/                 git-ignored file secrets, all written by `deno task setup` (see secrets/README.md)
 docs/                    documentation
 tests/                   unit, e2e, stdio, compile, container, sandbox, agents, fixtures, support
 packages/

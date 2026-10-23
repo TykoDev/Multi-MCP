@@ -4,13 +4,14 @@ The server defines **102 tools**: **57 browser tools**, 18 library tools and 27 
 what its scopes and the deployment allow; everything else is listed with a reason in `tools_withheld` (resource
 `ttk://capabilities`).
 
-| Credential                        | Tools in the default Compose stack |
-| --------------------------------- | ---------------------------------- |
-| Default grant (no `scopes` named) | 65                                 |
-| Every scope                       | 100                                |
+| Credential                                | Tools in the default Compose stack |
+| ----------------------------------------- | ---------------------------------- |
+| Default grant (no `scopes` named)         | 65                                 |
+| `setup`'s `client` key (the stack scopes) | 98                                 |
+| Every scope                               | 101                                |
 
-The two never offered by default: `agent_delegate` (needs `TTK_AGENT_PEERS_FILE`) and `agent_prompt` (needs the ACP
-bridge).
+The one never offered by default: `agent_prompt` (needs the ACP bridge, `docker-compose.agents.yml`). `agent_delegate`
+needs `TTK_AGENT_PEERS_FILE`, which the default stack sets to its bundled A2A peer.
 
 **Legend.** ✎ mutates the page or state: refused with `human-has-control` while a person holds the live-view lock.
 Scope: needed in addition to `mcp:invoke`; blank = none. Most browser tools take an optional `session_id` (default: your

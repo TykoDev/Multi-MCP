@@ -87,6 +87,41 @@ export async function writeSyntheticAdmin(path: string): Promise<void> {
 	);
 }
 
+/**
+ * The default stack's files beyond the keys, administrator and database key each proof makes for itself, written into
+ * `scratch` the way `deno task setup` writes them: the browser-secrets and git-remotes placeholders, the A2A peer list,
+ * and the peer's token with the hashed record the peer authenticates it by. Returns the fixture's `secrets:` entries
+ * for them (indented for a top-level `secrets:` block) and their names, for `assertIsolated`'s `required`.
+ */
+export async function writeStackFiles(
+	scratch: string,
+): Promise<{ readonly secrets: string; readonly names: string[] }> {
+	const token = `ttk_${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`;
+	const sha256 = Array.from(
+		new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))),
+		(byte) => byte.toString(16).padStart(2, '0'),
+	).join('');
+	const files: Record<string, [string, string]> = {
+		ttk_secrets: ['browser-secrets.json', '{}\n'],
+		ttk_git_remotes: ['git-remotes.json', '[]\n'],
+		ttk_agent_peers: [
+			'agent-peers.json',
+			`${JSON.stringify([{ id: 'peer', url: 'http://a2a-peer:8787', token_file: '/run/secrets/ttk_peer_token' }])}\n`,
+		],
+		ttk_peer_token: ['peer-token', `${token}\n`],
+		ttk_peer_api_keys: [
+			'peer-keys.json',
+			`${JSON.stringify([{ id: 'gateway', sha256, scopes: ['mcp:invoke', 'agent:invoke'] }])}\n`,
+		],
+	};
+	const lines: string[] = [];
+	for (const [name, [path, text]] of Object.entries(files)) {
+		await Deno.writeTextFile(join(scratch, path), text);
+		lines.push(`  ${name}:`, `    file: ${JSON.stringify(join(scratch, path).replaceAll('\\', '/'))}`);
+	}
+	return { secrets: `${lines.join('\n')}\n`, names: Object.keys(files) };
+}
+
 /** Whether `path` lies inside `folder` (both resolved; case-insensitive on Windows, as its file system is). */
 export function isInside(folder: string, path: string): boolean {
 	const fold = (value: string) => (Deno.build.os === 'windows' ? resolve(value).toLowerCase() : resolve(value));

@@ -131,8 +131,12 @@ Deno.test('gateway: the SPA and its assets are revalidated, never reused blind (
 	// Observed during B6's own container verification, where a stylesheet cached
 	// from the previous image made the fix under test look broken. It matters most
 	// for this release: a cached 0.1.0 bundle does not answer the keep-alive ping.
+	// Both asset roots answer through the one `/assets/*` route: a hand-written file is always there, and the bundle's
+	// stylesheet is checked whenever `deno task build:web` has run — `ok` and CI's unit job never build it, and a 404
+	// carries no caching policy to assert.
+	const built = await Deno.stat(new URL('../../web/dist/app.css', import.meta.url)).then(() => true, () => false);
 	await using f = await fixture();
-	for (const path of ['/', '/assets/app.css']) {
+	for (const path of ['/', '/assets/brand/favicon-32.png', ...(built ? ['/assets/app.css'] : [])]) {
 		const response = await fetch(`${f.url}${path}`);
 		await response.body?.cancel();
 		assertEquals(

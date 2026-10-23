@@ -147,6 +147,7 @@ Deno.test('C10 / D-151: the bundled CMD carries --unstable-kv behind --deny-ffi;
 	const files = await composeFiles();
 	assertEquals(files, [
 		'docker-compose.agents.yml',
+		'docker-compose.providers.yml',
 		'docker-compose.sandbox-docker.yml',
 		'docker-compose.sandbox.yml',
 		'docker-compose.yml',
@@ -253,24 +254,21 @@ Deno.test('D-131 / D-151: the sandbox CMD and the Docker overlay grant the git n
 		'--allow-sys=statfs',
 		'packages/sandbox/service.ts',
 	], 'Docker overlay command, whole');
-	// D-151: public clones are on in the default stack, from exactly the four public forges; credentialed remotes stay
-	// a commented opt-in (compose refuses a declared secret whose file is missing).
+	// D-151: public clones are on in the default stack, from exactly the four public forges. Credentialed remotes are
+	// mounted from the `[]` placeholder `deno task setup` writes (no remote until the operator fills it in), on the
+	// sandbox service alone: the credentials never reach the gateway, the peer or a cage.
 	const compose = await Deno.readTextFile('docker-compose.yml');
-	for (
-		const line of [
-			'# TTK_SANDBOX_GIT_REMOTES_FILE: /run/secrets/ttk_git_remotes',
-			'#   - ttk_git_remotes',
-			'# ttk_git_remotes:',
-			'#   file: ./secrets/ttk_git_remotes',
-		]
-	) {
-		assert(compose.includes(line), `docker-compose.yml keeps the commented opt-in line ${line}`);
-	}
 	const active = activeText(compose);
 	const hosts = [...active.matchAll(/^\s+TTK_SANDBOX_GIT_HOSTS: (.*)$/gm)].map((match) => match[1]);
 	assertEquals(hosts, ['github.com,gitlab.com,bitbucket.org,codeberg.org'], 'the public forges, exact names, once');
-	assert(serviceBlock(compose, 'sandbox')?.includes('TTK_SANDBOX_GIT_HOSTS:'), 'set on the sandbox service only');
-	assert(!/TTK_SANDBOX_GIT_REMOTES_FILE|ttk_git_remotes/.test(active), 'credentialed remotes stay an opt-in');
+	const sandbox = serviceBlock(compose, 'sandbox') ?? '';
+	assert(sandbox.includes('TTK_SANDBOX_GIT_HOSTS:'), 'set on the sandbox service only');
+	assert(sandbox.includes(`      TTK_SANDBOX_GIT_REMOTES_FILE: ${remotes}`), 'the remotes file, at the granted path');
+	assert(sandbox.includes('    secrets:\n      - ttk_git_remotes'), 'mounted as the compose secret');
+	assert(active.includes('  ttk_git_remotes:\n    file: ./secrets/ttk_git_remotes\n'), 'from secrets/');
+	for (const name of ['tykotech-mcp', 'a2a-peer']) {
+		assert(!/TTK_SANDBOX_GIT_REMOTES_FILE|ttk_git_remotes/.test(serviceBlock(compose, name) ?? ''), name);
+	}
 });
 
 /**
@@ -296,8 +294,8 @@ Deno.test('D-137 (AC6): the bundled CMD grants exactly the six OTEL_* names', as
  * binary's grant: the server's outbound network is on by default in both shapes, a provider host needs no election in
  * the matrix, and the providers file is the only allowlist for model hosts. The rest of the argv is unchanged. No
  * `--allow-env` entry names a provider-key variable (the T6 spelling: `*_API_KEY`, `OPENAI*`, `ANTHROPIC*`): a key
- * lives in `TTK_MODEL_PROVIDERS_FILE`, which `TTK_*` already covers. The default compose file carries the providers
- * opt-in commented, in the `ttk_secrets` style, and nothing of it active (the R12 pattern above).
+ * lives in `TTK_MODEL_PROVIDERS_FILE`, which `TTK_*` already covers. The providers opt-in is its own overlay,
+ * `docker-compose.providers.yml`, and nothing of it is active in the default file.
  */
 Deno.test('D-143 / D-145 / D-151: the bundled CMD grants unscoped net and no provider-key name', async () => {
 	const SIX = [
@@ -334,18 +332,20 @@ Deno.test('D-143 / D-145 / D-151: the bundled CMD grants unscoped net and no pro
 	// The compiled matrix is the same bare net grant, so the two shapes share one egress posture (D-053, D-151).
 	assertEquals(permissions('/usr/bin/chromium')[1], '--allow-net', 'slim bakes a bare --allow-net (D-053, D-151)');
 	assert(permissions('/usr/bin/chromium').includes('--allow-env'), 'slim bakes a bare --allow-env (D-053)');
-	// The default compose file: the opt-in is there, commented, in the ttk_secrets style, and nothing of it active.
+	// The opt-in is its own overlay, which sets the variable and mounts the file and nothing else; nothing of it is
+	// active in the default file (a providers file needs a real provider, so there is no placeholder to mount).
+	const overlay = activeText(await Deno.readTextFile('docker-compose.providers.yml'));
+	const gateway = serviceBlock(overlay, 'tykotech-mcp') ?? '';
+	assert(gateway.includes('      TTK_MODEL_PROVIDERS_FILE: /run/secrets/ttk_model_providers'), 'the overlay sets it');
+	assert(gateway.includes('    secrets:\n      - ttk_model_providers'), 'and mounts the file as a compose secret');
+	assert(overlay.includes('  ttk_model_providers:\n    file: ./secrets/ttk_model_providers.json'), 'from secrets/');
+	assert(!/command:|image:|build:|entrypoint:/.test(overlay), "and nothing else: the matrix stays the image's");
+	assertEquals(
+		[...overlay.matchAll(/\b[A-Z][A-Z0-9_]+\b/g)].map((match) => match[0]).filter((name) => KEY_VARIABLE.test(name)),
+		[],
+		'no provider-key variable in the overlay',
+	);
 	const compose = await Deno.readTextFile('docker-compose.yml');
-	for (
-		const line of [
-			'# TTK_MODEL_PROVIDERS_FILE: /run/secrets/ttk_model_providers',
-			'# - ttk_model_providers',
-			'# ttk_model_providers:',
-			'#   file: ./secrets/ttk_model_providers.json',
-		]
-	) {
-		assert(compose.includes(line), `docker-compose.yml keeps the commented opt-in line ${line}`);
-	}
 	const active = compose.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n');
 	assert(!/TTK_MODEL_PROVIDERS|ttk_model_providers/.test(active), 'nothing of D-143 is active in the default file');
 	assert(!/command:/.test(active), 'the default compose file ships no command: override — the CMD above is the matrix');
@@ -415,7 +415,7 @@ Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated 
 		for (const match of activeText(text).matchAll(/^\s+- ttk-sandbox-token:(\S+)$/gm)) {
 			assert(file === 'docker-compose.yml', `${file} mounts the token volume (${match[1]})`);
 		}
-		for (const service of ['agent-runner']) {
+		for (const service of ['agent-runner', 'a2a-peer']) {
 			assert(!(serviceBlock(text, service) ?? '').includes('ttk-sandbox-token'), `${file}: ${service} never mounts it`);
 		}
 	}
@@ -434,6 +434,55 @@ Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated 
 	}
 	assert(overlay.includes('  ttk_sandbox_token:\n    file: ./secrets/ttk_sandbox_token'), 'from secrets/');
 	assert(!/command:|image:|build:/.test(activeText(overlay)), "and nothing else: the matrices stay the images'");
+});
+
+/**
+ * The default stack's A2A peer (docs/design/stack-tooling-and-secrets.md): a second gateway from the same image that
+ * publishes nothing, authenticates with a key file holding only the hash of the token the gateway presents, is told
+ * the URL the gateway dials (the A2A client refuses a card that names another origin), and keeps the gateway's
+ * Chromium sandbox settings. The gateway names it in its peers file and never waits on it.
+ */
+Deno.test('stack: the A2A peer publishes nothing, holds only its own key file, and keeps the Chromium sandbox', async () => {
+	const compose = await Deno.readTextFile('docker-compose.yml');
+	const peer = serviceBlock(compose, 'a2a-peer');
+	const gateway = serviceBlock(compose, 'tykotech-mcp');
+	assert(peer !== null && gateway !== null, 'both services are in the base file');
+	for (
+		const line of [
+			'    image: tykotech-mcp:0.2.0',
+			"    user: '1993:1993'",
+			'      - ttk-peer-data:/data',
+			"    shm_size: '1gb'",
+			'      - seccomp:./docker/seccomp-chromium.json',
+			'      TTK_PUBLIC_URL: http://a2a-peer:8787',
+			'      TTK_API_KEYS_FILE: /run/secrets/ttk_peer_api_keys',
+			'    secrets:\n      - ttk_peer_api_keys\n',
+		]
+	) {
+		assert(peer.includes(line), `the peer carries ${JSON.stringify(line)}`);
+	}
+	assert(
+		!/^\s+(ports|expose|command|entrypoint|privileged|cap_add|network_mode|depends_on):/m.test(peer),
+		'nothing that widens it, and the image CMD is its matrix',
+	);
+	assert(!/^\s+build:/m.test(peer), "the gateway service's build is the peer's image: one build, not two");
+	assert(!peer.includes('no-new-privileges'), 'no-new-privileges would block the Chromium sandbox helper');
+	assert(
+		!/TTK_CHROMIUM_NO_SANDBOX|TTK_DB_KEY_FILE|TTK_ADMIN_USER_FILE|ttk_db_key|ttk_admin_user|ttk_api_keys|ttk-sandbox/
+			.test(peer),
+		"none of the gateway's secrets or the sandbox's token",
+	);
+	for (
+		const line of [
+			'      TTK_AGENT_PEERS_FILE: /run/secrets/ttk_agent_peers',
+			'      - ttk_agent_peers',
+			'      - ttk_peer_token',
+		]
+	) {
+		assert(gateway.includes(line), `the gateway carries ${JSON.stringify(line)}`);
+	}
+	assert(!gateway.includes('a2a-peer'), 'the gateway does not wait on the peer');
+	assert(!(serviceBlock(compose, 'sandbox') ?? '').includes('ttk_peer'), 'the sandbox never sees the peer token');
 });
 
 Deno.test('D-137 (AC6, F14): the bundled HEALTHCHECK strips OTEL_DENO before it runs deno', async () => {

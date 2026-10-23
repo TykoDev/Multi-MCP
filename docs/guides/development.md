@@ -7,7 +7,7 @@ Needs Deno 2.9.x and a Chromium-family browser (Chrome, Edge or Chromium, found 
 
 ```sh
 deno install --frozen        # dependencies from the lockfile
-deno task setup              # secrets/ and .env
+deno task setup              # every file in secrets/, and .env (secrets/README.md)
 deno task build:web          # web app bundle
 deno task ok                 # fmt, lint, types, gates, unit tests
 export TTK_DATA_DIR=data TTK_DB_KEY_FILE=secrets/ttk_db_key TTK_API_KEYS_FILE=secrets/ttk_api_keys.json
@@ -23,6 +23,7 @@ PowerShell:
 - With no credentials at all, loopback requests run anonymously with `TTK_ANON_SCOPES`.
 - `deno task stdio` runs MCP over stdio with the same grants and the same `ttk.db`.
 - The web UI is served with `Cache-Control: no-cache`: rebuild (`build:web`) and reload; no restart needed.
+- `deno task` lists every task with its description.
 
 ## Layout
 
@@ -81,7 +82,7 @@ Pick the lowest tier that proves the change.
 | Compile   | `deno task test:compile`                                                       | —                                          | The compiled binary and its baked permissions               |
 | Container | `deno task test:container`, `test:container:slim`                              | Docker, built image                        | The image from outside: tools, sandbox flags, allowlist     |
 | Sandbox   | `deno task test:sandbox`                                                       | Docker on Linux                            | Cages under production settings                             |
-| Compose   | `deno task test:compose --tag <t>`                                             | `tykotech-mcp:<t>`, `tykotech-sandbox:<t>` | The default Compose stack end to end                        |
+| Compose   | `deno task test:compose --tag <t>`                                             | `tykotech-mcp:<t>`, `tykotech-sandbox:<t>` | The default Compose stack (gateway, sandbox, A2A peer)      |
 | Agents    | `deno task test:agents`, `test:agents:runner`, `test:agents:compose --tag <t>` | Docker for the last two                    | ACP and A2A against fixtures; the runner image              |
 | Coverage  | `deno task cov`                                                                | As browser                                 | Line coverage ≥80% of `packages/mcp` and `packages/gateway` |
 

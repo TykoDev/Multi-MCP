@@ -97,6 +97,29 @@ export const LEGACY_DEFAULT_SCOPES: readonly Scope[] = [
 export const ADMIN_SCOPES: readonly Scope[] = [...DEFAULT_SCOPES, 'admin'];
 
 /**
+ * What `deno task setup`'s API key holds unless `--scopes` says otherwise (docs/design/stack-tooling-and-secrets.md):
+ * the default grant plus every capability the default compose stack runs — the file share and memory writes, the
+ * coding sandbox, agents, the built-in model agent and A2UI — so the key the quick start prints reaches all of it.
+ * Each is still an explicit grant, named here by the operator's own command: nothing reaches a principal that did not
+ * come through `setup`. `task`, `evaluate`, `admin`, `metrics:read` and `network:read` are not in it. The administrator
+ * `setup` creates holds these plus `admin`.
+ */
+export const STACK_SCOPES: readonly Scope[] = [
+	...DEFAULT_SCOPES,
+	'files:write',
+	'sandbox:execute',
+	'agent:invoke',
+	'model:invoke',
+	'a2ui:publish',
+];
+
+/**
+ * What the bundled A2A peer's key holds (`a2a-peer` in docker-compose.yml): A2A itself and the tools a delegated tool
+ * task runs, nothing that manages the peer or spends its operator's model.
+ */
+export const A2A_PEER_SCOPES: readonly Scope[] = ['agent:invoke', 'mcp:invoke'];
+
+/**
  * Scopes that must be named to be held. Never granted by a default, on any
  * path, for any principal kind.
  *

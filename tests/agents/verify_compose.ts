@@ -18,6 +18,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { assert, assertEquals } from '@std/assert';
 import { resolve } from '@std/path';
+import { encodeBase64Url } from '@std/encoding/base64url';
 import {
 	assertBuilt,
 	assertIsolated,
@@ -26,6 +27,7 @@ import {
 	docker as dockerCli,
 	dockerExecutable,
 	proofTag,
+	writeStackFiles,
 	writeSyntheticAdmin,
 } from '../support/compose_proof.ts';
 
@@ -77,6 +79,10 @@ await Deno.writeTextFile(
 		mcp_servers: [{ name: 'tykotech', url: 'http://tykotech-mcp:8787/mcp' }],
 	}]),
 );
+// The base file's database key (D-154) and the default stack's placeholders and A2A peer pair: every secret the
+// combined files declare comes from this folder.
+await Deno.writeTextFile(`${scratch}/db-key`, `${encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)))}\n`);
+const stack = await writeStackFiles(scratch);
 const safePath = (path: string): string => JSON.stringify(`${scratch}/${path}`.replaceAll('\\', '/'));
 await Deno.writeTextFile(
 	`${scratch}/compose.yml`,
@@ -88,6 +94,8 @@ await Deno.writeTextFile(
       TTK_PUBLIC_URL: http://127.0.0.1:8787
   sandbox:
     image: ${images.sandbox}
+  a2a-peer:
+    image: ${images['tykotech-mcp']}
   agent-runner:
     image: ${images['agent-runner']}
     init: true
@@ -102,7 +110,9 @@ secrets:
     file: ${safePath('bridge-token')}
   ttk_agent_commands:
     file: ${safePath('commands.json')}
-`,
+  ttk_db_key:
+    file: ${safePath('db-key')}
+${stack.secrets}`,
 );
 const compose = [
 	'compose',
@@ -124,8 +134,16 @@ try {
 	// Before anything is built or started: the tree's images by tag, and every secret file from the scratch folder.
 	assertIsolated(config as ComposeConfig, {
 		scratch,
-		images,
-		required: ['ttk_admin_user', 'ttk_api_keys', 'ttk_sandbox_token', 'ttk_agent_bridge_token', 'ttk_agent_commands'],
+		images: { ...images, 'a2a-peer': images['tykotech-mcp'] },
+		required: [
+			'ttk_admin_user',
+			'ttk_api_keys',
+			'ttk_db_key',
+			'ttk_sandbox_token',
+			'ttk_agent_bridge_token',
+			'ttk_agent_commands',
+			...stack.names,
+		],
 	});
 	assert(!config.services.sandbox.ports && !config.services['agent-runner'].ports);
 	assert(config.networks['agents-private'].internal && config.networks['sandbox-private'].internal);

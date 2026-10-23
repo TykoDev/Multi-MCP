@@ -9,11 +9,11 @@
 
 ## HTTP
 
-`deno task setup` printed one API key. Mint one per client with the scopes it needs, then append the record to
-`secrets/ttk_api_keys.json` (reloaded live):
+`deno task setup` printed one API key, `client`, holding every scope the stack's features need. Mint one per client with
+the scopes it needs; `--save` adds it to `secrets/ttk_api_keys.json`, which the gateway reloads live:
 
 ```sh
-deno task doctor --new-key my-client --scopes mcp:invoke,view:watch
+deno task doctor --new-key my-client --scopes mcp:invoke,view:watch --save
 ```
 
 **Claude Code**
@@ -79,9 +79,9 @@ stdio callers hold `TTK_ANON_SCOPES` (default `mcp:invoke,view:watch,view:contro
 | `task`, `evaluate`, `admin`    | `browser_run_task`, `browser_evaluate`, `browser_close_all` |
 
 Not on stdio: live view, MCP Apps, event streams, recording, signed links, `browser_request_human`. The `stdio` task
-grants loopback network only, so `browser_head` is withheld and only local model providers are reachable. If you
-`chgrp`ed `secrets/` for Docker on Linux, stdio may be unable to read them: see
-[secrets/README.md](../../secrets/README.md#ownership).
+grants loopback network only, so `browser_head` is withheld and only local model providers are reachable. stdio reads
+the files in `secrets/` as you; if they were once `chown`ed to the containers' uid, see
+[secrets/README.md](../../secrets/README.md#permissions).
 
 ## First calls
 

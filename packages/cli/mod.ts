@@ -25,6 +25,25 @@ export { OTEL_GATE_ENV_NAMES } from './otel_gate.ts';
 
 export const VERSION = '0.2.0';
 
+/** The files `setup` manages, by the name `--only` takes, in the order it writes them. */
+export const SETUP_UNITS = [
+	'db-key',
+	'admin',
+	'api-key',
+	'peer',
+	'browser-secrets',
+	'git-remotes',
+	'sandbox-token',
+	'agent-token',
+	'agent-commands',
+	'env',
+] as const;
+
+/** A `setup` unit. */
+export type SetupUnit = (typeof SETUP_UNITS)[number];
+
+const SETUP_UNITS_TEXT = SETUP_UNITS.join(', ');
+
 const USAGE = `tykotech-mcp ${VERSION}
 
 USAGE:
@@ -34,7 +53,7 @@ COMMANDS:
   serve            Run the HTTP gateway (MCP over Streamable HTTP + live view)
   stdio            Run MCP over stdio for a local client
   acp              Run Agent Client Protocol over stdio through the configured agent bridge
-  setup            Create missing secrets (API key, admin, database key) and .env; --force replaces them
+  setup            Create every missing file in secrets/ the compose files mount, and .env; --force replaces
   seed             Copy the providers file and browser secrets into the database; --force replaces
   doctor           Diagnose the environment; generate an API key
   healthcheck      Probe a running server on loopback; exit 0 when healthy
@@ -45,9 +64,12 @@ SERVE OPTIONS:
   --port <n>       Bind port           (default 8787, env TTK_PORT)
 
 SETUP OPTIONS:
-  --force, -Force      Replace files that exist (a new database key makes stored secrets unreadable)
+  --only <list>        Only these files: ${SETUP_UNITS_TEXT}
+  --force, -Force      Replace the generated files that exist (with --only: exactly the named ones, your own
+                       files included). A new database key makes every stored secret unreadable.
   --admin <user>       Administrator username (default admin)
-  --key-id <id>        API key id (default client); --scopes as for doctor --new-key
+  --key-id <id>        API key id (default client)
+  --scopes <list>      The API key's scopes (default: every one the stack's features need; see secrets/README.md)
 
 SEED OPTIONS:
   --force, -Force      Replace what the database holds with the sources (default: only an empty, never-seeded one)
@@ -55,6 +77,7 @@ SEED OPTIONS:
 
 DOCTOR OPTIONS:
   --new-key <id>       Print a new API key and its hashed record
+  --save               With --new-key: also add the record to secrets/ttk_api_keys.json (same id: replaced)
   --scopes <list>      Comma-separated scopes for --new-key, --new-admin or --grant
                        (--new-key default: the default grant; --new-admin always adds admin)
   --new-key-set <pfx>  Mint one single-scope key per scope in the vocabulary (ids <pfx>-<scope>)
@@ -87,7 +110,7 @@ function parseCli(argv: readonly string[]) {
 			'admin',
 			'key-id',
 		],
-		boolean: ['help', 'force', 'new-db-key'],
+		boolean: ['help', 'force', 'new-db-key', 'save'],
 		alias: { h: 'help' },
 	});
 }
@@ -421,6 +444,7 @@ async function runDoctor(
 		'data-dir'?: string;
 		force?: boolean;
 		'new-db-key'?: boolean;
+		save?: boolean;
 	},
 ): Promise<number> {
 	const { DEFAULT_SCOPES, ENV_NAMES, generateAdminUser, generateApiKey, loadConfig, processEnv, SCOPES } = await import(
@@ -537,8 +561,32 @@ async function runDoctor(
 		const { key, record } = await generateApiKey(keyId, requested);
 		console.log('New API key (shown once — store it now):\n');
 		console.log(`  ${key}\n`);
-		console.log('Add this record to TTK_API_KEYS (or the file TTK_API_KEYS_FILE points at):\n');
-		console.log(JSON.stringify([record], null, 2));
+		if (args.save !== true) {
+			console.log(
+				'Add this record to TTK_API_KEYS (or the file TTK_API_KEYS_FILE points at), or run again with --save:\n',
+			);
+			console.log(JSON.stringify([record], null, 2));
+			return 0;
+		}
+		// The record list `setup` wrote, with this id's record replaced or appended — rewritten in place, not replaced:
+		// the compose secret is a bind mount of this very file, so a running gateway's key-file watcher sees the new
+		// record without a restart, where a new file would leave the container reading the old one until recreated.
+		const records = await readKeyRecords(API_KEYS_FILE);
+		if (records === null) {
+			console.error(`${API_KEYS_FILE} is not a JSON list of key records; fix it or run setup --only api-key --force`);
+			return 1;
+		}
+		const kept = records.filter((entry) => (entry as { id?: unknown } | null)?.id !== keyId);
+		const text = `${JSON.stringify([...kept, record], null, 2)}\n`;
+		if (await exists(API_KEYS_FILE)) {
+			await Deno.writeTextFile(API_KEYS_FILE, text);
+			await repairSecretMode(API_KEYS_FILE);
+		} else await writeSecretFile(API_KEYS_FILE, text, { force: false });
+		console.log(
+			`${kept.length < records.length ? 'Replaced' : 'Added'} key ${keyId} in ${API_KEYS_FILE} (${
+				requested.join(', ')
+			}).`,
+		);
 		return 0;
 	}
 
@@ -639,18 +687,92 @@ async function runDoctor(
 	return ok ? 0 : 1;
 }
 
-/** D-154: where `setup` and `doctor` write the deployment's secrets, as `docker-compose.yml` mounts them. */
+/** D-154: where `setup` and `doctor` write the deployment's files, as the compose files mount them. */
 const SECRETS_DIR = 'secrets';
 const DB_KEY_FILE = `${SECRETS_DIR}/ttk_db_key`;
 const ADMIN_USER_FILE = `${SECRETS_DIR}/ttk_admin_user.json`;
 const API_KEYS_FILE = `${SECRETS_DIR}/ttk_api_keys.json`;
+const PEERS_FILE = `${SECRETS_DIR}/ttk_agent_peers.json`;
+const PEER_TOKEN_FILE = `${SECRETS_DIR}/ttk_peer_token`;
+const PEER_API_KEYS_FILE = `${SECRETS_DIR}/ttk_peer_api_keys.json`;
+const BROWSER_SECRETS_FILE = `${SECRETS_DIR}/ttk_secrets.json`;
+const GIT_REMOTES_FILE = `${SECRETS_DIR}/ttk_git_remotes`;
+const SANDBOX_TOKEN_FILE = `${SECRETS_DIR}/ttk_sandbox_token`;
+const AGENT_TOKEN_FILE = `${SECRETS_DIR}/ttk_agent_bridge_token`;
+const AGENT_COMMANDS_FILE = `${SECRETS_DIR}/ttk_agent_commands.json`;
 const ENV_FILE = '.env';
 
-/** The `.env` `setup` writes: the two Compose settings an operator changes first, at their loopback defaults. */
-const ENV_TEMPLATE = `# TykoTech-MCP: docker compose settings. Created by \`setup\`; never replaced without --force.
-# Publish beyond this machine: TTK_BIND=0.0.0.0 and TTK_PUBLIC_URL=http://<this host's address>:8787
+/**
+ * The modes of `secrets/` and of every file `setup` and `doctor` write in it. A compose file secret is a bind mount
+ * that keeps the host's owner and mode — Compose ignores `uid`, `gid` and `mode` for file secrets — and the containers
+ * run as uid 1993 (slim: 1000; rootless Docker and Docker Desktop map ids again), so a `0600` file is unreadable in
+ * them and the gateway restarts forever. The directory's `0700` is what keeps the files private on the host: no other
+ * account can open anything inside it, whatever a file's own mode. Inside a container the mount is the file alone, and
+ * `0644` lets the service's uid read it; every process there runs as that uid, which the old `chgrp 1993` + `0440`
+ * granted all the same.
+ */
+const SECRETS_DIR_MODE = 0o700;
+const SECRET_FILE_MODE = 0o644;
+
+/** The A2A peer the default stack runs (`a2a-peer` in docker-compose.yml): its URL is its own `TTK_PUBLIC_URL`. */
+const BUNDLED_PEER = { id: 'peer', url: 'http://a2a-peer:8787', token_file: '/run/secrets/ttk_peer_token' } as const;
+
+/**
+ * The ACP runner's commands file `setup` starts `docker-compose.agents.yml` with: one agent at the path the runner
+ * image reserves, offered the gateway's MCP endpoint (the delegated token is matched against `TTK_AGENT_MCP_URL`). The
+ * runner refuses to start until that executable exists — install your agent in an image derived from
+ * docker/Dockerfile.agent-runner. No credential belongs here: mount those as files and name them in `env` as `*_FILE`.
+ */
+const AGENT_COMMANDS_TEMPLATE = [{
+	id: 'default',
+	executable: '/opt/agents/agent',
+	args: [],
+	cwd: '/agent-workspace',
+	env: {},
+	mcp_servers: [{ name: 'tykotech', url: 'http://tykotech-mcp:8787/mcp' }],
+}];
+
+/**
+ * The `.env` `setup` writes: every value the compose files interpolate, at its default. `.env.example` is this text
+ * byte for byte (`tests/unit/setup_test.ts` holds the two equal), so there is one template, not two.
+ */
+export const ENV_TEMPLATE =
+	`# Multi-MCP: Docker Compose settings. Compose reads this file for interpolation only; no container sees it.
+# \`deno task setup\` writes .env from this template (.env.example is the same text) and never replaces it without
+# --force. Change a value, then \`docker compose up -d\`.
+
+# Host interface Docker publishes port 8787 on. 0.0.0.0 = every interface (the stack has credentials, so it may).
 TTK_BIND=127.0.0.1
+
+# The address clients use; opens the Host and Origin allowlists to it. LAN access: http://<host address>:8787
 TTK_PUBLIC_URL=http://127.0.0.1:8787
+
+# Allowlist overrides (comma-separated hostnames). Empty = derived from TTK_PUBLIC_URL. A value REPLACES the derived
+# list, so include the public host. Set both or neither.
+TTK_ALLOWED_HOSTS=
+TTK_ALLOWED_ORIGINS=
+
+# Navigation allowlist of the browsers (gateway and peer), followed by browser_head too. Empty = unrestricted.
+# Example: example.com,docs.example.com
+TTK_ALLOWED_DOMAINS=
+
+# Memory limit of the gateway container (the server and every browser session it runs), and the server's heap in MiB.
+TTK_GATEWAY_MEMORY=1536m
+TTK_GATEWAY_HEAP_MB=1024
+# The same for the bundled A2A peer.
+TTK_PEER_MEMORY=1g
+TTK_PEER_HEAP_MB=512
+
+# docker-compose.agents.yml: the runner image holding your ACP agent, and the agent id the gateway uses.
+TTK_AGENT_RUNNER_IMAGE=tykotech-agent-runner:0.2.0
+TTK_AGENT_DEFAULT=default
+
+# docker-compose.sandbox-docker.yml: the group owning the Docker socket (\`stat -c %g /var/run/docker.sock\`; 0 on
+# Docker Desktop), the workspace image, and volume names (two deployments on one daemon need different names).
+TTK_SANDBOX_DOCKER_GID=0
+TTK_SANDBOX_WORKSPACE_IMAGE=tykotech-sandbox-workspace:0.2.0
+TTK_SANDBOX_DOCKER_VOLUME=ttk-code
+TTK_SANDBOX_DOCKER_SOCK_VOLUME=ttk-sandbox-sock
 `;
 
 /** Whether `path` exists (a stat needs only the directory's search right, so a file another uid owns still counts). */
@@ -665,9 +787,25 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * D-154: writes a secret file `0600`, never over an existing one unless `force` — the owner's rule for every seed
- * destination. A forced write removes the old file first, so one left `0400` (or owned by the container's uid) is
- * replaced rather than refused.
+ * Creates `secrets/` if needed and makes it `0700` (see {@linkcode SECRETS_DIR_MODE}); `false` when the mode could not
+ * be set (a directory another account owns), which `setup` reports. Windows has no POSIX modes.
+ */
+async function ensureSecretsDir(dir = SECRETS_DIR): Promise<boolean> {
+	await Deno.mkdir(dir, { recursive: true });
+	if (Deno.build.os === 'windows') return true;
+	try {
+		await Deno.chmod(dir, SECRETS_DIR_MODE);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * D-154: writes a file in `secrets/` with {@linkcode SECRET_FILE_MODE}, never over an existing one unless `force` —
+ * the owner's rule for every seed destination. A forced write removes the old file first, so one left `0400` (or owned
+ * by the container's uid) is replaced rather than refused. The mode is set after the write because the one passed to
+ * the create is masked by the umask.
  */
 async function writeSecretFile(path: string, text: string, options: { force: boolean }): Promise<'written' | 'exists'> {
 	if (await exists(path)) {
@@ -675,58 +813,165 @@ async function writeSecretFile(path: string, text: string, options: { force: boo
 		await Deno.remove(path);
 	}
 	const slash = path.lastIndexOf('/');
-	if (slash > 0) await Deno.mkdir(path.slice(0, slash), { recursive: true });
-	await Deno.writeTextFile(path, text, { createNew: true, mode: 0o600 });
+	if (slash > 0) await ensureSecretsDir(path.slice(0, slash));
+	await Deno.writeTextFile(path, text, { createNew: true, mode: SECRET_FILE_MODE });
+	if (Deno.build.os !== 'windows') await Deno.chmod(path, SECRET_FILE_MODE);
 	return 'written';
 }
 
 /**
- * `setup` (D-154): creates what a first `docker compose up` needs — the database key, an administrator account, an
- * API key and `.env` — skipping each file that exists unless `--force`. The generated password and API key are
- * printed once and stored only as hashes.
+ * Gives a kept file in `secrets/` {@linkcode SECRET_FILE_MODE}: a checkout set up before this mode (`0600`, which the
+ * containers cannot read) is repaired by running `setup` again. `'repaired'` when the mode changed, `'unchanged'` when
+ * it was already right, `'foreign'` when this account may not change it (a file handed over with `chown 1993`).
  */
-async function runSetup(
-	args: { force?: boolean; admin?: string; 'key-id'?: string; scopes?: string },
+async function repairSecretMode(path: string): Promise<'repaired' | 'unchanged' | 'foreign'> {
+	if (Deno.build.os === 'windows') return 'unchanged';
+	const info = await Deno.lstat(path);
+	if (!info.isFile || info.mode === null || (info.mode & 0o777) === SECRET_FILE_MODE) return 'unchanged';
+	try {
+		await Deno.chmod(path, SECRET_FILE_MODE);
+		return 'repaired';
+	} catch {
+		return 'foreign';
+	}
+}
+
+/** The record list in an API keys file: `[]` when the file is absent, `null` when it holds anything but a list. */
+async function readKeyRecords(path: string): Promise<unknown[] | null> {
+	let text: string;
+	try {
+		text = await Deno.readTextFile(path);
+	} catch (cause) {
+		if (cause instanceof Deno.errors.NotFound) return [];
+		throw cause;
+	}
+	try {
+		const parsed: unknown = JSON.parse(text);
+		return Array.isArray(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+/** A bearer for a private service: 32 random bytes as 64 hex characters (the services' floor is 32 characters). */
+function serviceToken(): string {
+	return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** The `--only` list, validated; `null` (all units) when absent, `undefined` when it names an unknown one. */
+export function setupUnits(only: string | undefined): SetupUnit[] | null | undefined {
+	if (only === undefined) return null;
+	const named = only.split(',').map((unit) => unit.trim()).filter((unit) => unit !== '');
+	if (named.length === 0 || named.some((unit) => !(SETUP_UNITS as readonly string[]).includes(unit))) return undefined;
+	return named as SetupUnit[];
+}
+
+/**
+ * `setup` (D-154): creates every file a shipped compose file mounts — the database key, the administrator, the
+ * `client` API key, the A2A peer's token pair and list, the browser-secrets and git-remotes placeholders, the overlay
+ * tokens and the ACP commands template — and `.env`, skipping each file that exists. `--force` replaces the generated
+ * ones; files you fill in yourself (browser secrets, git remotes, agent commands) are replaced only when `--only`
+ * names them. Generated passwords and keys are printed once and stored only as hashes; the service tokens are stored
+ * as they are (each side must present one), in `secrets/` like every other file. Kept files get their modes repaired.
+ */
+export async function runSetup(
+	args: { force?: boolean; admin?: string; 'key-id'?: string; scopes?: string; only?: string },
+	root = '.',
 ): Promise<number> {
-	const { DEFAULT_SCOPES, generateAdminUser, generateApiKey, generateDbKey, SCOPES } = await import(
-		'@tykotech/gateway'
-	);
-	const { ADMIN_SCOPES } = await import('@tykotech/mcp');
-	const force = args.force === true;
+	const { generateAdminUser, generateApiKey, generateDbKey, SCOPES } = await import('@tykotech/gateway');
+	const { A2A_PEER_SCOPES, STACK_SCOPES } = await import('@tykotech/mcp');
+	type Scopes = Parameters<typeof generateApiKey>[1];
+	const units = setupUnits(args.only);
+	if (units === undefined) {
+		console.error(`--only takes a comma-separated list of: ${SETUP_UNITS.join(', ')}`);
+		return 1;
+	}
 	const scopes = args.scopes === undefined
-		? [...DEFAULT_SCOPES]
+		? [...STACK_SCOPES]
 		: args.scopes.split(',').map((scope) => scope.trim()).filter((scope) => scope !== '');
 	const unknown = scopes.filter((scope) => !(SCOPES as readonly string[]).includes(scope));
 	if (unknown.length > 0) {
 		console.error(`unknown scopes: ${unknown.join(', ')}\nvalid scopes: ${SCOPES.join(', ')}`);
 		return 1;
 	}
+	const selected = (unit: SetupUnit): boolean => units === null || units.includes(unit);
+	/** For a selected unit: `--force` replaces a generated file, and one you fill in yourself only when `--only` names it. */
+	const replace = (yours = false): boolean => args.force === true && (!yours || units !== null);
+
+	/** Where a file of the checkout is when `root` is not the working directory (the unit test's scratch folder). */
+	const at = (path: string): string => root === '.' ? path : `${root}/${path}`;
 	const report: string[] = [];
 	const once: string[] = [];
-	const mark = (path: string, outcome: 'written' | 'exists'): void => {
-		report.push(`  ${outcome === 'written' ? 'created' : 'kept   '}  ${path}`);
+	const problems: string[] = [];
+	const mark = async (path: string, outcome: 'written' | 'exists'): Promise<void> => {
+		if (outcome === 'written') {
+			report.push(`  created   ${path}`);
+			return;
+		}
+		const mode = path.startsWith(`${SECRETS_DIR}/`) ? await repairSecretMode(at(path)) : 'unchanged';
+		report.push(`  ${mode === 'repaired' ? 'repaired' : 'kept    '}  ${path}`);
+		if (mode === 'foreign') {
+			problems.push(`${path} belongs to another account, so its mode stays; the containers may not read it`);
+		}
+	};
+	/** One file of a unit: written unless it exists and is not being replaced. */
+	const file = async (unit: SetupUnit, path: string, make: () => Promise<string> | string, yours = false) => {
+		if (!selected(unit)) return;
+		const force = replace(yours);
+		if (!force && await exists(at(path))) return await mark(path, 'exists');
+		await mark(path, await writeSecretFile(at(path), await make(), { force }));
 	};
 
-	mark(DB_KEY_FILE, await writeSecretFile(DB_KEY_FILE, `${generateDbKey()}\n`, { force }));
+	if (!await ensureSecretsDir(at(SECRETS_DIR))) {
+		problems.push(`${SECRETS_DIR}/ is not yours, so it could not be made 0700; its files are readable to others`);
+	}
 
-	if (force || !await exists(ADMIN_USER_FILE)) {
-		const { record, password } = await generateAdminUser(args.admin ?? 'admin', undefined, [...ADMIN_SCOPES]);
-		mark(ADMIN_USER_FILE, await writeSecretFile(ADMIN_USER_FILE, `${JSON.stringify(record, null, 2)}\n`, { force }));
+	await file('db-key', DB_KEY_FILE, () => `${generateDbKey()}\n`);
+	await file('admin', ADMIN_USER_FILE, async () => {
+		const { record, password } = await generateAdminUser(args.admin ?? 'admin', undefined, [...STACK_SCOPES, 'admin']);
 		once.push(`  admin user  ${record.username}`, `  password    ${password}`);
-	} else mark(ADMIN_USER_FILE, 'exists');
-
-	if (force || !await exists(API_KEYS_FILE)) {
+		return `${JSON.stringify(record, null, 2)}\n`;
+	});
+	await file('api-key', API_KEYS_FILE, async () => {
 		const id = args['key-id'] ?? 'client';
-		const { key, record } = await generateApiKey(id, scopes as typeof DEFAULT_SCOPES);
-		mark(API_KEYS_FILE, await writeSecretFile(API_KEYS_FILE, `${JSON.stringify([record], null, 2)}\n`, { force }));
-		once.push(`  api key     ${key}  (id ${id}; ${scopes.join(', ')})`);
-	} else mark(API_KEYS_FILE, 'exists');
-
-	if (force || !await exists(ENV_FILE)) {
-		if (force && await exists(ENV_FILE)) await Deno.remove(ENV_FILE);
-		await Deno.writeTextFile(ENV_FILE, ENV_TEMPLATE, { createNew: true });
-		mark(ENV_FILE, 'written');
-	} else mark(ENV_FILE, 'exists');
+		const { key, record } = await generateApiKey(id, scopes as Scopes);
+		once.push(`  api key     ${key}`, `              id ${id}; ${scopes.join(', ')}`);
+		return `${JSON.stringify([record], null, 2)}\n`;
+	});
+	if (selected('peer')) {
+		// The token and its hash are one unit: a half that is missing or replaced makes the other useless, so both are
+		// written together. The list names the token by its path in the gateway container.
+		const force = replace();
+		if (force || !await exists(at(PEER_TOKEN_FILE)) || !await exists(at(PEER_API_KEYS_FILE))) {
+			const { key, record } = await generateApiKey('gateway', A2A_PEER_SCOPES);
+			await mark(PEER_TOKEN_FILE, await writeSecretFile(at(PEER_TOKEN_FILE), `${key}\n`, { force: true }));
+			await mark(
+				PEER_API_KEYS_FILE,
+				await writeSecretFile(at(PEER_API_KEYS_FILE), `${JSON.stringify([record], null, 2)}\n`, { force: true }),
+			);
+		} else {
+			await mark(PEER_TOKEN_FILE, 'exists');
+			await mark(PEER_API_KEYS_FILE, 'exists');
+		}
+		await file('peer', PEERS_FILE, () => `${JSON.stringify([BUNDLED_PEER], null, 2)}\n`);
+	}
+	await file('browser-secrets', BROWSER_SECRETS_FILE, () => '{}\n', true);
+	await file('git-remotes', GIT_REMOTES_FILE, () => '[]\n', true);
+	await file('sandbox-token', SANDBOX_TOKEN_FILE, () => `${serviceToken()}\n`);
+	await file('agent-token', AGENT_TOKEN_FILE, () => `${serviceToken()}\n`);
+	await file(
+		'agent-commands',
+		AGENT_COMMANDS_FILE,
+		() => `${JSON.stringify(AGENT_COMMANDS_TEMPLATE, null, 2)}\n`,
+		true,
+	);
+	if (selected('env')) {
+		if (replace() || !await exists(at(ENV_FILE))) {
+			if (await exists(at(ENV_FILE))) await Deno.remove(at(ENV_FILE));
+			await Deno.writeTextFile(at(ENV_FILE), ENV_TEMPLATE, { createNew: true });
+			await mark(ENV_FILE, 'written');
+		} else await mark(ENV_FILE, 'exists');
+	}
 
 	console.log('setup:');
 	for (const line of report) console.log(line);
@@ -734,20 +979,9 @@ async function runSetup(
 		console.log('\nShown once, stored only as hashes — save them now:');
 		for (const line of once) console.log(line);
 	}
-	// The containers run as 1993:1993, and a bind-mounted secret keeps its owner, group and mode. Group 1993 with 0440
-	// lets them read a file the operator still owns, so `dev`, `stdio` and `doctor` keep reading it too. `Deno.uid`
-	// needs a sys grant the task does not hold; unknown, the hint is printed.
-	let uid: number | null = null;
-	try {
-		uid = Deno.uid();
-	} catch {
-		uid = null;
-	}
-	if (Deno.build.os === 'linux' && uid !== 1993) {
-		console.log(
-			`\nFor docker compose: sudo chgrp 1993 ${SECRETS_DIR}/ttk_* && chmod 0440 ${SECRETS_DIR}/ttk_*`,
-		);
-	}
+	for (const line of problems) console.log(`\nwarning: ${line}`);
+	console.log('\nNext: docker compose up -d --build, then open the TTK_PUBLIC_URL in .env and sign in.');
+	console.log('Every file above is described in secrets/README.md.');
 	return 0;
 }
 

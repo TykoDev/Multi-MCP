@@ -39,23 +39,28 @@ A credential that names no scopes gets the four defaults. Tools outside a creden
 ## API keys
 
 ```sh
-deno task doctor --new-key ci-bot --scopes mcp:invoke,view:watch
+deno task doctor --new-key ci-bot --scopes mcp:invoke,view:watch --save
 ```
 
-Prints the raw key once and a record for `secrets/ttk_api_keys.json` (a JSON array):
+Prints the raw key once and, with `--save`, adds its record to `secrets/ttk_api_keys.json` (a JSON array; a record with
+the same id is replaced). Without `--save` the record is printed for you to add:
 
 ```json
 [{ "id": "ci-bot", "sha256": "3f1c…", "scopes": ["mcp:invoke", "view:watch"], "label": "CI" }]
 ```
 
 The file is watched: an edit applies within a second, and a removed key stops at once together with its sign-ins, tasks,
-streams and signed links. `doctor --new-key-set <prefix>` mints one single-scope key per scope.
+streams and signed links. Under Compose the file is a bind mount, so edit it in place (`--save` does): a replaced file
+reaches the container only when it is recreated (`docker compose up -d --force-recreate tykotech-mcp`).
+`doctor --new-key-set <prefix>` mints one single-scope key per scope. The `client` key `setup` writes holds the stack's
+scopes ([secrets/README.md](../../secrets/README.md#api-keys)).
 
 ## Accounts
 
-`setup` creates the first administrator (`secrets/ttk_admin_user.json`). With `TTK_DATA_DIR`, it is copied into
-`users.json` on first start; from then on manage accounts on the **Users** screen or `/api/v1/users`: create, change
-scopes, disable, reset passwords, issue account API keys (≤25 each), sign out everywhere.
+`setup` creates the first administrator (`secrets/ttk_admin_user.json`, the stack's scopes plus `admin`). With
+`TTK_DATA_DIR`, it is copied into `users.json` on first start; from then on manage accounts on the **Users** screen or
+`/api/v1/users`: create, change scopes, disable, reset passwords, issue account API keys (≤25 each), sign out
+everywhere.
 
 - Passwords: 8–256 characters, PBKDF2-SHA256.
 - The last enabled `admin` cannot be disabled, deleted or stripped of `admin`; nobody can disable or delete themselves.
@@ -101,10 +106,11 @@ Values the browser types without the model seeing them:
 { "github_password": { "value": "…", "domains": ["github.com"] } }
 ```
 
-Mount it as `TTK_SECRETS_FILE` (uncomment `ttk_secrets` in `docker-compose.yml`). With `TTK_DATA_DIR` it is sealed into
-`ttk.db` on first start; re-seed after edits with `ttk seed --force --only secrets` and restart. Use it as
-`<secret>github_password</secret>` in `browser_type`/`browser_fill`, or with `browser_fill_secret` (stricter: declared
-domains, fresh `state_token`, same-origin frames, audited). Values never appear in results, logs or errors.
+`docker-compose.yml` mounts it as `TTK_SECRETS_FILE` from `secrets/ttk_secrets.json` (`setup` writes `{}`); fill it in
+and restart the gateway. With `TTK_DATA_DIR` it is sealed into `ttk.db` on first start; re-seed after edits with
+`ttk seed --force --only secrets` and restart. Use it as `<secret>github_password</secret>` in
+`browser_type`/`browser_fill`, or with `browser_fill_secret` (stricter: declared domains, fresh `state_token`,
+same-origin frames, audited). Values never appear in results, logs or errors.
 
 ## Long-lived work follows its credential
 

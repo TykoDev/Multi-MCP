@@ -162,7 +162,7 @@ Deno.test('T4: tooling tasks are not held to it', () => {
 
 Deno.test('T4: every shipped task in deno.json denies FFI first', async () => {
 	const tasks = tasksOf(JSON.parse(await Deno.readTextFile('deno.json')));
-	for (const name of ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor', 'admin:generate', 'setup', 'seed']) {
+	for (const name of ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor', 'setup', 'seed']) {
 		const command = tasks[name];
 		assert(command !== undefined, `${name} exists`);
 		assert(deniesFfiFirst(command), `${name}: --deny-ffi must precede its first --allow-*`);
@@ -259,7 +259,7 @@ Deno.test('T5 (D-137): the copied list is the gate list itself', () => {
 Deno.test('T5 (D-137): every shipped task as it stood at S0 lacks the six names', async () => {
 	// Red before green: the S0 table, verbatim for these six tasks, granted only TTK_* and the platform names.
 	const table = tasksOf(JSON.parse(await Deno.readTextFile('deno.json')));
-	const shipped = ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor', 'admin:generate'];
+	const shipped = ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor'];
 	// The SEC-1W gate pre-step did not exist at S0 either; this test reads only the grant ("lacks") half of T5.
 	const asAtS0 = Object.fromEntries(
 		shipped.map((name) => [name, table[name]!.replace(`${OTEL_GATE_PRESTEP} && `, '').replace(`,${SIX}`, '')]),
@@ -333,7 +333,7 @@ Deno.test('T5 (D-137, SEC-1): a shipped substitution that runs deno without OTEL
 Deno.test('T5 (D-137, SEC-1): every grant substitution in the shipped deno.json is blanked', async () => {
 	const table = tasksOf(JSON.parse(await Deno.readTextFile('deno.json')));
 	let judged = 0;
-	for (const name of ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor', 'admin:generate']) {
+	for (const name of ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor']) {
 		const command = table[name]!;
 		assertEquals(substitutionOtelViolations(command), [], name);
 		judged += (command.match(/\$\(OTEL_DENO=false deno /g) ?? []).length;
@@ -382,7 +382,7 @@ Deno.test('T5 (D-137, SEC-1W): the shipped dev task starts with the gate pre-ste
 	assert(table.dev!.startsWith(`${OTEL_GATE_PRESTEP} && `), 'dev judges OTLP before the watcher starts');
 	assertEquals(watchGateViolations(table.dev!), []);
 	// Only dev runs a watcher; the other shipped tasks need no pre-step.
-	for (const name of ['stdio', 'acp', 'serve:cluster', 'doctor', 'admin:generate']) {
+	for (const name of ['stdio', 'acp', 'serve:cluster', 'doctor']) {
 		assertFalse(table[name]!.includes('--watch'), name);
 	}
 });
@@ -396,7 +396,7 @@ Deno.test('T6 (D-143): the copied name is the gateway’s', () => {
 
 Deno.test('T6 (D-143): the shipped deno.json passes', async () => {
 	const table = tasksOf(JSON.parse(await Deno.readTextFile('deno.json')));
-	for (const name of ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor', 'admin:generate']) {
+	for (const name of ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor']) {
 		assertEquals(modelProvidersGrantViolations(table[name]!), [], name);
 	}
 	assertEquals(only('T6', checkTasks(table)), []);
