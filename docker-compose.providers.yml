@@ -1,0 +1,19 @@
+# Overlay: seed the model providers from a file you write, instead of adding them in the web app
+# (System › Agents › Model providers › Add provider, the recommended way).
+#
+#   $EDITOR secrets/ttk_model_providers.json    # format: secrets/README.md#model-providers-file
+#   docker compose -f docker-compose.yml -f docker-compose.providers.yml up -d
+#
+# The file is copied into ttk.db once, each key sealed with secrets/ttk_db_key; afterwards the database is the source.
+# Re-copy an edited file: docker compose -f docker-compose.yml -f docker-compose.providers.yml run --rm --no-deps \
+#   tykotech-mcp ttk seed --force --only providers, then restart tykotech-mcp.
+services:
+  tykotech-mcp:
+    environment:
+      TTK_MODEL_PROVIDERS_FILE: /run/secrets/ttk_model_providers
+    secrets:
+      - ttk_model_providers
+secrets:
+  # { "version": 1, "providers": [{ "id", "kind", "base_url", "models", "api_key" }] }
+  ttk_model_providers:
+    file: ./secrets/ttk_model_providers.json

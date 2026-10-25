@@ -17,3 +17,5 @@ New here? Start with [QUICK-START.md](../QUICK-START.md).
 | [Development](guides/development.md)                         |                                                    | [Data model](reference/data-model.md)                       |
 |                                                              |                                                    | [Docker](reference/docker-reference.md)                     |
 |                                                              |                                                    | [SBOM](reference/sbom.md)                                   |
+
+Design notes: [the one-command stack, consolidated secrets and the task table](design/stack-tooling-and-secrets.md).

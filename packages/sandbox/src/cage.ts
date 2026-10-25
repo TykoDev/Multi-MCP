@@ -231,7 +231,13 @@ export async function probeProcPaths(bwrap: string): Promise<System['proc']> {
 		env: {},
 	}).output();
 	const said = new TextDecoder().decode(out.stderr).trim();
-	if (!out.success) throw new Error(said || `bubblewrap exited with ${out.code}`);
+	if (!out.success) {
+		// EACCES, not the EPERM a missing capability gives: the host's AppArmor, whose docker-default denies every mount.
+		const hint = /Permission denied/.test(said)
+			? ' (an AppArmor host runs the sandbox under docker/apparmor-sandbox, which deno task setup loads)'
+			: '';
+		throw new Error((said || `bubblewrap exited with ${out.code}`) + hint);
+	}
 	const present = new Set(new TextDecoder().decode(out.stdout).split('\n'));
 	return presentProcPaths((path) => present.has(path));
 }

@@ -5,6 +5,7 @@
  *
  *   docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges:true \
  *     --security-opt=seccomp=docker/seccomp-sandbox.json --security-opt=systempaths=unconfined \
+ *     --security-opt=apparmor=tykotech-sandbox \
  *     --tmpfs /work:uid=1993,gid=1993,mode=0700,size=512m -e TTK_SANDBOX_TEST_DIR=/work \
  *     --entrypoint deno <sandbox image> test --allow-run=/usr/bin/bwrap,... tests/sandbox/cages_test.ts
  *

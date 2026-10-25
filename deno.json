@@ -83,44 +83,157 @@
 		"sanitizeResources": true
 	},
 	"tasks": {
-		"ok": "deno task fmt:check && deno task lint && deno task check && deno task gate:tasks && deno task gate:lock && deno task test:unit",
-		"check": "deno check .",
-		"gate:tasks": "deno run --allow-read=deno.json scripts/check_tasks.ts",
-		"gate:lock": "deno install --frozen",
-		"lint": "deno lint",
-		"fmt": "deno fmt",
-		"fmt:check": "deno fmt --check",
-		"audit": "deno audit",
-		"cov:unit": "deno test --unstable-kv --coverage=coverage/unit --parallel --allow-net=127.0.0.1,localhost --allow-read=. --allow-write=tests/.scratch --allow-env=TTK_*,BUA_*,BROWSER_USE_*,TIMEOUT_*,ANTHROPIC_API_KEY packages/bus/ packages/cdp/ packages/browser/ packages/wire/ packages/sandbox/ packages/agents/ packages/mcp/ packages/gateway/ packages/web/ packages/cli/ tests/unit/ tests/agents/a2a_test.ts tests/agents/runtime_test.ts",
-		"cov:browser": "BUA_TEST_CHROMIUM=\"$(deno task -q resolve:chromium --pin || echo)\" TTK_FFMPEG=\"$(deno task -q tier:paths --ffmpeg-pin || echo)\" TTK_MODEL_CONFIG=\"$(deno task -q tier:paths --model-pin || echo)\" deno test --unstable-kv --coverage=coverage/browser \"--allow-net=$(deno task -q tier:paths --net || echo 127.0.0.1,localhost)\" \"--allow-run=$(deno task -q resolve:chromium --grant || echo ttk-tier/no-chromium-resolved),$(deno task -q tier:paths --ffmpeg)\" \"--allow-read=$(deno task -q tier:paths --read)\" \"--allow-write=$(deno task -q tier:paths --write)\" --allow-env tests/e2e/",
-		"cov": "deno task cov:unit && deno task cov:agents && deno task cov:browser && deno run -A scripts/coverage.ts coverage/unit coverage/agents coverage/browser",
-		"test:unit": "deno test --unstable-kv --parallel --allow-net=127.0.0.1,localhost --allow-read --allow-write --allow-env=TTK_*,BUA_*,BROWSER_USE_*,TIMEOUT_*,ANTHROPIC_API_KEY packages/bus/ packages/cdp/ packages/browser/ packages/wire/ packages/sandbox/ packages/agents/ packages/mcp/ packages/gateway/ packages/web/ packages/cli/ tests/unit/ tests/agents/a2a_test.ts tests/agents/runtime_test.ts",
-		"tier:paths": "deno run --allow-env=TMPDIR,TEMP,TMP,TTK_FFMPEG,TTK_MODEL_CONFIG,TTK_MODEL_BASE_URL,TTK_MODEL_API_KEY,TTK_MODEL_NAME,ANTHROPIC_API_KEY,PATH --allow-read scripts/tier_paths.ts",
-		"chromium:read": "deno run \"--allow-env=BUA_TEST_CHROMIUM,BUA_BROWSER_PATH,BROWSER_USE_BROWSER_PATH,TTK_BROWSER_PATH,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),USERPROFILE,HOME,PATH\" scripts/resolve_chromium.ts --read",
-		"resolve:chromium": "deno run \"--allow-read=$(deno task -q chromium:read || echo .)\" \"--allow-env=BUA_TEST_CHROMIUM,BUA_BROWSER_PATH,BROWSER_USE_BROWSER_PATH,TTK_BROWSER_PATH,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),USERPROFILE,HOME,PATH\" scripts/resolve_chromium.ts",
-		"test:browser": "BUA_TEST_CHROMIUM=\"$(deno task -q resolve:chromium --pin || echo)\" TTK_FFMPEG=\"$(deno task -q tier:paths --ffmpeg-pin || echo)\" TTK_MODEL_CONFIG=\"$(deno task -q tier:paths --model-pin || echo)\" deno test --unstable-kv \"--allow-net=$(deno task -q tier:paths --net || echo 127.0.0.1,localhost)\" \"--allow-run=$(deno task -q resolve:chromium --grant || echo ttk-tier/no-chromium-resolved),$(deno task -q tier:paths --ffmpeg)\" \"--allow-read=$(deno task -q tier:paths --read)\" \"--allow-write=$(deno task -q tier:paths --write)\" --allow-env=TTK_*,BUA_*,BROWSER_USE_*,TIMEOUT_*,ANTHROPIC_API_KEY,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,TMPDIR,TEMP,TMP tests/e2e/",
-		"test:stdio": "deno test --allow-run --allow-read=. --allow-env --allow-net=127.0.0.1 tests/stdio/",
-		"test:container": "deno run --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts --shape bundled",
-		"build:image": "docker build -t tykotech-mcp:0.2.0 .",
-		"build:image:slim": "docker build -f Dockerfile.slim -t tykotech-mcp:slim .",
-		"test:container:slim": "deno run --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts --shape slim",
-		"compile": "deno run -A scripts/compile.ts",
-		"test:compile": "deno test --allow-run --allow-read=. --allow-write=dist,tests/.scratch --allow-env --allow-net=127.0.0.1 tests/compile/",
-		"build:web": "rm -rf packages/web/dist && deno bundle --platform browser --minify --code-splitting --outdir packages/web/dist packages/web/src/app.ts && deno bundle --platform browser --minify --outdir packages/web/dist packages/web/src/styles/app.css && deno bundle --platform browser --minify --outdir packages/web/dist/screens packages/web/src/styles/screens/tools.css packages/web/src/styles/screens/resources.css packages/web/src/styles/screens/agents.css packages/web/src/styles/screens/users.css packages/web/src/styles/screens/system.css && deno run --allow-read=packages/web --allow-write=packages/web/dist scripts/build_icons.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/embed_live.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/embed_a2ui.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/embed_terminal.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/styles/embed.css && deno run --allow-read=packages/web --allow-write=packages/web/dist scripts/build_embed.ts",
-		"serve:cluster": "TTK_BROWSER_PATH=\"$(OTEL_DENO=false deno task -q resolve:chromium --pin --serve || echo)\" deno run --no-prompt --deny-ffi --unstable-kv --allow-net=127.0.0.1,localhost \"--allow-read=.,$(OTEL_DENO=false deno task -q tier:paths --write),$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved)\" \"--allow-write=$(OTEL_DENO=false deno task -q tier:paths --write),data\" \"--allow-run=$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved),$(OTEL_DENO=false deno task -q tier:paths --serve-ffmpeg || echo ttk-tier/no-ffmpeg-resolved)\" --allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts serve",
-		"dev": "deno run --no-prompt --deny-ffi --allow-env=TTK_OTEL_ENDPOINTS,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/gate.ts && TTK_BROWSER_PATH=\"$(OTEL_DENO=false deno task -q resolve:chromium --pin --serve || echo)\" deno run --watch --no-prompt --deny-ffi --allow-net=127.0.0.1 \"--allow-read=.,$(OTEL_DENO=false deno task -q tier:paths --write),$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved)\" \"--allow-write=$(OTEL_DENO=false deno task -q tier:paths --write),data\" \"--allow-run=$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved),$(OTEL_DENO=false deno task -q tier:paths --serve-ffmpeg || echo ttk-tier/no-ffmpeg-resolved)\" --allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts serve",
-		"stdio": "TTK_BROWSER_PATH=\"$(OTEL_DENO=false deno task -q resolve:chromium --pin --serve || echo)\" deno run --no-prompt --deny-ffi --allow-net=127.0.0.1 \"--allow-read=.,$(OTEL_DENO=false deno task -q tier:paths --write),$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved)\" \"--allow-write=$(OTEL_DENO=false deno task -q tier:paths --write),data\" \"--allow-run=$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved),$(OTEL_DENO=false deno task -q tier:paths --serve-ffmpeg || echo ttk-tier/no-ffmpeg-resolved)\" --allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts stdio",
-		"doctor": "deno run --deny-ffi \"--allow-read=.,$(OTEL_DENO=false deno task -q chromium:read || echo .)\" --allow-write=secrets \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts doctor",
-		"setup": "deno run --no-prompt --deny-ffi --allow-read=. --allow-write=secrets,.env \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts setup",
-		"seed": "deno run --no-prompt --deny-ffi --allow-read=. --allow-write=data,tests/.scratch \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts seed",
-		"admin:generate": "deno run --no-prompt --deny-ffi --allow-read=. --allow-write=secrets \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts doctor --new-admin admin",
-		"test:sandbox": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/sandbox/verify_sandbox.ts",
-		"resolve:docker": "deno run --deny-ffi --allow-read --allow-env=PATH scripts/resolve_docker.ts",
-		"test:agents": "deno test --deny-ffi \"--allow-run=$(deno run --deny-ffi scripts/agent_paths.ts)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=PATH tests/agents/",
-		"acp": "deno run --deny-ffi --allow-net=127.0.0.1,localhost --allow-read=. --allow-env=TTK_*,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts acp",
-		"test:compose": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/sandbox/verify_compose.ts",
-		"test:agents:runner": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/agents/verify_runner.ts",
-		"test:agents:compose": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/agents/verify_compose.ts",
-		"cov:agents": "deno test --coverage=coverage/agents --deny-ffi \"--allow-run=$(deno run --deny-ffi scripts/agent_paths.ts)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=PATH tests/agents/"
+		"setup": {
+			"description": "Create every missing file in secrets/ the compose files mount, and .env; prints the admin password and API key once; on an AppArmor host, installs the sandbox's AppArmor profile through sudo (--only, --force: see secrets/README.md)",
+			"command": "deno run --no-prompt --deny-ffi --allow-read=.,/etc/apparmor.d/tykotech-sandbox --allow-write=secrets,.env --allow-run=/usr/bin/aa-enabled,/usr/bin/aa-exec,/usr/bin/sudo \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts setup"
+		},
+		"doctor": {
+			"description": "Print the parsed configuration; --new-key <id> [--scopes] [--save], --new-admin, --new-db-key, --grant",
+			"command": "deno run --deny-ffi \"--allow-read=.,$(OTEL_DENO=false deno task -q chromium:read || echo .)\" --allow-write=secrets \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts doctor"
+		},
+		"seed": {
+			"description": "Copy the providers file and browser secrets into data/ttk.db (TTK_DATA_DIR=data); --force replaces",
+			"command": "deno run --no-prompt --deny-ffi --allow-read=. --allow-write=data,tests/.scratch \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts seed"
+		},
+		"dev": {
+			"description": "The HTTP gateway with file watching, loopback network and the host Chromium",
+			"command": "deno run --no-prompt --deny-ffi --allow-env=TTK_OTEL_ENDPOINTS,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/gate.ts && TTK_BROWSER_PATH=\"$(OTEL_DENO=false deno task -q resolve:chromium --pin --serve || echo)\" deno run --watch --no-prompt --deny-ffi --allow-net=127.0.0.1 \"--allow-read=.,$(OTEL_DENO=false deno task -q tier:paths --write),$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved)\" \"--allow-write=$(OTEL_DENO=false deno task -q tier:paths --write),data\" \"--allow-run=$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved),$(OTEL_DENO=false deno task -q tier:paths --serve-ffmpeg || echo ttk-tier/no-ffmpeg-resolved)\" --allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts serve"
+		},
+		"stdio": {
+			"description": "MCP over stdio for a local client, with dev's grants",
+			"command": "TTK_BROWSER_PATH=\"$(OTEL_DENO=false deno task -q resolve:chromium --pin --serve || echo)\" deno run --no-prompt --deny-ffi --allow-net=127.0.0.1 \"--allow-read=.,$(OTEL_DENO=false deno task -q tier:paths --write),$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved)\" \"--allow-write=$(OTEL_DENO=false deno task -q tier:paths --write),data\" \"--allow-run=$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved),$(OTEL_DENO=false deno task -q tier:paths --serve-ffmpeg || echo ttk-tier/no-ffmpeg-resolved)\" --allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts stdio"
+		},
+		"serve:cluster": {
+			"description": "The HTTP gateway with --unstable-kv, for TTK_CLUSTER_KV",
+			"command": "TTK_BROWSER_PATH=\"$(OTEL_DENO=false deno task -q resolve:chromium --pin --serve || echo)\" deno run --no-prompt --deny-ffi --unstable-kv --allow-net=127.0.0.1,localhost \"--allow-read=.,$(OTEL_DENO=false deno task -q tier:paths --write),$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved)\" \"--allow-write=$(OTEL_DENO=false deno task -q tier:paths --write),data\" \"--allow-run=$(OTEL_DENO=false deno task -q resolve:chromium --grant --serve || echo ttk-tier/no-chromium-resolved),$(OTEL_DENO=false deno task -q tier:paths --serve-ffmpeg || echo ttk-tier/no-ffmpeg-resolved)\" --allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts serve"
+		},
+		"acp": {
+			"description": "Agent Client Protocol over stdio, relayed to the ACP agent runner",
+			"command": "deno run --deny-ffi --allow-net=127.0.0.1,localhost --allow-read=. --allow-env=TTK_*,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT packages/cli/mod.ts acp"
+		},
+		"build:web": {
+			"description": "Bundle the web app and the MCP Apps embeds into packages/web/dist",
+			"command": "rm -rf packages/web/dist && deno bundle --platform browser --minify --code-splitting --outdir packages/web/dist packages/web/src/app.ts && deno bundle --platform browser --minify --outdir packages/web/dist packages/web/src/styles/app.css && deno bundle --platform browser --minify --outdir packages/web/dist/screens packages/web/src/styles/screens/tools.css packages/web/src/styles/screens/resources.css packages/web/src/styles/screens/agents.css packages/web/src/styles/screens/users.css packages/web/src/styles/screens/system.css && deno run --allow-read=packages/web --allow-write=packages/web/dist scripts/build_icons.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/embed_live.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/embed_a2ui.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/embed_terminal.ts && deno bundle --platform browser --minify --outdir packages/web/dist/embed-src packages/web/src/styles/embed.css && deno run --allow-read=packages/web --allow-write=packages/web/dist scripts/build_embed.ts"
+		},
+		"compile": {
+			"description": "Single binary in dist/ with baked permissions (run build:web first)",
+			"command": "deno run -A scripts/compile.ts"
+		},
+		"build:image": {
+			"description": "Build the bundled image tykotech-mcp:0.2.0 (docker compose build builds the whole stack)",
+			"command": "docker build -t tykotech-mcp:0.2.0 ."
+		},
+		"build:image:slim": {
+			"description": "Build the slim image tykotech-mcp:slim",
+			"command": "docker build -f Dockerfile.slim -t tykotech-mcp:slim ."
+		},
+		"ok": {
+			"description": "Pre-commit gate: fmt:check, lint, check, gate:tasks, gate:lock, test:unit",
+			"command": "deno task fmt:check && deno task lint && deno task check && deno task gate:tasks && deno task gate:lock && deno task test:unit"
+		},
+		"fmt": {
+			"description": "Format the tree",
+			"command": "deno fmt"
+		},
+		"fmt:check": {
+			"description": "Check formatting",
+			"command": "deno fmt --check"
+		},
+		"lint": {
+			"description": "Lint the tree",
+			"command": "deno lint"
+		},
+		"check": {
+			"description": "Type-check the tree",
+			"command": "deno check ."
+		},
+		"gate:tasks": {
+			"description": "Lint this task table: exact permissions, --deny-ffi first, the OTEL and provider-key rules",
+			"command": "deno run --allow-read=deno.json scripts/check_tasks.ts"
+		},
+		"gate:lock": {
+			"description": "Fail when deno.lock drifts",
+			"command": "deno install --frozen"
+		},
+		"audit": {
+			"description": "Dependency advisories",
+			"command": "deno audit"
+		},
+		"test:unit": {
+			"description": "Unit tier: every package and tests/unit (bare read/write: Deno.symlink refuses path-scoped grants)",
+			"command": "deno test --unstable-kv --parallel --allow-net=127.0.0.1,localhost --allow-read --allow-write --allow-env=TTK_*,BUA_*,BROWSER_USE_*,TIMEOUT_*,ANTHROPIC_API_KEY packages/bus/ packages/cdp/ packages/browser/ packages/wire/ packages/sandbox/ packages/agents/ packages/mcp/ packages/gateway/ packages/web/ packages/cli/ tests/unit/ tests/agents/a2a_test.ts tests/agents/runtime_test.ts"
+		},
+		"test:browser": {
+			"description": "Real-browser tier (tests/e2e); resolves Chromium, ffmpeg and a model endpoint",
+			"command": "BUA_TEST_CHROMIUM=\"$(deno task -q resolve:chromium --pin || echo)\" TTK_FFMPEG=\"$(deno task -q tier:paths --ffmpeg-pin || echo)\" TTK_MODEL_CONFIG=\"$(deno task -q tier:paths --model-pin || echo)\" deno test --unstable-kv \"--allow-net=$(deno task -q tier:paths --net || echo 127.0.0.1,localhost)\" \"--allow-run=$(deno task -q resolve:chromium --grant || echo ttk-tier/no-chromium-resolved),$(deno task -q tier:paths --ffmpeg)\" \"--allow-read=$(deno task -q tier:paths --read)\" \"--allow-write=$(deno task -q tier:paths --write)\" --allow-env=TTK_*,BUA_*,BROWSER_USE_*,TIMEOUT_*,ANTHROPIC_API_KEY,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PATH,TMPDIR,TEMP,TMP tests/e2e/"
+		},
+		"test:stdio": {
+			"description": "stdio tier: the CLI over pipes",
+			"command": "deno test --allow-run --allow-read=. --allow-env --allow-net=127.0.0.1 tests/stdio/"
+		},
+		"test:compile": {
+			"description": "Compile the binary for this host and run it",
+			"command": "deno test --allow-run --allow-read=. --allow-write=dist,tests/.scratch --allow-env --allow-net=127.0.0.1 tests/compile/"
+		},
+		"test:container": {
+			"description": "Verify the bundled image (default tykotech-mcp:0.2.0; another: deno task test:container <tag>)",
+			"command": "deno run --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts --shape bundled"
+		},
+		"test:container:slim": {
+			"description": "Verify the slim image (default tykotech-mcp:slim; another: deno task test:container:slim <tag>)",
+			"command": "deno run --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts --shape slim"
+		},
+		"test:sandbox": {
+			"description": "Sandbox tier: real bubblewrap cages in the sandbox image",
+			"command": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/sandbox/verify_sandbox.ts"
+		},
+		"test:compose": {
+			"description": "Compose proof of the default stack, from images built under --tag <t>",
+			"command": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/sandbox/verify_compose.ts"
+		},
+		"test:agents": {
+			"description": "Agents tier: ACP, bridge, peers and the model loop",
+			"command": "deno test --deny-ffi \"--allow-run=$(deno run --deny-ffi scripts/agent_paths.ts)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=PATH tests/agents/"
+		},
+		"test:agents:runner": {
+			"description": "The ACP runner image with a fixture agent",
+			"command": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/agents/verify_runner.ts"
+		},
+		"test:agents:compose": {
+			"description": "Compose proof of the agents overlay, from images built under --tag <t>",
+			"command": "deno run --deny-ffi \"--allow-run=$(deno task -q resolve:docker || echo ttk-tier/no-docker-resolved)\" --allow-read=. --allow-write=tests/.scratch --allow-net=127.0.0.1,localhost --allow-env=TTK_*,PATH tests/agents/verify_compose.ts"
+		},
+		"cov": {
+			"description": "Coverage gate: unit, agents and browser tiers merged; 80% lines over packages/mcp and packages/gateway",
+			"command": "deno task cov:unit && deno task cov:agents && deno task cov:browser && deno run -A scripts/coverage.ts coverage/unit coverage/agents coverage/browser"
+		},
+		"cov:unit": {
+			"description": "test:unit with coverage",
+			"command": "deno task test:unit --coverage=coverage/unit"
+		},
+		"cov:agents": {
+			"description": "test:agents with coverage",
+			"command": "deno task test:agents --coverage=coverage/agents"
+		},
+		"cov:browser": {
+			"description": "test:browser with coverage",
+			"command": "deno task test:browser --coverage=coverage/browser"
+		},
+		"resolve:chromium": {
+			"description": "Helper: the Chromium the tasks and tiers grant and launch",
+			"command": "deno run \"--allow-read=$(deno task -q chromium:read || echo .)\" \"--allow-env=BUA_TEST_CHROMIUM,BUA_BROWSER_PATH,BROWSER_USE_BROWSER_PATH,TTK_BROWSER_PATH,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),USERPROFILE,HOME,PATH\" scripts/resolve_chromium.ts"
+		},
+		"chromium:read": {
+			"description": "Helper: the read grant resolve:chromium needs",
+			"command": "deno run \"--allow-env=BUA_TEST_CHROMIUM,BUA_BROWSER_PATH,BROWSER_USE_BROWSER_PATH,TTK_BROWSER_PATH,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),USERPROFILE,HOME,PATH\" scripts/resolve_chromium.ts --read"
+		},
+		"tier:paths": {
+			"description": "Helper: temp, ffmpeg and model-endpoint grants for the tasks and tiers",
+			"command": "deno run --allow-env=TMPDIR,TEMP,TMP,TTK_FFMPEG,TTK_MODEL_CONFIG,TTK_MODEL_BASE_URL,TTK_MODEL_API_KEY,TTK_MODEL_NAME,ANTHROPIC_API_KEY,PATH --allow-read scripts/tier_paths.ts"
+		},
+		"resolve:docker": {
+			"description": "Helper: the docker binary the container tiers run",
+			"command": "deno run --deny-ffi --allow-read --allow-env=PATH scripts/resolve_docker.ts"
+		}
 	}
 }

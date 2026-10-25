@@ -2,7 +2,9 @@
 # No model/runtime or model key is baked into this private service.
 # C13 (D-103): pinned by digest to the gateway images' Deno. denoland/deno:2.9.7 and debian-2.9.7 are the same
 # multi-arch index; resolved 2026-10-04.
-FROM denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
+# Overridable like the other images' (a mirror, an air-gapped registry); the default is the pinned digest.
+ARG DENO_IMAGE=denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
+FROM ${DENO_IMAGE}
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends util-linux procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/agents /agent-workspace /app && chown -R deno:deno /opt/agents /agent-workspace /app

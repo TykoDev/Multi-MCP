@@ -72,8 +72,11 @@ Deno.test('D-145: the server never reads a model-key name — the only mention u
 });
 
 Deno.test('D-143: the compose opt-in and the container fixture name the gateway’s variable and carry no key', async () => {
-	const compose = await Deno.readTextFile('docker-compose.yml');
-	assert(compose.includes(`# ${MODEL_PROVIDERS_ENV}: /run/secrets/ttk_model_providers`), 'the commented opt-in line');
+	const overlay = await Deno.readTextFile('docker-compose.providers.yml');
+	assert(
+		overlay.includes(`      ${MODEL_PROVIDERS_ENV}: /run/secrets/ttk_model_providers`),
+		'the opt-in overlay sets it',
+	);
 	const fixture = JSON.parse(await Deno.readTextFile('tests/container/model_providers.fixture.json')) as {
 		version: number;
 		providers: Array<Record<string, unknown>>;

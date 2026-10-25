@@ -1,51 +1,82 @@
 # Secrets
 
-Everything here except this README is git-ignored and excluded from the Docker build context. Compose mounts each file
-at `/run/secrets/<name>`; the server reads it by path through a `*_FILE` variable. Secrets never go in the environment:
-Chromium inherits it ([Security model](../docs/concepts/security-model.md#process-permissions)).
+One command creates everything here:
+
+```sh
+deno task setup
+```
+
+It writes every file any shipped Compose file mounts (and `.env` at the repository root), skips the ones that exist, and
+prints the administrator password and the API key **once**: only their hashes are stored. Run it again at any time; it
+keeps what is there and repairs file modes. Everything here except this README is git-ignored and excluded from the
+Docker build context.
+
+Compose mounts each file at `/run/secrets/<name>`, and the server reads it by path through a `*_FILE` variable. Secrets
+never go in the environment: Chromium inherits it
+([Security model](../docs/concepts/security-model.md#process-permissions)).
 
 ## Files
 
-| File                       | Written by                                                    | Container path                        | Variable                       | Holds                                                               |
-| -------------------------- | ------------------------------------------------------------- | ------------------------------------- | ------------------------------ | ------------------------------------------------------------------- |
-| `ttk_db_key`               | `deno task setup`, `deno task doctor --new-db-key`            | `/run/secrets/ttk_db_key`             | `TTK_DB_KEY_FILE`              | The key that seals every secret in `ttk.db`                         |
-| `ttk_admin_user.json`      | `deno task setup`, `deno task doctor --new-admin <user>`      | `/run/secrets/ttk_admin_user`         | `TTK_ADMIN_USER_FILE`          | The first administrator account (PBKDF2 hash)                       |
-| `ttk_api_keys.json`        | `deno task setup` (id `client`); you, from `doctor --new-key` | `/run/secrets/ttk_api_keys`           | `TTK_API_KEYS_FILE`            | API key records (SHA-256 only)                                      |
-| `ttk_secrets.json`         | You                                                           | `/run/secrets/ttk_secrets`            | `TTK_SECRETS_FILE`             | Browser-typed secrets (seed)                                        |
-| `ttk_model_providers.json` | You, or the web app's configuration composer (draft)          | `/run/secrets/ttk_model_providers`    | `TTK_MODEL_PROVIDERS_FILE`     | Model providers and their keys (seed)                               |
-| `ttk_sandbox_token`        | You                                                           | `/run/secrets/ttk_sandbox_token`      | `TTK_SANDBOX_TOKEN_FILE`       | Gateway↔sandbox bearer, with `docker-compose.sandbox.yml` only      |
-| `ttk_git_remotes`          | You                                                           | `/run/secrets/ttk_git_remotes`        | `TTK_SANDBOX_GIT_REMOTES_FILE` | Sandbox credentialed git remotes                                    |
-| `ttk_agent_bridge_token`   | You                                                           | `/run/secrets/ttk_agent_bridge_token` | `TTK_AGENT_BRIDGE_TOKEN_FILE`  | Gateway↔ACP runner bearer (`docker-compose.agents.yml`)             |
-| `ttk_agent_commands.json`  | You                                                           | `/run/secrets/ttk_agent_commands`     | `TTK_AGENT_COMMANDS_FILE`      | The ACP runner's fixed agent commands (`docker-compose.agents.yml`) |
+| File                       | `setup` writes                    | `--only` name     | Mounted by                     | Variable                       |
+| -------------------------- | --------------------------------- | ----------------- | ------------------------------ | ------------------------------ |
+| `ttk_db_key`               | 32 random bytes                   | `db-key`          | gateway                        | `TTK_DB_KEY_FILE`              |
+| `ttk_admin_user.json`      | the `admin` account (PBKDF2 hash) | `admin`           | gateway                        | `TTK_ADMIN_USER_FILE`          |
+| `ttk_api_keys.json`        | the `client` key (SHA-256 only)   | `api-key`         | gateway                        | `TTK_API_KEYS_FILE`            |
+| `ttk_agent_peers.json`     | the bundled A2A peer              | `peer`            | gateway                        | `TTK_AGENT_PEERS_FILE`         |
+| `ttk_peer_token`           | the bearer the gateway gives it   | `peer`            | gateway (through the list)     | `token_file` in the list       |
+| `ttk_peer_api_keys.json`   | that bearer's hash                | `peer`            | `a2a-peer`                     | `TTK_API_KEYS_FILE` (peer)     |
+| `ttk_secrets.json`         | `{}`: yours to fill in            | `browser-secrets` | gateway                        | `TTK_SECRETS_FILE`             |
+| `ttk_git_remotes`          | `[]`: yours to fill in            | `git-remotes`     | sandbox                        | `TTK_SANDBOX_GIT_REMOTES_FILE` |
+| `ttk_sandbox_token`        | 64 hex characters                 | `sandbox-token`   | `docker-compose.sandbox.yml`   | `TTK_SANDBOX_TOKEN_FILE`       |
+| `ttk_agent_bridge_token`   | 64 hex characters                 | `agent-token`     | `docker-compose.agents.yml`    | `TTK_AGENT_BRIDGE_TOKEN_FILE`  |
+| `ttk_agent_commands.json`  | one agent at `/opt/agents/agent`  | `agent-commands`  | `docker-compose.agents.yml`    | `TTK_AGENT_COMMANDS_FILE`      |
+| `ttk_model_providers.json` | nothing: yours, optional          | none              | `docker-compose.providers.yml` | `TTK_MODEL_PROVIDERS_FILE`     |
+| `../.env`                  | `.env.example`, byte for byte     | `env`             | Compose interpolation          | none                           |
 
-`docker-compose.yml` mounts the first three and refuses to start if one is missing. `ttk_secrets`, `ttk_model_providers`
-and `ttk_git_remotes` are commented blocks there: uncomment the variable, the service's `secrets:` entry and the
-top-level entry.
+`docker-compose.yml` mounts the first eight; Compose refuses to start when a declared file is missing, which is why
+`setup` comes first.
 
-`setup` creates only missing files (`--force` / `-Force` replaces all four, `.env` included). `doctor --new-db-key` and
-`doctor --new-admin` refuse to overwrite without `--force`. Secret files are written `0600`.
+## Options
 
-## Ownership
+| Need                                    | Run                                                                     |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| Create what is missing (and fix modes)  | `deno task setup`                                                       |
+| Rotate one generated file               | `deno task setup --only peer --force` (any name from the table)         |
+| Reload the sandbox's AppArmor profile   | `deno task setup --only apparmor --force` (below)                       |
+| Reset a file you fill in yourself       | `deno task setup --only browser-secrets --force`                        |
+| Replace every generated file and `.env` | `deno task setup --force` (files you fill in are kept; see the db key)  |
+| A different administrator name          | `deno task setup --only admin --admin alice` (`--force` to replace)     |
+| Narrower scopes on the first key        | `deno task setup --only api-key --force --scopes mcp:invoke,view:watch` |
+| Another API key                         | `deno task doctor --new-key <id> --scopes <list> --save`                |
+| A new administrator password            | `deno task doctor --new-admin admin --force`                            |
 
-The containers run as 1993:1993. A Compose secret is a bind mount and keeps its owner, group and mode, so on Linux (WSL
-included) a file you own `0600` is unreadable in the container. `setup` prints the fix:
+After a change, `docker compose up -d` recreates the services whose files changed (`docker compose restart <service>`
+when a file was edited in place). A key added with `--save` needs neither: the gateway re-reads its key file on change.
 
-```sh
-sudo chgrp 1993 secrets/ttk_* && chmod 0440 secrets/ttk_*
-# without sudo:
-docker run --rm -v "$PWD/secrets:/s" busybox sh -c 'chgrp 1993 /s/ttk_* && chmod 0440 /s/ttk_*'
-```
+### The sandbox's AppArmor profile
 
-You stay the owner, so local `deno task dev`, `stdio` and `doctor` keep reading the files; group 1993 reads them in the
-containers. Files handed over with an older `chown 1993:1993` come back with
-`sudo chown $(id -u):1993 secrets/ttk_* && sudo chmod 0440 secrets/ttk_*`.
+One file `setup` manages lives outside this folder: `/etc/apparmor.d/tykotech-sandbox`, the coding sandbox's AppArmor
+profile (`docker/apparmor-sandbox`; `--only` name `apparmor`). On a host that runs AppArmor (Ubuntu, Debian), Docker's
+default profile denies the mounts the sandbox's cages need, and the sandbox does not start without this one. `setup`
+installs and loads it through `sudo` last, after the password and key are shown, and only when the installed copy
+differs from the checkout's or is not loaded; `sudo` asks for your password. When it cannot, `setup` exits 1 naming
+AppArmor, with the two commands to run by hand
+([Docker reference](../docs/reference/docker-reference.md#coding-sandbox)). Elsewhere it does nothing.
 
-| Need                             | Run                                                                         |
-| -------------------------------- | --------------------------------------------------------------------------- |
-| Local Deno only                  | Nothing: `setup` writes `0600`, owned by you.                               |
-| Compose and local Deno           | `sudo chgrp 1993 secrets/ttk_* && chmod 0440 secrets/ttk_*`                 |
-| Slim image (`ttk`, uid 1000)     | `sudo chgrp 1000 secrets/ttk_* && chmod 0440 secrets/ttk_*`                 |
-| Replace a file you no longer own | `--force` works: it deletes the old file first (needs write on `secrets/`). |
+## Permissions
+
+`setup` makes `secrets/` **0700** and every file in it **0644**, on every run. No other account on the host can open
+anything inside a `0700` directory, whatever a file's own mode, so the files stay private. Inside a container a Compose
+secret is a bind mount of the file alone, which keeps the host's owner and mode (Compose ignores `uid`, `gid` and `mode`
+for file secrets); `0644` is what lets the containers' unprivileged users (uid 1993; the slim image: 1000) read it, with
+rootless Docker and Docker Desktop too, and without `sudo`.
+
+- A checkout set up before this rule (`0600` files, which the containers cannot read, so the gateway restarted with
+  `Permission denied`) is repaired by running `deno task setup` again.
+- Files handed over with an older `chgrp 1993` + `0440` keep working. Files `chown`ed to 1993 cannot be repaired by you;
+  `setup` warns, and `--force` replaces them (it deletes the old file first).
+- Copying a file out of `secrets/` copies its `0644` with it: keep copies and backups somewhere private.
+- Windows has no POSIX modes; nothing is needed there.
 
 ## The database key
 
@@ -59,38 +90,57 @@ link-signing key.
   `the database holds encrypted secrets and no key is set` (none). Restore the key. Without it the only way on is a new
   database: move `ttk.db`, `ttk.db-wal` and `ttk.db-shm` aside (providers and memory go too), start with a new key,
   re-seed or re-enter providers and secrets.
-- `setup --force` and `doctor --new-db-key --force` write a new key, with the same effect. There is no rotation command.
+- `setup --force` (or `--only db-key --force`) and `doctor --new-db-key --force` write a new key, with the same effect.
+  There is no rotation command.
 - Without `TTK_DB_KEY_FILE` nothing secret is stored; a seed source that carries a secret refuses startup.
 
 ## API keys
 
+`setup` mints one key, id `client`, holding the stack's scopes: `mcp:invoke`, `view:watch`, `view:control`,
+`files:read`, `files:write`, `sandbox:execute`, `agent:invoke`, `model:invoke`, `a2ui:publish`. That reaches the
+browser, live view, file share, memory, coding sandbox, agents and A2UI. `task`, `evaluate`, `admin`, `metrics:read` and
+`network:read` are never granted unasked.
+
+Give every other client its own key with the scopes it needs:
+
 ```sh
-deno task doctor --new-key my-client --scopes mcp:invoke,view:control
+deno task doctor --new-key my-client --scopes mcp:invoke,view:control --save
 ```
 
-Keep the printed `ttk_…` key with the client. Append the printed record to the array in `ttk_api_keys.json`; the server
-reloads it without a restart:
+The key is printed once; `--save` adds its record to `ttk_api_keys.json` (replacing one with the same id), and the
+running gateway picks it up without a restart. Without `--save` the record is printed for you to add:
 
 ```json
 [{ "id": "my-client", "sha256": "<64 hex>", "scopes": ["mcp:invoke", "view:control"] }]
 ```
 
-Without `--scopes` a key gets `mcp:invoke`, `view:watch`, `view:control`, `files:read`, never `admin`. Scope list:
-[Managing access](../docs/guides/managing-access.md).
+Without `--scopes` a key gets `mcp:invoke`, `view:watch`, `view:control`, `files:read`, never `admin`. Remove a record
+to revoke its key. Scope list: [Managing access](../docs/guides/managing-access.md).
 
 ## Administrator account
 
-```sh
-deno task doctor --new-admin admin [--password <p>] [--scopes <list>] [--force]
-```
+`setup` writes `{ username, salt, hash, iterations, scopes }` for `admin` (the stack's scopes plus `admin`) and prints
+the password once. With `TTK_DATA_DIR` it seeds `users.json` on first start; afterwards edits to this file change
+nothing: manage accounts in the web app's **Users** screen. Replace the record with
+`deno task doctor --new-admin admin [--password <p>] [--scopes <list>] --force`.
 
-Prints the password once and writes `{ username, salt, hash, iterations, scopes }` (default scopes plus `admin`). With
-`TTK_DATA_DIR` it seeds `users.json` on first start; afterwards edits to this file change nothing. Manage accounts in
-the web app's **Users** screen.
+## A2A peer
+
+The default stack runs a second gateway, `a2a-peer`, that `agent_delegate` sends tasks to. `setup` writes three files
+for it, as one unit:
+
+- `ttk_peer_token`: the bearer the gateway presents to the peer;
+- `ttk_peer_api_keys.json`: its hash, the peer's only key, scoped to `mcp:invoke` and `agent:invoke`;
+- `ttk_agent_peers.json`: the gateway's peer list,
+  `[{ "id": "peer", "url": "http://a2a-peer:8787", "token_file": "/run/secrets/ttk_peer_token" }]`.
+
+Add other A2A agents to the list (`[{ "id", "url", "token_file"? }]`, up to 32; a token file must be mounted into the
+gateway) and `docker compose up -d`. A peer's agent card must name the origin it is reached at. Rotate the bundled pair:
+`deno task setup --only peer --force && docker compose up -d`.
 
 ## Browser-typed secrets
 
-`ttk_secrets.json` maps names to values a model may type without seeing them:
+`ttk_secrets.json` maps names to values a model may type without seeing them; `setup` writes `{}`:
 
 ```json
 { "github_pw": { "value": "…", "domains": ["github.com"] } }
@@ -99,14 +149,29 @@ the web app's **Users** screen.
 - The model writes `<secret>github_pw</secret>` in `browser_type`. The server substitutes it on the way to the browser,
   refuses it outside `domains`, and never returns it. `browser_fill_secret` refuses a secret without `domains`.
 - Names: `[A-Za-z0-9_.-]`, up to 64. A plain string value has no `domains`.
-- Seeded into `ttk.db` once, sealed (needs `ttk_db_key`). Later edits are not applied; the file may then be removed.
-  Apply edits with
+- Fill it in, then `docker compose restart tykotech-mcp`: the first non-empty file is sealed into `ttk.db` (needs
+  `ttk_db_key`). Later edits are not applied on their own; apply them with
   `docker compose run --rm --no-deps tykotech-mcp ttk seed --force --only secrets && docker compose restart tykotech-mcp`.
-- Enable: uncomment `ttk_secrets` in `docker-compose.yml` and add `TTK_SECRETS_FILE: /run/secrets/ttk_secrets`.
+
+## Git remotes
+
+`ttk_git_remotes` lists credentialed remotes for `sandbox_clone`; `setup` writes `[]`:
+
+```json
+[{ "id": "work", "url": "https://git.example.com/team/repo.git", "username": "bot", "token": "…" }]
+```
+
+https only. The sandbox reads it once at start (`docker compose restart sandbox` after an edit); the credential never
+enters a cage. Public clones from GitHub, GitLab, Bitbucket and Codeberg need nothing here.
 
 ## Model providers file
 
-Optional: providers can be added in the web app (**System › Agents**) instead.
+Optional: add providers in the web app (**System › Agents**) instead. To seed them from a file, write
+`ttk_model_providers.json` and add the overlay:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.providers.yml up -d
+```
 
 ```json
 {
@@ -132,22 +197,24 @@ Optional: providers can be added in the web app (**System › Agents**) instead.
 
 ## Sandbox token
 
-`docker-compose.yml` needs no file here: the sandbox service generates its token on first start (64 hex characters,
+`docker-compose.yml` uses no file for it: the sandbox service generates its token on first start (64 hex characters,
 `0400`, uid 1993) into the `ttk-sandbox-token` volume, mounted read-write by the sandbox and read-only by the gateway
 only. Rotate: `docker compose down`, `docker volume rm <project>_ttk-sandbox-token`, start again.
 
-To use your own token instead (at least 32 random non-whitespace characters):
+`docker-compose.sandbox.yml` uses `ttk_sandbox_token` instead (an operator-held token, at least 32 non-whitespace
+characters), for a gateway that is not in this Compose project:
 
 ```sh
-deno eval "console.log(crypto.randomUUID() + crypto.randomUUID())" > secrets/ttk_sandbox_token
-docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d
 ```
 
 ## Agent runner files
 
-For [`docker-compose.agents.yml`](../docker-compose.agents.yml): `ttk_agent_bridge_token` is an independent random
-token, made like the sandbox token. `ttk_agent_commands.json` fixes the ACP executables, arguments, cwd, environment and
-MCP allowlist; it must not hold MCP bearers, headers or provider keys (mount those separately). Example:
+For [`docker-compose.agents.yml`](../docker-compose.agents.yml): `ttk_agent_bridge_token` is the gateway↔runner bearer,
+and `ttk_agent_commands.json` fixes the ACP executables, arguments, cwd, environment and MCP allowlist. `setup` writes
+one agent, `default`, at `/opt/agents/agent`; install it in an image derived from `docker/Dockerfile.agent-runner` and
+edit the file to match (the runner refuses to start until the executable exists). It must not hold MCP bearers, headers
+or provider keys: mount those as files and name them in `env` as `*_FILE`. Example:
 [Agents and sandbox](../docs/guides/coding-and-agents.md#the-acp-agent-bridge).
 
 ## File format

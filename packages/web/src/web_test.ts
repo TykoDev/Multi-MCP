@@ -708,9 +708,11 @@ Deno.test({
 Deno.test('web (AC40, F17): build:web bundles the embeds in the task, chained with &&, and grants no --allow-run', async () => {
 	const tasks = JSON.parse(await Deno.readTextFile(new URL('../../../deno.json', import.meta.url))).tasks as Record<
 		string,
-		string
+		string | { command?: string }
 	>;
-	const build = tasks['build:web'] ?? '';
+	// A task is a string or, with a description, `{ description, command }`.
+	const entry = tasks['build:web'];
+	const build = (typeof entry === 'string' ? entry : entry?.command) ?? '';
 	assert(!build.includes('--allow-run'), 'build:web must not grant --allow-run');
 	assert(!/;|\|\|/.test(build), 'build:web chains its steps with && only');
 	for (

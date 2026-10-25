@@ -915,6 +915,20 @@ export const SETTINGS: readonly Setting[] = [
 		default: '1024',
 		explain: "The gateway's JavaScript heap limit in MiB (DENO_V8_FLAGS --max-old-space-size).",
 	}),
+	S({
+		name: 'TTK_PEER_MEMORY',
+		section: 'compose',
+		kind: 'text',
+		default: '1g',
+		explain: 'Memory limit of the bundled A2A peer container, its browser sessions included.',
+	}),
+	S({
+		name: 'TTK_PEER_HEAP_MB',
+		section: 'compose',
+		kind: 'integer',
+		default: '512',
+		explain: "The A2A peer's JavaScript heap limit in MiB.",
+	}),
 ];
 
 const BY_NAME: ReadonlyMap<string, Setting> = new Map(SETTINGS.map((setting) => [setting.name, setting]));

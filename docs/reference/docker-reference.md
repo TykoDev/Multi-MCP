@@ -8,10 +8,14 @@
 | `docker/Dockerfile.sandbox-workspace` | `tykotech-sandbox-workspace:0.2.0`: per-workspace container (Docker backend). |
 | `docker/Dockerfile.agent-runner`      | `tykotech-agent-runner:0.2.0`: base for the ACP agent runner.                 |
 | `docker/ttk`                          | The bundled image's maintenance command.                                      |
-| `docker-compose.yml`                  | Gateway plus coding sandbox.                                                  |
-| `docker-compose.sandbox.yml`          | Overlay: your own sandbox token file.                                         |
+| `docker-compose.yml`                  | The full stack: gateway, coding sandbox, A2A peer.                            |
+| `docker-compose.providers.yml`        | Overlay: seed model providers from `secrets/ttk_model_providers.json`.        |
+| `docker-compose.sandbox.yml`          | Overlay: an operator-held sandbox token file.                                 |
 | `docker-compose.sandbox-docker.yml`   | Overlay: one Docker container per workspace (mounts the Docker socket).       |
 | `docker-compose.agents.yml`           | Overlay: the ACP agent runner.                                                |
+
+Every image's base is an `ARG` (`DENO_IMAGE`, and `RUNTIME_IMAGE` where there is a second base) whose default is the
+pinned digest, so a mirror or an air-gapped registry is one `--build-arg` away.
 
 ```mermaid
 flowchart LR
@@ -23,10 +27,15 @@ flowchart LR
     subgraph sb[sandbox]
       Y[sandbox service] --> K[bubblewrap cages<br/>no network]
     end
+    subgraph pe[a2a-peer]
+      PS[Deno gateway] --> PC[Chromium<br/>own sandbox]
+    end
     gw -- sandbox-private<br/>internal --> sb
+    gw -- "A2A, default network<br/>bearer ttk_peer_token" --> pe
     sb -- sandbox-egress --> R[(registries,<br/>git hosts)]
     V1[(ttk-data)] --- gw
     V2[(ttk-code)] --- sb
+    V3[(ttk-peer-data)] --- pe
     T[(ttk-sandbox-token)] --- gw & sb
   end
   U[Clients] -- "127.0.0.1:8787" --> gw
@@ -73,27 +82,59 @@ Chromium always runs with its own sandbox. In a container that needs the `chromi
 `seccomp:./docker/seccomp-chromium.json`, `shm_size: 1gb`, and **no** `no-new-privileges`. No image sets
 `TTK_CHROMIUM_NO_SANDBOX`, and `TTK_BROWSER_ARGS` refuses sandbox-weakening switches.
 
+The profile denies by default and lists what the server and browser were measured to call, plus `inotify_init1`, which
+the gateway's API-key file watcher needs: without it the gateway logs `cannot watch the API key file` and a key added to
+`secrets/ttk_api_keys.json` waits for a restart.
+
+## Coding sandbox
+
+bubblewrap builds each cage's root with mounts inside the cage's own user namespace. Docker's default AppArmor profile
+(`docker-default`) denies every mount, so on an AppArmor host (Ubuntu, Debian, SUSE) the service exits with
+`bwrap: Failed to make / slave: Permission denied` and the gateway, which waits for it, never starts. The sandbox
+therefore runs under `apparmor=tykotech-sandbox`: `docker-default` with only that denial lifted
+([`docker/apparmor-sandbox`](../../docker/apparmor-sandbox)). The service holds no capability in its container, so the
+kernel still allows it to mount only inside a cage. Its other settings: `seccomp:./docker/seccomp-sandbox.json`
+(Docker's default plus the namespace calls) and `systempaths=unconfined` (each cage puts Docker's `/proc` masks back).
+
+An AppArmor host loads the profile once, and again after it changes; `/etc/apparmor.d` is reloaded at boot.
+`deno task setup` does it: it asks AppArmor's own tools whether AppArmor is on (`aa-enabled`) and whether the profile is
+loaded (`aa-exec`), and when the installed copy differs from the checkout's or is not loaded, it runs the two commands
+below through `sudo`, which asks for your password. When that fails (no `sudo`, no terminal, a wrong password) it exits
+1 with these commands, to run by hand:
+
+```sh
+sudo install -m 0644 docker/apparmor-sandbox /etc/apparmor.d/tykotech-sandbox
+sudo apparmor_parser -r /etc/apparmor.d/tykotech-sandbox
+```
+
+`deno task setup --only apparmor` does only this step (`--force`: reinstall and reload). Until the profile is loaded the
+container is refused with `unable to apply apparmor profile`. Docker ignores the option on a host without AppArmor
+(Fedora and RHEL use SELinux; Docker Desktop), which needs nothing.
+
 ## `docker-compose.yml`
 
-| Service        | Key settings                                                                                                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tykotech-mcp` | Port `${TTK_BIND:-127.0.0.1}:8787`; user `1993:1993`; volume `ttk-data:/data`; secrets `ttk_api_keys`, `ttk_admin_user`, `ttk_db_key`; waits for a healthy sandbox.                                                            |
-| `sandbox`      | No port; read-only root; all capabilities dropped; `no-new-privileges`; own seccomp profile; 1 GiB, 2 CPUs, 512 PIDs; volume `ttk-code:/work`; public clones from `github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org`. |
+| Service        | Key settings                                                                                                                                                                                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tykotech-mcp` | Port `${TTK_BIND:-127.0.0.1}:8787`; user `1993:1993`; volume `ttk-data:/data`; secrets `ttk_api_keys`, `ttk_admin_user`, `ttk_db_key`, `ttk_secrets`, `ttk_agent_peers`, `ttk_peer_token`; waits for a healthy sandbox.                                                                   |
+| `sandbox`      | No port; read-only root; all capabilities dropped; `no-new-privileges`; own seccomp and [AppArmor](#coding-sandbox) profiles; 1 GiB, 2 CPUs, 512 PIDs; volume `ttk-code:/work`; secret `ttk_git_remotes`; public clones from `github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org`. |
+| `a2a-peer`     | No port; the gateway image (built once, by `tykotech-mcp`); user `1993:1993`; volume `ttk-peer-data:/data`; secret `ttk_peer_api_keys` only; `TTK_PUBLIC_URL=http://a2a-peer:8787`; Chromium sandbox settings as the gateway's; `${TTK_PEER_MEMORY:-1g}`.                                 |
 
-Environment passed to the gateway from `.env`: `TTK_PUBLIC_URL`, `TTK_ALLOWED_HOSTS`, `TTK_ALLOWED_ORIGINS` (empty =
-derived). Commented opt-ins: `TTK_ALLOWED_DOMAINS`, `TTK_MODEL_PROVIDERS_FILE`, `TTK_SECRETS_FILE`,
-`TTK_SANDBOX_GIT_REMOTES_FILE`, each with its secret.
+Every secret file comes from `deno task setup` ([secrets/README.md](../../secrets/README.md)). Environment passed from
+`.env`: `TTK_PUBLIC_URL`, `TTK_ALLOWED_HOSTS`, `TTK_ALLOWED_ORIGINS` (empty = derived), `TTK_ALLOWED_DOMAINS` (gateway
+and peer; empty = unrestricted), and the memory sizes. The gateway does not wait for the peer: `agent_delegate` fails
+while it is down, nothing else does. `docker compose up -d tykotech-mcp sandbox` runs without it.
 
 The sandbox generates its bearer token on first start into the `ttk-sandbox-token` volume (gateway read-only). Rotate:
 `docker compose down && docker volume rm <project>_ttk-sandbox-token && docker compose up -d`.
 
 ## Overlays
 
-| Overlay                             | Adds                                                                                   | Needs                                                                                                                                                                            |
+| Overlay                             | Adds                                                                                   | Needs, beyond `deno task setup`                                                                                                                                                  |
 | ----------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker-compose.sandbox.yml`        | Your own token, `secrets/ttk_sandbox_token` (≥32 characters).                          | The file.                                                                                                                                                                        |
+| `docker-compose.providers.yml`      | `TTK_MODEL_PROVIDERS_FILE`: model providers seeded from a file.                        | `secrets/ttk_model_providers.json`, which you write ([format](../../secrets/README.md#model-providers-file)).                                                                    |
+| `docker-compose.sandbox.yml`        | An operator-held token, `secrets/ttk_sandbox_token` (`setup` writes one).              | Nothing.                                                                                                                                                                         |
 | `docker-compose.sandbox-docker.yml` | `TTK_SANDBOX_BACKEND=docker`: one hardened container per workspace via the Engine API. | `docker build -f docker/Dockerfile.sandbox-workspace -t tykotech-sandbox-workspace:0.2.0 .`; the socket's group in `TTK_SANDBOX_DOCKER_GID`. **The socket is root on the host.** |
-| `docker-compose.agents.yml`         | `agent-runner` service and the gateway's bridge settings.                              | `secrets/ttk_agent_bridge_token`, `secrets/ttk_agent_commands.json`, a runner image with your agent (`TTK_AGENT_RUNNER_IMAGE`).                                                  |
+| `docker-compose.agents.yml`         | `agent-runner` service and the gateway's bridge settings.                              | A runner image with your agent (`TTK_AGENT_RUNNER_IMAGE`), and `secrets/ttk_agent_commands.json` edited to match it.                                                             |
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d --build

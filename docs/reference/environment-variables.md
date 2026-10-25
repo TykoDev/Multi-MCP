@@ -198,7 +198,7 @@ Bundled image only. With `OTEL_DENO=true`, startup is refused unless every endpo
 
 ## Compose
 
-Compose interpolation only (`.env`); the server never reads these.
+Compose interpolation only (`.env`, written by `deno task setup` from `.env.example`); the server never reads these.
 
 | Variable                 | Default                     | Meaning                                                                              |
 | ------------------------ | --------------------------- | ------------------------------------------------------------------------------------ |
@@ -206,7 +206,9 @@ Compose interpolation only (`.env`); the server never reads these.
 | `TTK_AGENT_RUNNER_IMAGE` | tykotech-agent-runner:0.2.0 | The derived runner image that contains your ACP agent.                               |
 | `TTK_SANDBOX_DOCKER_GID` | 0                           | The group that owns the Docker socket on the host, for the docker sandbox overlay.   |
 | `TTK_GATEWAY_MEMORY`     | 1536m                       | Memory limit of the gateway container: the server and every browser session it runs. |
-| `TTK_GATEWAY_HEAP_MB`    | 768                         | The gateway's JavaScript heap limit in MiB (DENO_V8_FLAGS --max-old-space-size).     |
+| `TTK_GATEWAY_HEAP_MB`    | 1024                        | The gateway's JavaScript heap limit in MiB (DENO_V8_FLAGS --max-old-space-size).     |
+| `TTK_PEER_MEMORY`        | 1g                          | Memory limit of the bundled A2A peer container, its browser sessions included.       |
+| `TTK_PEER_HEAP_MB`       | 512                         | The A2A peer's JavaScript heap limit in MiB.                                         |
 
 ## Browser-layer variables
 

@@ -43,13 +43,12 @@ flowchart LR
 Needs Docker with Compose v2 and Deno 2.9 (for the one-time setup).
 
 ```sh
-deno task setup                                             # secrets/ and .env; prints the admin password and API key once
-sudo chgrp 1993 secrets/ttk_* && chmod 0440 secrets/ttk_*   # Linux only
-docker compose up -d --build
+deno task setup                 # every file in secrets/, and .env; prints the admin password and API key once
+docker compose up -d --build    # gateway, coding sandbox and an A2A peer
 ```
 
 Open <http://127.0.0.1:8787/> and sign in as `admin`. Full walkthrough, LAN access and local development:
-[QUICK-START.md](QUICK-START.md).
+[QUICK-START.md](QUICK-START.md); every secret file and option: [secrets/README.md](secrets/README.md).
 
 ## Connect a client
 

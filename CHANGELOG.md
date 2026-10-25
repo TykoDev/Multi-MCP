@@ -9,6 +9,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **One command sets up the full stack.** `deno task setup` now writes every file any shipped Compose file mounts — the
+  database key, the administrator, the `client` API key, the A2A peer's token pair and list, the browser-secrets (`{}`)
+  and git-remotes (`[]`) placeholders, the sandbox-overlay and agent-runner tokens and the ACP commands template — and
+  `.env` from `.env.example` (one template, held equal by a test). `--only <names>` limits it to some files and, with
+  `--force`, rotates exactly those; files you fill in yourself are replaced only when `--only` names them. Every file is
+  described in one place, `secrets/README.md`. **Upgrading:** run `deno task setup` before the next `docker compose up`;
+  it adds the new files, keeps yours, and repairs their modes.
+- **The default Compose stack runs an A2A peer**, `a2a-peer`: a second gateway from the same image (no second build),
+  with its own data volume and key file, no published port, and `TTK_PUBLIC_URL=http://a2a-peer:8787`. The gateway's
+  `TTK_AGENT_PEERS_FILE` names it, so `agent_delegate` and `agent_peers` work out of the box. `TTK_PEER_MEMORY` and
+  `TTK_PEER_HEAP_MB` size it. Browser-typed secrets (`TTK_SECRETS_FILE`) and credentialed git remotes
+  (`TTK_SANDBOX_GIT_REMOTES_FILE`) are mounted by default from `setup`'s placeholders; `TTK_ALLOWED_DOMAINS` is read
+  from `.env`.
+- **`docker-compose.providers.yml`** replaces the three commented lines that seeded model providers from a file.
+- **`doctor --new-key <id> --save`** adds (or replaces, by id) the record in `secrets/ttk_api_keys.json`, in place, so
+  the running gateway admits the key without a restart.
+- **Every task has a description**, so `deno task` lists what each does. Design notes:
+  `docs/design/stack-tooling-and-secrets.md`.
+
 - **MCP Apps streams for the terminal and A2UI surfaces.** `sandbox_session_open` now opens a terminal embed
   (`ui://tykotech/terminal`) whose **Attach** streams the shell session's output and feeds typed lines to it; the A2UI
   embed gains **Follow live**, which renders every new revision of the surface. Both use the live view's transport: a 30
@@ -53,6 +72,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   typing their path.
 
 ### Fixed
+
+- **The coding sandbox starts on AppArmor hosts (Ubuntu, Debian).** Docker's `docker-default` AppArmor profile denies
+  every mount, so bubblewrap could not build a cage: the sandbox restarted with
+  `bwrap: Failed to make / slave: Permission denied`, and the gateway, which waits for it, never started. The sandbox
+  now runs under `tykotech-sandbox` (`docker/apparmor-sandbox`): `docker-default` with only that denial lifted.
+  `deno task setup` installs and loads it through `sudo` on an AppArmor host (a new `apparmor` unit, last, after the
+  credentials are shown), and when it cannot, exits 1 naming AppArmor as the cause, with the two commands to run by
+  hand. The sandbox's start-up error names the profile too. **Upgrading:** on an AppArmor host, run `deno task setup`
+  again before the next `docker compose up`. Hosts without AppArmor need nothing.
+- **The Compose stack starts on Linux without `sudo`.** `setup` wrote its secrets `0600`, and a Compose file secret is a
+  bind mount that keeps the host's owner and mode (Compose ignores `uid`/`gid`/`mode` for file secrets), so the uid-1993
+  gateway restarted with `Permission denied` until the operator found the manual `chgrp`. `secrets/` is now `0700` and
+  its files `0644`: private on the host through the directory, readable in the containers, with rootless Docker and
+  Docker Desktop too. Re-running `setup` repairs an existing checkout.
+- **`setup`'s credentials reach the stack's features.** The `client` key and the administrator held the default grant,
+  so the sandbox, agent, A2UI, model and memory-write tools were withheld from them. They now hold `mcp:invoke`,
+  `view:watch`, `view:control`, `files:read`, `files:write`, `sandbox:execute`, `agent:invoke`, `model:invoke` and
+  `a2ui:publish` (the administrator also `admin`). `DEFAULT_SCOPES` is unchanged.
+- **API-key reload works in the containers.** `docker/seccomp-chromium.json` lacked `inotify_init1`, so the gateway's
+  key-file watcher never started under the stack's profile ("cannot watch the API key file") and a key added to the file
+  waited for a restart.
+- **`deno task ok` passes on a fresh checkout.** The B6.3 cache-policy test fetched `/assets/app.css`, which exists only
+  after `build:web`; it now checks a hand-written asset, and the bundle's stylesheet when it was built.
+- **`test:agents:compose` runs.** Its fixture never replaced the base file's `ttk_db_key`, so the proof refused itself
+  before starting; it now brings its own key, and both Compose proofs bring the stack's new files and pin the peer to
+  the tree's gateway image.
+- **`deno task cov` runs.** `cov:unit`, `cov:agents` and `cov:browser` restated their tiers' matrices and had drifted:
+  `cov:unit` granted path-scoped read and write, which Deno 2.9's `Deno.symlink` refuses, so two sandbox unit tests
+  failed under it. Each now runs its tier's task with `--coverage`. `admin:generate` is removed (`setup` creates the
+  administrator, `doctor --new-admin admin --force` replaces one).
+- **Every image base is an `ARG`.** `docker/Dockerfile.agent-runner` and `docker/Dockerfile.sandbox-workspace` named
+  theirs literally; they now take `DENO_IMAGE` (and `RUNTIME_IMAGE`) like the others, defaulting to the same pins.
+- The environment reference listed `TTK_GATEWAY_HEAP_MB`'s default as 768; Compose uses 1024.
 
 - **A surface's "Try it" controls did nothing visible.** A Slider moved its own value only: nothing in the catalog could
   compute another component's text from it. With `formatString`/`formatNumber` a bound input now drives computed text on

@@ -25,7 +25,8 @@
 
 /**
  * A task that must not hold an unscoped permission: these are shipped surfaces, not tooling. R3-2: `admin:generate`
- * runs the doctor, as `doctor` does, so it is held to the same rules.
+ * runs the doctor, as `doctor` does, so it is held to the same rules. The table no longer carries it (`setup` creates
+ * the administrator, `doctor --new-admin` replaces one); it stays named here so a task by that name is gated again.
  */
 const SHIPPED_TASKS = ['dev', 'stdio', 'acp', 'serve:cluster', 'doctor', 'admin:generate', 'setup', 'seed'] as const;
 

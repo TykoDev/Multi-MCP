@@ -1,18 +1,21 @@
-# Multi-MCP (tykotech-mcp): the gateway with its sandboxed Chromium, and the private coding sandbox.
+# Multi-MCP (tykotech-mcp), the full stack: the gateway with its sandboxed Chromium, the private coding sandbox, and an
+# A2A peer the gateway delegates to. A2A, A2UI, the coding agent (SlopLord), memory and the file share are on.
 #
-#   deno task setup                  # once: secrets/ and .env (see QUICK-START.md)
+#   deno task setup                  # once: every file below in secrets/, and .env (see secrets/README.md)
 #   docker compose up -d --build
-#   open http://127.0.0.1:8787/
+#   open http://127.0.0.1:8787/      # sign in as admin with the password setup printed
 #
-# Settings that vary per host live in `.env` (template: .env.example). To serve the LAN, set
-# TTK_BIND=0.0.0.0 and TTK_PUBLIC_URL=http://<host address>:8787. A non-loopback bind needs credentials;
-# the server refuses to start without them.
+# Host-specific settings live in `.env` (template: .env.example); nothing here needs editing. To serve the LAN, set
+# TTK_BIND=0.0.0.0 and TTK_PUBLIC_URL=http://<host address>:8787 there.
 #
-# State: the `ttk-data` volume holds /data/ttk.db. Every secret stored there is AES-256-GCM sealed with
-# secrets/ttk_db_key, which is a Docker secret and never on the volume. Back up both, separately.
+# State: `ttk-data` holds /data/ttk.db; every secret stored there is AES-256-GCM sealed with secrets/ttk_db_key, a
+# Docker secret that is never on the volume. Back up both, separately. `ttk-peer-data` is the peer's own database.
 #
-# Overlays (add with -f): docker-compose.sandbox.yml (your own sandbox token file),
-# docker-compose.sandbox-docker.yml (one Docker container per workspace), docker-compose.agents.yml (ACP bridge).
+# Overlays (add with -f, after this file; `deno task setup` has already written what each one mounts):
+#   docker-compose.providers.yml       seed model providers from secrets/ttk_model_providers.json
+#   docker-compose.agents.yml          the ACP agent runner (needs your agent in a derived image)
+#   docker-compose.sandbox.yml         an operator-held sandbox token instead of the generated one
+#   docker-compose.sandbox-docker.yml  one Docker container per coding workspace instead of a bubblewrap cage
 
 services:
   tykotech-mcp:
@@ -43,9 +46,16 @@ services:
       # Optional overrides. Empty derives both lists from TTK_PUBLIC_URL; a value replaces the derived list.
       TTK_ALLOWED_HOSTS: '${TTK_ALLOWED_HOSTS:-}'
       TTK_ALLOWED_ORIGINS: '${TTK_ALLOWED_ORIGINS:-}'
+      # Navigation allowlist; browser_head follows it too. Empty: unrestricted.
+      TTK_ALLOWED_DOMAINS: '${TTK_ALLOWED_DOMAINS:-}'
       TTK_API_KEYS_FILE: /run/secrets/ttk_api_keys
       TTK_ADMIN_USER_FILE: /run/secrets/ttk_admin_user
       TTK_DB_KEY_FILE: /run/secrets/ttk_db_key
+      # Credentials a model types by name without seeing them. `{}` from setup; fill it in, then
+      # `docker compose restart tykotech-mcp`. Copied into ttk.db once (secrets/README.md#browser-typed-secrets).
+      TTK_SECRETS_FILE: /run/secrets/ttk_secrets
+      # The A2A peers `agent_delegate` may reach: the bundled `a2a-peer` below, with the token setup made for it.
+      TTK_AGENT_PEERS_FILE: /run/secrets/ttk_agent_peers
       TTK_LOG_LEVEL: info
       # The server's JavaScript heap limit; Chromium's memory is outside it, inside mem_limit above.
       DENO_V8_FLAGS: '--max-old-space-size=${TTK_GATEWAY_HEAP_MB:-1024}'
@@ -54,22 +64,17 @@ services:
       # The coding sandbox, on the internal network. Its tools need the sandbox:execute scope.
       TTK_SANDBOX_URL: http://sandbox:8080
       TTK_SANDBOX_TOKEN_FILE: /run/secrets/ttk-sandbox-token/token
-      # Navigation allowlist; browser_head follows it too:
-      # TTK_ALLOWED_DOMAINS: 'example.com,docs.example.com'
-      # Seed model providers from a file (copied into the database once, keys sealed). Uncomment this line,
-      # its `secrets:` entry below and the top-level `ttk_model_providers` block. Or add providers in the web app.
-      # TTK_MODEL_PROVIDERS_FILE: /run/secrets/ttk_model_providers
     secrets:
       - ttk_api_keys
       - ttk_admin_user
       - ttk_db_key
-      # Credentials a model types by name without seeing them: uncomment, add
-      # TTK_SECRETS_FILE: /run/secrets/ttk_secrets above, and the top-level block. See secrets/README.md.
-      # - ttk_secrets
-      # - ttk_model_providers
+      - ttk_secrets
+      - ttk_agent_peers
+      - ttk_peer_token
     networks:
       - default
       - sandbox-private
+    # The peer is not waited for: a peer that is down fails agent_delegate only, never this service's start.
     depends_on:
       sandbox:
         condition: service_healthy
@@ -91,6 +96,9 @@ services:
       - seccomp:./docker/seccomp-sandbox.json
       # Fresh /proc mounts inside cages; each cage reinstalls Docker's masks.
       - systempaths=unconfined
+      # Docker's default AppArmor profile with the cages' mounts allowed (docker/apparmor-sandbox). On an AppArmor host
+      # (Ubuntu, Debian) `deno task setup` loads it; Docker ignores this line on a host without AppArmor.
+      - apparmor=tykotech-sandbox
     volumes:
       - ttk-code:/work
       # The service writes its bearer here on first start (0400, uid 1993) and reuses it after.
@@ -101,11 +109,11 @@ services:
       TTK_SANDBOX_TOKEN_FILE: /run/ttk-sandbox-token/token
       # Public clones (sandbox_clone) from these exact hosts, through the service's proxy. Empty turns them off.
       TTK_SANDBOX_GIT_HOSTS: github.com,gitlab.com,bitbucket.org,codeberg.org
-      # Credentialed remotes: secrets/ttk_git_remotes holds JSON [{"id", "url", "username"?, "token"?}].
-      # Uncomment this line, the `secrets:` pair below and the top-level entry. Credentials never enter a cage.
-      # TTK_SANDBOX_GIT_REMOTES_FILE: /run/secrets/ttk_git_remotes
-    # secrets:
-    #   - ttk_git_remotes
+      # Credentialed remotes, JSON [{"id", "url", "username"?, "token"?}]. `[]` from setup; fill it in, then
+      # `docker compose restart sandbox`. Read once at start; credentials never enter a cage.
+      TTK_SANDBOX_GIT_REMOTES_FILE: /run/secrets/ttk_git_remotes
+    secrets:
+      - ttk_git_remotes
     networks:
       - sandbox-private
       # Outbound access for the service's registry and git proxy only; cages have none.
@@ -120,28 +128,63 @@ services:
         max-size: 10m
         max-file: '3'
 
+  # The A2A peer: a second gateway from the same image, with its own browser and database and no published port. The
+  # gateway reaches it as http://a2a-peer:8787 with the bearer in secrets/ttk_peer_token; the peer's key file holds only
+  # that token's hash, scoped to A2A and its tools. Its public URL is the address the gateway dials, because the peer's
+  # agent card must name the origin it was fetched from.
+  a2a-peer:
+    # Built once, by the tykotech-mcp service above; Compose waits for that build before it starts this.
+    image: tykotech-mcp:0.2.0
+    user: '1993:1993'
+    volumes:
+      - ttk-peer-data:/data
+    shm_size: '1gb'
+    mem_limit: '${TTK_PEER_MEMORY:-1g}'
+    security_opt:
+      # As the gateway's: the Chromium sandbox helper's profile, and no no-new-privileges.
+      - seccomp:./docker/seccomp-chromium.json
+    environment:
+      TTK_HOST: '0.0.0.0'
+      TTK_PORT: '8787'
+      TTK_PUBLIC_URL: http://a2a-peer:8787
+      TTK_ALLOWED_DOMAINS: '${TTK_ALLOWED_DOMAINS:-}'
+      TTK_API_KEYS_FILE: /run/secrets/ttk_peer_api_keys
+      TTK_LOG_LEVEL: info
+      DENO_V8_FLAGS: '--max-old-space-size=${TTK_PEER_HEAP_MB:-512}'
+      TTK_MEMORY_LIMIT: '${TTK_PEER_MEMORY:-1g}'
+    secrets:
+      - ttk_peer_api_keys
+    networks:
+      - default
+    restart: unless-stopped
+
+# Every file here is written by `deno task setup` (secrets/README.md). Compose refuses a declared secret whose file is
+# missing, so run setup before the first `up`.
 secrets:
   ttk_api_keys:
     file: ./secrets/ttk_api_keys.json
   ttk_admin_user:
     file: ./secrets/ttk_admin_user.json
-  # 32 random bytes, base64url. Written by `deno task setup`.
+  # 32 random bytes, base64url.
   ttk_db_key:
     file: ./secrets/ttk_db_key
-  # ttk_secrets:
-  #   file: ./secrets/ttk_secrets.json
-  # { "version": 1, "providers": [{ "id", "kind", "base_url", "models", "api_key" }] }
-  # ttk_model_providers:
-  #   file: ./secrets/ttk_model_providers.json
-  # Commented: Compose refuses a declared secret whose file is missing.
-  # ttk_git_remotes:
-  #   file: ./secrets/ttk_git_remotes
+  ttk_secrets:
+    file: ./secrets/ttk_secrets.json
+  ttk_agent_peers:
+    file: ./secrets/ttk_agent_peers.json
+  ttk_peer_token:
+    file: ./secrets/ttk_peer_token
+  ttk_peer_api_keys:
+    file: ./secrets/ttk_peer_api_keys.json
+  ttk_git_remotes:
+    file: ./secrets/ttk_git_remotes
 
 volumes:
   ttk-data: {}
   ttk-code: {}
   # Mounted by `sandbox` (read-write) and `tykotech-mcp` (read-only) only.
   ttk-sandbox-token: {}
+  ttk-peer-data: {}
 
 networks:
   # Gateway <-> sandbox only; nothing on it reaches outside.

@@ -87,8 +87,10 @@ surface stream is read-only, and the terminal accepts input only because its tic
 The sandbox is another container on an internal network, reached with a token it generates into a volume only it and the
 gateway mount. Each command runs in a fresh cage: new namespaces, no capabilities, read-only root and `.git`, 200
 processes, empty environment, no network unless it asks for package registries (HTTPS `CONNECT` to a fixed list on
-public addresses only). Git credentials never enter a cage. Disk is budgeted per workspace and owner. The opt-in Docker
-backend gives the sandbox service, never the gateway, the Docker socket, which is root-equivalent on the host.
+public addresses only). Git credentials never enter a cage. The service itself holds no capability; its AppArmor profile
+is Docker's default with only mounts allowed, which bubblewrap needs to build a cage's root inside the cage's own user
+namespace. Disk is budgeted per workspace and owner. The opt-in Docker backend gives the sandbox service, never the
+gateway, the Docker socket, which is root-equivalent on the host.
 
 ## Agents
 

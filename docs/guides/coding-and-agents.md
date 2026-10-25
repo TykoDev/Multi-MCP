@@ -1,10 +1,12 @@
 # Agents and sandbox
 
 Coding workspaces, the agent task runtime, the built-in model agent, SlopLord, agent memory, A2A, the ACP bridge and
-A2UI surfaces. These need scopes the default grant lacks:
+A2UI surfaces. The default Compose stack runs all of them except the ACP bridge (it needs your agent), including an A2A
+peer to delegate to, and the `client` key and `admin` account `deno task setup` creates hold their scopes. A key you
+mint yourself needs them named, because the default grant lacks them:
 
 ```sh
-deno task doctor --new-key coder \
+deno task doctor --new-key coder --save \
   --scopes mcp:invoke,sandbox:execute,agent:invoke,model:invoke,a2ui:publish,files:read,files:write
 ```
 
@@ -45,8 +47,9 @@ Each command runs in a fresh bubblewrap cage: new namespaces, no capabilities, e
 - **Network.** Cages have only loopback. Registries mode allows HTTPS `CONNECT` to npm, JSR/Deno, PyPI, crates.io and
   the Go proxy, on public addresses only.
 - **Clones.** Public clones from `TTK_SANDBOX_GIT_HOSTS` (Compose default: GitHub, GitLab, Bitbucket, Codeberg).
-  Credentialed remotes: `secrets/ttk_git_remotes` (`[{ "id", "url", "username"?, "token"? }]`); the credential never
-  enters a cage. https only; no hooks or submodules; `.git` is read-only afterwards.
+  Credentialed remotes: `secrets/ttk_git_remotes` (`[{ "id", "url", "username"?, "token"? }]`; `setup` writes `[]`,
+  restart the sandbox after an edit); the credential never enters a cage. https only; no hooks or submodules; `.git` is
+  read-only afterwards.
 - **Budgets.** 1.5 GiB per workspace, 6 GiB per owner, 1 GiB free space kept. Over budget: cleanup-only.
 - **Ownership.** A workspace belongs to its creator; others get not-found. 128 per principal.
 - **Docker backend.** Hosts that forbid unprivileged user namespaces can run one hardened container per workspace with
@@ -83,7 +86,8 @@ calls with the caller's current scopes, and stops when the model answers.
 Anthropic, Ollama, vLLM / llama.cpp, OpenRouter, Custom). The key is sealed in `ttk.db` and never shown again; the
 reload button lists the provider's models.
 
-**Or seed from a file.** Uncomment `TTK_MODEL_PROVIDERS_FILE` and its two `secrets` lines in `docker-compose.yml`:
+**Or seed from a file.** Write `secrets/ttk_model_providers.json` and add the overlay:
+`docker compose -f docker-compose.yml -f docker-compose.providers.yml up -d`.
 
 ```json
 {
@@ -165,12 +169,21 @@ curl -s http://127.0.0.1:8787/a2a \
   task.
 - **Push notifications** are off unless `TTK_A2A_PUSH_ALLOWED_HOSTS` lists webhook hosts (`https:` only, never private
   addresses).
-- **Peers**: `TTK_AGENT_PEERS_FILE` lists other A2A agents (`[{ "id", "url", "token_file"? }]`) for `agent_delegate`.
+- **Peers**: `TTK_AGENT_PEERS_FILE` lists other A2A agents (`[{ "id", "url", "token_file"? }]`) for `agent_delegate` and
+  `agent_peers`. The default Compose stack lists one, `peer`: the `a2a-peer` service, a second gateway reached as
+  `http://a2a-peer:8787` with the token in `secrets/ttk_peer_token` (its key holds `mcp:invoke` and `agent:invoke`).
+  Delegate a tool task to it with
+  `agent_delegate { "peer": "peer", "parts": [{ "data": { "tool": "browser_get_state", "arguments": {} } }] }`. Add your
+  own peers to `secrets/ttk_agent_peers.json` ([secrets/README.md](../../secrets/README.md#a2a-peer)). A peer's agent
+  card must name the origin it is dialled at.
 
 ## The ACP agent bridge
 
 Runs an external coding agent (any ACP executable) in its own container. Put the executable at `/opt/agents/agent` in an
-image derived from `docker/Dockerfile.agent-runner`, describe it in `secrets/ttk_agent_commands.json`, then:
+image derived from `docker/Dockerfile.agent-runner` and describe it in `secrets/ttk_agent_commands.json`.
+`deno task
+setup` has written that file (one agent, `default`, at that path) and the bridge token; edit the file to
+match:
 
 ```json
 [
@@ -185,9 +198,10 @@ image derived from `docker/Dockerfile.agent-runner`, describe it in `secrets/ttk
 ```
 
 ```sh
-deno eval "console.log(crypto.randomUUID() + crypto.randomUUID())" > secrets/ttk_agent_bridge_token
 TTK_AGENT_RUNNER_IMAGE=my-runner:1 docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d --no-build
 ```
+
+(`TTK_AGENT_RUNNER_IMAGE` can live in `.env` instead.)
 
 Each prompt gets a delegated MCP token (`ttkd_`, ≤120 s, never `agent:invoke`, `task` or `admin`), offered to the agent
 only if its `mcp_servers` entry matches `TTK_AGENT_MCP_URL` exactly. Permission requests put the task in
@@ -267,11 +281,12 @@ lets the person type lines into the shell, alongside `sandbox_session_input` / `
 
 ## Troubleshooting
 
-| Symptom                                                                     | Fix                                                                                                         |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `sandbox` never healthy; gateway does not start                             | `docker compose logs sandbox`. The host must allow unprivileged user namespaces, or use the Docker backend. |
-| `sandbox_*` tools missing                                                   | `tools_withheld` says why: grant `sandbox:execute`, or the sandbox is unreachable.                          |
-| `-32004 Text execution requires a configured ACP agent or a model provider` | Add a provider with a default and grant `model:invoke`.                                                     |
-| Saving a key: `409 conflict`                                                | `TTK_DB_KEY_FILE` is not set: run `deno task setup` and restart.                                            |
-| Edited providers file has no effect                                         | The database is the source: `ttk seed --force --only providers`, then restart.                              |
-| `memory_*` tools missing                                                    | Set `TTK_DATA_DIR`; grant `files:read` / `files:write`.                                                     |
+| Symptom                                                                                   | Fix                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sandbox` never healthy; gateway does not start                                           | `docker compose logs sandbox`. The host must allow unprivileged user namespaces, or use the Docker backend.                                                    |
+| `bwrap: Failed to make / slave: Permission denied`, or `unable to apply apparmor profile` | An AppArmor host (Ubuntu, Debian): `deno task setup --only apparmor`, or load the profile by hand ([Docker](../reference/docker-reference.md#coding-sandbox)). |
+| `sandbox_*` tools missing                                                                 | `tools_withheld` says why: grant `sandbox:execute`, or the sandbox is unreachable.                                                                             |
+| `-32004 Text execution requires a configured ACP agent or a model provider`               | Add a provider with a default and grant `model:invoke`.                                                                                                        |
+| Saving a key: `409 conflict`                                                              | `TTK_DB_KEY_FILE` is not set: run `deno task setup` and restart.                                                                                               |
+| Edited providers file has no effect                                                       | The database is the source: `ttk seed --force --only providers`, then restart.                                                                                 |
+| `memory_*` tools missing                                                                  | Set `TTK_DATA_DIR`; grant `files:read` / `files:write`.                                                                                                        |

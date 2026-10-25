@@ -15,9 +15,12 @@
 # tini entrypoint would wrap `sleep infinity` under Docker's own init. Only the binary is taken from it.
 # Same Deno release and Debian (trixie) as the bubblewrap image; digests pinned (integration reconciles the Deno
 # digest with the other images').
-FROM denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432 AS deno
+# Both bases are overridable like the other images' (a mirror, an air-gapped registry); the defaults are the pins.
+ARG DENO_IMAGE=denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
+ARG RUNTIME_IMAGE=debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+FROM ${DENO_IMAGE} AS deno
 
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+FROM ${RUNTIME_IMAGE}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     socat git python3 python3-pip nodejs npm curl ca-certificates util-linux \
     && rm -rf /var/lib/apt/lists/*

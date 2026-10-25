@@ -123,6 +123,7 @@ export {
 export { libraryTools, registerLibrary } from './src/library_tools.ts';
 export { MAX_RESOURCE_SUBSCRIPTIONS, type ResourceWatch, watchResourceChanges } from './src/resource_notifications.ts';
 export {
+	A2A_PEER_SCOPES,
 	ADMIN_SCOPES,
 	areScopes,
 	DEFAULT_SCOPES,
@@ -131,6 +132,7 @@ export {
 	type Scope,
 	SCOPE_GRANTS,
 	SCOPES,
+	STACK_SCOPES,
 	unknownScopes,
 } from './src/scopes.ts';
 export { OUTPUT } from './src/schemas.ts';
