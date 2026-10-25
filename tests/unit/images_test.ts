@@ -390,6 +390,7 @@ Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated 
 			'      - no-new-privileges:true',
 			'      - seccomp:./docker/seccomp-sandbox.json',
 			'      - systempaths=unconfined',
+			'      - apparmor=tykotech-sandbox',
 			'      - ttk-code:/work',
 			`      - ttk-sandbox-token:${GENERATED_TOKEN_DIR}\n`,
 			'      - /tmp/ttk-sandbox:uid=1993,gid=1993,mode=0700,size=64m',
@@ -434,6 +435,39 @@ Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated 
 	}
 	assert(overlay.includes('  ttk_sandbox_token:\n    file: ./secrets/ttk_sandbox_token'), 'from secrets/');
 	assert(!/command:|image:|build:/.test(activeText(overlay)), "and nothing else: the matrices stay the images'");
+});
+
+/**
+ * The sandbox's AppArmor profile (docker/apparmor-sandbox) is Docker's docker-default with `deny mount` lifted, since
+ * bubblewrap cannot build a cage under it ("Failed to make / slave: Permission denied" on Ubuntu and Debian). Nothing
+ * else widens: docker-default's /proc and /sys denials stay, and the profile stays confined. Only the sandbox service
+ * asks for it; the Docker-backend overlay, which builds no cage, replaces its security options and so drops it.
+ */
+Deno.test('sandbox: the AppArmor profile is docker-default with the cage mounts allowed, used by the sandbox only', async () => {
+	const profile = await Deno.readTextFile('docker/apparmor-sandbox');
+	assert(profile.includes('\nprofile tykotech-sandbox flags=(attach_disconnected,mediate_deleted) {\n'), 'its name');
+	assert(/^ {2}mount,$/m.test(profile) && /^ {2}pivot_root,$/m.test(profile), 'bubblewrap may mount');
+	assert(!/^\s*deny mount/m.test(profile), "docker-default's deny mount is lifted");
+	for (
+		const rule of [
+			'deny @{PROC}/sysrq-trigger rwklx,',
+			'deny @{PROC}/kcore rwklx,',
+			'deny @{PROC}/sys/[^k]** w,',
+			'deny /sys/firmware/** rwklx,',
+			'deny /sys/kernel/security/** rwklx,',
+			'signal (send,receive) peer=tykotech-sandbox,',
+			'ptrace (trace,read,tracedby,readby) peer=tykotech-sandbox,',
+		]
+	) {
+		assert(profile.includes(`  ${rule}`), `docker-default's ${rule} is kept`);
+	}
+	assert(!/unconfined\)|change_profile|^\s*userns/m.test(profile), 'and the profile stays confined');
+	const compose = await Deno.readTextFile('docker-compose.yml');
+	for (const service of ['tykotech-mcp', 'a2a-peer']) {
+		assert(!(serviceBlock(compose, service) ?? '').includes('apparmor='), `${service} keeps Docker's default`);
+	}
+	const overlay = serviceBlock(await Deno.readTextFile('docker-compose.sandbox-docker.yml'), 'sandbox') ?? '';
+	assert(overlay.includes('    security_opt: !override\n') && !overlay.includes('apparmor='), 'the Docker backend');
 });
 
 /**

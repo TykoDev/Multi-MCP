@@ -19,13 +19,17 @@
  */
 import { parseArgs } from '@std/cli/parse-args';
 import { checkOtelEgress, enforceOtelEgress, otelDoctorLines, processOtelInputs } from './otel_gate.ts';
+import type { AppArmorHost } from './apparmor.ts';
 
 /** The six `OTEL_*` names the gate reads and every launcher grants (D-137); rule T5's copy is pinned equal to it. */
 export { OTEL_GATE_ENV_NAMES } from './otel_gate.ts';
 
 export const VERSION = '0.2.0';
 
-/** The files `setup` manages, by the name `--only` takes, in the order it writes them. */
+/**
+ * The files `setup` manages, by the name `--only` takes, in the order it writes them. `apparmor` is the host's copy of
+ * the sandbox's AppArmor profile (`packages/cli/apparmor.ts`), last because it may stop at sudo's password prompt.
+ */
 export const SETUP_UNITS = [
 	'db-key',
 	'admin',
@@ -37,6 +41,7 @@ export const SETUP_UNITS = [
 	'agent-token',
 	'agent-commands',
 	'env',
+	'apparmor',
 ] as const;
 
 /** A `setup` unit. */
@@ -873,10 +878,13 @@ export function setupUnits(only: string | undefined): SetupUnit[] | null | undef
  * ones; files you fill in yourself (browser secrets, git remotes, agent commands) are replaced only when `--only`
  * names them. Generated passwords and keys are printed once and stored only as hashes; the service tokens are stored
  * as they are (each side must present one), in `secrets/` like every other file. Kept files get their modes repaired.
+ * On an AppArmor host it then installs the sandbox's profile through sudo (`apparmor`), and when that fails it exits 1
+ * with the commands that do it by hand. `apparmor` stands in for the host in the unit tests.
  */
 export async function runSetup(
 	args: { force?: boolean; admin?: string; 'key-id'?: string; scopes?: string; only?: string },
 	root = '.',
+	apparmor?: AppArmorHost,
 ): Promise<number> {
 	const { generateAdminUser, generateApiKey, generateDbKey, SCOPES } = await import('@tykotech/gateway');
 	const { A2A_PEER_SCOPES, STACK_SCOPES } = await import('@tykotech/mcp');
@@ -980,6 +988,32 @@ export async function runSetup(
 		for (const line of once) console.log(line);
 	}
 	for (const line of problems) console.log(`\nwarning: ${line}`);
+	// After the credentials above are on screen: a Ctrl-C at sudo's prompt ends setup, and they are shown only once.
+	if (selected('apparmor')) {
+		const { ensureSandboxProfile, profileCommands, SANDBOX_PROFILE, shellLine, systemAppArmor } = await import(
+			'./apparmor.ts'
+		);
+		const { resolve } = await import('@std/path');
+		const source = resolve(at(SANDBOX_PROFILE.source));
+		const outcome = await ensureSandboxProfile(source, apparmor ?? systemAppArmor, {
+			force: replace(),
+			announce: (line) => console.log(`\napparmor: ${line}`),
+		});
+		if (outcome.status === 'current') console.log(`\napparmor: ${SANDBOX_PROFILE.target} is current`);
+		if (outcome.status === 'installed') console.log(`apparmor: ${SANDBOX_PROFILE.target} is installed and loaded`);
+		if (outcome.status === 'failed') {
+			const [install, load] = profileCommands(source);
+			console.error(
+				`\nerror: AppArmor: the coding sandbox's profile could not be installed: ${outcome.reason}.\n` +
+					"This host runs AppArmor, and Docker's default AppArmor profile denies the mounts the sandbox's bubblewrap\n" +
+					'cages need: until the profile is loaded, Docker refuses the sandbox ("unable to apply apparmor profile")\n' +
+					'and the gateway, which waits for it, never starts. Install it by hand, then docker compose up -d --build:\n\n' +
+					`  sudo ${shellLine(install)}\n  sudo ${shellLine(load)}\n\n` +
+					'Everything else setup does is done; running setup again retries only this step.',
+			);
+			return 1;
+		}
+	}
 	console.log('\nNext: docker compose up -d --build, then open the TTK_PUBLIC_URL in .env and sign in.');
 	console.log('Every file above is described in secrets/README.md.');
 	return 0;

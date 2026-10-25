@@ -86,13 +86,38 @@ The profile denies by default and lists what the server and browser were measure
 the gateway's API-key file watcher needs: without it the gateway logs `cannot watch the API key file` and a key added to
 `secrets/ttk_api_keys.json` waits for a restart.
 
+## Coding sandbox
+
+bubblewrap builds each cage's root with mounts inside the cage's own user namespace. Docker's default AppArmor profile
+(`docker-default`) denies every mount, so on an AppArmor host (Ubuntu, Debian, SUSE) the service exits with
+`bwrap: Failed to make / slave: Permission denied` and the gateway, which waits for it, never starts. The sandbox
+therefore runs under `apparmor=tykotech-sandbox`: `docker-default` with only that denial lifted
+([`docker/apparmor-sandbox`](../../docker/apparmor-sandbox)). The service holds no capability in its container, so the
+kernel still allows it to mount only inside a cage. Its other settings: `seccomp:./docker/seccomp-sandbox.json`
+(Docker's default plus the namespace calls) and `systempaths=unconfined` (each cage puts Docker's `/proc` masks back).
+
+An AppArmor host loads the profile once, and again after it changes; `/etc/apparmor.d` is reloaded at boot.
+`deno task setup` does it: it asks AppArmor's own tools whether AppArmor is on (`aa-enabled`) and whether the profile is
+loaded (`aa-exec`), and when the installed copy differs from the checkout's or is not loaded, it runs the two commands
+below through `sudo`, which asks for your password. When that fails (no `sudo`, no terminal, a wrong password) it exits
+1 with these commands, to run by hand:
+
+```sh
+sudo install -m 0644 docker/apparmor-sandbox /etc/apparmor.d/tykotech-sandbox
+sudo apparmor_parser -r /etc/apparmor.d/tykotech-sandbox
+```
+
+`deno task setup --only apparmor` does only this step (`--force`: reinstall and reload). Until the profile is loaded the
+container is refused with `unable to apply apparmor profile`. Docker ignores the option on a host without AppArmor
+(Fedora and RHEL use SELinux; Docker Desktop), which needs nothing.
+
 ## `docker-compose.yml`
 
-| Service        | Key settings                                                                                                                                                                                                                                              |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tykotech-mcp` | Port `${TTK_BIND:-127.0.0.1}:8787`; user `1993:1993`; volume `ttk-data:/data`; secrets `ttk_api_keys`, `ttk_admin_user`, `ttk_db_key`, `ttk_secrets`, `ttk_agent_peers`, `ttk_peer_token`; waits for a healthy sandbox.                                   |
-| `sandbox`      | No port; read-only root; all capabilities dropped; `no-new-privileges`; own seccomp profile; 1 GiB, 2 CPUs, 512 PIDs; volume `ttk-code:/work`; secret `ttk_git_remotes`; public clones from `github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org`.  |
-| `a2a-peer`     | No port; the gateway image (built once, by `tykotech-mcp`); user `1993:1993`; volume `ttk-peer-data:/data`; secret `ttk_peer_api_keys` only; `TTK_PUBLIC_URL=http://a2a-peer:8787`; Chromium sandbox settings as the gateway's; `${TTK_PEER_MEMORY:-1g}`. |
+| Service        | Key settings                                                                                                                                                                                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tykotech-mcp` | Port `${TTK_BIND:-127.0.0.1}:8787`; user `1993:1993`; volume `ttk-data:/data`; secrets `ttk_api_keys`, `ttk_admin_user`, `ttk_db_key`, `ttk_secrets`, `ttk_agent_peers`, `ttk_peer_token`; waits for a healthy sandbox.                                                                   |
+| `sandbox`      | No port; read-only root; all capabilities dropped; `no-new-privileges`; own seccomp and [AppArmor](#coding-sandbox) profiles; 1 GiB, 2 CPUs, 512 PIDs; volume `ttk-code:/work`; secret `ttk_git_remotes`; public clones from `github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org`. |
+| `a2a-peer`     | No port; the gateway image (built once, by `tykotech-mcp`); user `1993:1993`; volume `ttk-peer-data:/data`; secret `ttk_peer_api_keys` only; `TTK_PUBLIC_URL=http://a2a-peer:8787`; Chromium sandbox settings as the gateway's; `${TTK_PEER_MEMORY:-1g}`.                                 |
 
 Every secret file comes from `deno task setup` ([secrets/README.md](../../secrets/README.md)). Environment passed from
 `.env`: `TTK_PUBLIC_URL`, `TTK_ALLOWED_HOSTS`, `TTK_ALLOWED_ORIGINS` (empty = derived), `TTK_ALLOWED_DOMAINS` (gateway

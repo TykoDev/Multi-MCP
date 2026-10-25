@@ -73,6 +73,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The coding sandbox starts on AppArmor hosts (Ubuntu, Debian).** Docker's `docker-default` AppArmor profile denies
+  every mount, so bubblewrap could not build a cage: the sandbox restarted with
+  `bwrap: Failed to make / slave: Permission denied`, and the gateway, which waits for it, never started. The sandbox
+  now runs under `tykotech-sandbox` (`docker/apparmor-sandbox`): `docker-default` with only that denial lifted.
+  `deno task setup` installs and loads it through `sudo` on an AppArmor host (a new `apparmor` unit, last, after the
+  credentials are shown), and when it cannot, exits 1 naming AppArmor as the cause, with the two commands to run by
+  hand. The sandbox's start-up error names the profile too. **Upgrading:** on an AppArmor host, run `deno task setup`
+  again before the next `docker compose up`. Hosts without AppArmor need nothing.
 - **The Compose stack starts on Linux without `sudo`.** `setup` wrote its secrets `0600`, and a Compose file secret is a
   bind mount that keeps the host's owner and mode (Compose ignores `uid`/`gid`/`mode` for file secrets), so the uid-1993
   gateway restarted with `Permission denied` until the operator found the manual `chgrp`. `secrets/` is now `0700` and

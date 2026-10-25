@@ -14,6 +14,10 @@ deno task setup
 docker compose up -d --build
 ```
 
+On an AppArmor host (Ubuntu, Debian), `setup` also installs the coding sandbox's AppArmor profile through `sudo`, which
+asks for your password. If it cannot, it exits with the two commands to run by hand
+([Docker](docs/reference/docker-reference.md#coding-sandbox)).
+
 `setup` prints the admin password and an API key **once** (only hashes are stored), and writes every file the stack
 mounts into `secrets/` (private to you: the folder is `0700`), plus `.env`. The ones to know:
 

@@ -51,6 +51,8 @@ const secure = [
 	'--security-opt=no-new-privileges:true',
 	`--security-opt=seccomp=${profile}`,
 	'--security-opt=systempaths=unconfined',
+	// docker/apparmor-sandbox, loaded on an AppArmor host; ignored without AppArmor.
+	'--security-opt=apparmor=tykotech-sandbox',
 	'--memory=1g',
 	'--cpus=2',
 	'--pids-limit=512',

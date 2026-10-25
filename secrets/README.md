@@ -42,6 +42,7 @@ never go in the environment: Chromium inherits it
 | --------------------------------------- | ----------------------------------------------------------------------- |
 | Create what is missing (and fix modes)  | `deno task setup`                                                       |
 | Rotate one generated file               | `deno task setup --only peer --force` (any name from the table)         |
+| Reload the sandbox's AppArmor profile   | `deno task setup --only apparmor --force` (below)                       |
 | Reset a file you fill in yourself       | `deno task setup --only browser-secrets --force`                        |
 | Replace every generated file and `.env` | `deno task setup --force` (files you fill in are kept; see the db key)  |
 | A different administrator name          | `deno task setup --only admin --admin alice` (`--force` to replace)     |
@@ -51,6 +52,16 @@ never go in the environment: Chromium inherits it
 
 After a change, `docker compose up -d` recreates the services whose files changed (`docker compose restart <service>`
 when a file was edited in place). A key added with `--save` needs neither: the gateway re-reads its key file on change.
+
+### The sandbox's AppArmor profile
+
+One file `setup` manages lives outside this folder: `/etc/apparmor.d/tykotech-sandbox`, the coding sandbox's AppArmor
+profile (`docker/apparmor-sandbox`; `--only` name `apparmor`). On a host that runs AppArmor (Ubuntu, Debian), Docker's
+default profile denies the mounts the sandbox's cages need, and the sandbox does not start without this one. `setup`
+installs and loads it through `sudo` last, after the password and key are shown, and only when the installed copy
+differs from the checkout's or is not loaded; `sudo` asks for your password. When it cannot, `setup` exits 1 naming
+AppArmor, with the two commands to run by hand
+([Docker reference](../docs/reference/docker-reference.md#coding-sandbox)). Elsewhere it does nothing.
 
 ## Permissions
 

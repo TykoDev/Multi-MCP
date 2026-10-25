@@ -281,11 +281,12 @@ lets the person type lines into the shell, alongside `sandbox_session_input` / `
 
 ## Troubleshooting
 
-| Symptom                                                                     | Fix                                                                                                         |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `sandbox` never healthy; gateway does not start                             | `docker compose logs sandbox`. The host must allow unprivileged user namespaces, or use the Docker backend. |
-| `sandbox_*` tools missing                                                   | `tools_withheld` says why: grant `sandbox:execute`, or the sandbox is unreachable.                          |
-| `-32004 Text execution requires a configured ACP agent or a model provider` | Add a provider with a default and grant `model:invoke`.                                                     |
-| Saving a key: `409 conflict`                                                | `TTK_DB_KEY_FILE` is not set: run `deno task setup` and restart.                                            |
-| Edited providers file has no effect                                         | The database is the source: `ttk seed --force --only providers`, then restart.                              |
-| `memory_*` tools missing                                                    | Set `TTK_DATA_DIR`; grant `files:read` / `files:write`.                                                     |
+| Symptom                                                                                   | Fix                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sandbox` never healthy; gateway does not start                                           | `docker compose logs sandbox`. The host must allow unprivileged user namespaces, or use the Docker backend.                                                    |
+| `bwrap: Failed to make / slave: Permission denied`, or `unable to apply apparmor profile` | An AppArmor host (Ubuntu, Debian): `deno task setup --only apparmor`, or load the profile by hand ([Docker](../reference/docker-reference.md#coding-sandbox)). |
+| `sandbox_*` tools missing                                                                 | `tools_withheld` says why: grant `sandbox:execute`, or the sandbox is unreachable.                                                                             |
+| `-32004 Text execution requires a configured ACP agent or a model provider`               | Add a provider with a default and grant `model:invoke`.                                                                                                        |
+| Saving a key: `409 conflict`                                                              | `TTK_DB_KEY_FILE` is not set: run `deno task setup` and restart.                                                                                               |
+| Edited providers file has no effect                                                       | The database is the source: `ttk seed --force --only providers`, then restart.                                                                                 |
+| `memory_*` tools missing                                                                  | Set `TTK_DATA_DIR`; grant `files:read` / `files:write`.                                                                                                        |

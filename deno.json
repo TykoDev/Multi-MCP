@@ -84,8 +84,8 @@
 	},
 	"tasks": {
 		"setup": {
-			"description": "Create every missing file in secrets/ the compose files mount, and .env; prints the admin password and API key once (--only, --force: see secrets/README.md)",
-			"command": "deno run --no-prompt --deny-ffi --allow-read=. --allow-write=secrets,.env \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts setup"
+			"description": "Create every missing file in secrets/ the compose files mount, and .env; prints the admin password and API key once; on an AppArmor host, installs the sandbox's AppArmor profile through sudo (--only, --force: see secrets/README.md)",
+			"command": "deno run --no-prompt --deny-ffi --allow-read=.,/etc/apparmor.d/tykotech-sandbox --allow-write=secrets,.env --allow-run=/usr/bin/aa-enabled,/usr/bin/aa-exec,/usr/bin/sudo \"--allow-env=TTK_*,HOME,USERPROFILE,LOCALAPPDATA,PROGRAMFILES,PROGRAMFILES(X86),PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT\" packages/cli/mod.ts setup"
 		},
 		"doctor": {
 			"description": "Print the parsed configuration; --new-key <id> [--scopes] [--save], --new-admin, --new-db-key, --grant",

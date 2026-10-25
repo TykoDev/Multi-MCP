@@ -1,25 +1,55 @@
 /**
  * `setup` writes every file the shipped compose files mount (design: docs/design/stack-tooling-and-secrets.md), with
  * modes the containers can read, the stack's scopes on the credentials it prints, and `.env` from the one template.
- * Run against a scratch checkout under `tests/.scratch`, the only place the unit tier may write.
+ * Run against a scratch checkout under `tests/.scratch`, the only place the unit tier may write. The host's AppArmor is
+ * stood in for (`apparmor_test.ts` covers the unit itself): off, unless a test says otherwise.
  */
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
 import { fromFileUrl } from '@std/path';
 import { A2A_PEER_SCOPES as PEER_SCOPES, STACK_SCOPES } from '@tykotech/mcp';
+import { type AppArmorHost, profileCommands, shellLine } from './apparmor.ts';
 import { ENV_TEMPLATE, runSetup, SETUP_UNITS, setupUnits } from './mod.ts';
 
 const ROOT = new URL('../../', import.meta.url);
 const posix = Deno.build.os !== 'windows';
 
-/** A scratch folder standing in for a checkout; removed after `body`. Console output (the printed keys) is swallowed. */
-async function checkout(body: (root: string) => Promise<void>): Promise<void> {
+/** A host without AppArmor: the unit does nothing there, and sudo must never run. */
+const OFF: AppArmorHost = {
+	enabled: () => Promise.resolve(false),
+	installed: () => Promise.resolve(null),
+	loaded: () => Promise.resolve(false),
+	sudo: () => Promise.reject(new Error('sudo ran on a host without AppArmor')),
+};
+
+/** An AppArmor host without the profile, whose sudo records each command and answers with `answer`. */
+function appArmorHost(answer: string | null, calls: string[][], out: string[]): AppArmorHost {
+	let loaded = false;
+	return {
+		enabled: () => Promise.resolve(true),
+		installed: () => Promise.resolve(null),
+		loaded: () => Promise.resolve(loaded),
+		sudo: (argv) => {
+			calls.push([...argv]);
+			out.push(`<sudo ${argv[0]}>`);
+			loaded = answer === null && argv[0] === 'apparmor_parser';
+			return Promise.resolve(answer);
+		},
+	};
+}
+
+/**
+ * A scratch folder standing in for a checkout; removed after `body`. Console output (the printed keys) is kept from
+ * the terminal and handed to `body`, one entry per call.
+ */
+async function checkout(body: (root: string, out: string[]) => Promise<void>): Promise<void> {
 	const scratch = fromFileUrl(new URL('tests/.scratch/', ROOT));
 	await Deno.mkdir(scratch, { recursive: true });
 	const root = await Deno.makeTempDir({ dir: scratch, prefix: 'setup-' });
 	const { log, error } = console;
-	console.log = console.error = () => {};
+	const out: string[] = [];
+	console.log = console.error = (...parts: unknown[]) => void out.push(parts.join(' '));
 	try {
-		await body(root);
+		await body(root, out);
 	} finally {
 		console.log = log;
 		console.error = error;
@@ -78,7 +108,7 @@ Deno.test('setup: --only names units, and nothing else', () => {
 
 Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts, readable by the containers', async () => {
 	await checkout(async (root) => {
-		assertEquals(await runSetup({}, root), 0);
+		assertEquals(await runSetup({}, root, OFF), 0);
 		// Every secret file compose declares exists, except the one only you can write (the providers overlay's).
 		const declared = await composeSecretFiles();
 		assert(declared.size >= 11, `the compose files declare ${declared.size} secret files`);
@@ -118,10 +148,10 @@ Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts
 
 Deno.test('setup: a second run keeps everything and repairs a mode the containers cannot read', async () => {
 	await checkout(async (root) => {
-		assertEquals(await runSetup({}, root), 0);
+		assertEquals(await runSetup({}, root, OFF), 0);
 		const before = await read(root, 'secrets/ttk_api_keys.json');
 		if (posix) await Deno.chmod(`${root}/secrets/ttk_db_key`, 0o600);
-		assertEquals(await runSetup({}, root), 0);
+		assertEquals(await runSetup({}, root, OFF), 0);
 		assertEquals(await read(root, 'secrets/ttk_api_keys.json'), before);
 		if (posix) assertEquals(await mode(root, 'secrets/ttk_db_key'), 0o644);
 	});
@@ -129,19 +159,19 @@ Deno.test('setup: a second run keeps everything and repairs a mode the container
 
 Deno.test('setup: --force replaces generated files, and yours only when --only names them', async () => {
 	await checkout(async (root) => {
-		assertEquals(await runSetup({}, root), 0);
+		assertEquals(await runSetup({}, root, OFF), 0);
 		const yours = '{ "github_pw": { "value": "x", "domains": ["github.com"] } }\n';
 		await Deno.writeTextFile(`${root}/secrets/ttk_secrets.json`, yours);
 		const key = await read(root, 'secrets/ttk_db_key');
 		const token = await read(root, 'secrets/ttk_peer_token');
 
-		assertEquals(await runSetup({ force: true }, root), 0);
+		assertEquals(await runSetup({ force: true }, root, OFF), 0);
 		assertNotEquals(await read(root, 'secrets/ttk_db_key'), key, 'a generated file is replaced');
 		assertEquals(await read(root, 'secrets/ttk_secrets.json'), yours, 'a file you filled in is not');
 
 		// --only peer --force: the pair is replaced together, and nothing else.
 		const db = await read(root, 'secrets/ttk_db_key');
-		assertEquals(await runSetup({ force: true, only: 'peer' }, root), 0);
+		assertEquals(await runSetup({ force: true, only: 'peer' }, root, OFF), 0);
 		const replaced = (await read(root, 'secrets/ttk_peer_token')).trim();
 		assertNotEquals(replaced, token.trim());
 		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<{ sha256: string }>;
@@ -149,22 +179,72 @@ Deno.test('setup: --force replaces generated files, and yours only when --only n
 		assertEquals(await read(root, 'secrets/ttk_db_key'), db);
 
 		// Named, a file of yours is replaced too.
-		assertEquals(await runSetup({ force: true, only: 'browser-secrets' }, root), 0);
+		assertEquals(await runSetup({ force: true, only: 'browser-secrets' }, root, OFF), 0);
 		assertEquals(await json(root, 'secrets/ttk_secrets.json'), {});
 	});
 });
 
 Deno.test('setup: a half-written peer pair is rewritten whole, and a bad --only or scope writes nothing', async () => {
 	await checkout(async (root) => {
-		assertEquals(await runSetup({ only: 'nope' }, root), 1);
-		assertEquals(await runSetup({ scopes: 'mcp:invoke,bogus' }, root), 1);
+		assertEquals(await runSetup({ only: 'nope' }, root, OFF), 1);
+		assertEquals(await runSetup({ scopes: 'mcp:invoke,bogus' }, root, OFF), 1);
 		assertEquals(await Array.fromAsync(Deno.readDir(root)), [], 'nothing was written');
 
-		assertEquals(await runSetup({ only: 'peer' }, root), 0);
+		assertEquals(await runSetup({ only: 'peer' }, root, OFF), 0);
 		await Deno.remove(`${root}/secrets/ttk_peer_api_keys.json`);
-		assertEquals(await runSetup({ only: 'peer' }, root), 0);
+		assertEquals(await runSetup({ only: 'peer' }, root, OFF), 0);
 		const token = (await read(root, 'secrets/ttk_peer_token')).trim();
 		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<{ sha256: string }>;
 		assertEquals(peerKeys[0]?.sha256, await sha256(token));
+	});
+});
+
+/** A scratch checkout's copy of the sandbox's AppArmor profile, at the path setup hands to sudo. */
+async function profileSource(root: string): Promise<string> {
+	await Deno.mkdir(`${root}/docker`, { recursive: true });
+	await Deno.writeTextFile(`${root}/docker/apparmor-sandbox`, 'profile tykotech-sandbox {}\n');
+	return `${root}/docker/apparmor-sandbox`;
+}
+
+Deno.test('setup: on an AppArmor host the profile is installed through sudo, after the credentials are on screen', async () => {
+	await checkout(async (root, out) => {
+		const source = await profileSource(root);
+		const calls: string[][] = [];
+		assertEquals(await runSetup({}, root, appArmorHost(null, calls, out)), 0);
+		assertEquals(calls, profileCommands(source));
+		const password = out.findIndex((line) => line.startsWith('  password'));
+		assert(password >= 0 && password < out.indexOf('<sudo install>'), 'the password is shown before sudo can prompt');
+		assert(out.some((line) => line.includes('is installed and loaded')), 'and the outcome is reported');
+	});
+});
+
+Deno.test('setup: when sudo fails it exits 1, naming AppArmor and the commands to run by hand', async () => {
+	await checkout(async (root, out) => {
+		const source = await profileSource(root);
+		const calls: string[][] = [];
+		assertEquals(await runSetup({}, root, appArmorHost('sudo install exited with 1', calls, out)), 1);
+		assertEquals(calls.length, 1, 'nothing runs after the refusal');
+		const error = out.find((line) => line.includes('error: AppArmor')) ?? '';
+		assert(error.includes('could not be installed: sudo install exited with 1.'), 'the reason');
+		assert(error.includes('unable to apply apparmor profile'), 'what Docker says without the profile');
+		for (const argv of profileCommands(source)) {
+			assert(error.includes(`\n  sudo ${shellLine(argv)}\n`), `the manual command: sudo ${argv.join(' ')}`);
+		}
+		assert((await Deno.stat(`${root}/secrets/ttk_db_key`)).isFile, 'every file is written all the same');
+		assert(!out.some((line) => line.includes('Next: docker compose up')), 'and it does not say the stack is ready');
+	});
+});
+
+Deno.test('setup: --only apparmor installs the profile and writes no file', async () => {
+	await checkout(async (root, out) => {
+		await profileSource(root);
+		const calls: string[][] = [];
+		assertEquals(await runSetup({ only: 'apparmor' }, root, appArmorHost(null, calls, out)), 0);
+		assertEquals(calls.map((argv) => argv[0]), ['install', 'apparmor_parser']);
+		assertEquals(await Array.fromAsync(Deno.readDir(`${root}/secrets`)), []);
+		assertEquals(await Array.fromAsync(Deno.readDir(root)).then((entries) => entries.map((e) => e.name).sort()), [
+			'docker',
+			'secrets',
+		]);
 	});
 });

@@ -96,6 +96,9 @@ services:
       - seccomp:./docker/seccomp-sandbox.json
       # Fresh /proc mounts inside cages; each cage reinstalls Docker's masks.
       - systempaths=unconfined
+      # Docker's default AppArmor profile with the cages' mounts allowed (docker/apparmor-sandbox). On an AppArmor host
+      # (Ubuntu, Debian) `deno task setup` loads it; Docker ignores this line on a host without AppArmor.
+      - apparmor=tykotech-sandbox
     volumes:
       - ttk-code:/work
       # The service writes its bearer here on first start (0400, uid 1993) and reuses it after.
