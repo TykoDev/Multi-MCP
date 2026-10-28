@@ -114,7 +114,7 @@ override; the slim image's compiled binary bakes its permissions (`scripts/compi
 deno.json, deno.lock     workspace, imports, tasks, fmt/lint config; frozen lockfile
 Dockerfile               bundled image (Deno + Chromium + ffmpeg)
 Dockerfile.slim          slim image (compiled binary)
-docker-compose*.yml      gateway + sandbox + A2A peer; overlays: providers file, sandbox token, Docker backend, ACP runner
+docker-compose*.yml      gateway + sandbox + A2A peer; overlays: providers file, Docker backend, ACP runner
 docker/                  sandbox, workspace, agent-runner images; seccomp profiles; ttk
 scripts/                 gates, compile, coverage, health checks, grant resolvers
 secrets/                 git-ignored file secrets, all written by `deno task setup` (see secrets/README.md)

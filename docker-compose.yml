@@ -14,7 +14,6 @@
 # Overlays (add with -f, after this file; `deno task setup` has already written what each one mounts):
 #   docker-compose.providers.yml       seed model providers from secrets/ttk_model_providers.json
 #   docker-compose.agents.yml          the ACP agent runner (needs your agent in a derived image)
-#   docker-compose.sandbox.yml         an operator-held sandbox token instead of the generated one
 #   docker-compose.sandbox-docker.yml  one Docker container per coding workspace instead of a bubblewrap cage
 
 services:

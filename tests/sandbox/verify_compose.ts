@@ -11,8 +11,7 @@
  * anything starts. Its own project name, its own volumes, an ephemeral loopback port; all removed at the end.
  *
  * D-151: it runs `docker-compose.yml` alone, as a plain `up` does — the sandbox is in the base file, and its token is
- * the one the service generates into the project's own `ttk-sandbox-token` volume, so no token file is made here (the
- * agents proof covers the operator-file overlay, `docker-compose.sandbox.yml`).
+ * the one the service generates into the project's own `ttk-sandbox-token` volume, so no token file is made here.
  *
  * D-154: the database key is a scratch secret too, and the proof checks the default stack end to end: `/data/ttk.db`
  * is created owner-only with no plaintext key in it or beside it; a provider key typed through the admin route survives

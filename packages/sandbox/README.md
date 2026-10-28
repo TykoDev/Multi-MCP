@@ -1,18 +1,30 @@
 # Coding sandbox
 
-`mod.ts` exports the gateway client and Linux service composition interfaces. The service listens privately on
-port 8080. `docker-compose.yml` runs it beside the gateway (D-151); its token comes only from `TTK_SANDBOX_TOKEN_FILE`.
-That file is the operator's (`docker-compose.sandbox.yml` mounts `secrets/ttk_sandbox_token`), except for the one path
-`/run/ttk-sandbox-token/token` the base compose file names: there the service creates the token on its first start (64
-hex characters from `crypto.getRandomValues`, mode 0400) on a volume only it and the gateway mount, never replaces it,
-and after the one read gives up its read grant on both token locations and its write grant on that folder
-(`src/token.ts`). Gateway clients pass the authenticated principal by argument. Workspace ownership is persisted as a
-SHA-256 principal identity in `/work/.owners`, which is never mounted into a command cage or workspace container.
+The private service behind the `sandbox_*` tools. `mod.ts` exports the gateway's client (`SandboxClient`), the Linux
+service composition, and the seccomp profile builder `scripts/sandbox_seccomp.ts` uses. The service listens on port 8080
+with no published port; `docker-compose.yml` runs it beside the gateway, reachable only on an internal network.
+
+## Token
+
+The service and the gateway share one bearer, read only from the file `TTK_SANDBOX_TOKEN_FILE` names (at least 32
+non-whitespace characters).
+
+- **Compose** names `/run/ttk-sandbox-token/token`, on the `ttk-sandbox-token` volume only the sandbox (read-write) and
+  the gateway (read-only) mount. That one path is created by the service on its first start (64 hex characters from
+  `crypto.getRandomValues`, mode 0400, uid 1993) and never replaced. Rotate it:
+  `docker compose down && docker volume rm <project>_ttk-sandbox-token && docker compose up -d`.
+- **Outside Compose** the image's default is `/run/secrets/ttk_sandbox_token`: mount a token of your own there, and give
+  the gateway the same file in its `TTK_SANDBOX_TOKEN_FILE`. Any path other than the Compose one must exist, or the
+  service refuses to start.
+
+After the one read the service gives up its read grant on both token locations and its write grant on the token's folder
+(`src/token.ts`).
 
 ## API
 
-The internal API accepts `POST /v1/{operation}` with `{ "principal": "opaque authenticated owner", "args": {} }` and a
-bearer service credential, for twelve operations:
+The internal API accepts `POST /v1/{operation}` with `{ "principal": "opaque authenticated owner", "args": {} }` and the
+bearer, for twelve operations. The gateway passes the authenticated principal; ownership is kept as its SHA-256 in
+`/work/.owners`, which no command cage or workspace container ever mounts.
 
 | Operation       | Arguments                                                                      |
 | --------------- | ------------------------------------------------------------------------------ |
@@ -29,87 +41,95 @@ bearer service credential, for twelve operations:
 | `session_read`  | `session_id`, `after?`, `wait_ms?`                                             |
 | `session_close` | `session_id`                                                                   |
 
-Each operation rejects unknown fields. `GET /healthz` is unauthenticated and answers
-`{ "ok": true|false, "backend": "bwrap"|"docker", "clone": true|false }` without diagnostic text; the gateway reports
+Unknown fields are refused with 400 `invalid_request`. `GET /healthz` is unauthenticated and answers
+`{ "ok": true|false, "backend": "bwrap"|"docker", "clone": true|false }` without diagnostic text. The gateway reports
 the backend in its admin diagnostics (`sandboxBackend`, `sandboxClone`) and in `capabilities.tykotech.sandbox` for a
 caller holding `sandbox:execute`, and offers `sandbox_clone` only while `clone` is `true`.
 
-Creation provisions an empty Git repository and accepts an optional display `name` and initial text `files`. Seed files
-appear in diffs against the empty initial commit. Cloning is its own operation (`clone`), off unless
-`TTK_SANDBOX_GIT_HOSTS` or `TTK_SANDBOX_GIT_REMOTES_FILE` is set; it runs a fixed git command once in the workspace's
-provisioning cage, public clones through the CONNECT proxy limited to the git hosts, credentialed clones through the
-service-side forwarder (`src/git_forwarder.ts`, upload-pack only, TLS verified for the remote's name), whose credential
-never enters a cage. A clone's `.git` is read-only afterwards, and a failed or cancelled clone is discarded. Until the
-clone has finished, every operation on the workspace but `remove` answers 409 `run_busy`. The caller can write source
-files and install packages through an explicitly requested `registries` network mode. A live session (D-076) is a
-line-mode shell (`/bin/sh -s`, no terminal) read by long-polling `session_read`; one per workspace, four in all, closed
-after 30 minutes idle or 4 hours.
+- **Create** makes an empty Git repository with an optional display `name` and initial text `files`; seed files appear
+  in diffs against the empty initial commit.
+- **Clone** is off unless `TTK_SANDBOX_GIT_HOSTS` or `TTK_SANDBOX_GIT_REMOTES_FILE` is set; `docker-compose.yml` sets
+  both (GitHub, GitLab, Bitbucket and Codeberg, and `secrets/ttk_git_remotes`). A fixed git command runs once in the
+  workspace's provisioning cage: public clones through the CONNECT proxy limited to the git hosts, credentialed clones
+  through the service-side forwarder (`src/git_forwarder.ts`, upload-pack only, TLS verified for the remote's name),
+  whose credential never enters a cage. The clone's `.git` is read-only afterwards and a failed or cancelled clone is
+  discarded. Until it has finished, every operation on the workspace but `remove` answers 409 `run_busy`.
+- **Network** is off in a command unless it asks for `registries`, which allows package registries only (see Limits).
+- **Live sessions** are line-mode shells (`/bin/sh -s`, no terminal) read by long-polling `session_read`: one per
+  workspace, four in all, closed after 30 minutes idle or 4 hours.
 
 ## Backends
 
-`TTK_SANDBOX_BACKEND` selects how commands run. Both answer every operation with the same limits, results and errors.
+`TTK_SANDBOX_BACKEND` selects how commands run. Both answer every operation with the same API, limits and errors, with
+the exceptions listed under Docker.
 
 **`bwrap` (default).** Each command runs in a fresh bubblewrap user, PID, mount, network, IPC, UTS and cgroup namespace
 with an empty inherited environment, no capabilities, read-only system files and Git metadata, and only its own writable
-workspace, home and temporary directory. The default cage has no network. A registries cage receives only its own Unix
-proxy socket.
+workspace, home and temporary directory. The default cage has no network; a registries cage receives only its own Unix
+proxy socket. The container needs the seccomp and AppArmor profiles `docker-compose.yml` names
+([Docker reference](../../docs/reference/docker-reference.md#coding-sandbox)).
 
-**`docker` (opt-in, D-108).** Each workspace is a container of its own, created through the Docker Engine API over the
-socket that `docker-compose.sandbox-docker.yml` mounts into this service (never the gateway), from the image
-`docker/Dockerfile.sandbox-workspace` builds. Socket access is root-equivalent on the host: the service logs a warning
-at every start, and rootless Docker is recommended. Every create and exec body is built from fixed values and checked
-against an allowlist and a forbidden list before it is sent (`src/docker_spec.ts`): uid 1993, `Privileged: false`,
-`CapDrop: ALL`, `no-new-privileges`, a read-only root with a 256 MiB `/tmp` tmpfs, `NetworkMode: none`, 1 GiB memory,
-one CPU, 200 processes, and only named-volume subpath mounts (`/workspace`, `/workspace/.git` read-only,
-`/home/sandbox`, `/run/harbour` read-only) — no bind, device, host namespace or published port; only the workspace and
-its home are writable. Each container is named `ttk-sandbox-<deployment>-<workspace>`, where the deployment is derived
-from the code volume's name, and labelled with that deployment and the hash of its create body: a container whose body
-or image no longer matches is replaced before it runs again. The container runs `sleep
-infinity` under Docker's init, is
-started on demand, stopped after 10 minutes idle and removed with the workspace; each command is an exec into it, run in
-a session of its own so a time limit kills its process group, and followed by a cleanup that kills whatever it left
-running. A registries-mode exec gets the proxy's socket at `/run/harbour/proxy.sock` only while it runs. At start-up the
-service checks the Engine (API 1.45 or later) and both volumes (`TTK_SANDBOX_DOCKER_VOLUME`,
-`TTK_SANDBOX_DOCKER_SOCK_VOLUME`), proves with a container of its own that the configured code volume is the one it
-holds at `/work` (or refuses to start), then removes this deployment's containers of workspaces that no longer exist and
-stops the rest; containers of other deployments are left alone. Two deployments on one daemon must use different code
-volumes: sharing one shares every workspace. Disk use is measured by the service on its own view of the volume while the
-workspace's container is paused, which needs the Engine's `pause` (cgroup v2 for rootless Docker). Settings:
-`TTK_SANDBOX_DOCKER_SOCKET` (default `/var/run/docker.sock`), `TTK_SANDBOX_WORKSPACE_IMAGE` (default
-`tykotech-sandbox-workspace:0.2.0`, a tag or digest), `TTK_SANDBOX_DOCKER_VOLUME` (default `ttk-code`),
-`TTK_SANDBOX_DOCKER_SOCK_VOLUME` (default `ttk-sandbox-sock`). The default image's grants do not include these names,
-which then read as unset.
+**`docker` (opt-in).** `docker-compose.sandbox-docker.yml` mounts the Docker socket into this service (never the
+gateway) and runs each workspace as a container of its own, from the image `docker/Dockerfile.sandbox-workspace` builds.
+For hosts that forbid unprivileged user namespaces. **Socket access is root-equivalent on the host:** the service logs a
+warning at every start, and rootless Docker is recommended.
+
+- Every create and exec body is built from fixed values and checked against an allowlist and a forbidden list before it
+  is sent (`src/docker_spec.ts`): uid 1993, `Privileged: false`, `CapDrop: ALL`, `no-new-privileges`, a read-only root
+  with a 256 MiB `/tmp` tmpfs, `NetworkMode: none`, 1 GiB memory, one CPU, 200 processes, and only named-volume subpath
+  mounts (`/workspace`, `/workspace/.git` read-only, `/home/sandbox`, `/run/harbour` read-only). No bind, device, host
+  namespace or published port.
+- A container is named `ttk-sandbox-<deployment>-<workspace>` (the deployment derives from the code volume's name) and
+  labelled `eu.tykotech.sandbox=1`. It runs `sleep infinity` under Docker's init, is started on demand, stopped after 10
+  minutes idle and removed with its workspace. Each command is an exec in a session of its own, so a time limit kills
+  its process group, followed by a cleanup that kills whatever it left running.
+- At start-up the service checks the Engine (API 1.45 or later) and both volumes, proves the configured code volume is
+  the one it holds at `/work` (or refuses to start), removes this deployment's containers of workspaces that no longer
+  exist and stops the rest. Two deployments on one daemon need different code volumes: sharing one shares every
+  workspace.
+- Compose does not create these containers, so `docker compose down` leaves them; remove them with
+  `docker rm -f $(docker ps -aq --filter label=eu.tykotech.sandbox=1)` before `down -v`, or the volumes stay in use.
+- Differences from `bwrap`: one registries-mode command per workspace at a time (another answers 409 `run_busy`); `/tmp`
+  is shared by the workspace's commands, kept between them and outside the disk budget; disk use is measured by the
+  service with the container paused, which needs the Engine's `pause` (cgroup v2 under rootless Docker).
+- Settings: `TTK_SANDBOX_DOCKER_SOCKET` (default `/var/run/docker.sock`), `TTK_SANDBOX_WORKSPACE_IMAGE` (default
+  `tykotech-sandbox-workspace:0.2.0`, a tag or digest), `TTK_SANDBOX_DOCKER_VOLUME` (default `ttk-code`),
+  `TTK_SANDBOX_DOCKER_SOCK_VOLUME` (default `ttk-sandbox-sock`); the overlay also reads `TTK_SANDBOX_DOCKER_GID`, the
+  socket's group, from `.env`. The default image does not grant these names, so without the overlay they read as unset
+  and the backend stays `bwrap`.
 
 ## Limits
 
-The registry proxy permits HTTPS CONNECT to the fixed registry allowlist and dials only independently validated public
-IP addresses; a clone step gets the same proxy limited to `TTK_SANDBOX_GIT_HOSTS` instead (D-131). The remotes file
-(`/run/secrets/ttk_git_remotes`) is read once at start-up and its read grant revoked, as the token's is (D-132).
-Registry access permits uploads as well as downloads; operator secrets are never injected into cages.
+- **Network.** The registry proxy permits HTTPS CONNECT to a fixed registry allowlist (npm, JSR/Deno, PyPI, crates.io,
+  the Go proxy) and dials only validated public addresses; a clone gets the same proxy limited to the git hosts. It
+  permits uploads as well as downloads. Operator secrets are never injected into cages; the remotes file is read once at
+  start and its read grant revoked, as the token's is.
+- **Paths.** Absolute paths, parent traversal, symlinked segments, Windows drive or stream names and `.git` file
+  operations are refused. Operations on one workspace exclude each other; removal cancels running commands first.
+- **Sizes.** File input and output 256 KiB, directory listings 1,000 entries, command output 1 MiB, diff patches 8 MiB
+  (a diff reply is cut to 9 MiB of JSON).
+- **Counts.** 128 workspaces per principal, 1,024 in all.
+- **Disk.** 1.5 GiB per workspace and 6 GiB per principal, a measured budget rather than a filesystem quota: checked
+  before and after each command and every 250 ms while a command or diff runs, so a command that writes past it is
+  stopped, as is any command when free space falls below 1 GiB. A command can overshoot by what it writes between two
+  checks. Over budget, a workspace can still remove, move or truncate files but not write data; past twice its budget
+  (or a budget past its share of the 6 GiB) it cannot run anything until it is removed.
+- Leftovers from a crash (a checkout or state with no owner record) are swept at start and hourly.
 
-File operations and commands exclude concurrent changes to the same workspace. Removal cancels running commands before
-deleting data. Symlinked path segments, absolute paths, parent traversal, Windows drive/stream names and `.git` file
-operations are refused. File input/output is bounded to 256 KiB, directory listing to 1,000 entries, command output to 1
-MiB, and diff patches to 8 MiB (a diff reply is cut to 9 MiB of JSON). There are at most 128 workspaces per principal
-and 1,024 total. Each workspace has a 1.5 GiB disk budget and a principal's workspaces share 6 GiB. It is a measured
-budget rather than a filesystem quota: du runs in a cage that can read directories a command locked (the Docker backend
-measures from the service with the container paused, gives locked directories their owner's access back first, and
-counts a measurement that fails as over budget). The budget is measured before and after each command, and the volume is
-watched every 250 ms while a command or diff runs, so a command that writes past its budget is stopped, as is any
-command when free space falls below 1 GiB. A workspace over its budget may still run commands that remove, move or
-truncate files, but they cannot write file data. A command can overshoot by what it writes between two checks, and a
-workspace past twice its budget (or a budget past its share of the 6 GiB) cannot run anything until it is removed.
-Leftovers from a crash (a checkout or state with no owner record) are swept hourly.
+## Seccomp
 
-## Provenance and tests
+The cage's seccomp profile, `docker/seccomp-sandbox.json`, is Docker's default profile (vendored from the commit
+`docker/seccomp-sandbox-source.json` names) plus the calls bubblewrap needs. Regenerate it with
+`deno run --allow-read=docker --allow-write=docker scripts/sandbox_seccomp.ts`.
 
-The cage, registry proxy, request validators, scheduler, diff collector, seccomp filter and output collector are adapted
-from `SPECS/sandbox`. The original donor remains unchanged. The Docker base seccomp profile is vendored from the exact
-commit in `docker/seccomp-sandbox-source.json`; regenerate the derived profile with `scripts/sandbox_seccomp.ts`.
-Adaptation and separate permission matrices are recorded in D-064 and D-066; the Docker backend in D-108; clones in
-D-131 and D-132.
+## Tests
 
-Package unit tests run on Windows and Linux; the Docker backend's run against a fake Engine API
-(`src/testing_engine.ts`). `deno task test:sandbox` builds the Linux image (`--image <tag>` names another tag),
-exercises real cage isolation and cancellation under the production seccomp/container posture, then probes authenticated
-workspace lifecycle through a disposable host-loopback-only test port.
+- `deno task test:unit`: the package's unit tests (Linux, macOS, Windows), the Docker backend against a fake Engine API
+  (`src/testing_engine.ts`).
+- `deno task test:sandbox`: builds `docker/Dockerfile.sandbox` (`--image <tag>` names the tag; default
+  `tykotech-sandbox:0.2.0`), runs the cage, proxy, budget, session, clone and cancellation tests inside it under the
+  production posture, then probes the service's workspace lifecycle on a host-loopback port with a token file.
+- `deno task test:compose --tag <t>`: the default stack from images built under `<t>`, with the generated token and the
+  sandbox driven through the gateway's tools.
+- `tests/sandbox/verify_docker_backend.ts`: the Docker backend on a real Engine, with throwaway volumes (no task; the
+  command is in the file's header).

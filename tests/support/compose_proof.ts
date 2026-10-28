@@ -29,7 +29,7 @@ export async function deployedTags(root = '.'): Promise<Set<string>> {
 	const tags = new Set<string>();
 	const { version } = JSON.parse(await Deno.readTextFile(join(root, 'deno.json'))) as { version?: unknown };
 	if (typeof version === 'string') tags.add(version);
-	for (const file of ['docker-compose.yml', 'docker-compose.sandbox.yml', 'docker-compose.agents.yml']) {
+	for (const file of ['docker-compose.yml', 'docker-compose.agents.yml']) {
 		// `image: tykotech-mcp:0.2.0`, and `image: '${TTK_AGENT_RUNNER_IMAGE:-tykotech-agent-runner:0.2.0}'`.
 		const images = /image:\s*['"]?(?:\$\{[A-Z_]+:-)?tykotech-[a-z-]+:([A-Za-z0-9_.-]+)/g;
 		for (const match of (await Deno.readTextFile(join(root, file))).matchAll(images)) tags.add(match[1]!);

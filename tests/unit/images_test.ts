@@ -149,7 +149,6 @@ Deno.test('C10 / D-151: the bundled CMD carries --unstable-kv behind --deny-ffi;
 		'docker-compose.agents.yml',
 		'docker-compose.providers.yml',
 		'docker-compose.sandbox-docker.yml',
-		'docker-compose.sandbox.yml',
 		'docker-compose.yml',
 	]);
 	for (const file of files) {
@@ -360,9 +359,8 @@ Deno.test('D-143 / D-145 / D-151: the bundled CMD grants unscoped net and no pro
  * volume on its first start. What is held here: the gateway reaches the sandbox only over the internal network and
  * waits for it to be healthy; the volume is mounted by exactly those two services in every compose file, read-only in
  * the gateway and under `/run/secrets` (which its `--allow-read` already covers, so its matrix needs nothing new); the
- * paths are the ones `packages/sandbox/src/token.ts` creates and revokes; the image makes the folder 1993-owned 0700,
- * so a fresh volume takes that owner and mode; and `docker-compose.sandbox.yml` points both services at an
- * operator-made file instead.
+ * paths are the ones `packages/sandbox/src/token.ts` creates and revokes; and the image makes the folder 1993-owned
+ * 0700, so a fresh volume takes that owner and mode.
  */
 Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated token only two services mount', async () => {
 	const compose = await Deno.readTextFile('docker-compose.yml');
@@ -426,15 +424,6 @@ Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated 
 	const dockerfile = await Deno.readTextFile('docker/Dockerfile.sandbox');
 	assert(dockerfile.includes(`chmod 0700 ${GENERATED_TOKEN_DIR}`), 'the token folder is 0700');
 	assert(new RegExp(`chown -R 1993:1993 [^\\n]*${GENERATED_TOKEN_DIR}`).test(dockerfile), 'and owned by 1993');
-	// The operator-file overlay points both services at the compose secret the image's CMD grants on its own.
-	const overlay = await Deno.readTextFile('docker-compose.sandbox.yml');
-	for (const name of ['tykotech-mcp', 'sandbox']) {
-		const block = serviceBlock(overlay, name) ?? '';
-		assert(block.includes(`      TTK_SANDBOX_TOKEN_FILE: ${SECRET_TOKEN_FILE}`), `${name}: the operator's file`);
-		assert(block.includes('    secrets:\n      - ttk_sandbox_token'), `${name}: mounted as the compose secret`);
-	}
-	assert(overlay.includes('  ttk_sandbox_token:\n    file: ./secrets/ttk_sandbox_token'), 'from secrets/');
-	assert(!/command:|image:|build:/.test(activeText(overlay)), "and nothing else: the matrices stay the images'");
 });
 
 /**

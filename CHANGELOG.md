@@ -17,11 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   grouped connection offers; `TTK_MCP_TOOL_GROUPS=false` restores the flat list.
 - **One command sets up the full stack.** `deno task setup` now writes every file any shipped Compose file mounts — the
   database key, the administrator, the `client` API key, the A2A peer's token pair and list, the browser-secrets (`{}`)
-  and git-remotes (`[]`) placeholders, the sandbox-overlay and agent-runner tokens and the ACP commands template — and
-  `.env` from `.env.example` (one template, held equal by a test). `--only <names>` limits it to some files and, with
-  `--force`, rotates exactly those; files you fill in yourself are replaced only when `--only` names them. Every file is
-  described in one place, `secrets/README.md`. **Upgrading:** run `deno task setup` before the next `docker compose up`;
-  it adds the new files, keeps yours, and repairs their modes.
+  and git-remotes (`[]`) placeholders, the agent-runner token and the ACP commands template — and `.env` from
+  `.env.example` (one template, held equal by a test). `--only <names>` limits it to some files and, with `--force`,
+  rotates exactly those; files you fill in yourself are replaced only when `--only` names them. Every file is described
+  in one place, `secrets/README.md`. **Upgrading:** run `deno task setup` before the next `docker compose up`; it adds
+  the new files, keeps yours, and repairs their modes.
 - **The default Compose stack runs an A2A peer**, `a2a-peer`: a second gateway from the same image (no second build),
   with its own data volume and key file, no published port, and `TTK_PUBLIC_URL=http://a2a-peer:8787`. The gateway's
   `TTK_AGENT_PEERS_FILE` names it, so `agent_delegate` and `agent_peers` work out of the box. `TTK_PEER_MEMORY` and
@@ -744,6 +744,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Removed
 
+- **`docker-compose.sandbox.yml`**, and `ttk_sandbox_token` from `deno task setup` (`--only sandbox-token` is no longer
+  a name). The coding sandbox runs in `docker-compose.yml` with a token it generates into the `ttk-sandbox-token`
+  volume, so the overlay only swapped that token for a file and nothing needed it. **Upgrading:** drop
+  `-f docker-compose.sandbox.yml` from your command; `secrets/ttk_sandbox_token` can be deleted. A sandbox run outside
+  Compose still reads its token from `TTK_SANDBOX_TOKEN_FILE`.
 - **The Library screen.** Its files, skills and prompts are groups of the Resources tree; every behaviour (upload, new
   folder and file, move, delete, download, grid and list, the skill and prompt editors, `files:write` gating) has one
   home there. Nothing on the wire changes.

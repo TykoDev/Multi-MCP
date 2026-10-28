@@ -4,7 +4,7 @@
  * Run against a scratch checkout under `tests/.scratch`, the only place the unit tier may write. The host's AppArmor is
  * stood in for (`apparmor_test.ts` covers the unit itself): off, unless a test says otherwise.
  */
-import { assert, assertEquals, assertNotEquals } from '@std/assert';
+import { assert, assertEquals, assertNotEquals, assertRejects } from '@std/assert';
 import { fromFileUrl } from '@std/path';
 import { A2A_PEER_SCOPES as PEER_SCOPES, STACK_SCOPES } from '@tykotech/mcp';
 import { type AppArmorHost, profileCommands, shellLine } from './apparmor.ts';
@@ -135,12 +135,12 @@ Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts
 			{ id: 'peer', url: 'http://a2a-peer:8787', token_file: '/run/secrets/ttk_peer_token' },
 		]);
 
-		// Placeholders that configure nothing until filled in, and the overlays' tokens.
+		// Placeholders that configure nothing until filled in, and the agent runner's token.
 		assertEquals(await json(root, 'secrets/ttk_secrets.json'), {});
 		assertEquals(await json(root, 'secrets/ttk_git_remotes'), []);
-		for (const name of ['ttk_sandbox_token', 'ttk_agent_bridge_token']) {
-			assert(/^[0-9a-f]{64}$/.test((await read(root, `secrets/${name}`)).trim()), name);
-		}
+		assert(/^[0-9a-f]{64}$/.test((await read(root, 'secrets/ttk_agent_bridge_token')).trim()));
+		// The sandbox makes its own token, on its volume.
+		await assertRejects(() => Deno.stat(`${root}/secrets/ttk_sandbox_token`), Deno.errors.NotFound);
 		const commands = await json(root, 'secrets/ttk_agent_commands.json') as Array<Record<string, unknown>>;
 		assertEquals(commands.map((command) => [command.id, command.executable]), [['default', '/opt/agents/agent']]);
 	});

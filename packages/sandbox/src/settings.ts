@@ -1,8 +1,8 @@
 /**
  * The sandbox service's configuration, read from its environment once at start-up.
  *
- * Deno's `--allow-env` is an allowlist: the default image grants `TTK_SANDBOX_TOKEN_FILE` only, and reading any
- * other name throws. A name outside the grant is therefore read as unset (`grantedEnv`), so the default image
+ * Deno's `--allow-env` is an allowlist: the default image grants `TTK_SANDBOX_TOKEN_FILE` and the two git names
+ * below only, and reading any other name throws. A name outside the grant is therefore read as unset (`grantedEnv`), so the default image
  * keeps starting the bubblewrap backend without knowing the Docker backend's names exist; the opt-in overlay
  * (docker-compose.sandbox-docker.yml) grants them (D-108).
  *

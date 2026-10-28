@@ -27,7 +27,6 @@ never go in the environment: Chromium inherits it
 | `ttk_peer_api_keys.json`   | that bearer's hash                | `peer`            | `a2a-peer`                     | `TTK_API_KEYS_FILE` (peer)     |
 | `ttk_secrets.json`         | `{}`: yours to fill in            | `browser-secrets` | gateway                        | `TTK_SECRETS_FILE`             |
 | `ttk_git_remotes`          | `[]`: yours to fill in            | `git-remotes`     | sandbox                        | `TTK_SANDBOX_GIT_REMOTES_FILE` |
-| `ttk_sandbox_token`        | 64 hex characters                 | `sandbox-token`   | `docker-compose.sandbox.yml`   | `TTK_SANDBOX_TOKEN_FILE`       |
 | `ttk_agent_bridge_token`   | 64 hex characters                 | `agent-token`     | `docker-compose.agents.yml`    | `TTK_AGENT_BRIDGE_TOKEN_FILE`  |
 | `ttk_agent_commands.json`  | one agent at `/opt/agents/agent`  | `agent-commands`  | `docker-compose.agents.yml`    | `TTK_AGENT_COMMANDS_FILE`      |
 | `ttk_model_providers.json` | nothing: yours, optional          | none              | `docker-compose.providers.yml` | `TTK_MODEL_PROVIDERS_FILE`     |
@@ -61,7 +60,9 @@ default profile denies the mounts the sandbox's cages need, and the sandbox does
 installs and loads it through `sudo` last, after the password and key are shown, and only when the installed copy
 differs from the checkout's or is not loaded; `sudo` asks for your password. When it cannot, `setup` exits 1 naming
 AppArmor, with the two commands to run by hand
-([Docker reference](../docs/reference/docker-reference.md#coding-sandbox)). Elsewhere it does nothing.
+([Docker reference](../docs/reference/docker-reference.md#coding-sandbox)). Elsewhere it does nothing, and so does
+Docker: on a host without AppArmor, or without its tools (`aa-enabled`, `apparmor_parser`: the `apparmor` package), the
+sandbox runs without the profile. Install the package and run `setup` again to have it applied.
 
 ## Permissions
 
@@ -71,10 +72,8 @@ secret is a bind mount of the file alone, which keeps the host's owner and mode 
 for file secrets); `0644` is what lets the containers' unprivileged users (uid 1993; the slim image: 1000) read it, with
 rootless Docker and Docker Desktop too, and without `sudo`.
 
-- A checkout set up before this rule (`0600` files, which the containers cannot read, so the gateway restarted with
-  `Permission denied`) is repaired by running `deno task setup` again.
-- Files handed over with an older `chgrp 1993` + `0440` keep working. Files `chown`ed to 1993 cannot be repaired by you;
-  `setup` warns, and `--force` replaces them (it deletes the old file first).
+- A file the containers cannot read (a gateway restarting with `Permission denied`) is repaired by running
+  `deno task setup` again. A file owned by another account cannot be; `setup` warns, and `--force` replaces it.
 - Copying a file out of `secrets/` copies its `0644` with it: keep copies and backups somewhere private.
 - Windows has no POSIX modes; nothing is needed there.
 
@@ -197,15 +196,12 @@ docker compose -f docker-compose.yml -f docker-compose.providers.yml up -d
 
 ## Sandbox token
 
-`docker-compose.yml` uses no file for it: the sandbox service generates its token on first start (64 hex characters,
-`0400`, uid 1993) into the `ttk-sandbox-token` volume, mounted read-write by the sandbox and read-only by the gateway
-only. Rotate: `docker compose down`, `docker volume rm <project>_ttk-sandbox-token`, start again.
-
-`docker-compose.sandbox.yml` uses `ttk_sandbox_token` instead (an operator-held token, at least 32 non-whitespace
-characters), for a gateway that is not in this Compose project:
+Not a file here: the sandbox service generates its token on first start (64 hex characters, `0400`, uid 1993) into the
+`ttk-sandbox-token` volume, mounted read-write by the sandbox and read-only by the gateway only. Rotate it (the project
+is the checkout's folder name unless you set one):
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d
+docker compose down && docker volume rm <project>_ttk-sandbox-token && docker compose up -d
 ```
 
 ## Agent runner files
@@ -214,7 +210,8 @@ For [`docker-compose.agents.yml`](../docker-compose.agents.yml): `ttk_agent_brid
 and `ttk_agent_commands.json` fixes the ACP executables, arguments, cwd, environment and MCP allowlist. `setup` writes
 one agent, `default`, at `/opt/agents/agent`; install it in an image derived from `docker/Dockerfile.agent-runner` and
 edit the file to match (the runner refuses to start until the executable exists). It must not hold MCP bearers, headers
-or provider keys: mount those as files and name them in `env` as `*_FILE`. Example:
+or provider keys: mount those as files and name them in `env` as `*_FILE`. Steps:
+[Quick start](../QUICK-START.md#3-docker-sandbox-and-agent-runner); format:
 [Agents and sandbox](../docs/guides/coding-and-agents.md#the-acp-agent-bridge).
 
 ## File format
