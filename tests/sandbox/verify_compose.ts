@@ -226,6 +226,11 @@ try {
 	const alice = clients[0]!;
 	const bob = clients[1]!;
 	const restricted = clients[2]!;
+	// Tool groups: this 2025-era client holds a stateful session, which lists the sandbox tools behind `use_sandbox`.
+	const grouped = await alice.listTools();
+	assert(grouped.tools.some((tool) => tool.name === 'use_sandbox'), 'the sandbox group must be offered');
+	const opened = await alice.callTool({ name: 'use_sandbox', arguments: {} });
+	assert(opened.isError !== true, JSON.stringify(opened.content));
 	const tools = await alice.listTools();
 	assert(tools.tools.some((tool) => tool.name === 'sandbox_create'), 'Ready sandbox tools must be advertised');
 	const created = await alice.callTool({

@@ -342,6 +342,8 @@ async function runStdio(): Promise<number> {
 		// D-108: `capabilities.tykotech.sandbox` on stdio too.
 		...(sandbox === undefined ? {} : { sandboxBackend: () => sandbox.backend }),
 		...clone,
+		// Tool groups (`TTK_MCP_TOOL_GROUPS`): the one server pinned to this connection remembers the groups it opens.
+		toolGroups: config.mcpToolGroups,
 	});
 	const watches: Array<{ close(): void }> = [];
 	const handle = serveStdio(async (context) => {

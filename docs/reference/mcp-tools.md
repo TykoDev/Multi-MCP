@@ -17,6 +17,35 @@ needs `TTK_AGENT_PEERS_FILE`, which the default stack sets to its bundled A2A pe
 Scope: needed in addition to `mcp:invoke`; blank = none. Most browser tools take an optional `session_id` (default: your
 `default` session). Index-based tools take `index` plus the `state_token` from `browser_get_state`.
 
+## Tool groups
+
+The counts above are the flat list. On a connection that keeps one server for its whole life — stdio, and a 2025-era
+client's `Mcp-Session-Id` session (`TTK_MCP_STATEFUL`, on by default outside a cluster) — `tools/list` starts instead
+with one entry tool for each group the credential holds tools in (`TTK_MCP_TOOL_GROUPS`, on by default):
+
+| Entry tool    | Adds to the list                   |
+| ------------- | ---------------------------------- |
+| `use_browser` | every `browser_*` tool             |
+| `use_library` | `file_*`, `skill_*` and `prompt_*` |
+| `use_sandbox` | `sandbox_*`                        |
+| `use_agent`   | `agent_*`                          |
+| `use_memory`  | `memory_*`                         |
+| `use_a2ui`    | `a2ui_*`                           |
+
+- An entry tool takes no arguments. It adds its group's tools to this connection's list, sends one
+  `notifications/tools/list_changed` so the client re-lists, and returns each tool's name, title and description
+  (`structuredContent`: `{ group, tools: [{ name, title, description }] }`). Calling it again returns the same index and
+  announces nothing, unless the group's availability changed in between.
+- It is listed only for a group the credential holds a tool of, and only while one of them is available, and it adds
+  only those tools. `capabilities.tykotech.tool_groups` names the groups offered when the connection opened.
+- Grouping decides what is listed, never what may be called: every tool still answers `tools/call` by name, and such a
+  call does not open its group. The MCP Apps tickets (`browser_live_ticket`, `a2ui_surface_ticket`,
+  `sandbox_session_ticket`) are never grouped.
+- The stateless 2026-07-28 mount (one server per request), the web app and a cluster list every tool at once.
+- Opened groups last as long as the connection. A session rebuilt after a scope change, or restored after a restart,
+  starts with every group closed and is told to re-list.
+- A client that does not re-list on `tools/list_changed` never sees an opened group: set `TTK_MCP_TOOL_GROUPS=false`.
+
 ## Browser: navigation and interaction
 
 | Tool                       | Scope      |   | Does                                                                                                                                               |

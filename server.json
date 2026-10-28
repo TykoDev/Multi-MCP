@@ -307,6 +307,12 @@
 					"isSecret": false
 				},
 				{
+					"name": "TTK_MCP_TOOL_GROUPS",
+					"description": "stdio and stateful sessions list one use_<group> tool per group until the model opens it; default true.",
+					"isRequired": false,
+					"isSecret": false
+				},
+				{
 					"name": "TTK_OTEL_ENDPOINTS",
 					"description": "OTLP collector origins (comma list, max 16). While OTEL_DENO=true it must name every endpoint's origin, so empty or off-list refuses start. A malformed entry refuses start in any mode.",
 					"isRequired": false,

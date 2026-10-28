@@ -130,7 +130,8 @@ Deno.test({
 		const child = new Deno.Command(BINARY, {
 			args: ['stdio'],
 			cwd: ROOT,
-			env: { TTK_LOG_LEVEL: 'error' },
+			// The flat list: this case proves the binary carries the whole catalog, which a grouped list would hide.
+			env: { TTK_LOG_LEVEL: 'error', TTK_MCP_TOOL_GROUPS: 'false' },
 			clearEnv: true,
 			stdin: 'piped',
 			stdout: 'piped',

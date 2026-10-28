@@ -199,6 +199,12 @@ export interface Config {
 	 */
 	readonly mcpStateful: boolean;
 	/**
+	 * Tool groups: on a connection that keeps one server for its whole life — stdio and a stateful 2025 session — list
+	 * one `use_<group>` entry tool per group until the model opens it (`TTK_MCP_TOOL_GROUPS`, on by default). The
+	 * stateless 2026-07-28 mount lists flat either way: a server built per request cannot remember an opened group.
+	 */
+	readonly mcpToolGroups: boolean;
+	/**
 	 * Multi-node configuration (R10) and this node's role (R12).
 	 *
 	 * `cluster` is `null` for the single-node default, which is also the only
@@ -356,6 +362,7 @@ export const ENV_NAMES = [
 	'TTK_RATE_RPM',
 	'TTK_MAX_BODY_KB',
 	'TTK_MCP_STATEFUL',
+	'TTK_MCP_TOOL_GROUPS',
 	'TTK_ROLE',
 	'TTK_CLUSTER_KV',
 	'TTK_NODE_ID',
@@ -1094,6 +1101,8 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): Config {
 				'unset TTK_MCP_STATEFUL or TTK_CLUSTER_KV',
 		);
 	}
+	// Tool groups: nothing to refuse in a cluster, where the stateless mount serves every HTTP client flat anyway.
+	const mcpToolGroups = bool(env, 'TTK_MCP_TOOL_GROUPS', true);
 
 	// D-150: one line per default-on switch that resolved off here, logged by `startGateway`.
 	const featureNotes: string[] = [];
@@ -1246,6 +1255,7 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): Config {
 			maxBodyBytes: int(env, 'TTK_MAX_BODY_KB', 256, 1, 65_536) * 1024,
 		},
 		mcpStateful,
+		mcpToolGroups,
 		cluster,
 		role,
 		logFormat: env.TTK_LOG_FORMAT?.trim() === 'pretty' ? 'pretty' : 'json',

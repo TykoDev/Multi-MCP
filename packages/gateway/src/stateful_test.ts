@@ -48,6 +48,8 @@ async function fixture(
 		TTK_API_KEYS: JSON.stringify([record]),
 		TTK_LOG_LEVEL: 'error',
 		TTK_MCP_STATEFUL: 'true',
+		// The session mechanics below are read off the flat catalog; the tool-group cases at the end turn grouping on.
+		TTK_MCP_TOOL_GROUPS: 'false',
 		...overrides,
 	});
 	const gateway = await startGateway({
@@ -571,4 +573,73 @@ Deno.test('TTK_MCP_STATEFUL: on by default, off by default in a cluster, refused
 	assertEquals(loadConfig({}).mcpStateful, true);
 	assertEquals(loadConfig({ TTK_CLUSTER_KV: 'tests/.scratch/kv', TTK_NODE_URL: 'http://n1:8787' }).mcpStateful, false);
 	assertEquals(loadConfig({ TTK_MCP_STATEFUL: 'false' }).mcpStateful, false);
+});
+
+// --- tool groups: a session lists one entry tool per group until its model opens one ------------------------------
+
+/** A 2025 session on a real gateway, with `notifications/initialized` sent, and its `tools/list` names. */
+async function groupedSession(f: Fixture) {
+	const initialized = await rpc(f, LEGACY_INITIALIZE);
+	const session = initialized.headers.get(SESSION_HEADER);
+	assert(session !== null, 'no Mcp-Session-Id came back');
+	await initialized.body?.cancel();
+	const headers = { [SESSION_HEADER]: session, 'mcp-protocol-version': '2025-06-18' };
+	await (await rpc(f, { jsonrpc: '2.0', method: 'notifications/initialized' }, headers)).body?.cancel();
+	let id = 100;
+	const names = async (): Promise<string[]> =>
+		((await resultOf(await rpc(f, { jsonrpc: '2.0', id: id++, method: 'tools/list' }, headers))).tools as {
+			name: string;
+		}[]).map((tool) => tool.name);
+	const call = async (name: string): Promise<Record<string, unknown>> =>
+		await resultOf(
+			await rpc(f, { jsonrpc: '2.0', id: id++, method: 'tools/call', params: { name, arguments: {} } }, headers),
+		);
+	return { headers, names, call };
+}
+
+Deno.test('tool groups: a 2025 session lists the entry tools, and opening one pushes list_changed on its stream', async () => {
+	await using f = await fixture({ TTK_MCP_TOOL_GROUPS: 'true' });
+	const s = await groupedSession(f);
+	const before = await s.names();
+	assert(before.includes('use_browser'), before.join(','));
+	assert(!before.includes('browser_navigate'), 'a grouped tool waits behind its entry tool');
+
+	const stream = await fetch(`${f.url}/mcp`, {
+		headers: { accept: 'text/event-stream', authorization: `Bearer ${f.key}`, ...s.headers },
+	});
+	assertEquals(stream.status, 200);
+	// The standalone stream is registered once its response has started; give the transport a beat to hold it.
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	const opened = await s.call('use_browser');
+	assertEquals((opened.structuredContent as { group: string }).group, 'browser');
+	assertStringIncludes(await readUntil(stream, 'tools/list_changed'), 'notifications/tools/list_changed');
+	assert((await s.names()).includes('browser_navigate'), 'the opened group is listed');
+});
+
+Deno.test('tool groups: the stateless mount lists flat beside a grouped session, and so does a session with grouping off', async () => {
+	{
+		await using f = await fixture({ TTK_MCP_TOOL_GROUPS: 'true' });
+		// No session and no 2025 initialize: the stateless mount, which builds a server per request.
+		const flat = ((await resultOf(await rpc(f, { jsonrpc: '2.0', id: 1, method: 'tools/list' }))).tools as {
+			name: string;
+		}[]).map((tool) => tool.name);
+		assert(flat.includes('browser_navigate'), flat.join(','));
+		assert(!flat.some((name) => name.startsWith('use_')), 'no entry tool on the stateless mount');
+		// The same gateway's session is grouped.
+		assert((await (await groupedSession(f)).names()).includes('use_browser'));
+	}
+	{
+		await using f = await fixture({ TTK_MCP_TOOL_GROUPS: 'false' });
+		const names = await (await groupedSession(f)).names();
+		assert(names.includes('browser_navigate') && !names.some((name) => name.startsWith('use_')), names.join(','));
+	}
+});
+
+Deno.test('TTK_MCP_TOOL_GROUPS: on by default, off when false, and anything else is refused', () => {
+	assertEquals(loadConfig({}).mcpToolGroups, true);
+	assertEquals(loadConfig({ TTK_MCP_TOOL_GROUPS: 'false' }).mcpToolGroups, false);
+	assertEquals(loadConfig({ TTK_MCP_TOOL_GROUPS: 'off' }).mcpToolGroups, false);
+	assertEquals(loadConfig({ TTK_MCP_TOOL_GROUPS: 'true' }).mcpToolGroups, true);
+	const error = assertThrows(() => loadConfig({ TTK_MCP_TOOL_GROUPS: 'sometimes' }), ConfigError);
+	assertStringIncludes(error.message, 'TTK_MCP_TOOL_GROUPS');
 });

@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Grouped tool lists.** On stdio and on a 2025-era client's stateful session, `tools/list` starts with one entry tool
+  per group — `use_browser`, `use_library`, `use_sandbox`, `use_agent`, `use_memory`, `use_a2ui` — instead of up to 102
+  tools. Calling one adds that group's tools to the connection's list, announces `tools/list_changed` once, and returns
+  each tool's name, title and description. Every tool still answers `tools/call` by name; the stateless 2026-07-28
+  mount, the web app and a cluster list every tool as before. `capabilities.tykotech.tool_groups` names the groups a
+  grouped connection offers; `TTK_MCP_TOOL_GROUPS=false` restores the flat list.
 - **One command sets up the full stack.** `deno task setup` now writes every file any shipped Compose file mounts — the
   database key, the administrator, the `client` API key, the A2A peer's token pair and list, the browser-secrets (`{}`)
   and git-remotes (`[]`) placeholders, the sandbox-overlay and agent-runner tokens and the ACP commands template — and
@@ -133,6 +139,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Breaking
 
+- **stdio and stateful-session clients see grouped tool lists by default.** A client that does not re-list on
+  `tools/list_changed` sees only the `use_*` entry tools; set `TTK_MCP_TOOL_GROUPS=false` to keep the flat list. Tool
+  names and parameters are unchanged.
 - **Secrets rest only encrypted, in `<TTK_DATA_DIR>/ttk.db` (D-154).** Set `TTK_DB_KEY_FILE` (32 bytes;
   `deno task
   setup` or `doctor --new-db-key` writes one; Compose mounts `secrets/ttk_db_key`). With a data directory,

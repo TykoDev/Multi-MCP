@@ -90,6 +90,10 @@ peer). `tests/container/verify_container.ts` derives the expected set from the c
 (`--shape
 bundled|slim`).
 
+Those counts are the flat list, which the stateless mount and the web app serve. stdio and stateful 2025 sessions list
+grouped by default (`TTK_MCP_TOOL_GROUPS`): six `use_<group>` entry tools (`packages/mcp/src/tool_groups.ts`) stand in
+for their groups until opened, and every tool stays callable by name.
+
 The two images differ: the bundled image's grants live in its `CMD` and can be narrowed by a Compose `command:`
 override; the slim image's compiled binary bakes its permissions (`scripts/compile.ts`) and cannot be re-flagged.
 

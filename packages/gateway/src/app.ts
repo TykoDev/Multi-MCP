@@ -508,17 +508,27 @@ export function createGatewayApp(deps: GatewayDeps): GatewayApp {
 		...(expansion.applyModelProviders === undefined ? {} : { apply: expansion.applyModelProviders }),
 		views: () => expansion.modelProviders.providers,
 	});
-	const buildServer = createBuildServer({ ...coreDeps, extraTools: expansion.tools });
+	// One set of deps for both factories below, so the mounts cannot drift in tools or policy. R6/F3 (D-126): it carries
+	// one `requestState` key, so a round minted on either mount verifies on the other.
+	const serverDeps: McpDeps = {
+		...coreDeps,
+		extraTools: expansion.tools,
+		requestStateKey: crypto.getRandomValues(new Uint8Array(32)),
+	};
+	const buildServer = createBuildServer(serverDeps);
 	const handler = createMcpHandler(buildServer, { legacy: 'stateless' });
 
 	// R8: the stateful path, for 2025-era clients that need an `Mcp-Session-Id` and a standalone stream — the only
-	// way such a client hears that its tools changed. Same factory, so both mounts serve identical tools and policy.
+	// way such a client hears that its tools changed. The same deps, so both mounts serve identical tools and policy;
+	// with `TTK_MCP_TOOL_GROUPS` the session factory differs only in grouping its list.
 	// Its session records survive a restart, so a client is told to re-list after a deploy.
 	/** Each browser session's last memory dump (Sessions › Sessions), refreshed at most every 15 s per session. */
 	const browserMemory = new BrowserMemoryCache();
 	const stateful = config.mcpStateful
 		? new StatefulMount({
-			buildServer,
+			// Tool groups (`TTK_MCP_TOOL_GROUPS`): a session keeps one server for its whole life, so it can remember a
+			// group its model opened; the stateless mount above builds a server per request and lists flat.
+			buildServer: config.mcpToolGroups ? createBuildServer({ ...serverDeps, toolGroups: true }) : buildServer,
 			logger,
 			registry,
 			...(config.dataDir === null ? {} : { persistPath: `${config.dataDir}/mcp/sessions.json` }),

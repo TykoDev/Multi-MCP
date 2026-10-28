@@ -57,6 +57,14 @@ export function serverInstructions(capabilities: TykotechCapabilities): string {
 		'Multi-MCP runs a server-side Chromium for you. Read the ttk://capabilities resource for what this ' +
 		'credential can do here.',
 	];
+	// `tool_groups` is present only on a connection that lists its tools grouped. The sentences below name tools such a
+	// list does not hold yet, so the way to them comes first.
+	if (capabilities.tool_groups !== undefined) {
+		lines.push(
+			`Tools come in groups: call ${capabilities.tool_groups.map((group) => `use_${group}`).join(', ')} to add ` +
+				"that group's tools to your tool list before you use them.",
+		);
+	}
 	// `events` is present exactly when the caller holds `mcp:invoke`, i.e. can drive the browser at all.
 	if (capabilities.events !== undefined) {
 		lines.push(
