@@ -142,6 +142,7 @@ async function complete(
 	};
 	if (era === MODERN) {
 		params._meta = { [PROTOCOL_VERSION_META_KEY]: MODERN, [CLIENT_CAPABILITIES_META_KEY]: {} };
+		headers['mcp-protocol-version'] = MODERN;
 		headers['mcp-method'] = 'completion/complete';
 	}
 	const response = await f.handler.fetch(

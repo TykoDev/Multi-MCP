@@ -112,13 +112,14 @@ function callParams(era: string, name: string, args: Record<string, unknown>): R
 	return params;
 }
 
-/** SEP-2243 requires the method and the tool name in headers on the modern era. */
+/** SEP-2243 requires the protocol version, the method and the tool name in headers on the modern era. */
 function modernHeaders(era: string, name: string): HeadersInit {
 	const headers: Record<string, string> = {
 		'content-type': 'application/json',
 		accept: 'application/json, text/event-stream',
 	};
 	if (era === MODERN) {
+		headers['mcp-protocol-version'] = MODERN;
 		headers['mcp-method'] = 'tools/call';
 		headers['mcp-name'] = name;
 	}

@@ -82,7 +82,11 @@ async function gateway(env: Record<string, string>) {
 			headers: {
 				...headers(user.key),
 				...(modern
-					? { 'mcp-method': method, ...(method === 'tools/call' ? { 'mcp-name': String(params.name) } : {}) }
+					? {
+						'mcp-protocol-version': '2026-07-28',
+						'mcp-method': method,
+						...(method === 'tools/call' ? { 'mcp-name': String(params.name) } : {}),
+					}
 					: {}),
 			},
 			body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),

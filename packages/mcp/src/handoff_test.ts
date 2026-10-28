@@ -61,6 +61,7 @@ async function rpc(handler: ReturnType<typeof createMcpHandler>, c: Call = {}): 
 		params._meta = { [PROTOCOL_VERSION_META_KEY]: MODERN, [CLIENT_CAPABILITIES_META_KEY]: c.caps ?? {} };
 		if (c.responses !== undefined) params.inputResponses = c.responses;
 		if (c.state !== undefined) params.requestState = c.state;
+		headers['mcp-protocol-version'] = MODERN;
 		headers['mcp-method'] = method;
 		if (method === 'tools/call') headers['mcp-name'] = 'browser_request_human';
 	}

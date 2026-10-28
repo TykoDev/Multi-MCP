@@ -617,6 +617,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Dependencies updated.** The MCP TypeScript SDK (`@modelcontextprotocol/server` and `client`) 2.0.0 → 2.4.0,
+  `@modelcontextprotocol/hono` 2.0.2, `hono` 4.13.14, `jose` 6.2.13, `zod` 4.6.7, and the `@std/*` packages to their
+  latest 1.x. SDK 2.4.0 enforces SEP-2243 on the 2026-07-28 HTTP era: every request carries `MCP-Protocol-Version` and
+  `Mcp-Method` (and `Mcp-Name` where the method names a tool, resource or prompt), and `initialize` under a modern
+  header is refused. The SDK's clients send them; nothing changes for the 2025 era or the web app.
 - **Larger filter chips and logos.** The Resources filter chips are 15% larger again, with count bubbles in inverted
   text colour for contrast; the dock logo is 20% larger and the Sessions empty-state logo 40% larger.
 - **Brand: Multi-MCP.** The dock shows the Multi-MCP logo and wordmark; the TykoTech logo sits at the dock's foot (full
