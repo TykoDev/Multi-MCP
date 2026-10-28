@@ -428,13 +428,16 @@ Deno.test('D-151: docker-compose.yml runs the hardened sandbox with a generated 
 
 /**
  * The sandbox's AppArmor profile (docker/apparmor-sandbox) is Docker's docker-default with `deny mount` lifted, since
- * bubblewrap cannot build a cage under it ("Failed to make / slave: Permission denied" on Ubuntu and Debian). Nothing
+ * bubblewrap cannot build a cage under it ("Failed to make / slave: Permission denied" on Ubuntu and Debian), and its
+ * policy ABI pinned to AppArmor 3.0, without which an AppArmor 4 kernel refuses each cage its user namespace. Nothing
  * else widens: docker-default's /proc and /sys denials stay, and the profile stays confined. Only the sandbox service
  * asks for it; the Docker-backend overlay, which builds no cage, replaces its security options and so drops it.
  */
 Deno.test('sandbox: the AppArmor profile is docker-default with the cage mounts allowed, used by the sandbox only', async () => {
 	const profile = await Deno.readTextFile('docker/apparmor-sandbox');
 	assert(profile.includes('\nprofile tykotech-sandbox flags=(attach_disconnected,mediate_deleted) {\n'), 'its name');
+	// AppArmor 4 kernels mediate user namespace creation; pinned to the 3.0 ABI, the cages may make theirs.
+	assert(/^abi <abi\/3\.0>,$/m.test(profile), 'the policy ABI is pinned to AppArmor 3.0');
 	assert(/^ {2}mount,$/m.test(profile) && /^ {2}pivot_root,$/m.test(profile), 'bubblewrap may mount');
 	assert(!/^\s*deny mount/m.test(profile), "docker-default's deny mount is lifted");
 	for (

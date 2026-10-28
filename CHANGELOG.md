@@ -79,6 +79,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The coding sandbox on AppArmor 4 hosts (Debian 13, Ubuntu 24.04).** The sandbox's AppArmor profile is pinned to the
+  3.0 policy ABI. Without that, the kernel refused every bubblewrap cage its user namespace, so the sandbox never became
+  healthy (`bwrap: Creating new namespace failed: Permission denied`). Reload it with `deno task setup --only apparmor`.
 - **The coding sandbox starts on AppArmor hosts (Ubuntu, Debian).** Docker's `docker-default` AppArmor profile denies
   every mount, so bubblewrap could not build a cage: the sandbox restarted with
   `bwrap: Failed to make / slave: Permission denied`, and the gateway, which waits for it, never started. The sandbox
