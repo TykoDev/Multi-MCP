@@ -71,6 +71,7 @@ async function rpc(
 	};
 	if (era === MODERN) {
 		params._meta = { [PROTOCOL_VERSION_META_KEY]: MODERN, [CLIENT_CAPABILITIES_META_KEY]: {} };
+		headers['mcp-protocol-version'] = MODERN;
 		headers['mcp-method'] = method;
 	}
 	const response = await handler.fetch(

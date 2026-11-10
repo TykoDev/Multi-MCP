@@ -110,6 +110,8 @@ export {
 	resourceUris,
 } from './src/resources.ts';
 export { annotationsFor, CATALOG, CATALOG_BY_NAME, type ToolAvailability, type ToolDefinition } from './src/catalog.ts';
+// Tool groups: the groups a grouped connection lists behind `use_<group>` entry tools, and the group of a tool name.
+export { TOOL_GROUPS, type ToolGroup, toolGroupOf } from './src/tool_groups.ts';
 export { type ExtensionAction, type ExtensionActions, extensionTools } from './src/extension_tools.ts';
 export {
 	type Entry as LibraryEntry,

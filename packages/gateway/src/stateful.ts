@@ -446,7 +446,10 @@ export class StatefulMount {
 		return session;
 	}
 
-	/** The server for a transport: the same factory the stateless mount uses, so both eras serve the same catalog. */
+	/**
+	 * The server for a transport, from the factory the gateway gives this mount: built from the same deps as the
+	 * stateless mount's, so both eras serve the same catalog (listed grouped here with `TTK_MCP_TOOL_GROUPS`).
+	 */
 	async #build(
 		transport: WebStandardStreamableHTTPServerTransport,
 		authInfo: AuthInfo | undefined,

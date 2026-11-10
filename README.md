@@ -56,7 +56,10 @@ Open <http://127.0.0.1:8787/> and sign in as `admin`. Full walkthrough, LAN acce
 claude mcp add --transport http multi-mcp http://127.0.0.1:8787/mcp --header "Authorization: Bearer ttk_<key>"
 ```
 
-Other clients and stdio: [Connecting clients](docs/guides/connecting-clients.md).
+Other clients and stdio: [Connecting clients](docs/guides/connecting-clients.md). A stdio client, or a 2025-era client
+on a stateful session (on by default outside a cluster), first lists one `use_<group>` tool for each group its
+credential holds tools in (browser, library, sandbox, agent, memory, A2UI); calling one adds that group's tools
+([tool groups](docs/reference/mcp-tools.md#tool-groups)).
 
 ## Documentation
 

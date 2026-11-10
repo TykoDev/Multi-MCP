@@ -168,6 +168,7 @@ for (const era of ['2025-06-18', '2026-07-28']) {
 		};
 		if (era === '2026-07-28') {
 			params._meta = { [PROTOCOL_VERSION_META_KEY]: era, [CLIENT_CAPABILITIES_META_KEY]: {} };
+			headers['mcp-protocol-version'] = era;
 			headers['mcp-method'] = 'tools/call';
 			headers['mcp-name'] = tool.name;
 		}

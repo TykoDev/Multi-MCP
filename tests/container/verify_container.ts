@@ -1133,7 +1133,7 @@ try {
 	// --- the SPA is served ---------------------------------------------------
 	const spa = await fetch(`http://127.0.0.1:${HOST_PORT}/`);
 	const spaBody = await spa.text();
-	check('live-view SPA is served', spa.ok && spaBody.includes('TykoTech-MCP'), `${spa.status}`);
+	check('live-view SPA is served', spa.ok && spaBody.includes('Multi-MCP'), `${spa.status}`);
 
 	// --- unauthenticated access is refused ------------------------------------
 	const anon = await fetch(`http://127.0.0.1:${HOST_PORT}/mcp`, {
@@ -1279,18 +1279,28 @@ try {
 		providersRefused.status === 403 && providersRefused.text.includes('forbidden-scope'),
 		`status=${providersRefused.status}`,
 	);
+	// The route also lists the built-in agents a caller can target: with no provider, SlopLord is there, unavailable.
+	const providersOf = ({ agents, ...rest }: Record<string, unknown>): string =>
+		JSON.stringify({
+			...rest,
+			agents: (agents as { id: string; available: boolean }[] | undefined)?.map(
+				({ id, available }) => ({ id, available }),
+			),
+		});
 	const providersListed = await rest(HOST_PORT, '/api/v1/agent/providers', agentKey);
 	check(
 		'D-143 §3.3: with agent:invoke the route answers the empty list, invocable: false, acp: false, default: null',
 		providersListed.status === 200 &&
-			JSON.stringify(providersListed.body) === '{"invocable":false,"acp":false,"default":null,"providers":[]}',
+			providersOf(providersListed.body) ===
+				'{"invocable":false,"acp":false,"default":null,"providers":[],"agents":[{"id":"sloplord","available":false}]}',
 		providersListed.text.slice(0, 160),
 	);
 	const providersHeld = await rest(HOST_PORT, '/api/v1/agent/providers', modelKey);
 	check(
 		'D-143 §3.3: with model:invoke too the route answers invocable: true and the same empty list',
 		providersHeld.status === 200 &&
-			JSON.stringify(providersHeld.body) === '{"invocable":true,"acp":false,"default":null,"providers":[]}',
+			providersOf(providersHeld.body) ===
+				'{"invocable":true,"acp":false,"default":null,"providers":[],"agents":[{"id":"sloplord","available":false}]}',
 		providersHeld.text.slice(0, 160),
 	);
 	const diagnosticsNoFile = await rest(HOST_PORT, '/api/v1/system/diagnostics', adminKey);

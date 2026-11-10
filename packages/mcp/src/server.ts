@@ -32,6 +32,15 @@ import type { LibraryStore } from './library.ts';
 import { libraryTools, registerLibrary } from './library_tools.ts';
 import type { SessionAccess, SessionRegistry } from './registry.ts';
 import type { SecretStore } from './secrets.ts';
+import {
+	entryTool,
+	type GroupMember,
+	type GroupState,
+	type ListedTool,
+	TOOL_GROUPS,
+	type ToolGroup,
+	toolGroupOf,
+} from './tool_groups.ts';
 import type { McpAppsDeps, RecordingController, SignedLinkMinter, ToolContext, ToolResult } from './types.ts';
 import { registerUiResources, toolUiMeta } from './ui_resources.ts';
 
@@ -121,6 +130,13 @@ export interface McpDeps {
 	readonly signedLink?: SignedLinkMinter;
 	/** R14 (design §2.10, D-122): the deployment's public identity for `serverInfo`; absent on stdio. */
 	readonly identity?: { readonly websiteUrl?: string; readonly iconUrl?: string };
+	/**
+	 * Tool groups (`TTK_MCP_TOOL_GROUPS`): list each group's tools behind one `use_<group>` entry tool until the model
+	 * opens the group (`tool_groups.ts`). Only for a server that lives as long as its connection — stdio and a stateful
+	 * 2025 session — because the opened groups live on the server; a server built per request must leave it unset and
+	 * list flat. Absent means flat.
+	 */
+	readonly toolGroups?: boolean;
 	/**
 	 * R9 (design §2.20): the MCP Apps deployment, set by W7 only when `TTK_MCP_APPS` is not `off`. S0 seam: passed
 	 * through to the tool context and turns on `availability.mcpApps`.
@@ -286,6 +302,10 @@ export function refreshToolAvailability(server: McpServer): void {
  * genuinely not part of this principal's world, while one disabled because a
  * human has the browser is coming back, and calling it reports it as disabled
  * rather than as unknown.
+ *
+ * With `deps.toolGroups`, a grouped tool is also unlisted until the model opens its group through the group's
+ * `use_<group>` entry tool (`tool_groups.ts`). That decides listing only: the tool stays registered and permitted, so
+ * a call by name is dispatched exactly as on a flat connection.
  */
 export function registerCatalog(
 	server: McpServer,
@@ -325,24 +345,24 @@ export function registerCatalog(
 
 	const availability = availabilityOf(deps);
 	const permitted = new Set<string>();
-	const gated: { tool: ToolDefinition; registered: { enabled: boolean; enable(): void; disable(): void } }[] = [];
+	// Every registration whose listing can change after connect: an availability predicate, a group, or both.
+	const gated: { tool: ToolDefinition; group?: ToolGroup; registered: ListedTool }[] = [];
+	// Tool groups: the groups this connection's model has opened, and each group's members as registered here.
+	const groups: GroupState = {
+		open: new Set<ToolGroup>(),
+		availability: () => availabilityOf(deps),
+		// One announcement per opening; a send that fails is the stream's own end, as in `StatefulMount`.
+		announce: () => {
+			if (server.isConnected()) void server.server.sendToolListChanged().catch(() => {});
+		},
+	};
+	const members = new Map<ToolGroup, GroupMember[]>();
 
-	// The library tools are not extension tools in the GW-5 sense: they touch shared storage, not owned
-	// resources, so a principal without an owner (the stdio mount) may still hold them on its scopes.
-	const catalog = [...CATALOG, ...(deps.extraTools ?? []), ...libraryTools(deps.library ?? null)];
-	if (new Set(catalog.map((tool) => tool.name)).size !== catalog.length) {
-		throw new Error('duplicate tool in composed catalog');
-	}
-	for (const tool of catalog) {
-		if (tool.scope !== undefined && !scopes.has(tool.scope)) continue;
-		// GW-5: an extension tool creates owned resources, so it exists only for a caller with a known owner.
-		if (extensionPrincipal === undefined && extensionNames.has(tool.name)) continue;
-		permitted.add(tool.name);
+	const register = (tool: ToolDefinition): ListedTool => {
 		// R9 (D-134): a tool that opens an MCP Apps embed says which one, and only while the deployment serves them;
 		// with `TTK_MCP_APPS` off no tool carries `_meta.ui`.
 		const uiMeta = deps.mcpApps === undefined ? undefined : toolUiMeta(tool.name);
-
-		const registered = server.registerTool(
+		return server.registerTool(
 			tool.name,
 			{
 				title: tool.title,
@@ -377,20 +397,54 @@ export function registerCatalog(
 					clientSupportsSampling: server.server.getClientCapabilities()?.sampling !== undefined,
 				}, deps.logger),
 		);
+	};
 
-		if (tool.available !== undefined && !tool.available(availability)) registered.disable();
-		if (tool.available !== undefined) gated.push({ tool, registered });
+	// The library tools are not extension tools in the GW-5 sense: they touch shared storage, not owned
+	// resources, so a principal without an owner (the stdio mount) may still hold them on its scopes.
+	const catalog = [...CATALOG, ...(deps.extraTools ?? []), ...libraryTools(deps.library ?? null)];
+	if (new Set(catalog.map((tool) => tool.name)).size !== catalog.length) {
+		throw new Error('duplicate tool in composed catalog');
+	}
+	for (const tool of catalog) {
+		if (tool.scope !== undefined && !scopes.has(tool.scope)) continue;
+		// GW-5: an extension tool creates owned resources, so it exists only for a caller with a known owner.
+		if (extensionPrincipal === undefined && extensionNames.has(tool.name)) continue;
+		permitted.add(tool.name);
+		const registered = register(tool);
+		const group = deps.toolGroups === true ? toolGroupOf(tool.name) : undefined;
+		// A grouped tool waits unlisted for its entry tool. Disabled before the server connects, so nothing is announced.
+		if (group !== undefined || (tool.available !== undefined && !tool.available(availability))) registered.disable();
+		if (tool.available !== undefined || group !== undefined) gated.push({ tool, group, registered });
+		if (group !== undefined) {
+			const held = members.get(group) ?? [];
+			held.push({ tool, listed: registered });
+			members.set(group, held);
+		}
+	}
+	// One entry tool per group this caller holds a tool of. Dispatched like any tool, through the same seam.
+	const entries: ToolDefinition[] = [];
+	for (const group of TOOL_GROUPS) {
+		const held = members.get(group);
+		if (held === undefined) continue;
+		const entry = entryTool(group, held, groups);
+		permitted.add(entry.name);
+		const registered = register(entry);
+		if (!entry.available!(availability)) registered.disable();
+		gated.push({ tool: entry, registered });
+		entries.push(entry);
 	}
 	refreshers.set(server, () => {
 		const now = availabilityOf(deps);
-		for (const { tool, registered } of gated) {
-			const on = tool.available!(now);
+		for (const { tool, group, registered } of gated) {
+			// A grouped member returns only to an opened group: a service coming back does not undo the grouping.
+			const on = (tool.available === undefined || tool.available(now)) &&
+				(group === undefined || groups.open.has(group));
 			if (on !== registered.enabled) on ? registered.enable() : registered.disable();
 		}
 	});
 
 	return {
-		catalog: new Map(catalog.map((tool) => [tool.name, tool])),
+		catalog: new Map([...catalog, ...entries].map((tool) => [tool.name, tool])),
 		permitted,
 		scopes,
 		// D-082: read at call time, so a long-lived connection refuses a tool whose service went down since.
@@ -484,6 +538,8 @@ export function capabilitiesFor(deps: McpDeps, authInfo: AuthInfo | undefined): 
 		...(typeof deps.registry.ownership === 'string' ? { sessionOwnership: deps.registry.ownership } : {}),
 		// D-143: the provider counts, for the `model:invoke` holder's `model` block; absent means none configured.
 		...(deps.modelProviders === undefined ? {} : { model: deps.modelProviders() }),
+		// Tool groups: `tool_groups` names the entry tools a grouped connection lists, from the same composed tools.
+		...(deps.toolGroups === true ? { toolGroups: true } : {}),
 	});
 }
 

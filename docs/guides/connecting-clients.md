@@ -41,6 +41,11 @@ challenge; no static header. 2025-era clients get `Mcp-Session-Id` sessions with
 re-list their tools after a deploy or a scope change ([change push](../reference/mcp-protocol.md#notifications));
 `TTK_MCP_STATEFUL=false` turns sessions off, and a cluster runs without them.
 
+On those sessions and on stdio, tools come in groups: the list starts with one entry tool for each group the credential
+holds tools in (`use_browser`, `use_library`, `use_sandbox`, `use_agent`, `use_memory`, `use_a2ui`), and calling one
+adds that group's tools ([tool groups](../reference/mcp-tools.md#tool-groups)). A client that does not re-list on
+`tools/list_changed` needs `TTK_MCP_TOOL_GROUPS=false`, which lists every tool at once.
+
 ## stdio
 
 The client starts the server as a subprocess. With `TTK_DATA_DIR` and `TTK_DB_KEY_FILE`, it opens the same `ttk.db` as
@@ -85,7 +90,8 @@ the files in `secrets/` as you; if they were once `chown`ed to the containers' u
 
 ## First calls
 
-1. `tools/list`, then read `ttk://capabilities`: what is withheld and why.
+1. `tools/list`, then read `ttk://capabilities`: what is withheld and why. On a grouped connection, call `use_browser`
+   to list the browser tools.
 2. `browser_navigate`, then `browser_get_state`. Pass element `index` and `state_token` to interaction tools.
 3. After the page changes, read state again; a stale token answers `element-not-found`.
 4. Wait with `browser_wait_for`, not by polling.

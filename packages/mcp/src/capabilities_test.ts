@@ -12,7 +12,12 @@
  * the withheld-tool reason must be enumerable without naming a scope.
  */
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
-import { createMcpHandler, McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
+import {
+	CLIENT_CAPABILITIES_META_KEY,
+	createMcpHandler,
+	McpServer,
+	PROTOCOL_VERSION_META_KEY,
+} from '@modelcontextprotocol/server';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { EVENT_KINDS, WS_EVENT_KINDS } from '@tykotech/wire';
 import { buildCapabilities, TOOL_WITHHELD_REASONS, toolsWithheld, type TykotechCapabilities } from './capabilities.ts';
@@ -65,36 +70,39 @@ async function readRpc(response: Response): Promise<Record<string, unknown>> {
 	return JSON.parse(text);
 }
 
-/** One `initialize`, on the named era, through the real HTTP entry. */
+/**
+ * The handshake that carries the server's capabilities, on the named era, through the real HTTP entry: `initialize` on
+ * 2025, `server/discover` on 2026-07-28 (where `initialize` is a legacy handshake the SDK refuses under a modern
+ * `MCP-Protocol-Version` header).
+ */
 async function initialize(
 	handler: { fetch: (r: Request, o?: { authInfo?: AuthInfo }) => Promise<Response> },
 	era: string,
 	authInfo?: AuthInfo,
-): Promise<{ protocolVersion: string; capabilities: Record<string, unknown> }> {
-	const params: Record<string, unknown> = {
-		protocolVersion: era,
-		capabilities: {},
-		clientInfo: { name: 'capabilities-test', version: '0' },
-	};
+): Promise<{ capabilities: Record<string, unknown> }> {
+	const method = era === MODERN ? 'server/discover' : 'initialize';
+	const params: Record<string, unknown> = era === MODERN
+		? { _meta: { [PROTOCOL_VERSION_META_KEY]: MODERN, [CLIENT_CAPABILITIES_META_KEY]: {} } }
+		: { protocolVersion: era, capabilities: {}, clientInfo: { name: 'capabilities-test', version: '0' } };
 	const headers: Record<string, string> = {
 		'content-type': 'application/json',
 		accept: 'application/json, text/event-stream',
 	};
 	if (era === MODERN) {
-		params._meta = { [PROTOCOL_VERSION_META_KEY]: MODERN };
-		headers['mcp-method'] = 'initialize';
+		headers['mcp-protocol-version'] = MODERN;
+		headers['mcp-method'] = method;
 	}
 	const response = await handler.fetch(
 		new Request('http://127.0.0.1/mcp', {
 			method: 'POST',
 			headers,
-			body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params }),
+			body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
 		}),
 		authInfo === undefined ? {} : { authInfo },
 	);
 	const body = await readRpc(response);
-	assertEquals(body.error, undefined, `initialize answered a JSON-RPC error: ${JSON.stringify(body.error)}`);
-	return body.result as { protocolVersion: string; capabilities: Record<string, unknown> };
+	assertEquals(body.error, undefined, `${method} answered a JSON-RPC error: ${JSON.stringify(body.error)}`);
+	return body.result as { capabilities: Record<string, unknown> };
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +110,7 @@ async function initialize(
 // ---------------------------------------------------------------------------
 
 for (const era of [LEGACY, MODERN]) {
-	Deno.test(`U-8 (${era}): capabilities.tykotech survives the initialize result`, async () => {
+	Deno.test(`U-8 (${era}): capabilities.tykotech survives the handshake result`, async () => {
 		const sessions = registry();
 		const handler = createMcpHandler(createBuildServer(deps(sessions)), { legacy: 'stateless' });
 		try {

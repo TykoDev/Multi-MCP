@@ -9,13 +9,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Grouped tool lists.** On stdio and on a 2025-era client's stateful session, `tools/list` starts with one entry tool
+  per group — `use_browser`, `use_library`, `use_sandbox`, `use_agent`, `use_memory`, `use_a2ui` — instead of up to 102
+  tools. Calling one adds that group's tools to the connection's list, announces `tools/list_changed` once, and returns
+  each tool's name, title and description. Every tool still answers `tools/call` by name; the stateless 2026-07-28
+  mount, the web app and a cluster list every tool as before. `capabilities.tykotech.tool_groups` names the groups a
+  grouped connection offers; `TTK_MCP_TOOL_GROUPS=false` restores the flat list.
 - **One command sets up the full stack.** `deno task setup` now writes every file any shipped Compose file mounts — the
   database key, the administrator, the `client` API key, the A2A peer's token pair and list, the browser-secrets (`{}`)
-  and git-remotes (`[]`) placeholders, the sandbox-overlay and agent-runner tokens and the ACP commands template — and
-  `.env` from `.env.example` (one template, held equal by a test). `--only <names>` limits it to some files and, with
-  `--force`, rotates exactly those; files you fill in yourself are replaced only when `--only` names them. Every file is
-  described in one place, `secrets/README.md`. **Upgrading:** run `deno task setup` before the next `docker compose up`;
-  it adds the new files, keeps yours, and repairs their modes.
+  and git-remotes (`[]`) placeholders, the agent-runner token and the ACP commands template — and `.env` from
+  `.env.example` (one template, held equal by a test). `--only <names>` limits it to some files and, with `--force`,
+  rotates exactly those; files you fill in yourself are replaced only when `--only` names them. Every file is described
+  in one place, `secrets/README.md`. **Upgrading:** run `deno task setup` before the next `docker compose up`; it adds
+  the new files, keeps yours, and repairs their modes.
 - **The default Compose stack runs an A2A peer**, `a2a-peer`: a second gateway from the same image (no second build),
   with its own data volume and key file, no published port, and `TTK_PUBLIC_URL=http://a2a-peer:8787`. The gateway's
   `TTK_AGENT_PEERS_FILE` names it, so `agent_delegate` and `agent_peers` work out of the box. `TTK_PEER_MEMORY` and
@@ -73,6 +79,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The Users screen offers a new account key every scope its account holds.** The API keys tab built its scope picker
+  once, over the account as its dialog opened, so a grant saved from the same dialog's Scopes tab was never offered —
+  `setup`'s administrator, raised to every scope, still saw only its first ten, without `task`, `evaluate`,
+  `metrics:read` and `network:read` — and a scope taken away still was. The picker now follows the account. The server's
+  check is unchanged: a key never holds a scope its account does not.
+- **The coding sandbox on AppArmor 4 hosts (Debian 13, Ubuntu 24.04).** The sandbox's AppArmor profile is pinned to the
+  3.0 policy ABI. Without that, the kernel refused every bubblewrap cage its user namespace, so the sandbox never became
+  healthy (`bwrap: Creating new namespace failed: Permission denied`). Reload it with `deno task setup --only apparmor`.
 - **The coding sandbox starts on AppArmor hosts (Ubuntu, Debian).** Docker's `docker-default` AppArmor profile denies
   every mount, so bubblewrap could not build a cage: the sandbox restarted with
   `bwrap: Failed to make / slave: Permission denied`, and the gateway, which waits for it, never started. The sandbox
@@ -133,6 +147,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Breaking
 
+- **stdio and stateful-session clients see grouped tool lists by default.** A client that does not re-list on
+  `tools/list_changed` sees only the `use_*` entry tools; set `TTK_MCP_TOOL_GROUPS=false` to keep the flat list. Tool
+  names and parameters are unchanged.
 - **Secrets rest only encrypted, in `<TTK_DATA_DIR>/ttk.db` (D-154).** Set `TTK_DB_KEY_FILE` (32 bytes;
   `deno task
   setup` or `doctor --new-db-key` writes one; Compose mounts `secrets/ttk_db_key`). With a data directory,
@@ -216,6 +233,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+- **A model provider with `allow_http` may carry an API key to a private or named host (an owner decision, a deliberate
+  relaxation).** Plain `http:` to a private address (RFC 1918, unique-local) or a service name is admitted with
+  `allow_http` and a key, as loopback already was, so the key crosses the network unencrypted; that provider's start-up
+  warning now ends `its API key travels in plaintext`. `http:` to a public or link-local address is still refused
+  whatever the flag. An `https:` public address with `allow_http` and a key is still refused, now as
+  `allow_http with a key needs a loopback, private or named host` (was `a key never travels in plaintext off the host`).
 - **OpenTelemetry export is allowlisted at the process edge (D-137):** before any subcommand runs, the CLI judges every
   non-empty OTLP endpoint — the base one included — against `TTK_OTEL_ENDPOINTS`, and refuses the runtime default
   `http://localhost:4318`, credentials in an endpoint URL, an empty base endpoint and vsock export; a malformed
@@ -605,6 +628,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Dependencies updated.** The MCP TypeScript SDK (`@modelcontextprotocol/server` and `client`) 2.0.0 → 2.4.0,
+  `@modelcontextprotocol/hono` 2.0.2, `hono` 4.13.14, `jose` 6.2.13, `zod` 4.6.7, and the `@std/*` packages to their
+  latest 1.x. SDK 2.4.0 enforces SEP-2243 on the 2026-07-28 HTTP era: every request carries `MCP-Protocol-Version` and
+  `Mcp-Method` (and `Mcp-Name` where the method names a tool, resource or prompt), and `initialize` under a modern
+  header is refused. The SDK's clients send them; nothing changes for the 2025 era or the web app.
 - **Larger filter chips and logos.** The Resources filter chips are 15% larger again, with count bubbles in inverted
   text colour for contrast; the dock logo is 20% larger and the Sessions empty-state logo 40% larger.
 - **Brand: Multi-MCP.** The dock shows the Multi-MCP logo and wordmark; the TykoTech logo sits at the dock's foot (full
@@ -735,6 +763,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Removed
 
+- **`docker-compose.sandbox.yml`**, and `ttk_sandbox_token` from `deno task setup` (`--only sandbox-token` is no longer
+  a name). The coding sandbox runs in `docker-compose.yml` with a token it generates into the `ttk-sandbox-token`
+  volume, so the overlay only swapped that token for a file and nothing needed it. **Upgrading:** drop
+  `-f docker-compose.sandbox.yml` from your command; `secrets/ttk_sandbox_token` can be deleted. A sandbox run outside
+  Compose still reads its token from `TTK_SANDBOX_TOKEN_FILE`.
 - **The Library screen.** Its files, skills and prompts are groups of the Resources tree; every behaviour (upload, new
   folder and file, move, delete, download, grid and list, the skill and prompt editors, `files:write` gating) has one
   home there. Nothing on the wire changes.

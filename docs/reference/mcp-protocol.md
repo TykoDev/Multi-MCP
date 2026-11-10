@@ -39,7 +39,9 @@ recorder, signed links, handoff or MCP Apps.
 The `tykotech` block is also served as resource `ttk://capabilities` and in `browser_health`. SDK clients strip unknown
 capability keys, so read the resource. Keys: `version`, `live_view`, `events`, `fields`, `state_token`, `tools_withheld`
 (`[{ name, reason }]`, reason `scope-required` or `feature-unavailable`), `browser.sandboxed`, `sessions.ownership`,
-`sandbox.backend`, `model`.
+`sandbox.backend`, `model`, and on a grouped connection `tool_groups` (the groups whose `use_<group>` entry tool it
+listed when it connected; see [tool groups](mcp-tools.md#tool-groups)). Like `tools_withheld`, the block is built when
+the connection opens and is not rebuilt when a service later comes or goes; `tools/list` follows such changes.
 
 ## Resources
 
@@ -59,12 +61,12 @@ values. Stored prompt templates and skills (`skill:<name>`) are listed as MCP pr
 
 ## Notifications
 
-| Notification                           | When                                                                                                                        |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `notifications/tools/list_changed`     | The sandbox or agent runner becomes reachable or unreachable (30 s probe); after a deploy; when the caller's scopes change. |
-| `notifications/resources/list_changed` | A session or its file list changes.                                                                                         |
-| `notifications/resources/updated`      | A session's page changes (subscribed URIs on 2025-era connections).                                                         |
-| `notifications/progress`               | Every second for a call that sent a `progressToken`.                                                                        |
+| Notification                           | When                                                                                                                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `notifications/tools/list_changed`     | The sandbox or agent runner becomes reachable or unreachable (30 s probe); after a deploy; when the caller's scopes change; once when a `use_<group>` tool opens its group. |
+| `notifications/resources/list_changed` | A session or its file list changes.                                                                                                                                         |
+| `notifications/resources/updated`      | A session's page changes (subscribed URIs on 2025-era connections).                                                                                                         |
+| `notifications/progress`               | Every second for a call that sent a `progressToken`.                                                                                                                        |
 
 Stateless clients receive notifications over `subscriptions/listen`.
 

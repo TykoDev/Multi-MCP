@@ -90,6 +90,10 @@ peer). `tests/container/verify_container.ts` derives the expected set from the c
 (`--shape
 bundled|slim`).
 
+Those counts are the flat list, which the stateless mount and the web app serve. stdio and stateful 2025 sessions list
+grouped by default (`TTK_MCP_TOOL_GROUPS`): six `use_<group>` entry tools (`packages/mcp/src/tool_groups.ts`) stand in
+for their groups until opened, and every tool stays callable by name.
+
 The two images differ: the bundled image's grants live in its `CMD` and can be narrowed by a Compose `command:`
 override; the slim image's compiled binary bakes its permissions (`scripts/compile.ts`) and cannot be re-flagged.
 
@@ -110,7 +114,7 @@ override; the slim image's compiled binary bakes its permissions (`scripts/compi
 deno.json, deno.lock     workspace, imports, tasks, fmt/lint config; frozen lockfile
 Dockerfile               bundled image (Deno + Chromium + ffmpeg)
 Dockerfile.slim          slim image (compiled binary)
-docker-compose*.yml      gateway + sandbox + A2A peer; overlays: providers file, sandbox token, Docker backend, ACP runner
+docker-compose*.yml      gateway + sandbox + A2A peer; overlays: providers file, Docker backend, ACP runner
 docker/                  sandbox, workspace, agent-runner images; seccomp profiles; ttk
 scripts/                 gates, compile, coverage, health checks, grant resolvers
 secrets/                 git-ignored file secrets, all written by `deno task setup` (see secrets/README.md)

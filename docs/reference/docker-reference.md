@@ -10,7 +10,6 @@
 | `docker/ttk`                          | The bundled image's maintenance command.                                      |
 | `docker-compose.yml`                  | The full stack: gateway, coding sandbox, A2A peer.                            |
 | `docker-compose.providers.yml`        | Overlay: seed model providers from `secrets/ttk_model_providers.json`.        |
-| `docker-compose.sandbox.yml`          | Overlay: an operator-held sandbox token file.                                 |
 | `docker-compose.sandbox-docker.yml`   | Overlay: one Docker container per workspace (mounts the Docker socket).       |
 | `docker-compose.agents.yml`           | Overlay: the ACP agent runner.                                                |
 
@@ -109,7 +108,8 @@ sudo apparmor_parser -r /etc/apparmor.d/tykotech-sandbox
 
 `deno task setup --only apparmor` does only this step (`--force`: reinstall and reload). Until the profile is loaded the
 container is refused with `unable to apply apparmor profile`. Docker ignores the option on a host without AppArmor
-(Fedora and RHEL use SELinux; Docker Desktop), which needs nothing.
+(Fedora and RHEL use SELinux; Docker Desktop), which needs nothing, and on one whose kernel has AppArmor but not its
+tools (no `apparmor` package): there the sandbox runs without the profile, and `setup` skips this step.
 
 ## `docker-compose.yml`
 
@@ -132,7 +132,6 @@ The sandbox generates its bearer token on first start into the `ttk-sandbox-toke
 | Overlay                             | Adds                                                                                   | Needs, beyond `deno task setup`                                                                                                                                                  |
 | ----------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `docker-compose.providers.yml`      | `TTK_MODEL_PROVIDERS_FILE`: model providers seeded from a file.                        | `secrets/ttk_model_providers.json`, which you write ([format](../../secrets/README.md#model-providers-file)).                                                                    |
-| `docker-compose.sandbox.yml`        | An operator-held token, `secrets/ttk_sandbox_token` (`setup` writes one).              | Nothing.                                                                                                                                                                         |
 | `docker-compose.sandbox-docker.yml` | `TTK_SANDBOX_BACKEND=docker`: one hardened container per workspace via the Engine API. | `docker build -f docker/Dockerfile.sandbox-workspace -t tykotech-sandbox-workspace:0.2.0 .`; the socket's group in `TTK_SANDBOX_DOCKER_GID`. **The socket is root on the host.** |
 | `docker-compose.agents.yml`         | `agent-runner` service and the gateway's bridge settings.                              | A runner image with your agent (`TTK_AGENT_RUNNER_IMAGE`), and `secrets/ttk_agent_commands.json` edited to match it.                                                             |
 

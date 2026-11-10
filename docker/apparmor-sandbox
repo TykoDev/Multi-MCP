@@ -14,6 +14,13 @@
 #   sudo apparmor_parser -r /etc/apparmor.d/tykotech-sandbox
 #
 # Docker ignores the option on a host without AppArmor, which needs nothing.
+#
+# The policy ABI is pinned to AppArmor 3.0. AppArmor 4 kernels (Debian 13, Ubuntu 24.04) also mediate user namespace
+# creation, which every cage needs; a profile compiled against their ABI without a `userns` rule makes bubblewrap fail
+# with "Creating new namespace failed: Permission denied". Pinned to 3.0, the kernel enforces this profile as AppArmor 3
+# hosts do, and the parser of every AppArmor 3 and 4 host still loads it (a `userns` rule would need AppArmor 4's).
+
+abi <abi/3.0>,
 
 #include <tunables/global>
 

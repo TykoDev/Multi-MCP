@@ -114,14 +114,15 @@ Add the MCP host's sandbox hostname to `TTK_ALLOWED_ORIGINS`, or its embeds cann
 
 ## Limits and transport
 
-| Variable                  | Default        | Meaning                                                                                    |
-| ------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
-| `TTK_RATE_RPM`            | 120 (1–100000) | Requests per minute per principal; the burst is a third of this.                           |
-| `TTK_MCP_STATEFUL`        | true           | Serve 2025-era clients a stateful session (Mcp-Session-Id, change push); off in a cluster. |
-| `TTK_MAX_BODY_KB`         | 256            | Largest request body on the API routes, in KiB.                                            |
-| `TTK_METRICS`             | false          | Serves Prometheus metrics at GET /metrics to metrics:read or admin.                        |
-| `TTK_CONFIRM_DESTRUCTIVE` | true           | Ask a client that declared form elicitation to confirm the seven destructive tools.        |
-| `TTK_HUMAN_HANDOFF`       | true           | Offers browser_request_human, which hands out live-view links.                             |
+| Variable                  | Default        | Meaning                                                                                     |
+| ------------------------- | -------------- | ------------------------------------------------------------------------------------------- |
+| `TTK_RATE_RPM`            | 120 (1–100000) | Requests per minute per principal; the burst is a third of this.                            |
+| `TTK_MCP_STATEFUL`        | true           | Serve 2025-era clients a stateful session (Mcp-Session-Id, change push); off in a cluster.  |
+| `TTK_MCP_TOOL_GROUPS`     | true           | stdio and stateful sessions list one `use_<group>` tool per group until the model opens it. |
+| `TTK_MAX_BODY_KB`         | 256            | Largest request body on the API routes, in KiB.                                             |
+| `TTK_METRICS`             | false          | Serves Prometheus metrics at GET /metrics to metrics:read or admin.                         |
+| `TTK_CONFIRM_DESTRUCTIVE` | true           | Ask a client that declared form elicitation to confirm the seven destructive tools.         |
+| `TTK_HUMAN_HANDOFF`       | true           | Offers browser_request_human, which hands out live-view links.                              |
 
 ## Logging
 

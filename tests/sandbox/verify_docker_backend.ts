@@ -14,7 +14,7 @@
  * Everything it made — the service, every workspace container on its volume, the volumes — is removed at the end,
  * whatever happened. No default volume, project or port is touched.
  *
- *   deno run --deny-ffi --allow-run=<docker> --allow-read=. --allow-write=tests/.scratch \
+ *   deno run --deny-ffi --allow-run=<docker> --allow-read=.,/var/run/docker.sock --allow-write=tests/.scratch \
  *     --allow-net=127.0.0.1 --allow-env=PATH tests/sandbox/verify_docker_backend.ts --tag verify-w5 [--no-build]
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
@@ -51,6 +51,9 @@ const suffix = crypto.randomUUID().slice(0, 8);
 const name = `ttk-docker-test-${suffix}`;
 const codeVolume = `${name}-code`;
 const sockVolume = `${name}-sock`;
+// The socket's group, as the overlay's TTK_SANDBOX_DOCKER_GID gives it: root on Docker Desktop, `docker` on most Linux
+// hosts. Without the read grant it stays root, the old assumption.
+const socketGroup = String(await Deno.stat('/var/run/docker.sock').then((info) => info.gid ?? 0, () => 0));
 
 /** The overlay's sandbox `command:`, as written, so this run proves the grants that ship. */
 async function overlayCommand(): Promise<string[]> {
@@ -122,7 +125,7 @@ try {
 		'--cpus=2',
 		'--pids-limit=512',
 		'--group-add',
-		'0',
+		socketGroup,
 		'-v',
 		'/var/run/docker.sock:/var/run/docker.sock',
 		'--mount',

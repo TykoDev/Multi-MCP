@@ -51,6 +51,11 @@ import { type Navigate, renderShell } from './shell.ts';
  */
 let vocabulary: ScopeInfo[] = [];
 
+/** Adopts the vocabulary a users response declares: `render` does on every answer, the unit tests directly. */
+export function adoptVocabulary(declared: ScopeInfo[]): void {
+	vocabulary = declared;
+}
+
 function isExplicit(scope: string): boolean {
 	return vocabulary.find((entry) => entry.scope === scope)?.explicit === true;
 }
@@ -166,6 +171,47 @@ const ACCOUNT_PRESETS: readonly PickerPreset[] = [
 	{ label: 'Defaults', scopes: () => vocabulary.filter((entry) => entry.default).map((entry) => entry.scope) },
 	{ label: 'Clear', scopes: () => [] },
 ];
+
+/**
+ * The new key's scope picker (D-146): every scope the account holds, explicit grants included, and none it does not.
+ * The server's check (`buildKey` in `users.ts`) stays the authority; this only offers what it would accept. `follow`
+ * takes the account as the dialog re-reads it. Previously the picker was built once over the account as its dialog opened,
+ * so a grant saved from that dialog's own Scopes tab never reached it (`setup`'s administrator, raised to every scope,
+ * was still offered only its first ten) and a scope taken away stayed on offer. It is rebuilt only when the held
+ * scopes change, so a re-read after a key is minted or revoked keeps the selection.
+ */
+export function keyScopePicker(start: PublicUser): {
+	node: HTMLElement;
+	read(): string[];
+	follow(user: PublicUser): void;
+} {
+	let current = start;
+	const build = (user: PublicUser): ReturnType<typeof scopePicker> =>
+		scopePicker(user.scopes, {
+			within: user.scopes,
+			legend: 'Key scopes',
+			presets: [
+				{ label: 'All', scopes: () => current.scopes },
+				{ label: 'Clear', scopes: () => [] },
+			],
+		});
+	const held = (user: PublicUser): string => [...user.scopes].sort().join(' ');
+	let picker = build(start);
+	return {
+		get node(): HTMLElement {
+			return picker.node;
+		},
+		read: () => picker.read(),
+		follow(user: PublicUser) {
+			if (held(user) !== held(current)) {
+				const next = build(user);
+				picker.node.replaceWith(next.node);
+				picker = next;
+			}
+			current = user;
+		},
+	};
+}
 
 /** One secret in a one-time reveal: what it is, the value in mono, and its copy button. */
 function secretRow(
@@ -348,14 +394,7 @@ export function usersView(navigate: Navigate): void {
 			maxlength: 64,
 			placeholder: 'Label (optional)',
 		});
-		const scopes = scopePicker(start.scopes, {
-			within: start.scopes,
-			legend: 'Key scopes',
-			presets: [
-				{ label: 'All', scopes: () => current.scopes },
-				{ label: 'Clear', scopes: () => [] },
-			],
-		});
+		const scopes = keyScopePicker(start);
 		const submit = button({ label: 'Create key', icon: 'plus', variant: 'primary', type: 'submit' });
 		const form = el('form', { class: 'acct-form acct-key-form' }, [
 			el('div', { class: 'acct-key-form-head' }, [
@@ -445,6 +484,7 @@ export function usersView(navigate: Navigate): void {
 			]),
 			update(user: PublicUser) {
 				current = user;
+				scopes.follow(user);
 				paint();
 			},
 		};
@@ -743,7 +783,7 @@ export function usersView(navigate: Navigate): void {
 	}
 
 	function render(data: UsersResponse): void {
-		vocabulary = data.vocabulary;
+		adoptVocabulary(data.vocabulary);
 		latest = data.users;
 		const admins = data.users.filter((user) => user.scopes.includes('admin') && !user.disabled).length;
 		tiles.users.set(String(data.users.length), `${data.users.filter((user) => user.disabled).length} disabled`);

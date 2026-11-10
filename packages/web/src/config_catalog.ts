@@ -573,6 +573,13 @@ export const SETTINGS: readonly Setting[] = [
 		explain: 'Serve 2025-era clients a stateful session (Mcp-Session-Id, change push); off in a cluster.',
 	}),
 	S({
+		name: 'TTK_MCP_TOOL_GROUPS',
+		section: 'limits',
+		kind: 'boolean',
+		default: 'true',
+		explain: 'stdio and stateful sessions list one use_<group> tool per group until the model opens it.',
+	}),
+	S({
 		name: 'TTK_MAX_BODY_KB',
 		section: 'limits',
 		kind: 'integer',

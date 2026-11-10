@@ -10,6 +10,10 @@ async function docker(args: string[]): Promise<string> {
 }
 
 const name = `ttk-runner-test-${crypto.randomUUID().slice(0, 8)}`;
+// Built from this tree under a test tag, never over the deployable `tykotech-agent-runner:0.2.0`; the fixture is
+// layered on it (tests/agents/Dockerfile.fixture takes the base as RUNNER_IMAGE) and removed at the end.
+const runnerImage = 'tykotech-agent-runner:verify';
+const fixtureImage = 'tykotech-agent-runner:verify-fixture';
 const scratch = resolve('tests/.scratch', name);
 const token = crypto.randomUUID() + crypto.randomUUID();
 const clients: AgentBridgeClient[] = [];
@@ -20,9 +24,18 @@ await Deno.writeTextFile(
 	JSON.stringify([{ id: 'fixture', executable: '/opt/agents/agent', args: [], cwd: '/agent-workspace' }]),
 );
 try {
-	await docker(['build', '-f', 'docker/Dockerfile.agent-runner', '-t', 'tykotech-agent-runner:0.2.0', '.']);
+	await docker(['build', '-f', 'docker/Dockerfile.agent-runner', '-t', runnerImage, '.']);
 	console.log('PASS runner image build and frozen dependency cache');
-	await docker(['build', '-f', 'tests/agents/Dockerfile.fixture', '-t', 'tykotech-agent-runner:fixture', '.']);
+	await docker([
+		'build',
+		'-f',
+		'tests/agents/Dockerfile.fixture',
+		'--build-arg',
+		`RUNNER_IMAGE=${runnerImage}`,
+		'-t',
+		fixtureImage,
+		'.',
+	]);
 	await docker([
 		'run',
 		'-d',
@@ -44,7 +57,7 @@ try {
 		'TTK_AGENT_COMMANDS_FILE=/run/secrets/commands.json',
 		'--env',
 		'TTK_AGENT_BRIDGE_TOKEN_FILE=/run/secrets/token',
-		'tykotech-agent-runner:fixture',
+		fixtureImage,
 	]);
 	const address = await docker(['port', name, '8789/tcp']);
 	const url = `http://${address}`;
@@ -97,6 +110,7 @@ try {
 } finally {
 	await Promise.allSettled(clients.map((client) => client.close()));
 	await docker(['rm', '-f', name]).catch(() => {});
+	await docker(['rmi', fixtureImage]).catch(() => {});
 	// Exact randomly named test scratch is confined below tests/.scratch.
 	await Deno.remove(scratch, { recursive: true });
 }

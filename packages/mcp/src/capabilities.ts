@@ -32,6 +32,7 @@ import { FIELD_NAMES, FIELD_OPTIONS, FIELD_PRESETS } from './element_record.ts';
 import { MAX_EVENT_BYTES, MAX_RING_BYTES, RING_CAPACITY } from './events.ts';
 import type { SessionOwnership } from './registry.ts';
 import type { Scope } from './scopes.ts';
+import { TOOL_GROUPS, type ToolGroup, toolGroupOf } from './tool_groups.ts';
 
 /**
  * Why a tool the caller cannot see is missing from `tools/list`.
@@ -130,6 +131,12 @@ export interface TykotechCapabilities {
 	 * principal holding `model:invoke` — the `sandbox` precedent: told to the caller who could use it, absent otherwise.
 	 */
 	readonly model?: { readonly providers: number; readonly builtin_agent: boolean };
+	/**
+	 * Tool groups: on a connection that lists its tools grouped, the groups whose `use_<group>` entry tool it listed when
+	 * it connected, in `TOOL_GROUPS` order. Absent on a flat connection, so a client knows from the block whether to
+	 * call one.
+	 */
+	readonly tool_groups?: readonly ToolGroup[];
 }
 
 /** What the builder needs to answer for one principal. */
@@ -163,6 +170,8 @@ export interface CapabilityInputs {
 	 * (no providers file, stdio without one) reads as none configured: a `model:invoke` holder is still told the block.
 	 */
 	readonly model?: { readonly providers: number; readonly reachable: number };
+	/** Tool groups: true on a connection that lists its tools grouped (`McpDeps.toolGroups`). */
+	readonly toolGroups?: boolean;
 }
 
 /** True when the principal holds either live-view scope. */
@@ -200,6 +209,27 @@ export function toolsWithheld(
 }
 
 /**
+ * The groups whose entry tool a grouped connection lists for this principal: those holding at least one tool the
+ * principal's scopes admit and the deployment offers — the tests `registerCatalog` applies to the same composed tools,
+ * so at connect time the block names exactly the entry tools listed. Like `tools_withheld`, it is not rebuilt when a
+ * service later comes or goes; the list itself follows (D-082).
+ */
+function groupsListed(
+	scopes: ReadonlySet<Scope>,
+	availability: ToolAvailability,
+	tools: readonly ToolDefinition[],
+): ToolGroup[] {
+	const held = new Set<ToolGroup>();
+	for (const tool of tools) {
+		if (tool.scope !== undefined && !scopes.has(tool.scope)) continue;
+		if (tool.available !== undefined && !tool.available(availability)) continue;
+		const group = toolGroupOf(tool.name);
+		if (group !== undefined) held.add(group);
+	}
+	return TOOL_GROUPS.filter((group) => held.has(group));
+}
+
+/**
  * Builds the `capabilities.tykotech` block for one principal.
  *
  * Every optional member is present only when the principal could use what it describes, so the block
@@ -218,6 +248,7 @@ export function buildCapabilities(input: CapabilityInputs): TykotechCapabilities
 		browser?: { sandboxed: boolean };
 		sessions?: { ownership: SessionOwnership };
 		model?: { providers: number; builtin_agent: boolean };
+		tool_groups?: readonly ToolGroup[];
 	} = { version: input.version };
 
 	if (input.liveView !== undefined && watchesLiveView(input.scopes)) capabilities.live_view = input.liveView;
@@ -249,6 +280,10 @@ export function buildCapabilities(input: CapabilityInputs): TykotechCapabilities
 		if (input.chromiumSandboxed !== undefined) capabilities.browser = { sandboxed: input.chromiumSandboxed };
 		// D-128: told to the callers whose sessions it governs, beside the browser posture.
 		if (input.sessionOwnership !== undefined) capabilities.sessions = { ownership: input.sessionOwnership };
+		if (input.toolGroups === true) {
+			const listed = groupsListed(input.scopes, input.availability, input.tools ?? CATALOG);
+			if (listed.length > 0) capabilities.tool_groups = listed;
+		}
 	}
 
 	// D-108 / G1: an opt-in backend that weakens isolation is visible — to the caller who can run commands in it.

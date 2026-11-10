@@ -96,6 +96,7 @@ async function rpc(
 	const body = { ...params };
 	if (era === MODERN) {
 		body._meta = { [PROTOCOL_VERSION_META_KEY]: MODERN, [CLIENT_CAPABILITIES_META_KEY]: {} };
+		headers['mcp-protocol-version'] = MODERN;
 		headers['mcp-method'] = method;
 		if (name !== undefined) headers['mcp-name'] = name;
 	}

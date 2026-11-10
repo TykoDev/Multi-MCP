@@ -37,7 +37,6 @@ export const SETUP_UNITS = [
 	'peer',
 	'browser-secrets',
 	'git-remotes',
-	'sandbox-token',
 	'agent-token',
 	'agent-commands',
 	'env',
@@ -342,6 +341,8 @@ async function runStdio(): Promise<number> {
 		// D-108: `capabilities.tykotech.sandbox` on stdio too.
 		...(sandbox === undefined ? {} : { sandboxBackend: () => sandbox.backend }),
 		...clone,
+		// Tool groups (`TTK_MCP_TOOL_GROUPS`): the one server pinned to this connection remembers the groups it opens.
+		toolGroups: config.mcpToolGroups,
 	});
 	const watches: Array<{ close(): void }> = [];
 	const handle = serveStdio(async (context) => {
@@ -487,7 +488,7 @@ async function runDoctor(
 			console.error(`${DB_KEY_FILE} exists; --force replaces it, and every secret sealed with it becomes unreadable`);
 			return 1;
 		}
-		console.log(`Wrote ${DB_KEY_FILE} (0600). Set TTK_DB_KEY_FILE to it; keep it off the data volume and backed up.`);
+		console.log(`Wrote ${DB_KEY_FILE}. Set TTK_DB_KEY_FILE to it; keep it off the data volume and backed up.`);
 		return 0;
 	}
 
@@ -702,7 +703,6 @@ const PEER_TOKEN_FILE = `${SECRETS_DIR}/ttk_peer_token`;
 const PEER_API_KEYS_FILE = `${SECRETS_DIR}/ttk_peer_api_keys.json`;
 const BROWSER_SECRETS_FILE = `${SECRETS_DIR}/ttk_secrets.json`;
 const GIT_REMOTES_FILE = `${SECRETS_DIR}/ttk_git_remotes`;
-const SANDBOX_TOKEN_FILE = `${SECRETS_DIR}/ttk_sandbox_token`;
 const AGENT_TOKEN_FILE = `${SECRETS_DIR}/ttk_agent_bridge_token`;
 const AGENT_COMMANDS_FILE = `${SECRETS_DIR}/ttk_agent_commands.json`;
 const ENV_FILE = '.env';
@@ -872,14 +872,14 @@ export function setupUnits(only: string | undefined): SetupUnit[] | null | undef
 }
 
 /**
- * `setup` (D-154): creates every file a shipped compose file mounts — the database key, the administrator, the
- * `client` API key, the A2A peer's token pair and list, the browser-secrets and git-remotes placeholders, the overlay
- * tokens and the ACP commands template — and `.env`, skipping each file that exists. `--force` replaces the generated
- * ones; files you fill in yourself (browser secrets, git remotes, agent commands) are replaced only when `--only`
- * names them. Generated passwords and keys are printed once and stored only as hashes; the service tokens are stored
- * as they are (each side must present one), in `secrets/` like every other file. Kept files get their modes repaired.
- * On an AppArmor host it then installs the sandbox's profile through sudo (`apparmor`), and when that fails it exits 1
- * with the commands that do it by hand. `apparmor` stands in for the host in the unit tests.
+ * `setup` (D-154): creates every file a shipped compose file mounts — the database key, the administrator, the `client`
+ * API key, the A2A peer's token pair and list, the browser-secrets and git-remotes placeholders, the agent runner's
+ * token and the ACP commands template — and `.env`, skipping each file that exists. `--force` replaces the generated
+ * ones; files you fill in yourself (browser secrets, git remotes, agent commands) are replaced only when `--only` names
+ * them. Generated passwords and keys are printed once and stored only as hashes; the service tokens are stored as they
+ * are (each side must present one), in `secrets/` like every other file. Kept files get their modes repaired. On an
+ * AppArmor host it then installs the sandbox's profile through sudo (`apparmor`), and when that fails it exits 1 with
+ * the commands that do it by hand. `apparmor` stands in for the host in the unit tests.
  */
 export async function runSetup(
 	args: { force?: boolean; admin?: string; 'key-id'?: string; scopes?: string; only?: string },
@@ -965,7 +965,6 @@ export async function runSetup(
 	}
 	await file('browser-secrets', BROWSER_SECRETS_FILE, () => '{}\n', true);
 	await file('git-remotes', GIT_REMOTES_FILE, () => '[]\n', true);
-	await file('sandbox-token', SANDBOX_TOKEN_FILE, () => `${serviceToken()}\n`);
 	await file('agent-token', AGENT_TOKEN_FILE, () => `${serviceToken()}\n`);
 	await file(
 		'agent-commands',

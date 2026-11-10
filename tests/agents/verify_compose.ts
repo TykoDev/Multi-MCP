@@ -11,9 +11,8 @@
  * over the deployed `:0.2.0`. Every secret, the administrator record included, is made in a scratch folder, and the
  * resolved configuration is checked to say so before anything starts.
  *
- * D-151: it layers `docker-compose.sandbox.yml`, which since D-151 only swaps the generated sandbox token for an
- * operator-made file — so this proof is also the one that keeps the operator-file path working (the sandbox proof runs
- * the generated token).
+ * D-151: the sandbox's bearer is the one the service generates into the project's own `ttk-sandbox-token` volume, as
+ * in a plain `docker compose up`, so no token file is made here.
  */
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { assert, assertEquals } from '@std/assert';
@@ -66,7 +65,6 @@ await Deno.writeTextFile(
 		}))),
 	),
 );
-await Deno.writeTextFile(`${scratch}/sandbox-token`, crypto.randomUUID() + crypto.randomUUID());
 await Deno.writeTextFile(`${scratch}/bridge-token`, crypto.randomUUID() + crypto.randomUUID());
 await writeSyntheticAdmin(`${scratch}/admin-user.json`);
 await Deno.writeTextFile(
@@ -102,8 +100,6 @@ await Deno.writeTextFile(
 secrets:
   ttk_api_keys:
     file: ${safePath('keys.json')}
-  ttk_sandbox_token:
-    file: ${safePath('sandbox-token')}
   ttk_admin_user:
     file: ${safePath('admin-user.json')}
   ttk_agent_bridge_token:
@@ -121,8 +117,6 @@ const compose = [
 	'-f',
 	resolve('docker-compose.yml'),
 	'-f',
-	resolve('docker-compose.sandbox.yml'),
-	'-f',
 	resolve('docker-compose.agents.yml'),
 	'-f',
 	`${scratch}/compose.yml`,
@@ -139,7 +133,6 @@ try {
 			'ttk_admin_user',
 			'ttk_api_keys',
 			'ttk_db_key',
-			'ttk_sandbox_token',
 			'ttk_agent_bridge_token',
 			'ttk_agent_commands',
 			...stack.names,

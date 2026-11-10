@@ -15,7 +15,7 @@
  * It imports nothing, so the Linux tier can run it in a process with exactly the production grants.
  */
 
-/** The compose secret an operator-provided token is mounted at (`docker-compose.sandbox.yml`, the image's default). */
+/** The image's default `TTK_SANDBOX_TOKEN_FILE`: where an operator mounts a token of their own, outside Compose. */
 export const SECRET_TOKEN_FILE = '/run/secrets/ttk_sandbox_token';
 
 /**

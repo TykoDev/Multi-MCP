@@ -9,6 +9,8 @@ const ROOT = fromFileUrl(new URL('../..', import.meta.url));
 
 interface Exchange {
 	responses: Map<number, Record<string, unknown>>;
+	/** The method of every notification the server wrote, in order. */
+	notifications: string[];
 	stderr: string;
 }
 
@@ -41,6 +43,7 @@ async function converse(
 	}
 
 	const responses = new Map<number, Record<string, unknown>>();
+	const notifications: string[] = [];
 	const decoder = new TextDecoder();
 	const reader = child.stdout.getReader();
 	let buffer = '';
@@ -55,8 +58,9 @@ async function converse(
 		for (const line of lines) {
 			if (line.trim() === '') continue;
 			try {
-				const message = JSON.parse(line) as { id?: number };
+				const message = JSON.parse(line) as { id?: number; method?: string };
 				if (typeof message.id === 'number') responses.set(message.id, message as Record<string, unknown>);
+				else if (typeof message.method === 'string') notifications.push(message.method);
 			} catch {
 				// A non-JSON line on stdout is itself a finding; captured below.
 				responses.set(-1, { raw: line });
@@ -85,11 +89,11 @@ async function converse(
 	await child.status;
 	await child.stdout.cancel().catch(() => {});
 	await child.stderr.cancel().catch(() => {});
-	return { responses, stderr };
+	return { responses, notifications, stderr };
 }
 
 Deno.test('stdio: initialize, tools/list and a tool call round-trip', async () => {
-	const { responses } = await converse([
+	const { responses, notifications } = await converse([
 		{
 			jsonrpc: '2.0',
 			id: 1,
@@ -98,8 +102,11 @@ Deno.test('stdio: initialize, tools/list and a tool call round-trip', async () =
 		},
 		{ jsonrpc: '2.0', method: 'notifications/initialized' },
 		{ jsonrpc: '2.0', id: 2, method: 'tools/list' },
+		// Tool groups: a grouped tool answers by name before its group is open, then `use_browser` opens the group.
 		{ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'browser_list_sessions', arguments: {} } },
-	], [1, 2, 3]);
+		{ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'use_browser', arguments: {} } },
+		{ jsonrpc: '2.0', id: 5, method: 'tools/list' },
+	], [1, 2, 3, 4, 5]);
 
 	const initialize = responses.get(1);
 	assert(initialize !== undefined, 'no initialize response');
@@ -118,8 +125,25 @@ Deno.test('stdio: initialize, tools/list and a tool call round-trip', async () =
 	assert(typeof instructions === 'string' && new TextEncoder().encode(instructions).byteLength <= 2048, 'instructions');
 	assert(!instructions.includes('live view'), 'stdio serves no live view, so the instructions say nothing about it');
 
-	const list = responses.get(2);
-	const names = ((list?.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((tool) => tool.name);
+	// Tool groups (`TTK_MCP_TOOL_GROUPS`, on by default): stdio keeps one server for the connection, so its first list
+	// holds the entry tools only — `use_browser`, the one group this credential-less mount holds tools in here.
+	const listNames = (id: number): string[] =>
+		((responses.get(id)?.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((tool) => tool.name);
+	const grouped = listNames(2);
+	assert(grouped.includes('use_browser'), grouped.join(','));
+	assert(grouped.every((name) => name.startsWith('use_')), `only entry tools before a group is opened: ${grouped}`);
+	const opened = responses.get(4)?.result as { structuredContent?: { group?: string; tools?: unknown[] } } | undefined;
+	assertEquals(opened?.structuredContent?.group, 'browser');
+	assertEquals(
+		notifications.filter((method) => method === 'notifications/tools/list_changed').length,
+		1,
+		`opening the group announced once: ${notifications.join(',')}`,
+	);
+	// What follows is the opened browser group, which is the flat list's browser tools.
+	const listed = listNames(5);
+	const names = listed.filter((name) => name.startsWith('browser_'));
+	assertEquals(listed.filter((name) => !name.startsWith('browser_')), grouped, 'the entry tools stay listed');
+	assertEquals(opened?.structuredContent?.tools?.length, names.length, 'the index names every tool it listed');
 	// stdio has no auth gate, so the caller is trusted with every tool its
 	// *scopes* allow — which is `DEFAULT_SCOPES`, not the whole vocabulary (SEC-01).
 	// Two other absences here have a different cause again: `browser_storage_state`
@@ -249,7 +273,8 @@ Deno.test('stdio: browser_head is offered exactly when a public outbound grant i
 			{ jsonrpc: '2.0', id: 2, method: 'tools/list' },
 		],
 		[1, 2],
-		{ allowNet: '127.0.0.1,docs.example', env: { TTK_ALLOWED_DOMAINS: 'docs.example' } },
+		// The flat list: this case is about which tools are offered, not how they are grouped.
+		{ allowNet: '127.0.0.1,docs.example', env: { TTK_ALLOWED_DOMAINS: 'docs.example', TTK_MCP_TOOL_GROUPS: 'false' } },
 	);
 	const list = responses.get(2);
 	assert(list !== undefined, `no tools/list response; stderr: ${stderr}`);
@@ -410,7 +435,8 @@ Deno.test('stdio (D-125): a client without elicitation, or with confirmations of
 });
 
 Deno.test('stdio (D-124): the handoff is never offered on stdio, even with TTK_HUMAN_HANDOFF=true', async () => {
-	await interactive({ TTK_HUMAN_HANDOFF: 'true' }, async (io) => {
+	// The flat list, or a grouped one would hide `browser_request_human` for the wrong reason and pass vacuously.
+	await interactive({ TTK_HUMAN_HANDOFF: 'true', TTK_MCP_TOOL_GROUPS: 'false' }, async (io) => {
 		await open(io, { elicitation: { url: {} } });
 		await io.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
 		const list = (await io.next()) as { result: { tools: Array<{ name: string }> } };
@@ -425,5 +451,58 @@ Deno.test('stdio (D-124): the handoff is never offered on stdio, even with TTK_H
 		assertEquals(refused.result?.isError, true);
 		assertEquals(refused.result?.structuredContent?.error?.code, 'feature-unavailable');
 		assert((refused.result?.structuredContent?.error?.message ?? '').includes('TTK_HUMAN_HANDOFF'));
+	});
+});
+
+// --- tool groups on the 2026-07-28 era: one server pinned to the connection, changes on `subscriptions/listen` ------
+
+Deno.test('stdio (tool groups): a 2026-era connection lists the entry tools and hears its group open on subscriptions/listen', async () => {
+	const meta = {
+		'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+		'io.modelcontextprotocol/clientCapabilities': {},
+		'io.modelcontextprotocol/clientInfo': { name: 'test', version: '0' },
+	};
+	const request = (id: number, method: string, params: Record<string, unknown> = {}) => ({
+		jsonrpc: '2.0',
+		id,
+		method,
+		params: { ...params, _meta: meta },
+	});
+	await interactive({}, async (io) => {
+		const seen: Record<string, unknown>[] = [];
+		const until = async (match: (message: Record<string, unknown>) => boolean): Promise<Record<string, unknown>> => {
+			for (;;) {
+				const message = await io.next();
+				seen.push(message);
+				if (match(message)) return message;
+			}
+		};
+		const names = (message: Record<string, unknown>): string[] =>
+			((message.result as { tools?: Array<{ name: string }> }).tools ?? []).map((tool) => tool.name);
+		const announced = (): number => seen.filter((m) => m.method === 'notifications/tools/list_changed').length;
+
+		await io.send(request(1, 'server/discover'));
+		const discovered = (await until((m) => m.id === 1)).result as {
+			instructions?: string;
+			capabilities?: { tykotech?: { tool_groups?: string[] } };
+		};
+		assertEquals(discovered.capabilities?.tykotech?.tool_groups, ['browser']);
+		assert(discovered.instructions?.includes('use_browser'), discovered.instructions);
+
+		await io.send(request(2, 'subscriptions/listen', { notifications: { toolsListChanged: true } }));
+		await until((m) => m.method === 'notifications/subscriptions/acknowledged');
+
+		await io.send(request(3, 'tools/list'));
+		assertEquals(names(await until((m) => m.id === 3)), ['use_browser']);
+
+		await io.send(request(4, 'tools/call', { name: 'use_browser', arguments: {} }));
+		const opened = (await until((m) => m.id === 4)).result as { structuredContent?: { group?: string } };
+		assertEquals(opened.structuredContent?.group, 'browser');
+		// The announcement rides the listen stream, so it may arrive on either side of the call's answer.
+		if (announced() === 0) await until((m) => m.method === 'notifications/tools/list_changed');
+
+		await io.send(request(5, 'tools/list'));
+		assert(names(await until((m) => m.id === 5)).includes('browser_navigate'), 'the opened group is listed');
+		assertEquals(announced(), 1, 'one announcement for the whole group');
 	});
 });

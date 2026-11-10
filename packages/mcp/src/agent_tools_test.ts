@@ -72,6 +72,7 @@ async function served() {
 					headers: {
 						'content-type': 'application/json',
 						accept: 'application/json, text/event-stream',
+						'mcp-protocol-version': MODERN,
 						'mcp-method': 'tools/call',
 						'mcp-name': 'browser_run_task',
 					},
@@ -219,6 +220,7 @@ Deno.test('AC23: a task round minted under one codec is not honoured by another 
 					headers: {
 						'content-type': 'application/json',
 						accept: 'application/json, text/event-stream',
+						'mcp-protocol-version': MODERN,
 						'mcp-method': 'tools/call',
 						'mcp-name': 'browser_run_task',
 					},

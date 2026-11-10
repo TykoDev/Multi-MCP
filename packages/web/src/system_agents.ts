@@ -444,7 +444,7 @@ function openEditor(
 			el('div', { class: 'pv-grid' }, [
 				el('label', { class: 'pv-toggle wide', for: 'pv-allow-http' }, [
 					allowHttp,
-					el('span', { text: 'Allow http to a private or named host (never with a key off loopback)' }),
+					el('span', { text: 'Allow http to a private or named host (an API key is then sent in plaintext)' }),
 				]),
 				field('pv-tokens-param', 'Output limit parameter', tokensParam),
 				field('pv-max-steps', 'Max steps', maxSteps, '1–64 tool steps per task.'),
