@@ -405,8 +405,9 @@ Deno.test('D-154: a typed key is judged by the parser’s key rules before anyth
 		],
 		[added({ kind: 'anthropic' }), 'an anthropic provider needs a key, entry 1, field key'],
 		[
-			added({ base_url: 'http://10.0.0.5/v1', allow_http: true, key: { mode: 'set', value: TYPED } }),
-			'a key never travels in plaintext off the host, entry 1, field allow_http',
+			added({ base_url: 'https://203.0.113.7/v1', allow_http: true, key: { mode: 'set', value: TYPED } }),
+			'allow_http with a key needs a loopback, private or named host, entry 1, field allow_http',
+			'203.0.113.7',
 		],
 		[
 			added({ base_url: 'http://203.0.113.7/v1' }),
@@ -429,6 +430,28 @@ Deno.test('D-154: a typed key is judged by the parser’s key rules before anyth
 	}
 	assertEquals(h.data.store!.vault.names('model-provider/'), [], 'nothing was sealed');
 	assertFalse(h.lines.join('\n').includes(TYPED));
+});
+
+Deno.test('C2 (v): allow_http with a typed key is admitted to a private or named host, sealed, and warned of in plaintext', async () => {
+	await using s = await scratch();
+	await using h = await harness(null, s.data);
+	for (
+		const [base_url, host] of [['http://10.0.0.5/v1', '10.0.0.5'], ['http://ollama:11434/v1', 'ollama:11434']] as const
+	) {
+		const put = await h.put({
+			providers: [added({ base_url, allow_http: true, key: { mode: 'set', value: TYPED } })],
+		});
+		assertEquals(put.status, 200, await put.text());
+		assertEquals(h.store.effective()!.providers.map((p) => [p.baseUrl, p.allowHttp, p.apiKey]), [
+			[base_url, true, TYPED],
+		]);
+		assertStringIncludes(
+			h.lines.join('\n'),
+			`plaintext HTTP to ${host} is permitted; its API key travels in plaintext`,
+		);
+	}
+	assertEquals(h.data.store!.vault.names('model-provider/'), [providerKeyName('second')]);
+	assertFalse(h.lines.join('\n').includes(TYPED), 'the warning never carries the key');
 });
 
 Deno.test('D-154: the body is strict — no inline key, no key file — and both routes need admin', async () => {

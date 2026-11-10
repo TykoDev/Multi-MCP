@@ -157,7 +157,7 @@ Deno.test('doctor: a refused file exits 1 naming the entry and the field — hea
 	}
 });
 
-Deno.test('doctor: branch (v) is reported with its field, never the key', async () => {
+Deno.test('doctor: allow_http with a key on a named host is admitted with a warning that the key travels in plaintext, never the key', async () => {
 	const { dir, file } = await scratchFiles([
 		{
 			id: 'ollama',
@@ -171,8 +171,38 @@ Deno.test('doctor: branch (v) is reported with its field, never the key', async 
 	try {
 		await withEnv({ TTK_MODEL_PROVIDERS_FILE: file }, async () => {
 			const captured = await run(['doctor']);
+			assertEquals(captured.code, 0, captured.err);
+			assertStringIncludes(
+				captured.out,
+				'\nwarning: model provider ollama: allow_http is set, plaintext HTTP to ollama:11434 is permitted; ' +
+					'its API key travels in plaintext\n',
+			);
+			assert(!`${captured.out}${captured.err}`.includes(INLINE_KEY));
+		});
+	} finally {
+		await Deno.remove(dir, { recursive: true });
+	}
+});
+
+Deno.test('doctor: branch (v) is reported with its field, never the key', async () => {
+	const { dir, file } = await scratchFiles([
+		{
+			id: 'public',
+			kind: 'openai',
+			base_url: 'https://8.8.8.8/v1',
+			models: ['m'],
+			allow_http: true,
+			api_key: INLINE_KEY,
+		},
+	]);
+	try {
+		await withEnv({ TTK_MODEL_PROVIDERS_FILE: file }, async () => {
+			const captured = await run(['doctor']);
 			assertEquals(captured.code, 1);
-			assertStringIncludes(captured.err, 'a key never travels in plaintext off the host, entry 1, field allow_http');
+			assertStringIncludes(
+				captured.err,
+				'allow_http with a key needs a loopback, private or named host, entry 1, field allow_http',
+			);
 			assert(!`${captured.out}${captured.err}`.includes(INLINE_KEY));
 		});
 	} finally {

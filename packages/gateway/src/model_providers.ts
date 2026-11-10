@@ -84,7 +84,10 @@ export interface ModelProviderSettings {
 	 */
 	readonly keySource: 'file' | 'inline' | 'stored' | 'none';
 	readonly headers: Readonly<Record<string, string>>;
-	/** C2: `http:` admitted to a private literal or a DNS name only with this flag; never with a key off-host. */
+	/**
+	 * C2: `http:` admitted to a private literal or a DNS name only with this flag — a key included, which then travels
+	 * in plaintext; never to a public or link-local literal.
+	 */
 	readonly allowHttp: boolean;
 	/** §3.12 (gate F16): which output-token parameter the OpenAI wire takes; `max_tokens` by default. */
 	readonly maxTokensParam: 'max_tokens' | 'max_completion_tokens';
@@ -260,9 +263,12 @@ export function judgeBaseUrl(
 		// (ii) admits loopback without a flag; (iii) admits private literals and names only with it.
 		if (cls !== 'loopback' && !allowHttp) return { field: 'base_url', phrase: 'plaintext HTTP needs allow_http' };
 	}
-	// (v): the flag and a key together are refused unless the host is loopback.
-	if (allowHttp && hasKey && cls !== 'loopback') {
-		return { field: 'allow_http', phrase: 'a key never travels in plaintext off the host' };
+	// (v), an owner decision and a deliberate relaxation: the flag and a key together are admitted for a loopback,
+	// private or named host, so the key may cross the network in plaintext to a host the operator named; the startup
+	// warning says so. Over http (iv) and the link-local rule have already refused every other host, so only an https
+	// public literal reaches this: the flag admits no plaintext there, and with a key it is refused as before.
+	if (allowHttp && hasKey && cls === 'public') {
+		return { field: 'allow_http', phrase: 'allow_http with a key needs a loopback, private or named host' };
 	}
 	return null;
 }
@@ -412,7 +418,11 @@ export async function parseModelProviders<E extends Error>(
 		if (!entry.models.includes(defaultModel)) throw fail('default_model', 'not one of the listed models');
 
 		if (allowHttp) {
-			warnings.push(`model provider ${entry.id}: allow_http is set, plaintext HTTP to ${url.host} is permitted`);
+			// A key admitted with the flag is sent unencrypted; the line says that it is, never what it is.
+			const keyInPlaintext = apiKey !== null && url.protocol === 'http:' ? '; its API key travels in plaintext' : '';
+			warnings.push(
+				`model provider ${entry.id}: allow_http is set, plaintext HTTP to ${url.host} is permitted${keyInPlaintext}`,
+			);
 		}
 		providers.push({
 			id: entry.id,

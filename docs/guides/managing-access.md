@@ -63,6 +63,8 @@ scopes ([secrets/README.md](../../secrets/README.md#api-keys)).
 everywhere.
 
 - Passwords: 8–256 characters, PBKDF2-SHA256.
+- An account key holds any of its account's scopes, explicit ones included, and never one the account lacks; the
+  **Users** screen offers exactly those, following a scope change made while the account is open.
 - The last enabled `admin` cannot be disabled, deleted or stripped of `admin`; nobody can disable or delete themselves.
 - Sign-ins last `TTK_LOGIN_TTL_S` (7 days); scope changes apply on the next request.
 - Failed sign-ins back off per source (5 free) and per username (10 free); no lockout.

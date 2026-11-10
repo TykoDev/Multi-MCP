@@ -441,31 +441,75 @@ Deno.test('C2 (iv) / gate F23: 0/8, multicast, benchmarking, 192.0.0/24 and :: a
 	}
 });
 
-Deno.test('C2 (v): allow_http with a key off the host is refused — http://ollama:11434 + flag + key', async () => {
-	const phrase = 'a key never travels in plaintext off the host, entry 1, field allow_http';
-	assertStringIncludes(
-		await refused([provider({ base_url: 'http://ollama:11434', allow_http: true, api_key: KEY })]),
-		phrase,
+Deno.test('C2 (v): allow_http with a key is admitted to a private or named host, and the warning says the key travels in plaintext', async () => {
+	for (
+		const url of [
+			'http://ollama:11434',
+			'http://10.0.0.5',
+			'http://172.16.0.1',
+			'http://192.168.1.10:8080',
+			'http://[fd12::1]',
+			'http://[::ffff:10.0.0.1]:11434',
+			'http://vllm.internal:8000',
+		]
+	) {
+		const warnings: string[] = [];
+		const config = await admitted([provider({ base_url: url, allow_http: true, api_key: KEY })], {
+			warn: (l) => warnings.push(l),
+		});
+		assertEquals(config.providers[0]!.apiKey, KEY);
+		assertEquals(config.providers[0]!.allowHttp, true);
+		assertEquals(warnings, [
+			`model provider local: allow_http is set, plaintext HTTP to ${new URL(url).host} is permitted; ` +
+			'its API key travels in plaintext',
+		]);
+		assert(!warnings.join('\n').includes(KEY), 'the warning never carries the key');
+	}
+	// A key file is the same key.
+	const fromFile = await admitted(
+		[provider({ base_url: 'http://ollama:11434', allow_http: true, api_key_file: KEY_FILE })],
+		{ files: { [KEY_FILE]: `${KEY}\n` } },
 	);
-	assertStringIncludes(
-		await refused([provider({ base_url: 'http://10.0.0.5', allow_http: true, api_key: KEY })]),
-		phrase,
-	);
-	assertStringIncludes(
-		await refused([provider({ base_url: 'http://ollama:11434', allow_http: true, api_key_file: KEY_FILE })], {
-			files: { [KEY_FILE]: `${KEY}\n` },
-		}),
-		phrase,
-	);
-	// The flag is judged as written, on either scheme: the combination has no honest reading off the host.
-	assertStringIncludes(
-		await refused([provider({ base_url: 'https://api.openai.com/v1', allow_http: true, api_key: KEY })]),
-		phrase,
-	);
-	// Loopback is the one exception: the key never leaves the host.
+	assertEquals(fromFile.providers[0]!.apiKey, KEY);
+	// The flag is judged by the host, on either scheme: over https the key is not in plaintext, and the warning says no
+	// more than the flag permits.
+	const tlsWarnings: string[] = [];
+	const tls = await admitted([provider({ base_url: 'https://api.openai.com/v1', allow_http: true, api_key: KEY })], {
+		warn: (l) => tlsWarnings.push(l),
+	});
+	assertEquals(tls.providers[0]!.apiKey, KEY);
+	assertEquals(tlsWarnings, ['model provider local: allow_http is set, plaintext HTTP to api.openai.com is permitted']);
+	// Loopback stays admitted: the key never leaves the host.
 	const loop = await admitted([provider({ base_url: 'http://127.0.0.1:11434', allow_http: true, api_key: KEY })]);
 	assertEquals(loop.providers[0]!.apiKey, KEY);
 	assertEquals(loop.providers[0]!.allowHttp, true);
+});
+
+Deno.test('C2 (iv), (v): a public or link-local address stays refused with the flag and a key, on either scheme', async () => {
+	// Plaintext: (iv) and the link-local rule refuse the URL itself, before the key is considered.
+	for (const url of ['http://8.8.8.8', 'http://[2001:db8::1]', 'http://100.64.0.1', 'http://[::ffff:8.8.8.8]']) {
+		assertStringIncludes(
+			await refused([provider({ base_url: url, allow_http: true, api_key: KEY })]),
+			'plaintext HTTP to a public address, entry 1, field base_url',
+		);
+	}
+	for (const url of ['http://169.254.169.254', 'http://[fe80::1]', 'https://169.254.169.254']) {
+		assertStringIncludes(
+			await refused([provider({ base_url: url, allow_http: true, api_key: KEY })]),
+			'link-local address, entry 1, field base_url',
+		);
+	}
+	// Over https a public literal with the flag and a key is refused on the flag: it names no host the flag admits.
+	assertStringIncludes(
+		await refused([provider({ base_url: 'https://8.8.8.8/v1', allow_http: true, api_key: KEY })]),
+		'allow_http with a key needs a loopback, private or named host, entry 1, field allow_http',
+	);
+	assertStringIncludes(
+		await refused([provider({ base_url: 'https://8.8.8.8/v1', allow_http: true, api_key_file: KEY_FILE })], {
+			files: { [KEY_FILE]: `${KEY}\n` },
+		}),
+		'field allow_http',
+	);
 });
 
 Deno.test('C2 / gate F21: http://[::ffff:10.0.0.1]:11434 + flag is admitted as private (IPv4-mapped, folded as head.ts folds it)', async () => {
@@ -548,7 +592,10 @@ Deno.test('C2: judgeBaseUrl names the field each branch refuses', () => {
 	assertEquals(judgeBaseUrl(new URL('https://169.254.0.1'), true, false)?.field, 'base_url');
 	assertEquals(judgeBaseUrl(new URL('http://8.8.8.8'), true, false)?.field, 'base_url');
 	assertEquals(judgeBaseUrl(new URL('http://ollama'), false, false)?.field, 'base_url');
-	assertEquals(judgeBaseUrl(new URL('http://ollama'), true, true)?.field, 'allow_http');
+	assertEquals(judgeBaseUrl(new URL('http://ollama'), true, true), null, '(v): a named host takes the flag and a key');
+	assertEquals(judgeBaseUrl(new URL('http://10.0.0.5'), true, true), null, '(v): so does a private one');
+	assertEquals(judgeBaseUrl(new URL('http://8.8.8.8'), true, true)?.field, 'base_url');
+	assertEquals(judgeBaseUrl(new URL('https://8.8.8.8'), true, true)?.field, 'allow_http');
 });
 
 // --- default --------------------------------------------------------------------------------------------------------

@@ -79,6 +79,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The Users screen offers a new account key every scope its account holds.** The API keys tab built its scope picker
+  once, over the account as its dialog opened, so a grant saved from the same dialog's Scopes tab was never offered —
+  `setup`'s administrator, raised to every scope, still saw only its first ten, without `task`, `evaluate`,
+  `metrics:read` and `network:read` — and a scope taken away still was. The picker now follows the account. The server's
+  check is unchanged: a key never holds a scope its account does not.
 - **The coding sandbox on AppArmor 4 hosts (Debian 13, Ubuntu 24.04).** The sandbox's AppArmor profile is pinned to the
   3.0 policy ABI. Without that, the kernel refused every bubblewrap cage its user namespace, so the sandbox never became
   healthy (`bwrap: Creating new namespace failed: Permission denied`). Reload it with `deno task setup --only apparmor`.
@@ -228,6 +233,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+- **A model provider with `allow_http` may carry an API key to a private or named host (an owner decision, a deliberate
+  relaxation).** Plain `http:` to a private address (RFC 1918, unique-local) or a service name is admitted with
+  `allow_http` and a key, as loopback already was, so the key crosses the network unencrypted; that provider's start-up
+  warning now ends `its API key travels in plaintext`. `http:` to a public or link-local address is still refused
+  whatever the flag. An `https:` public address with `allow_http` and a key is still refused, now as
+  `allow_http with a key needs a loopback, private or named host` (was `a key never travels in plaintext off the host`).
 - **OpenTelemetry export is allowlisted at the process edge (D-137):** before any subcommand runs, the CLI judges every
   non-empty OTLP endpoint — the base one included — against `TTK_OTEL_ENDPOINTS`, and refuses the runtime default
   `http://localhost:4318`, credentials in an endpoint URL, an empty base endpoint and vsock export; a malformed

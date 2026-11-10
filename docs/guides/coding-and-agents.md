@@ -113,12 +113,15 @@ The file is copied in once; afterwards the database is the source (`ttk seed --f
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | `id`                                             | `^[a-z][a-z0-9_-]{0,31}$`                                                                                            |
 | `kind`                                           | `openai` or `anthropic`                                                                                              |
-| `base_url`                                       | `https:` anywhere; `http:` to loopback; `http:` to a private host or service name only with `allow_http` and no key. |
+| `base_url`                                       | `https:` anywhere; `http:` to loopback; `http:` to a private host or service name with `allow_http`, a key included. |
 | `models`, `default_model`                        | 1–64 model names; default the first.                                                                                 |
 | `api_key` / `api_key_file`                       | File only; sealed per host. Needs `TTK_DB_KEY_FILE`.                                                                 |
 | `headers`                                        | ≤8 non-credential headers.                                                                                           |
 | `max_tokens_param`                               | `max_tokens` (default) or `max_completion_tokens`.                                                                   |
 | `max_steps`, `max_output_tokens`, `token_budget` | Defaults 24, 4096, 400 000.                                                                                          |
+
+**Plaintext.** `http:` off loopback needs `allow_http`, and a provider's API key then crosses the network unencrypted;
+the start-up log warns that it does. `http:` to a public or link-local address is refused whatever the flag.
 
 **Routing.** A text task may name `provider` (and `model`). Without one: the ACP agent if configured, else the default
 provider for a caller holding `model:invoke`, else `-32004`. Never put a key in the environment; the server does not
