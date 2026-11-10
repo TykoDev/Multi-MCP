@@ -18,6 +18,7 @@ import { assert, assertEquals } from '@std/assert';
 import { hitTest } from '@tykotech/mcp';
 import { loadFixtureRoutes } from '../../packages/browser/fixtures/dom/pages.ts';
 import { harness, skipUnlessBrowser } from '../support/harness.ts';
+import { jsLiteral } from '../support/js_literal.ts';
 
 const ignore = skipUnlessBrowser('element_at e2e');
 
@@ -99,7 +100,7 @@ async function rectOf(h: { gateway: { registry: { peek(id: string): unknown } } 
 	const cdp = await record.session.sessionManager.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
 	const out = await record.session.cdpClient.send.Runtime.evaluate({
 		expression: `(() => { const r = document.getElementById(${
-			JSON.stringify(id)
+			jsLiteral(id)
 		}).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`,
 		returnByValue: true,
 	}, cdp.sessionId);
@@ -117,7 +118,7 @@ async function pageText(h: { gateway: { registry: { peek(id: string): unknown } 
 	};
 	const cdp = await record.session.sessionManager.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
 	const out = await record.session.cdpClient.send.Runtime.evaluate({
-		expression: `document.getElementById(${JSON.stringify(id)}).textContent`,
+		expression: `document.getElementById(${jsLiteral(id)}).textContent`,
 		returnByValue: true,
 	}, cdp.sessionId);
 	return String(out.result.value ?? '');

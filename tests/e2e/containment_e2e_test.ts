@@ -25,6 +25,7 @@
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import type { EventRecord } from '@tykotech/wire';
 import { type Harness, harness, skipUnlessBrowser } from '../support/harness.ts';
+import { jsLiteral } from '../support/js_literal.ts';
 
 const ignore = skipUnlessBrowser('containment e2e');
 
@@ -60,7 +61,8 @@ function servers(): Servers {
 	const page = (request: Request): Response => {
 		const url = new URL(request.url);
 		const to = url.searchParams.get('to') ?? '/';
-		const target = JSON.stringify(to);
+		// Written into <script> elements and single-quoted handler attributes below, so escaped for both.
+		const target = jsLiteral(to);
 		switch (url.pathname) {
 			case '/click':
 				return html(`<a id="go" href="${to}">go</a>`);
@@ -78,7 +80,7 @@ function servers(): Servers {
 				const features = url.searchParams.get('mode') === 'opener' ? '' : 'noopener';
 				return html(
 					`<button id="go" type="button" onclick='window.open(${target},"_blank",${
-						JSON.stringify(features)
+						jsLiteral(features)
 					})'>open</button>`,
 				);
 			}

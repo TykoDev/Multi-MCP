@@ -320,6 +320,9 @@ Deno.test('default-action: print triggers are recognised narrowly', () => {
 	assertEquals(trigger({ nodeName: 'A', attributes: { onclick: 'window.print()' } }), true);
 	assertEquals(trigger({ nodeName: 'BUTTON', attributes: { onclick: 'print();return false' } }), true);
 	assertEquals(trigger({ nodeName: 'A', attributes: { href: 'javascript:window.print()' } }), true);
+	// The scheme is read as the URL parser reads it: case, leading spaces and controls, tabs and newlines inside.
+	assertEquals(trigger({ nodeName: 'A', attributes: { href: ' \u0001JavaScript:print()' } }), true);
+	assertEquals(trigger({ nodeName: 'A', attributes: { href: 'java\tscr\nipt:window.pri\rnt()' } }), true);
 	assertEquals(trigger({ nodeName: 'BUTTON', attributes: { 'aria-label': 'Print' } }), true);
 	assertEquals(trigger({ nodeName: 'DIV', attributes: { role: 'button', title: 'Print this page' } }), true);
 	assertEquals(trigger({ nodeName: 'INPUT', attributes: { type: 'submit', value: 'Print' } }), true);
@@ -330,6 +333,11 @@ Deno.test('default-action: print triggers are recognised narrowly', () => {
 	assertEquals(trigger({ nodeName: 'BUTTON', attributes: { onclick: 'fingerprint()' } }), false);
 	assertEquals(trigger({ nodeName: 'BUTTON', attributes: { onclick: 'this.blueprint(1)' } }), false);
 	assertEquals(trigger({ nodeName: 'BUTTON' }), false);
+	// Only a `javascript:` URL runs its text on a click: a path that names one, and other schemes, are plain links.
+	assertEquals(trigger({ nodeName: 'A', attributes: { href: '/docs/javascript:print()' } }), false);
+	assertEquals(trigger({ nodeName: 'A', attributes: { href: 'javascript:void(0)' } }), false);
+	assertEquals(trigger({ nodeName: 'A', attributes: { href: 'data:text/html,<script>print()</script>' } }), false);
+	assertEquals(trigger({ nodeName: 'A', attributes: { href: 'vbscript:print()' } }), false);
 });
 
 Deno.test('default-action: a print-dialog click becomes Page.printToPDF, not a mouse press', async () => {

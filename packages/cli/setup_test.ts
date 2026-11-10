@@ -8,7 +8,7 @@ import { assert, assertEquals, assertNotEquals, assertRejects } from '@std/asser
 import { fromFileUrl } from '@std/path';
 import { A2A_PEER_SCOPES as PEER_SCOPES, STACK_SCOPES } from '@tykotech/mcp';
 import { type AppArmorHost, profileCommands, shellLine } from './apparmor.ts';
-import { ENV_TEMPLATE, runSetup, SETUP_UNITS, setupUnits } from './mod.ts';
+import { type CredentialStreams, ENV_TEMPLATE, redactedUrl, runSetup, SETUP_UNITS, setupUnits } from './mod.ts';
 
 const ROOT = new URL('../../', import.meta.url);
 const posix = Deno.build.os !== 'windows';
@@ -37,19 +37,28 @@ function appArmorHost(answer: string | null, calls: string[][], out: string[]): 
 	};
 }
 
+/** What marks an entry of `checkout`'s `out` that was written to a credential stream rather than through `console`. */
+const SHOWN = '[shown] ';
+
 /**
- * A scratch folder standing in for a checkout; removed after `body`. Console output (the printed keys) is kept from
- * the terminal and handed to `body`, one entry per call.
+ * A scratch folder standing in for a checkout; removed after `body`. Everything setup puts on screen is kept from the
+ * terminal and handed to `body` in the order it was written: console output one entry per call, and what went to the
+ * credential streams (`show`, which every `runSetup` here is given) one entry per line, each marked {@linkcode SHOWN}.
  */
-async function checkout(body: (root: string, out: string[]) => Promise<void>): Promise<void> {
+async function checkout(
+	body: (root: string, out: string[], show: CredentialStreams) => Promise<void>,
+): Promise<void> {
 	const scratch = fromFileUrl(new URL('tests/.scratch/', ROOT));
 	await Deno.mkdir(scratch, { recursive: true });
 	const root = await Deno.makeTempDir({ dir: scratch, prefix: 'setup-' });
 	const { log, error } = console;
 	const out: string[] = [];
 	console.log = console.error = (...parts: unknown[]) => void out.push(parts.join(' '));
+	const shown = (text: string): void => {
+		for (const line of text.replace(/\n$/, '').split('\n')) out.push(`${SHOWN}${line}`);
+	};
 	try {
-		await body(root, out);
+		await body(root, out, { out: shown, err: shown });
 	} finally {
 		console.log = log;
 		console.error = error;
@@ -98,6 +107,15 @@ Deno.test('setup: the stack and peer scopes are scopes, and never the explicit g
 	}
 });
 
+Deno.test('doctor: a URL on a diagnostic line never carries its username or password', () => {
+	assertEquals(redactedUrl(new URL('https://idp.example.com/realms/main')), 'https://idp.example.com/realms/main');
+	assertEquals(
+		redactedUrl(new URL('https://ops:hunter2@idp.example.com/realms/main?x=1')),
+		'https://idp.example.com/realms/main?x=1',
+	);
+	assertEquals(redactedUrl(new URL('http://ops@127.0.0.1:8787/')), 'http://127.0.0.1:8787/');
+});
+
 Deno.test('setup: --only names units, and nothing else', () => {
 	assertEquals(setupUnits(undefined), null);
 	assertEquals(setupUnits('peer, env'), ['peer', 'env']);
@@ -107,8 +125,17 @@ Deno.test('setup: --only names units, and nothing else', () => {
 });
 
 Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts, readable by the containers', async () => {
-	await checkout(async (root) => {
-		assertEquals(await runSetup({}, root, OFF), 0);
+	await checkout(async (root, out, show) => {
+		assertEquals(await runSetup({}, root, OFF, show), 0);
+		// The generated password and key are written to the stream itself; neither is a console line (a log line).
+		const value = (label: string): string =>
+			out.find((line) => line.startsWith(`${SHOWN}  ${label}`))?.slice(`${SHOWN}  ${label}`.length).trim() ?? '';
+		const credentials = [value('password'), value('api key')];
+		assert(credentials[0]!.length >= 20 && credentials[1]!.startsWith('ttk_'), 'both are shown');
+		const logged = out.filter((line) => !line.startsWith(SHOWN)).join('\n');
+		for (const credential of credentials) assert(!logged.includes(credential), 'a credential went through console');
+		assert(logged.includes('Shown once, stored only as hashes'), 'the heading is an ordinary line');
+
 		// Every secret file compose declares exists, except the one only you can write (the providers overlay's).
 		const declared = await composeSecretFiles();
 		assert(declared.size >= 11, `the compose files declare ${declared.size} secret files`);
@@ -147,31 +174,31 @@ Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts
 });
 
 Deno.test('setup: a second run keeps everything and repairs a mode the containers cannot read', async () => {
-	await checkout(async (root) => {
-		assertEquals(await runSetup({}, root, OFF), 0);
+	await checkout(async (root, _out, show) => {
+		assertEquals(await runSetup({}, root, OFF, show), 0);
 		const before = await read(root, 'secrets/ttk_api_keys.json');
 		if (posix) await Deno.chmod(`${root}/secrets/ttk_db_key`, 0o600);
-		assertEquals(await runSetup({}, root, OFF), 0);
+		assertEquals(await runSetup({}, root, OFF, show), 0);
 		assertEquals(await read(root, 'secrets/ttk_api_keys.json'), before);
 		if (posix) assertEquals(await mode(root, 'secrets/ttk_db_key'), 0o644);
 	});
 });
 
 Deno.test('setup: --force replaces generated files, and yours only when --only names them', async () => {
-	await checkout(async (root) => {
-		assertEquals(await runSetup({}, root, OFF), 0);
+	await checkout(async (root, _out, show) => {
+		assertEquals(await runSetup({}, root, OFF, show), 0);
 		const yours = '{ "github_pw": { "value": "x", "domains": ["github.com"] } }\n';
 		await Deno.writeTextFile(`${root}/secrets/ttk_secrets.json`, yours);
 		const key = await read(root, 'secrets/ttk_db_key');
 		const token = await read(root, 'secrets/ttk_peer_token');
 
-		assertEquals(await runSetup({ force: true }, root, OFF), 0);
+		assertEquals(await runSetup({ force: true }, root, OFF, show), 0);
 		assertNotEquals(await read(root, 'secrets/ttk_db_key'), key, 'a generated file is replaced');
 		assertEquals(await read(root, 'secrets/ttk_secrets.json'), yours, 'a file you filled in is not');
 
 		// --only peer --force: the pair is replaced together, and nothing else.
 		const db = await read(root, 'secrets/ttk_db_key');
-		assertEquals(await runSetup({ force: true, only: 'peer' }, root, OFF), 0);
+		assertEquals(await runSetup({ force: true, only: 'peer' }, root, OFF, show), 0);
 		const replaced = (await read(root, 'secrets/ttk_peer_token')).trim();
 		assertNotEquals(replaced, token.trim());
 		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<{ sha256: string }>;
@@ -179,20 +206,20 @@ Deno.test('setup: --force replaces generated files, and yours only when --only n
 		assertEquals(await read(root, 'secrets/ttk_db_key'), db);
 
 		// Named, a file of yours is replaced too.
-		assertEquals(await runSetup({ force: true, only: 'browser-secrets' }, root, OFF), 0);
+		assertEquals(await runSetup({ force: true, only: 'browser-secrets' }, root, OFF, show), 0);
 		assertEquals(await json(root, 'secrets/ttk_secrets.json'), {});
 	});
 });
 
 Deno.test('setup: a half-written peer pair is rewritten whole, and a bad --only or scope writes nothing', async () => {
-	await checkout(async (root) => {
-		assertEquals(await runSetup({ only: 'nope' }, root, OFF), 1);
-		assertEquals(await runSetup({ scopes: 'mcp:invoke,bogus' }, root, OFF), 1);
+	await checkout(async (root, _out, show) => {
+		assertEquals(await runSetup({ only: 'nope' }, root, OFF, show), 1);
+		assertEquals(await runSetup({ scopes: 'mcp:invoke,bogus' }, root, OFF, show), 1);
 		assertEquals(await Array.fromAsync(Deno.readDir(root)), [], 'nothing was written');
 
-		assertEquals(await runSetup({ only: 'peer' }, root, OFF), 0);
+		assertEquals(await runSetup({ only: 'peer' }, root, OFF, show), 0);
 		await Deno.remove(`${root}/secrets/ttk_peer_api_keys.json`);
-		assertEquals(await runSetup({ only: 'peer' }, root, OFF), 0);
+		assertEquals(await runSetup({ only: 'peer' }, root, OFF, show), 0);
 		const token = (await read(root, 'secrets/ttk_peer_token')).trim();
 		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<{ sha256: string }>;
 		assertEquals(peerKeys[0]?.sha256, await sha256(token));
@@ -207,22 +234,22 @@ async function profileSource(root: string): Promise<string> {
 }
 
 Deno.test('setup: on an AppArmor host the profile is installed through sudo, after the credentials are on screen', async () => {
-	await checkout(async (root, out) => {
+	await checkout(async (root, out, show) => {
 		const source = await profileSource(root);
 		const calls: string[][] = [];
-		assertEquals(await runSetup({}, root, appArmorHost(null, calls, out)), 0);
+		assertEquals(await runSetup({}, root, appArmorHost(null, calls, out), show), 0);
 		assertEquals(calls, profileCommands(source));
-		const password = out.findIndex((line) => line.startsWith('  password'));
+		const password = out.findIndex((line) => line.startsWith(`${SHOWN}  password`));
 		assert(password >= 0 && password < out.indexOf('<sudo install>'), 'the password is shown before sudo can prompt');
 		assert(out.some((line) => line.includes('is installed and loaded')), 'and the outcome is reported');
 	});
 });
 
 Deno.test('setup: when sudo fails it exits 1, naming AppArmor and the commands to run by hand', async () => {
-	await checkout(async (root, out) => {
+	await checkout(async (root, out, show) => {
 		const source = await profileSource(root);
 		const calls: string[][] = [];
-		assertEquals(await runSetup({}, root, appArmorHost('sudo install exited with 1', calls, out)), 1);
+		assertEquals(await runSetup({}, root, appArmorHost('sudo install exited with 1', calls, out), show), 1);
 		assertEquals(calls.length, 1, 'nothing runs after the refusal');
 		const error = out.find((line) => line.includes('error: AppArmor')) ?? '';
 		assert(error.includes('could not be installed: sudo install exited with 1.'), 'the reason');
@@ -236,10 +263,10 @@ Deno.test('setup: when sudo fails it exits 1, naming AppArmor and the commands t
 });
 
 Deno.test('setup: --only apparmor installs the profile and writes no file', async () => {
-	await checkout(async (root, out) => {
+	await checkout(async (root, out, show) => {
 		await profileSource(root);
 		const calls: string[][] = [];
-		assertEquals(await runSetup({ only: 'apparmor' }, root, appArmorHost(null, calls, out)), 0);
+		assertEquals(await runSetup({ only: 'apparmor' }, root, appArmorHost(null, calls, out), show), 0);
 		assertEquals(calls.map((argv) => argv[0]), ['install', 'apparmor_parser']);
 		assertEquals(await Array.fromAsync(Deno.readDir(`${root}/secrets`)), []);
 		assertEquals(await Array.fromAsync(Deno.readDir(root)).then((entries) => entries.map((e) => e.name).sort()), [

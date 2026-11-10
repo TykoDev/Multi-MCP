@@ -446,13 +446,27 @@ Deno.test('web: the kit never fetches icons or code by URL (S-1)', async () => {
 	assertEquals(markup.map(({ name }) => name), []);
 });
 
+/**
+ * `html` without its comments. Stripped until nothing changes: removing one comment can join the text around it into
+ * another (`<!-<!-- x -->- y -->`), which a single pass would leave in place.
+ */
+function withoutComments(html: string): string {
+	let text = html;
+	let before: string;
+	do {
+		before = text;
+		text = text.replace(/<!--[\s\S]*?-->/g, '');
+	} while (text !== before);
+	return text;
+}
+
 Deno.test('web: the page CSP is unchanged by the kit (S-2); D-111 adds only media-src for A2UI players', async () => {
 	const html = await Deno.readTextFile(new URL('../static/index.html', import.meta.url));
 	assertStringIncludes(
 		html,
 		"content=\"default-src 'self'; img-src 'self' blob: data:; media-src 'self' data: blob:; connect-src 'self' ws: wss:; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'\"",
 	);
-	assert(!/https?:\/\//.test(html.replace(/<!--[\s\S]*?-->/g, '')), 'the shell page names no other origin');
+	assert(!/https?:\/\//.test(withoutComments(html)), 'the shell page names no other origin');
 	const css = await Deno.readTextFile(new URL('./styles/app.css', import.meta.url));
 	assert(!/@import\s+['"]?https?:/.test(css), 'no stylesheet is pulled from another origin');
 });

@@ -2,6 +2,9 @@
  * `doctor --new-key-set <prefix>` (owner item 5): one single-scope key per scope
  * in the vocabulary, raw keys to stderr, hashed records to stdout as one array.
  *
+ * A generated credential is written to the stream itself and never through `console`, the process's log (CodeQL
+ * js/clear-text-logging on `packages/cli/mod.ts`): `run` captures the two apart, as `out`/`err` and `shown`.
+ *
  * The security claim is per-key least privilege: each record holds exactly one
  * scope, so a role composed from a subset of these keys can do exactly that
  * subset and no more. And it adds no default-grant site (BF-2): every key names
@@ -12,21 +15,28 @@ import { main } from '../../packages/cli/mod.ts';
 import { SCOPES } from '@tykotech/gateway';
 
 interface Captured {
+	/** What went through `console.log` / `console.error`. */
 	out: string;
 	err: string;
+	/** What was written to the credential streams. */
+	shown: { out: string; err: string };
 	code: number;
 }
 
 async function run(argv: string[]): Promise<Captured> {
 	const outParts: string[] = [];
 	const errParts: string[] = [];
+	const shown = { out: '', err: '' };
 	const origLog = console.log;
 	const origErr = console.error;
 	console.log = (...args: unknown[]) => void outParts.push(args.map(String).join(' '));
 	console.error = (...args: unknown[]) => void errParts.push(args.map(String).join(' '));
 	try {
-		const code = await main(argv);
-		return { out: outParts.join('\n'), err: errParts.join('\n'), code };
+		const code = await main(argv, {
+			out: (text) => void (shown.out += text),
+			err: (text) => void (shown.err += text),
+		});
+		return { out: outParts.join('\n'), err: errParts.join('\n'), shown, code };
 	} finally {
 		console.log = origLog;
 		console.error = origErr;
@@ -54,10 +64,22 @@ Deno.test('doctor --new-key-set: one single-scope key per scope, hashed records 
 	// The raw keys are on stderr and NOT on stdout — a redirect of stdout to a
 	// file yields hashed records with no secret in them.
 	assertEquals(captured.out.includes('ttk_'), false, 'no raw key may reach stdout');
-	assert(
-		captured.err.includes('ttk_') || captured.err.includes('web-mcp-invoke'),
-		'the raw keys and ids are on stderr',
-	);
+	assertEquals(captured.shown.out, '', 'no raw key may reach stdout');
+	assert(captured.err.includes('web-mcp-invoke'), 'the ids are on stderr');
+	// And they are written to the stream itself: no raw key is a console line.
+	assertEquals(captured.err.includes('ttk_'), false, 'no raw key may go through console');
+	assertEquals(captured.shown.err.match(/ttk_[A-Za-z0-9_-]+/g)?.length, SCOPES.length, 'one raw key per scope');
+});
+
+Deno.test('doctor --new-key: the raw key is written to stdout itself, the record through console', async () => {
+	const captured = await run(['doctor', '--new-key', 'unit']);
+	assertEquals(captured.code, 0);
+	const key = /ttk_[A-Za-z0-9_-]+/.exec(captured.shown.out)?.[0] ?? '';
+	assert(key.length > 20, 'the raw key is shown');
+	assertEquals(captured.out.includes('ttk_'), false, 'no raw key may go through console');
+	const records = JSON.parse(captured.out.slice(captured.out.indexOf('['))) as Array<{ id: string; sha256: string }>;
+	assertEquals(records.map((record) => record.id), ['unit']);
+	assertEquals(captured.shown.err, '');
 });
 
 /**

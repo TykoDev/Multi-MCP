@@ -121,7 +121,12 @@ to revoke its key. Scope list: [Managing access](../docs/guides/managing-access.
 `setup` writes `{ username, salt, hash, iterations, scopes }` for `admin` (the stack's scopes plus `admin`) and prints
 the password once. With `TTK_DATA_DIR` it seeds `users.json` on first start; afterwards edits to this file change
 nothing: manage accounts in the web app's **Users** screen. Replace the record with
-`deno task doctor --new-admin admin [--password <p>] [--scopes <list>] --force`.
+`deno task doctor --new-admin admin [--password <p>] [--scopes <list>] --force`; a password you give with `--password`
+is not printed back.
+
+`setup` and `doctor` write a generated password or key straight to the terminal's stream, not through the process log,
+so a log collector or OpenTelemetry export of the console never holds one. Redirecting the output still captures it:
+keep such a file as you would the secret.
 
 ## A2A peer
 
