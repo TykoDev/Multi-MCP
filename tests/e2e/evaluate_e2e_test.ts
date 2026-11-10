@@ -17,6 +17,7 @@
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { harness, skipUnlessBrowser, textOf } from '../support/harness.ts';
+import { jsLiteral } from '../support/js_literal.ts';
 import { startFixtureSite } from '../fixtures/site.ts';
 
 const ignore = skipUnlessBrowser('evaluate e2e');
@@ -134,7 +135,7 @@ Deno.test({
 					// the request arrives. This is the measurement behind SECURITY-AUTH §8's sentence.
 					const marker = `/via-evaluate?c=${crypto.randomUUID().slice(0, 8)}`;
 					const evaluated = await h.call('browser_evaluate', {
-						expression: `fetch(${JSON.stringify(exfil.origin + marker)}).then(r => r.status)`,
+						expression: `fetch(${jsLiteral(exfil.origin + marker)}).then(r => r.status)`,
 					});
 					assertEquals(evaluated.isError, undefined, `the evaluated fetch was refused: ${JSON.stringify(evaluated)}`);
 					const payload = evaluated.structuredContent as Evaluated;
@@ -201,7 +202,7 @@ Deno.test({
 				await h.callText('browser_navigate', { url: h.site.page('form') });
 				const sentinel = 'Zq8-E2E-EXPR-SENTINEL-3vP';
 				const first = (await h.call('browser_evaluate', {
-					expression: `(() => { const marker = ${JSON.stringify(sentinel)}; return marker.length; })()`,
+					expression: `(() => { const marker = ${jsLiteral(sentinel)}; return marker.length; })()`,
 				})).structuredContent as Evaluated;
 				assertEquals(first.ok, true);
 				assertEquals(first.value, sentinel.length);

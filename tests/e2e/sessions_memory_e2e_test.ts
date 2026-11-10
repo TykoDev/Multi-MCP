@@ -6,6 +6,7 @@
  */
 import { assert, assertEquals } from '@std/assert';
 import { harness, imageOf, skipUnlessBrowser } from '../support/harness.ts';
+import { jsLiteral } from '../support/js_literal.ts';
 
 Deno.test({
 	name: 'e2e Sessions: each browser’s memory is measured and shown against the limits; a session closes from its card',
@@ -55,7 +56,7 @@ Deno.test({
 
 		await t.step('the Sessions tab shows the meters and the sessions as Active, each with its memory', async () => {
 			await until(`!!document.querySelector('input')`, 'the connect form');
-			await inPage(`(() => { const i = document.querySelector('input'); i.value = ${JSON.stringify(h.key)};
+			await inPage(`(() => { const i = document.querySelector('input'); i.value = ${jsLiteral(h.key)};
 				i.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('button').click(); return true; })()`);
 			await until(`location.hash === '#/sessions'`, 'the sessions screen');
 			await until(`document.querySelectorAll('.sc-mem .sc-meter').length === 3`, 'the three meters');

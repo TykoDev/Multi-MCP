@@ -6,7 +6,7 @@
  * The browser-tier legs (a real redirect and a real `window.open` contained, a real download denied) are in
  * `tests/e2e/browser_policy_e2e_test.ts`; this file pins the rules those legs depend on, with no Chromium.
  */
-import { assert, assertEquals, assertFalse } from '@std/assert';
+import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
 import {
 	BrowserErrorEvent,
 	type BrowserSession,
@@ -363,7 +363,7 @@ Deno.test('C1: a contained redirect is one navigation record, blocked and redact
 
 		// The log line names the origin and nothing after it.
 		assertEquals(h.infos.length, 1);
-		assert(h.infos[0]?.includes('https://idp.evil.test'), h.infos[0]);
+		assertStringIncludes(h.infos[0] ?? '', 'https://idp.evil.test');
 		assert(!h.infos[0]?.includes('/callback'), h.infos[0]);
 		assert(!h.infos[0]?.includes('Zq8-OAUTH-CODE'), h.infos[0]);
 

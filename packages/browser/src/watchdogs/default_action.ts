@@ -1005,6 +1005,10 @@ export function typeGuardRail(node: EnhancedDomTreeNode): TypeResult | null {
 	return null;
 }
 
+/** A `javascript:` href once its tabs and newlines are removed: the scheme after any leading C0 controls and spaces. */
+// deno-lint-ignore no-control-regex -- leading control characters are exactly what the URL parser skips.
+const JAVASCRIPT_HREF = /^[\x00-\x20]*javascript:/i;
+
 /**
  * Does clicking this element open the print dialog?
  *
@@ -1026,7 +1030,13 @@ export function isPrintDialogTrigger(node: EnhancedDomTreeNode): boolean {
 	const href = attributeOf(node, 'href') ?? '';
 	const printCall = /(?:^|[^\w.$])(?:window\s*\.\s*)?print\s*\(/;
 	if (printCall.test(onclick)) return true;
-	if (href.toLowerCase().startsWith('javascript:') && printCall.test(href)) return true;
+	// Local change to the vendored rule (CodeQL js/incomplete-url-scheme-check): the href is read the way the URL
+	// parser reads it — tabs and newlines removed anywhere, leading C0 controls and spaces dropped — so
+	// ` javascript:print()` and `java\tscript:print()`, which the browser runs, are recognised and a literal prefix
+	// test is not what decides. This recognises a print link; it filters nothing, so `data:` and `vbscript:` hrefs,
+	// which a click does not execute in this document, stay ordinary clicks.
+	const link = href.replace(/[\t\n\r]/g, '');
+	if (JAVASCRIPT_HREF.test(link) && printCall.test(link)) return true;
 
 	const tag = tagNameOf(node);
 	const role = (attributeOf(node, 'role') ?? '').toLowerCase();

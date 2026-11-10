@@ -14,6 +14,7 @@ import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import type { EventRecord } from '@tykotech/wire';
 import { readEnv } from '../support/browser_tier.ts';
 import { harness, skipUnlessBrowser } from '../support/harness.ts';
+import { jsLiteral } from '../support/js_literal.ts';
 
 const ignore = skipUnlessBrowser('browser policy e2e');
 
@@ -61,7 +62,7 @@ function servers(): Servers {
 			case '/redirect':
 				return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store' } });
 			case '/jsredirect':
-				return html(`<script>location.replace(${JSON.stringify(to)});</script>`);
+				return html(`<script>location.replace(${jsLiteral(to)});</script>`);
 			case '/popup':
 				// `noopener`: measured on this tier, a `window.open` that keeps its opener never loads at all
 				// (the other origin receives no request, the target stays at url ''), with or without an
@@ -70,7 +71,7 @@ function servers(): Servers {
 				return html(
 					`<button id="open" type="button">open</button>` +
 						`<script>document.getElementById('open').addEventListener('click',()=>window.open(${
-							JSON.stringify(to)
+							jsLiteral(to)
 						},'_blank','noopener'));</script>`,
 				);
 			case '/host':

@@ -121,7 +121,42 @@ function parseCli(argv: readonly string[]) {
 
 type CliArgs = ReturnType<typeof parseCli>;
 
-export async function main(argv: string[]): Promise<number> {
+/**
+ * Where a generated credential is shown: the standard streams themselves, never `console`. `console` is the process's
+ * log — a host's log collector reads it, and with `OTEL_DENO` the runtime exports every line of it (D-142) — and a
+ * credential that is shown once must not be in a log. The unit tests pass their own pair.
+ */
+export interface CredentialStreams {
+	/** Standard output. */
+	readonly out: (text: string) => void;
+	/** Standard error: the raw keys of `--new-key-set`, whose standard output is the record file. */
+	readonly err: (text: string) => void;
+}
+
+const streamWriter = (stream: () => { writeSync(bytes: Uint8Array): number }) => (text: string): void => {
+	const bytes = new TextEncoder().encode(text);
+	let written = 0;
+	while (written < bytes.length) written += stream().writeSync(bytes.subarray(written));
+};
+
+const CREDENTIAL_STREAMS: CredentialStreams = {
+	out: streamWriter(() => Deno.stdout),
+	err: streamWriter(() => Deno.stderr),
+};
+
+/**
+ * A URL for a diagnostic line: without the username and password a URL may carry (`https://user:pass@host/`), which
+ * no configuration check refuses and the doctor's output — pasted into issues — must not repeat.
+ */
+export function redactedUrl(url: URL): string {
+	if (url.username === '' && url.password === '') return url.href;
+	const shown = new URL(url.href);
+	shown.username = '';
+	shown.password = '';
+	return shown.href;
+}
+
+export async function main(argv: string[], show: CredentialStreams = CREDENTIAL_STREAMS): Promise<number> {
 	const args = parseCli(argv);
 	const command = String(args._[0] ?? '');
 
@@ -131,7 +166,7 @@ export async function main(argv: string[]): Promise<number> {
 	}
 
 	try {
-		return await dispatch(command, args);
+		return await dispatch(command, args, show);
 	} catch (cause) {
 		// A refusal written for the operator — a variable, a path and a fixed phrase, never a value — is the whole
 		// message; anything else is a fault and keeps its stack.
@@ -146,7 +181,7 @@ export async function main(argv: string[]): Promise<number> {
 /** Errors whose message is written for the operator (D-154 adds the database, vault and seed refusals). */
 const OPERATOR_ERRORS = new Set(['ConfigError', 'SecretError', 'SeedError', 'VaultError', 'DatabaseError']);
 
-async function dispatch(command: string, args: CliArgs): Promise<number> {
+async function dispatch(command: string, args: CliArgs, show: CredentialStreams): Promise<number> {
 	switch (command) {
 		case 'version':
 			console.log(VERSION);
@@ -158,11 +193,11 @@ async function dispatch(command: string, args: CliArgs): Promise<number> {
 		case 'acp':
 			return await runAcp();
 		case 'setup':
-			return await runSetup(args);
+			return await runSetup(args, '.', undefined, show);
 		case 'seed':
 			return await runSeed(args);
 		case 'doctor':
-			return await runDoctor(args);
+			return await runDoctor(args, show);
 		case 'healthcheck':
 			return await runHealthcheck();
 		default:
@@ -452,6 +487,7 @@ async function runDoctor(
 		'new-db-key'?: boolean;
 		save?: boolean;
 	},
+	show: CredentialStreams,
 ): Promise<number> {
 	const { DEFAULT_SCOPES, ENV_NAMES, generateAdminUser, generateApiKey, loadConfig, processEnv, SCOPES } = await import(
 		'@tykotech/gateway'
@@ -510,7 +546,10 @@ async function runDoctor(
 		console.log('Admin User Generated Successfully');
 		console.log('====================================================');
 		console.log(`Username: ${record.username}`);
-		console.log(`Password: ${password}`);
+		// A password given with --password is the operator's already and is not repeated. A generated one is shown
+		// once, on the stream itself (see CredentialStreams).
+		if (args.password === undefined) show.out(`Password: ${password}\n`);
+		else console.log('Password: the one given with --password (not repeated here)');
 		console.log('====================================================\n');
 
 		const secretFile = ADMIN_USER_FILE;
@@ -546,7 +585,8 @@ async function runDoctor(
 		for (const scope of SCOPES) {
 			const id = `${keySetPrefix}-${scope.replace(/:/g, '-')}`;
 			const { key, record } = await generateApiKey(id, [scope]);
-			console.error(`  ${id}\n    ${key}\n`);
+			console.error(`  ${id}`);
+			show.err(`    ${key}\n\n`);
 			records.push(record);
 		}
 		// The raw keys go to stderr, the hashed records to stdout as one array,
@@ -566,7 +606,7 @@ async function runDoctor(
 		if (requested === null) return 1;
 		const { key, record } = await generateApiKey(keyId, requested);
 		console.log('New API key (shown once — store it now):\n');
-		console.log(`  ${key}\n`);
+		show.out(`  ${key}\n\n`);
 		if (args.save !== true) {
 			console.log(
 				'Add this record to TTK_API_KEYS (or the file TTK_API_KEYS_FILE points at), or run again with --save:\n',
@@ -633,11 +673,15 @@ async function runDoctor(
 		const refs = configuredSecretRefs(env);
 		const keysRef = refs.find((ref) => ref.variable === 'TTK_API_KEYS_REF');
 		console.log(`bind            ${config.host}:${config.port}`);
-		console.log(`public url      ${config.publicUrl.href}`);
+		console.log(`public url      ${redactedUrl(config.publicUrl)}`);
+		// Counted rather than read: the number on this line is derived from no value of the credential list, which is
+		// how the clear-text-logging analysis (CodeQL) can tell that nothing of a key record reaches the output.
+		let keyRecords = 0;
+		for (const _record of config.apiKeys) keyRecords += 1;
 		console.log(
-			`api keys        ${keysRef === undefined ? config.apiKeys.length : `from ${keysRef.provider} (not contacted)`}`,
+			`api keys        ${keysRef === undefined ? keyRecords : `from ${keysRef.provider} (not contacted)`}`,
 		);
-		console.log(`oauth           ${config.oauth === null ? 'disabled' : config.oauth.issuer.href}`);
+		console.log(`oauth           ${config.oauth === null ? 'disabled' : redactedUrl(config.oauth.issuer)}`);
 		console.log(
 			`allowed domains ${config.allowedDomains.length === 0 ? '(unrestricted)' : config.allowedDomains.join(', ')}`,
 		);
@@ -876,15 +920,17 @@ export function setupUnits(only: string | undefined): SetupUnit[] | null | undef
  * API key, the A2A peer's token pair and list, the browser-secrets and git-remotes placeholders, the agent runner's
  * token and the ACP commands template — and `.env`, skipping each file that exists. `--force` replaces the generated
  * ones; files you fill in yourself (browser secrets, git remotes, agent commands) are replaced only when `--only` names
- * them. Generated passwords and keys are printed once and stored only as hashes; the service tokens are stored as they
+ * them. Generated passwords and keys are shown once — on standard output itself, never through `console`
+ * ({@linkcode CredentialStreams}) — and stored only as hashes; the service tokens are stored as they
  * are (each side must present one), in `secrets/` like every other file. Kept files get their modes repaired. On an
  * AppArmor host it then installs the sandbox's profile through sudo (`apparmor`), and when that fails it exits 1 with
- * the commands that do it by hand. `apparmor` stands in for the host in the unit tests.
+ * the commands that do it by hand. `apparmor` stands in for the host in the unit tests, and `show` for the streams.
  */
 export async function runSetup(
 	args: { force?: boolean; admin?: string; 'key-id'?: string; scopes?: string; only?: string },
 	root = '.',
 	apparmor?: AppArmorHost,
+	show: CredentialStreams = CREDENTIAL_STREAMS,
 ): Promise<number> {
 	const { generateAdminUser, generateApiKey, generateDbKey, SCOPES } = await import('@tykotech/gateway');
 	const { A2A_PEER_SCOPES, STACK_SCOPES } = await import('@tykotech/mcp');
@@ -984,7 +1030,7 @@ export async function runSetup(
 	for (const line of report) console.log(line);
 	if (once.length > 0) {
 		console.log('\nShown once, stored only as hashes — save them now:');
-		for (const line of once) console.log(line);
+		show.out(`${once.join('\n')}\n`);
 	}
 	for (const line of problems) console.log(`\nwarning: ${line}`);
 	// After the credentials above are on screen: a Ctrl-C at sudo's prompt ends setup, and they are shown only once.

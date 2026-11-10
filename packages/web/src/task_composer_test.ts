@@ -250,8 +250,12 @@ Deno.test('task_composer: the form paints three role=tab kinds, #agent-prompt, a
 		// FE-2: a disabled option's reason is in its content too (visually hidden), not only in the tooltip.
 		assertEquals(byClass(options[3]!, 'sr-only').map((node) => node.textContent), [' — no-net-grant']);
 		assertEquals(byClass(options[1]!, 'sr-only').length, 0);
-		// Nothing of the server's secrets is in the DOM: no host, no key-like string.
-		assert(!all(root).some((node) => node.textContent.includes('api.openai.com')));
+		// Nothing of the server's secrets is in the DOM: no provider's host (with or without its port), no key-like string.
+		const shown = all(root).map((node) => node.textContent).join('\n');
+		for (const provider of PROVIDERS.providers) {
+			const name = provider.host?.split(':')[0] ?? '';
+			assert(name !== '' && !shown.includes(name), `${provider.host} is in the DOM`);
+		}
 	});
 	assertEquals(calls, []);
 });

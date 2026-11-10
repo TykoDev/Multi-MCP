@@ -8,6 +8,7 @@
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { type Harness, harness, skipUnlessBrowser } from '../support/harness.ts';
+import { jsLiteral } from '../support/js_literal.ts';
 
 const ignore = skipUnlessBrowser('network log e2e');
 
@@ -49,7 +50,7 @@ function servers(): { readonly a: string; readonly off: string; readonly offHits
 				"document.getElementById('send').addEventListener('click',()=>{" +
 				"console.log('typed:'+f.value);console.warn('second line');" +
 				"fetch('/echo?v='+encodeURIComponent(f.value),{headers:{'x-echo':f.value}}).then((r)=>r.text());});" +
-				`document.getElementById('leave').addEventListener('click',()=>{location.href=${JSON.stringify(to)};});` +
+				`document.getElementById('leave').addEventListener('click',()=>{location.href=${jsLiteral(to)};});` +
 				'</script>',
 		);
 	});

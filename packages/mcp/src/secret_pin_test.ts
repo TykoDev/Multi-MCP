@@ -7,7 +7,7 @@
  * origins in either direction. The index-less path's focus walk is scripted per frame, and every read it
  * makes is asserted to have happened in an isolated world rather than in the page's own.
  */
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { captureHarness } from '../fixtures/capture_session.ts';
 import { ToolError } from './errors.ts';
 import { SecretStore } from './secrets.ts';
@@ -188,7 +188,7 @@ Deno.test('A2: an index inside a cross-origin frame of the pinned top is refused
 			ToolError,
 		);
 		assertEquals(error.code, 'navigation-blocked');
-		assert(error.message.includes('https://evil.example'), error.message);
+		assertStringIncludes(error.message, 'https://evil.example');
 		assert(!error.message.includes(BANK_SECRET));
 		assertEquals(f.dispatched.length, 0, 'nothing was typed');
 		assertEquals(f.record.audit.read({ principal: 'test', all: true }).entries.length, 0);
@@ -282,7 +282,7 @@ Deno.test('A2: focus in an out-of-process frame is followed into that frame’s 
 			ToolError,
 		);
 		assertEquals(error.code, 'navigation-blocked');
-		assert(error.message.includes('https://evil.example'), error.message);
+		assertStringIncludes(error.message, 'https://evil.example');
 		// The child's world was created on the child's session, and its URL read from the child's tree.
 		const childWorld = f.calls.find((call) =>
 			call.method === 'Page.createIsolatedWorld' && (call.params as { frameId: string }).frameId === 'OOP'
@@ -339,7 +339,7 @@ Deno.test('R3-1: focus in an <object>/<embed> showing another origin is followed
 					ToolError,
 				);
 				assertEquals(error.code, 'navigation-blocked', `${nodeName} inProcess=${inProcess}`);
-				assert(error.message.includes('https://evil.example'), error.message);
+				assertStringIncludes(error.message, 'https://evil.example');
 				assertEquals(f.keys(), 0, 'no keystroke left the server');
 				const world = f.calls.find((call) =>
 					call.method === 'Page.createIsolatedWorld' && (call.params as { frameId: string }).frameId === 'EMBEDDED'
@@ -433,7 +433,7 @@ Deno.test('R3-2: a context id from before a cross-site navigation cannot answer 
 			ToolError,
 		);
 		assertEquals(error.code, 'navigation-blocked');
-		assert(error.message.includes('https://evil.example'), `the pin must be B's own frame: ${error.message}`);
+		assertStringIncludes(error.message, 'https://evil.example', "the pin must be B's own frame");
 		assertEquals(f.keys(), keysOnA, 'nothing was typed on B');
 		// A fresh world per read: B's read used an id no earlier read had.
 		assertEquals(f.calls.filter((call) => call.method === 'Page.createIsolatedWorld').length, first + 1);

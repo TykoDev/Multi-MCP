@@ -426,7 +426,7 @@ Deno.test('A11 / N1: the gateway wires the gate into the card and the address cl
 		assertEquals(withheld.runtime.supportsPush, false);
 		assert(lines.some((line) => line.startsWith('warn') && line.includes('no outbound net grant')), lines.join('\n'));
 		assertEquals(offered.runtime.supportsPush, true);
-		assert(lines.some((line) => line.startsWith('info') && line.includes('hooks.example.com')));
+		assertStringIncludes(lines.filter((line) => line.startsWith('info')).join('\n'), 'hooks.example.com');
 		const task = offered.runtime.submit(
 			'api-key:alice',
 			new Set(['agent:invoke', 'mcp:invoke']),
