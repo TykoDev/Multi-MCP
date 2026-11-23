@@ -1,23 +1,11 @@
 /**
- * Disposable Compose proof: gateway MCP scopes and ownership all the way to a real code cage.
+ * Disposable Compose proof of the default stack, from images built under `--tag` (a deployed tag is refused), with
+ * scratch secrets only (nothing from `secrets/`), its own project, volumes and ephemeral port, all removed at the end.
+ * It proves `/data/ttk.db` owner-only with no plaintext key, a provider key sealed across a restart, `ttk seed` in the
+ * image, and the built-in model agent (on a scripted OpenAI-compatible model) creating a workspace, running code in
+ * the cage and saving to memory, which the same caller then finds over MCP.
  *
- *   docker build -t tykotech-mcp:verify .
- *   docker build -f docker/Dockerfile.sandbox -t tykotech-sandbox:verify .
  *   deno task test:compose --tag verify
- *
- * ERRATUM(E-112), review R3-4 / K-6: it runs the images built from this tree under `--tag` (required; a deployed tag is
- * refused), never the deployed ones, and mounts nothing from the checkout's `secrets/`: the keys and a synthetic
- * administrator record are made in a scratch folder, and the resolved configuration is checked to say so before
- * anything starts. Its own project name, its own volumes, an ephemeral loopback port; all removed at the end.
- *
- * D-151: it runs `docker-compose.yml` alone, as a plain `up` does — the sandbox is in the base file, and its token is
- * the one the service generates into the project's own `ttk-sandbox-token` volume, so no token file is made here.
- *
- * D-154: the database key is a scratch secret too, and the proof checks the default stack end to end: `/data/ttk.db`
- * is created owner-only with no plaintext key in it or beside it; a provider key typed through the admin route survives
- * a restart sealed; `ttk seed` runs inside the image; and the built-in model agent — on a scripted OpenAI-compatible
- * model (`fake-model`, the gateway image running a scratch script on the default network) — creates a workspace, runs
- * code in the sandbox cage and saves what it saw to its memory, which the same caller then finds over MCP.
  */
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { assert, assertEquals } from '@std/assert';
@@ -59,7 +47,7 @@ const keys = [
 	crypto.randomUUID() + crypto.randomUUID(),
 	crypto.randomUUID() + crypto.randomUUID(),
 ];
-/** D-154: who manages providers and runs the built-in agent, with every grant its task's tools need. */
+/** Who manages providers and runs the built-in agent, with every grant its task's tools need. */
 const OPERATOR_SCOPES = [
 	'admin',
 	'mcp:invoke',
@@ -80,7 +68,7 @@ await Deno.writeTextFile(
 	),
 );
 await writeSyntheticAdmin(adminFile);
-// D-154: 32 random bytes, base64url, as `setup` writes it.
+// 32 random bytes, base64url, as `setup` writes it.
 await Deno.writeTextFile(
 	dbKeyFile,
 	`${
@@ -89,10 +77,10 @@ await Deno.writeTextFile(
 	}\n`,
 );
 /**
- * D-154: a scripted OpenAI-compatible model. Its turn is chosen by how many tool results the transcript holds: create a
+ * A scripted OpenAI-compatible model. Its turn is chosen by how many tool results the transcript holds: create a
  * workspace, run its program, save the output to memory, then answer with what the cage printed.
  *
- * D-156: a transcript whose system prompt is SlopLord's takes the SlopLord script instead — create a workspace with a
+ * A transcript whose system prompt is SlopLord's takes the SlopLord script instead — create a workspace with a
  * test, run it in the cage, then answer with the test's outcome and whether any browser tool was offered (SlopLord's
  * allowlist offers none) — so the answer proves the profile's prompt and tool list reached the model.
  */
@@ -135,7 +123,7 @@ Deno.serve({ hostname: '0.0.0.0', port: 8080 }, async (request) => {
 `,
 );
 const file = (path: string): string => JSON.stringify(path.replaceAll('\\', '/'));
-// The default stack's placeholders and its A2A peer's token pair, as `deno task setup` writes them.
+// The default stack's placeholders, as `deno task setup` writes them.
 const stack = await writeStackFiles(scratch);
 await Deno.writeTextFile(
 	fixture,
@@ -147,8 +135,6 @@ await Deno.writeTextFile(
       TTK_PUBLIC_URL: http://127.0.0.1:8787
   sandbox:
     image: ${images.sandbox}
-  a2a-peer:
-    image: ${images['tykotech-mcp']}
   fake-model:
     image: ${images['tykotech-mcp']}
     command: ['deno', 'run', '--allow-net=0.0.0.0:8080', '/fake/fake_model.ts']
@@ -184,35 +170,25 @@ try {
 	// Before anything starts: the tree's images by tag, and every secret file from the scratch folder.
 	assertIsolated(config as ComposeConfig, {
 		scratch,
-		images: { ...images, 'a2a-peer': images['tykotech-mcp'], 'fake-model': images['tykotech-mcp'] },
+		images: { ...images, 'fake-model': images['tykotech-mcp'] },
 		required: ['ttk_admin_user', 'ttk_api_keys', 'ttk_db_key', ...stack.names],
 	});
-	// D-154: the vault key reaches the gateway as a secret file, never the environment's value.
+	// The vault key reaches the gateway as a secret file, never the environment's value.
 	assertEquals(config.services['tykotech-mcp'].environment.TTK_DB_KEY_FILE, '/run/secrets/ttk_db_key');
-	// D-151: no token secret at all; both services name the generated token, the gateway through a read-only mount.
-	assert(!config.secrets?.ttk_sandbox_token, 'the default stack needs no sandbox token file');
-	assertEquals(config.services.sandbox.environment.TTK_SANDBOX_TOKEN_FILE, '/run/ttk-sandbox-token/token');
-	assertEquals(
-		config.services['tykotech-mcp'].environment.TTK_SANDBOX_TOKEN_FILE,
-		'/run/secrets/ttk-sandbox-token/token',
-	);
-	const tokenMounts = (service: string) =>
-		(config.services[service].volumes as Array<{ source?: string; target: string; read_only?: boolean }>)
-			.filter((mount) => mount.source === 'ttk-sandbox-token')
-			.map((mount) => `${mount.target}${mount.read_only ? ':ro' : ''}`);
-	assertEquals(tokenMounts('tykotech-mcp'), ['/run/secrets/ttk-sandbox-token:ro']);
-	assertEquals(tokenMounts('sandbox'), ['/run/ttk-sandbox-token']);
+	// One token secret, mounted into both services at the image's default path; no token volume.
+	for (const service of ['tykotech-mcp', 'sandbox']) {
+		assertEquals(config.services[service].environment.TTK_SANDBOX_TOKEN_FILE, '/run/secrets/ttk_sandbox_token');
+		const taken = (config.services[service].secrets as Array<{ source: string }>).map((secret) => secret.source);
+		assert(taken.includes('ttk_sandbox_token'), `${service} takes the token secret`);
+		const volumes = (config.services[service].volumes ?? []) as Array<{ source?: string }>;
+		assert(!volumes.some((mount) => mount.source === 'ttk-sandbox-token'), `${service} mounts no token volume`);
+	}
+	assert(!config.services['tykotech-mcp'].depends_on?.sandbox, 'the gateway does not wait for the sandbox');
 	assert(!config.services.sandbox.ports, 'Production sandbox must not publish a port');
 	assert(config.networks['sandbox-private'].internal, 'Private ingress must be an internal network');
 	assert(!config.services['tykotech-mcp'].volumes.some((mount: { target: string }) => mount.target === '/work'));
 	// `--pull never`: an image that is not there is a refusal, never a download.
 	await run([...compose, 'up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '90']);
-	// D-151: the service made its token on this first start — owner-read-only, uid 1993, 64 hex characters.
-	assertEquals(
-		(await run([...compose, 'exec', '-T', 'sandbox', 'stat', '-c', '%a %u %s', '/run/ttk-sandbox-token/token']))
-			.trim(),
-		'400 1993 65',
-	);
 	let origin = `http://${(await run([...compose, 'port', 'tykotech-mcp', '8787'])).trim()}`;
 	const url = new URL(`${origin}/mcp`);
 	for (const key of keys) {
@@ -262,7 +238,7 @@ try {
 	const deleted = await alice.callTool({ name: 'sandbox_delete', arguments: { workspace_id } });
 	assert(deleted.isError !== true);
 
-	// --- D-154: the database, its vault, and the built-in agent end to end -------------------------------------------
+	// --- the database, its vault, and the built-in agent end to end ------------------------------------------------
 	const exec = (command: string) => run([...compose, 'exec', '-T', 'tykotech-mcp', 'sh', '-c', command]);
 	assertEquals((await exec('stat -c "%a %u" /data/ttk.db')).trim(), '600 1993', 'the database is owner-only');
 	const operatorKey = keys[3]!;
@@ -347,7 +323,7 @@ try {
 	assertEquals(hits[0]?.id, 'answer');
 	assertEquals(hits[0]?.text, 'the cage printed 42');
 
-	// --- D-156: SlopLord, the built-in coding agent, served over A2A by the default stack -----------------------------
+	// --- SlopLord, the built-in coding agent, served over A2A by the default stack ------------------------------------
 	// Its public card says it takes text: the stack composes the sandbox and the scripted provider is the default.
 	const sloplordCard = await (await fetch(`${origin}/a2a/agents/sloplord/.well-known/agent-card.json`)).json();
 	assertEquals(sloplordCard.name, 'SlopLord');
@@ -392,7 +368,7 @@ try {
 	const listedTask = (await (await api('GET', `/api/v1/agent/tasks/${sloplordTask!.id}`)).json()).task;
 	assertEquals(listedTask.metadata.agent, 'sloplord');
 	console.log(
-		`PASS Compose (${images['tykotech-mcp']}, ${images.sandbox}, scratch secrets only, generated sandbox token): ` +
+		`PASS Compose (${images['tykotech-mcp']}, ${images.sandbox}, scratch secrets only, shared sandbox token):` +
 			'private sandbox, ' +
 			'authenticated scoped MCP create/write/exec/diff/delete, wrong-owner and scope denial, sandboxed Chromium state, ' +
 			'owner-only database with sealed keys across a restart, ttk seed in the image, built-in agent through ' +

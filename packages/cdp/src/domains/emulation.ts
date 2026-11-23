@@ -2,7 +2,7 @@
  * CDP `Emulation` domain — device metrics, user agent, locale/timezone/geolocation, media.
  *
  * Implements the viewport half of BrowserProfile's display invariants
- * (SPECS/DATA-MODEL.md §5.2: `noViewport ⇒ viewport === null`; viewport mode ⇒
+ * (`noViewport ⇒ viewport === null`; viewport mode ⇒
  * `deviceScaleFactor ≥ 1`), re-applied on `TabCreatedEvent`/`AgentFocusChangedEvent`.
  */
 
@@ -78,7 +78,7 @@ export interface EmulationResults {
 	'Emulation.setUserAgentOverride': EmptyResult;
 }
 
-/** `Emulation.virtualTimeBudgetExpired` exists but is unused (D-CDP2). */
+/** `Emulation.virtualTimeBudgetExpired` exists but is unused, so untyped. */
 export type EmulationEvents = Record<never, never>;
 
 export const EMULATION_METHODS = [

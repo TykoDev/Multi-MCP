@@ -1,10 +1,7 @@
 /**
- * E-4: operator-configured A2UI tool actions, end to end through the gateway: a published button bound to a
- * configured action calls the operator's tool with the operator's arguments plus the declared context, under the
- * clicking principal's own scopes.
- *
- * X-1 (D-141, AC24): a button whose configured tool cannot run indirectly (`NOT_TASKABLE`) is refused by the
- * dispatcher too, for a configuration that reached the store without passing `expansionConfig()`.
+ * Operator-configured A2UI tool actions, end to end through the gateway: a published button bound to a configured
+ * action calls the operator's tool with the operator's arguments plus the declared context, under the clicking
+ * principal's own scopes.
  */
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { type Scope, SessionRegistry, ToolError } from '@tykotech/mcp';
@@ -145,9 +142,8 @@ Deno.test('A2UI tool actions: configured tool, fixed arguments, declared context
 	}
 });
 
-Deno.test('X-1 (AC24): the dispatcher refuses a NOT_TASKABLE action that bypassed configuration, before any call', async () => {
-	// `sandbox_delete` is in the confirmation set (G5). Built straight into the expansion config, as a store that never
-	// passed `expansionConfig()` would hold it; `loadConfig` itself refuses it (expansion_config_test.ts).
+Deno.test('A2UI tool actions: the dispatcher refuses a NOT_TASKABLE action that bypassed configuration, before any call', async () => {
+	// `sandbox_delete` is in the confirmation set.
 	assert(NOT_TASKABLE.has('sandbox_delete'));
 	const expansion = {
 		...loadConfig({}).expansion,

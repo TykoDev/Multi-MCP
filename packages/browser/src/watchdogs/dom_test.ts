@@ -1,14 +1,13 @@
 /**
- * `DOMWatchdog` contract tests (ARCHITECTURE.md §6.7; COMPLETIONS-CRITERIA.md §3.2 watchdog row 7
- * and the "DOMWatchdog budget" row; DATA-MODEL.md §5.3, §6.3 R6.1–R6.4).
+ * `DOMWatchdog` contract tests, including the combined state budget.
  *
  * What is real here: a real `Deno.serve` CDP endpoint (`ChromeFixture`), a real `CdpClient`, a real
  * `SessionManager`, a real `EventBus` and the real `src/dom/` pipeline. The DOM payloads the fixture
- * serves are the **recorded captures** under `packages/core/fixtures/dom/` — recorded CDP data is
- * data, not a mock (D-TEST1), and replaying it through the socket exercises exactly the code path a
+ * serves are the **recorded captures** under `packages/browser/fixtures/dom/` — recorded CDP data is
+ * data, not a mock, and replaying it through the socket exercises exactly the code path a
  * browser drives.
  *
- * The five behaviours the completions criteria name, and where each is proved:
+ * The five contract behaviours, and where each is proved:
  *
  * | Contract | Test |
  * |---|---|
@@ -62,8 +61,8 @@ const FIXTURE_ROOT = fromFileUrl(new URL('../../fixtures/dom/', import.meta.url)
 /**
  * Loads a recorded capture by preference, falling back to whatever the corpus holds.
  *
- * The corpus under `packages/core/fixtures/dom/` is owned by the fixture recorder and its member
- * names have changed once already. These tests care about *a page with interactive elements*, not
+ * The corpus under `packages/browser/fixtures/dom/` is owned by the fixture recorder and its member
+ * names can change. These tests care about *a page with interactive elements*, not
  * about a particular page, so they name preferences and degrade to the first available capture
  * rather than breaking every time the corpus is regenerated.
  */
@@ -118,7 +117,7 @@ const FIXTURE_PAGE_TITLE = 'fixture page';
  * the device-pixel probe is a number. One handler, because the fixture keys scripts by CDP method.
  *
  * `location.href` answers with the URL of the target this session belongs to, i.e. a page that agrees
- * with its own target record. The E-30 test is the one that pulls the two apart.
+ * with its own target record. The lagging-record test is the one that pulls the two apart.
  */
 function replyEvaluate(fixture: ChromeFixture, request: FixtureRequest, devicePixelRatio: number): void {
 	const expression = String(request.params.expression ?? '');
@@ -245,10 +244,10 @@ function requestState(harness: Harness, init: ConstructorParameters<typeof Brows
 }
 
 // ---------------------------------------------------------------------------
-// constants (COMPLETIONS-CRITERIA.md §3.2: "all timing constants encoded verbatim")
+// constants: every timing constant is encoded verbatim
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-watchdog: the ARCHITECTURE §6.7 budget constants are encoded verbatim', () => {
+Deno.test('dom-watchdog: the state budget constants are encoded verbatim', () => {
 	assertEquals(STATE_BUDGET_MS, 20_000);
 	assertEquals(NETWORK_PROBE_MAX_MS, 2_000);
 	assertEquals(NETWORK_STABILITY_MS, 300);
@@ -346,7 +345,7 @@ Deno.test('dom-watchdog: the pending-network probe gives up at the 2 s cap', asy
 	assertLess(elapsed, NETWORK_PROBE_MAX_MS * 2, 'the probe is capped, not open-ended');
 	assertEquals(state.stateError, null, 'an unstable network is not a failure');
 
-	// The same in-flight request is what `pendingNetworkRequests` reports (§5.3).
+	// The same in-flight request is what `pendingNetworkRequests` reports.
 	assertEquals(state.pendingNetworkRequests.length, 1);
 	assertEquals(state.pendingNetworkRequests[0]?.url, 'http://127.0.0.1:1/slow.json');
 	assertEquals(state.pendingNetworkRequests[0]?.resourceType, 'XHR');
@@ -396,7 +395,7 @@ Deno.test('dom-watchdog: a build that overruns the budget yields a non-actionabl
 			.dispatch(new BrowserStateRequestEvent({ includeScreenshot: false }))
 			.eventResult({ raiseIfAny: true, raiseIfNone: true });
 
-		assert(state.stateError !== null, 'an exhausted budget must set stateError (R6.4)');
+		assert(state.stateError !== null, 'an exhausted budget must set stateError');
 		assertStringIncludes(state.stateError, 'budget');
 		assertEquals(state.domState.selectorMap.size, 0, 'no stale index may survive a timed-out build');
 		assertEquals(state.domState.root, null);
@@ -431,7 +430,7 @@ Deno.test('dom-watchdog: a failed DOM build returns a recovery state carrying br
 			.dispatch(new BrowserStateRequestEvent({ includeScreenshot: false }))
 			.eventResult({ raiseIfAny: true, raiseIfNone: true });
 
-		// The distinction the spec draws: a *failure* is recoverable and reported through
+		// The distinction that matters: a *failure* is recoverable and reported through
 		// `browserErrors`; only a *timeout* is non-actionable and sets `stateError`.
 		assertEquals(state.stateError, null);
 		assert(state.browserErrors.length > 0);
@@ -461,11 +460,11 @@ Deno.test('dom-watchdog: a screenshot failure degrades to browserErrors, not a f
 });
 
 // ---------------------------------------------------------------------------
-// non-actionable state on whole-event timeout (ARCHITECTURE.md §6.7, R6.4)
+// non-actionable state on whole-event timeout
 // ---------------------------------------------------------------------------
 
 Deno.test('dom-watchdog: a whole-event timeout yields a non-actionable state with an empty selectorMap', async () => {
-	// The bus reads `TIMEOUT_<EventClassName>` through an injected source (D-BUS1), so the 30 s
+	// The bus reads `TIMEOUT_<EventClassName>` through an injected source, so the 30 s
 	// default is overridden here without touching the process environment.
 	const bus = new EventBus({
 		name: 'dom-timeout',
@@ -481,7 +480,7 @@ Deno.test('dom-watchdog: a whole-event timeout yields a non-actionable state wit
 	try {
 		const state = await session.getBrowserStateSummary();
 		assert(state.stateError !== null, 'the session synthesizes stateError when the event times out');
-		assertEquals(state.domState.selectorMap.size, 0, 'R6.4: no index may outlive its tree');
+		assertEquals(state.domState.selectorMap.size, 0, 'no index may outlive its tree');
 		assertEquals(state.domState.root, null);
 		assertEquals(state.screenshot, null);
 		assertEquals(state.browserErrors, [state.stateError]);
@@ -509,7 +508,7 @@ Deno.test('dom-watchdog: a non-http(s) URL takes the fast path — no DOM build,
 		0,
 		'nothing is loading on about:blank',
 	);
-	// The live-URL read of ERRATUM(M1-hardening-4) must not turn the fast path into a round trip:
+	// The live-URL read must not turn the fast path into a round trip:
 	// `document.title` is the only evaluate a non-http(s) state is allowed to cost.
 	assertEquals(
 		h.fixture.requestsFor('Runtime.evaluate').filter((request) => request.params.expression === 'location.href')
@@ -517,7 +516,7 @@ Deno.test('dom-watchdog: a non-http(s) URL takes the fast path — no DOM build,
 		0,
 		'about:blank has no location worth asking for',
 	);
-	// PageInfo still comes from exactly one `Page.getLayoutMetrics` (ARCHITECTURE.md §6.7).
+	// PageInfo still comes from exactly one `Page.getLayoutMetrics`.
 	assertEquals(h.fixture.requestsFor('Page.getLayoutMetrics').length, 1);
 });
 
@@ -529,16 +528,16 @@ Deno.test('dom-watchdog: includeDom=false skips the build even on an http(s) pag
 });
 
 // ---------------------------------------------------------------------------
-// E-30 — the summary's url and its domState must describe the same page
+// the summary's url and its domState must describe the same page
 // ---------------------------------------------------------------------------
 
 /**
- * The measured shape of E-30: right after a click that navigates, the renderer has committed the new
+ * The measured shape of the lag: right after a click that navigates, the renderer has committed the new
  * document while `Target.targetInfoChanged` has not arrived yet, so `SessionManager`'s record still
  * names the previous page. Reproduced here by moving the *page* without touching the target record —
  * which is exactly what the lag is.
  */
-Deno.test("dom-watchdog: the summary url is the page's own, not the lagging target record (E-30)", async () => {
+Deno.test("dom-watchdog: the summary url is the page's own, not the lagging target record", async () => {
 	const capture = await loadCapture(INTERACTIVE_CAPTURE);
 	await using h = await harness({ capture });
 	const target = h.fixture.targets[0];
@@ -561,7 +560,7 @@ Deno.test("dom-watchdog: the summary url is the page's own, not the lagging targ
 	assertEquals(
 		h.session.sessionManager?.targets.get(target.targetId)?.url,
 		lagging,
-		'the record must still lag, or this test is not reproducing E-30',
+		'the record must still lag, or this test is not reproducing the lag',
 	);
 	assertEquals(state.url, live, 'the summary reports the page whose DOM it just extracted');
 	assert(state.domState.selectorMap.size > 0, "and it is the same summary that carries that page's elements");
@@ -572,13 +571,13 @@ Deno.test("dom-watchdog: the summary url is the page's own, not the lagging targ
 // assembly: selector map cache, tabs, popups, recent events
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-watchdog: the selector map is assembled, cached and resolvable by index (R6.3)', async () => {
+Deno.test('dom-watchdog: the selector map is assembled, cached and resolvable by index', async () => {
 	await using h = await harness({ capture: await loadCapture(INTERACTIVE_CAPTURE) });
 	const state = await requestState(h, { includeScreenshot: false });
 
 	assert(state.domState.selectorMap.size > 0);
 	assertEquals(h.watchdog.selectorMap.size, state.domState.selectorMap.size, 'the map is cached on the watchdog');
-	assert(h.watchdog.reverseMap.size > 0, 'R6.3 caches the reverse map alongside');
+	assert(h.watchdog.reverseMap.size > 0, 'the reverse map is cached alongside');
 	assert(h.watchdog.serializedText.length > 0);
 
 	const [index, node] = [...state.domState.selectorMap][0] ?? [];
@@ -586,7 +585,7 @@ Deno.test('dom-watchdog: the selector map is assembled, cached and resolvable by
 	assertEquals(h.watchdog.nodeForIndex(index)?.backendNodeId, node.backendNodeId);
 	assertEquals(h.watchdog.nodeForIndex(-1), null);
 
-	// R6.1: the LLM index IS the backendNodeId unless it collided.
+	// The LLM index IS the backendNodeId unless it collided.
 	assertEquals(index, node.backendNodeId);
 
 	h.watchdog.clearCache();
@@ -622,7 +621,7 @@ Deno.test('dom-watchdog: auto-handled dialogs surface once as "[type] message"',
 	assertEquals(second.closedPopupMessages, [], 'a dialog is reported once, not on every step');
 });
 
-Deno.test('dom-watchdog: recentEvents is opt-in and never carries typed text (D-SEC2)', async () => {
+Deno.test('dom-watchdog: recentEvents is opt-in and never carries typed text', async () => {
 	await using h = await harness({ pages: ['about:blank'] });
 	const off = h.session.eventBus.on(NavigateToUrlEvent, () => {}, { wrap: null });
 	try {
@@ -632,7 +631,7 @@ Deno.test('dom-watchdog: recentEvents is opt-in and never carries typed text (D-
 	}
 
 	const without = await requestState(h, { includeScreenshot: false });
-	assertEquals(without.recentEvents, null, 'recentEvents is opt-in (§5.3)');
+	assertEquals(without.recentEvents, null, 'recentEvents is opt-in');
 
 	const with_ = await requestState(h, { includeScreenshot: false, includeRecentEvents: true });
 	assert(with_.recentEvents !== null);
@@ -715,7 +714,7 @@ Deno.test('dom-watchdog: summarizeEvent emits the envelope plus an allow-list, n
 	const summary = summarizeEvent(event);
 	assertEquals(summary.eventType, 'TypeTextEvent');
 	assert(typeof summary.eventId === 'string');
-	assertEquals(Object.values(summary).includes('hunter2'), false, 'D-SEC2: typed text never reaches the prompt');
+	assertEquals(Object.values(summary).includes('hunter2'), false, 'typed text never reaches the prompt');
 	assertEquals(JSON.stringify(summary).includes('hunter2'), false);
 
 	const navigation = new NavigateToUrlEvent({ url: 'http://127.0.0.1:1/x' });

@@ -1,13 +1,12 @@
 /**
- * `LocalBrowserWatchdog` contract tests (ARCHITECTURE.md §6.1; COMPLETIONS-CRITERIA.md §3.2
- * watchdog row 1): launch-arg composition, the `--user-data-dir` assertion, the `/json/version`
- * poll parameters (100 ms × 30 s), the 3× profile-lock retry budget, and the kill ladder — CDP
- * `Browser.close()` first, process kill as the fallback.
+ * `LocalBrowserWatchdog` contract tests: launch-arg composition, the `--user-data-dir` assertion, the
+ * `/json/version` poll parameters (100 ms × 30 s), the 3× profile-lock retry budget, and the kill
+ * ladder — CDP `Browser.close()` first, process kill as the fallback.
  *
- * The tier-1 permission matrix grants neither `--allow-run` nor a writable temp root, so the launch
+ * The unit-tier permission matrix grants neither `--allow-run` nor a writable temp root, so the launch
  * *policy* is exercised through the watchdog's declared injection seams while the real spawn is
- * covered by `packages/core/tests/integration/session_lifecycle_test.ts`. The event bus, the profile
- * resolver and the CDP client are all real.
+ * covered by the browser tier (`deno task test:browser`). The event bus, the profile resolver and the
+ * CDP client are all real.
  */
 
 import { assert, assertEquals, assertRejects } from '@std/assert';
@@ -32,6 +31,7 @@ import {
 	PROFILE_LOCK_MAX_ATTEMPTS,
 	removeProfileTree,
 	TEMP_PROFILE_PREFIX,
+	WEBRTC_UDP_OFF_PREFERENCE,
 } from './local_browser.ts';
 
 // ---------------------------------------------------------------------------
@@ -105,13 +105,13 @@ const noopDirs = {
 // constants
 // ---------------------------------------------------------------------------
 
-Deno.test('ARCHITECTURE §6.1 launch constants are encoded verbatim', () => {
+Deno.test('launch constants are encoded verbatim', () => {
 	assertEquals(JSON_VERSION_POLL_INTERVAL_MS, 100);
 	assertEquals(JSON_VERSION_TIMEOUT_MS, 30_000);
 	assertEquals(PROFILE_LOCK_MAX_ATTEMPTS, 3);
 	assertEquals(GRACEFUL_KILL_MS, 5_000);
 	assertEquals(BROWSER_CLOSE_TIMEOUT_MS, 5_000);
-	// `bua doctor --kill-zombies` sweeps this glob (SETUP-WIZARD.md §4.4).
+	// Leftover temp profiles are swept by this prefix.
 	assertEquals(TEMP_PROFILE_PREFIX, 'bua-tmp-');
 });
 
@@ -142,7 +142,7 @@ Deno.test('launch composes profile args, asserts --user-data-dir, and pins the r
 		assertEquals(options.readinessPollIntervalMs, JSON_VERSION_POLL_INTERVAL_MS);
 		assertEquals(options.readinessTimeoutMs, JSON_VERSION_TIMEOUT_MS);
 		assertEquals(options.maxAttempts, PROFILE_LOCK_MAX_ATTEMPTS);
-		// The normative §6.1 assertion, re-checked on the composed argv the watchdog handed over.
+		// The `--user-data-dir` invariant, re-checked on the composed argv the watchdog handed over.
 		assertUserDataDirPresent(options.args ?? []);
 		assert((options.args ?? []).some((arg) => arg.startsWith('--user-data-dir=')));
 		assertEquals(watchdog.launchPlan?.userDataDir, '/tmp/bua-test-profile');
@@ -315,14 +315,14 @@ Deno.test('keepAlive leaves the browser running on a non-forced stop; force over
 });
 
 // ---------------------------------------------------------------------------
-// kill budget — ERRATUM(KILL-1/2/3)
+// kill budget
 // ---------------------------------------------------------------------------
 
 function killContext(signal: AbortSignal, timeoutSec = 30): HandlerContext {
 	return { signal, handlerName: 'LocalBrowserWatchdog.onBrowserKillEvent', timeoutSec };
 }
 
-Deno.test('ERRATUM(KILL-1): an aborted kill reaps the process but starts no filesystem sweep', async () => {
+Deno.test('an aborted kill reaps the process but starts no filesystem sweep', async () => {
 	const bus = new EventBus({ name: 'lb', logger: silentBusLogger });
 	const recorder = launchRecorder('http://127.0.0.1:9222');
 	const removed: string[] = [];
@@ -358,10 +358,10 @@ Deno.test('ERRATUM(KILL-1): an aborted kill reaps the process but starts no file
 	}
 });
 
-Deno.test('ERRATUM(KILL-2): the close ladder is clamped to the budget, not stacked on top of it', async () => {
+Deno.test('the close ladder is clamped to the budget, not stacked on top of it', async () => {
 	// `TIMEOUT_BrowserKillEvent=3` leaves 2 s spendable after the reserve, so the 5 s graceful window
 	// must come back reduced rather than honoured in full. The env source is injected, so this needs
-	// no `--allow-env` and no real sleeping (D-TEST1 §4.1.4).
+	// no `--allow-env` and no real sleeping.
 	const bus = new EventBus({
 		name: 'lb',
 		logger: silentBusLogger,
@@ -391,8 +391,8 @@ Deno.test('ERRATUM(KILL-2): the close ladder is clamped to the budget, not stack
 	}
 });
 
-Deno.test('ERRATUM(KILL-3): the profile sweep stops between entries and resumes on the next pass', async () => {
-	// Real files in the one writable root the §3.6 test matrix grants; `makeTempDir` is atomic, so a
+Deno.test('the profile sweep stops between entries and resumes on the next pass', async () => {
+	// Real files in the one writable root the test matrix grants; `makeTempDir` is atomic, so a
 	// --parallel sibling cannot collide with this tree.
 	const scratchRoot = fromFileUrl(new URL('../../../../tests/.scratch', import.meta.url));
 	await Deno.mkdir(scratchRoot, { recursive: true });
@@ -420,7 +420,7 @@ Deno.test('ERRATUM(KILL-3): the profile sweep stops between entries and resumes 
 	}
 });
 
-Deno.test('ERRATUM(KILL-5): a sweep that fails says so, instead of into a discarded debug line', async () => {
+Deno.test('a sweep that fails says so at warn level', async () => {
 	const bus = new EventBus({ name: 'lb', logger: silentBusLogger });
 	const recorder = launchRecorder('http://127.0.0.1:9222');
 	const warnings: { message: string; fields: Record<string, unknown> | undefined }[] = [];
@@ -459,7 +459,7 @@ Deno.test('ERRATUM(KILL-5): a sweep that fails says so, instead of into a discar
 });
 
 // ---------------------------------------------------------------------------
-// the launch/stop window — ERRATUM(CANCEL-4)
+// the launch/stop window
 // ---------------------------------------------------------------------------
 
 /** Holds a spawn open until the test releases it, so the launch/stop window is addressable. */
@@ -486,7 +486,7 @@ async function whenLaunching(watchdog: LocalBrowserWatchdog): Promise<void> {
 	assert(watchdog.launching, 'the spawn should be in flight');
 }
 
-Deno.test('ERRATUM(CANCEL-4): a stop mid-spawn kills the browser the spawn goes on to produce', async () => {
+Deno.test('a stop mid-spawn kills the browser the spawn goes on to produce', async () => {
 	const bus = new EventBus({ name: 'lb', logger: silentBusLogger });
 	const recorder = launchRecorder('http://127.0.0.1:9222');
 	const gated = gatedLaunch(recorder);
@@ -511,8 +511,8 @@ Deno.test('ERRATUM(CANCEL-4): a stop mid-spawn kills the browser the spawn goes 
 		const launching = bus.dispatch(new BrowserLaunchEvent()).eventResult({ raiseIfAny: true });
 		await whenLaunching(watchdog);
 
-		// The defect: `#launched` was still null here, so the stop used to return without a kill and
-		// leave a Chrome running that nothing in this process could name.
+		// `#launched` is still null here, so the stop must not rely on it alone, or it would return
+		// without a kill and leave a Chrome running that nothing in this process could name.
 		assertEquals(watchdog.launched, null);
 		await bus.dispatch(new BrowserStopEvent());
 		assertEquals(recorder.closed, [], 'the kill cannot close a handle that does not exist yet');
@@ -530,7 +530,7 @@ Deno.test('ERRATUM(CANCEL-4): a stop mid-spawn kills the browser the spawn goes 
 	}
 });
 
-Deno.test('ERRATUM(CANCEL-4): concurrent launches join one spawn instead of forking a second Chrome', async () => {
+Deno.test('concurrent launches join one spawn instead of forking a second Chrome', async () => {
 	const bus = new EventBus({ name: 'lb', logger: silentBusLogger });
 	const recorder = launchRecorder('http://127.0.0.1:9222');
 	const gated = gatedLaunch(recorder);
@@ -586,18 +586,18 @@ Deno.test('a remote (attached) browser is never killed by this watchdog', async 
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-110) (review R2-1): an allowlist launches the profile with preloading off
+// an allowlist launches the profile with preloading off
 // ---------------------------------------------------------------------------
 
-const FXB_SCRATCH = fromFileUrl(new URL('../../../../tests/.scratch', import.meta.url));
+const PREFS_SCRATCH = fromFileUrl(new URL('../../../../tests/.scratch', import.meta.url));
 
 /** Launches once against a real profile directory under `tests/.scratch` and returns what the launcher left there. */
 async function launchWithProfile(
-	init: { allowedDomains?: string[] },
+	init: { allowedDomains?: string[]; requestScope?: 'documents' | 'all' },
 	seed: string | null,
-): Promise<{ prefs: string | null; warnings: string[] }> {
-	await Deno.mkdir(FXB_SCRATCH, { recursive: true });
-	const dir = await Deno.makeTempDir({ dir: FXB_SCRATCH, prefix: 'fxb-e110-' });
+): Promise<{ prefs: string | null; warnings: string[]; args: readonly string[] }> {
+	await Deno.mkdir(PREFS_SCRATCH, { recursive: true });
+	const dir = await Deno.makeTempDir({ dir: PREFS_SCRATCH, prefix: 'preferences-' });
 	const file = join(dir, 'Default', PREFERENCES_FILENAME);
 	if (seed !== null) {
 		await Deno.mkdir(join(dir, 'Default'), { recursive: true });
@@ -625,7 +625,7 @@ async function launchWithProfile(
 			// No profile directory: nothing was written at all.
 		}
 		assertEquals(leftovers, [], 'no temp file is left beside Preferences');
-		return { prefs, warnings };
+		return { prefs, warnings, args: recorder.calls[0]?.args ?? [] };
 	} finally {
 		watchdog.detach();
 		await bus.stop();
@@ -633,13 +633,13 @@ async function launchWithProfile(
 	}
 }
 
-Deno.test('E-110: with an allowlist the launcher writes preloading off into a fresh profile', async () => {
+Deno.test('with an allowlist the launcher writes preloading off into a fresh profile', async () => {
 	assertEquals(PRELOADING_OFF_PREFERENCE, { section: 'net', key: 'network_prediction_options', value: 2 });
 	const { prefs } = await launchWithProfile({ allowedDomains: ['*.example.com'] }, null);
 	assertEquals(JSON.parse(prefs ?? 'null'), { net: { network_prediction_options: 2 } });
 });
 
-Deno.test('E-110: an existing Preferences file is merged, every other key kept', async () => {
+Deno.test('an existing Preferences file is merged, every other key kept', async () => {
 	const seed = JSON.stringify({ net: { other: true, network_prediction_options: 0 }, profile: { name: 'kept' } });
 	const { prefs } = await launchWithProfile({ allowedDomains: ['*.example.com'] }, seed);
 	assertEquals(JSON.parse(prefs ?? 'null'), {
@@ -648,13 +648,50 @@ Deno.test('E-110: an existing Preferences file is merged, every other key kept',
 	});
 });
 
-Deno.test('E-110: a Preferences file that is not a JSON object is left untouched, with a warning', async () => {
+Deno.test('a Preferences file that is not a JSON object is left untouched, with a warning', async () => {
 	const { prefs, warnings } = await launchWithProfile({ allowedDomains: ['*.example.com'] }, '[1,2]');
 	assertEquals(prefs, '[1,2]');
 	assert(warnings.some((message) => message.includes('not a JSON object')), JSON.stringify(warnings));
 });
 
-Deno.test('E-110 (AC3): without an allowlist nothing is written', async () => {
+Deno.test('without an allowlist nothing is written', async () => {
 	const { prefs } = await launchWithProfile({}, null);
 	assertEquals(prefs, null);
+});
+
+// ---------------------------------------------------------------------------
+// `all` also launches with WebRTC's UDP off
+// ---------------------------------------------------------------------------
+
+Deno.test('requestScope all writes WebRTC UDP off beside preloading off, in one merge', async () => {
+	assertEquals(WEBRTC_UDP_OFF_PREFERENCE, {
+		section: 'webrtc',
+		key: 'ip_handling_policy',
+		value: 'disable_non_proxied_udp',
+	});
+	const fresh = await launchWithProfile({ allowedDomains: ['example.com'], requestScope: 'all' }, null);
+	assertEquals(JSON.parse(fresh.prefs ?? 'null'), {
+		net: { network_prediction_options: 2 },
+		webrtc: { ip_handling_policy: 'disable_non_proxied_udp' },
+	});
+	const seed = JSON.stringify({ webrtc: { ip_handling_policy: 'default', udp_port_range: 'kept' }, other: 1 });
+	const merged = await launchWithProfile({ allowedDomains: ['example.com'], requestScope: 'all' }, seed);
+	assertEquals(JSON.parse(merged.prefs ?? 'null'), {
+		webrtc: { ip_handling_policy: 'disable_non_proxied_udp', udp_port_range: 'kept' },
+		other: 1,
+		net: { network_prediction_options: 2 },
+	});
+});
+
+Deno.test('documents scope, and all without an allowlist, leave WebRTC as it was', async () => {
+	const documents = await launchWithProfile({ allowedDomains: ['example.com'], requestScope: 'documents' }, null);
+	assertEquals(JSON.parse(documents.prefs ?? 'null'), { net: { network_prediction_options: 2 } });
+	const open = await launchWithProfile({ requestScope: 'all' }, null);
+	assertEquals(open.prefs, null);
+});
+
+Deno.test('no WebRTC switch is added — --force-webrtc-ip-handling-policy measured inert on the branded build', async () => {
+	const { args } = await launchWithProfile({ allowedDomains: ['example.com'], requestScope: 'all' }, null);
+	assert(args.length > 0, 'the launch carried its arguments');
+	assertEquals(args.filter((arg) => arg.toLowerCase().includes('webrtc')), [], JSON.stringify(args));
 });

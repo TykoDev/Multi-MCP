@@ -7,853 +7,444 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Added
-
-- **Grouped tool lists.** On stdio and on a 2025-era client's stateful session, `tools/list` starts with one entry tool
-  per group — `use_browser`, `use_library`, `use_sandbox`, `use_agent`, `use_memory`, `use_a2ui` — instead of up to 102
-  tools. Calling one adds that group's tools to the connection's list, announces `tools/list_changed` once, and returns
-  each tool's name, title and description. Every tool still answers `tools/call` by name; the stateless 2026-07-28
-  mount, the web app and a cluster list every tool as before. `capabilities.tykotech.tool_groups` names the groups a
-  grouped connection offers; `TTK_MCP_TOOL_GROUPS=false` restores the flat list.
-- **One command sets up the full stack.** `deno task setup` now writes every file any shipped Compose file mounts — the
-  database key, the administrator, the `client` API key, the A2A peer's token pair and list, the browser-secrets (`{}`)
-  and git-remotes (`[]`) placeholders, the agent-runner token and the ACP commands template — and `.env` from
-  `.env.example` (one template, held equal by a test). `--only <names>` limits it to some files and, with `--force`,
-  rotates exactly those; files you fill in yourself are replaced only when `--only` names them. Every file is described
-  in one place, `secrets/README.md`. **Upgrading:** run `deno task setup` before the next `docker compose up`; it adds
-  the new files, keeps yours, and repairs their modes.
-- **The default Compose stack runs an A2A peer**, `a2a-peer`: a second gateway from the same image (no second build),
-  with its own data volume and key file, no published port, and `TTK_PUBLIC_URL=http://a2a-peer:8787`. The gateway's
-  `TTK_AGENT_PEERS_FILE` names it, so `agent_delegate` and `agent_peers` work out of the box. `TTK_PEER_MEMORY` and
-  `TTK_PEER_HEAP_MB` size it. Browser-typed secrets (`TTK_SECRETS_FILE`) and credentialed git remotes
-  (`TTK_SANDBOX_GIT_REMOTES_FILE`) are mounted by default from `setup`'s placeholders; `TTK_ALLOWED_DOMAINS` is read
-  from `.env`.
-- **`docker-compose.providers.yml`** replaces the three commented lines that seeded model providers from a file.
-- **`doctor --new-key <id> --save`** adds (or replaces, by id) the record in `secrets/ttk_api_keys.json`, in place, so
-  the running gateway admits the key without a restart.
-- **Every task has a description**, so `deno task` lists what each does. Design notes:
-  `docs/design/stack-tooling-and-secrets.md`.
-
-- **MCP Apps streams for the terminal and A2UI surfaces.** `sandbox_session_open` now opens a terminal embed
-  (`ui://tykotech/terminal`) whose **Attach** streams the shell session's output and feeds typed lines to it; the A2UI
-  embed gains **Follow live**, which renders every new revision of the surface. Both use the live view's transport: a 30
-  s single-use ticket bound to the embed's origin, minted by the new app-only tools `sandbox_session_ticket` and
-  `a2ui_surface_ticket`, redeemed by `/live/terminal/{id}/ws` and `/live/surface/{id}/ws`.
-
-- **Sessions: memory per browser session, Active and Idle, Close.** For an administrator the Sessions tab shows the
-  container, the browser sessions and the gateway heap against their limits, and lists sessions as Active or Idle (with
-  when each closes); every card shows its browser's private memory — Chromium's own memory dump over CDP — and a Close
-  button, and the Idle group closes all its sessions at once. `GET /api/v1/system/usage`; `TTK_MEMORY_LIMIT` (the limit
-  the meters use). Compose gives the gateway container `mem_limit: ${TTK_GATEWAY_MEMORY:-1536m}` and a heap of
-  `${TTK_GATEWAY_HEAP_MB:-1024}` MiB.
-- **Screen stylesheets load with their screens.** `dist/app.css` holds the shell, the shared components and the three
-  first-paint screens (23.5 KB gzip, from 41.3 KB); each lazy screen's rules are `dist/screens/*.css`, applied with its
-  chunk. The first-paint stylesheet budget is 50 KB gzip (D-159).
-- **MCP change push: clients re-list their tools after a deploy or a scope change.** 2025-era clients (pi, most hosts)
-  now get stateful sessions by default (`TTK_MCP_STATEFUL` defaults on; off in a cluster), whose standalone stream
-  carries `notifications/tools/list_changed`. Session records (id, principal, the client's handshake; no token or scope)
-  survive a restart in `<TTK_DATA_DIR>/mcp/sessions.json`, so after a deploy the reconnecting client's session is
-  restored and told to re-list. A scope change (an edited account, a reloaded key file, a removed key) rebuilds that
-  credential's sessions and pushes the same notification; a revoked credential closes them. A session now answers only
-  the principal that opened it.
-- **Workspaces: Files & shell and Surfaces tabs, and a task icon.** An open workspace switches between its files and
-  shell and its surfaces in place (`#/workspaces/<id>[/surfaces]`); the header's task icon counts the agent tasks that
-  used the workspace (`GET /api/v1/agent/tasks?workspace_id=`) and opens them on Agents › Tasks, filtered.
-- **Agents: one task per conversation, and a Tasks tab with run histories.** Every request in the Agents chat starts a
-  task with its own id and the chat moves to it (`#/agents/chat/<task>`), instead of one long thread of every task. The
-  new **Tasks** tab (`#/agents/tasks[/<task>]`) lists every task beside its run history: facts, request, answer,
-  artifacts and the run log. The run log is new on the server too: each task keeps a bounded, redacted record of its
-  provider requests (timing, token usage, stop reason, errors), tool calls with arguments and results, ACP updates, peer
-  requests and state changes, persisted with the task (`GET /api/v1/agent/tasks/{id}/log`; 300 entries, 128 KiB).
-- **A2UI surfaces belong to a workspace.** `createSurface` takes an optional `workspaceId`, and
-  `PATCH /api/v1/a2ui/surfaces/{id}` attaches or detaches one. Surfaces moved from the Agents screen to their workspace
-  in **Sessions › Workspaces**, with New surface, Detach, Delete, and Attach here for surfaces in no workspace.
-- **A2UI computed text: `formatString` and `formatNumber`.** The v0.9 catalog functions compute a text from the
-  surface's data model on the page — `${/pointer}` interpolation, nested for lookups — so a Slider or TextField visibly
-  drives the rest of a surface. The current specification's basic catalog id (`…/v0_9/catalogs/basic/catalog.json`) is
-  accepted like the older one.
-- **Workspaces screen: a file and folder tree.** Opening a workspace lists every file and folder it holds (folders
-  first, `.git` hidden); a folder lists on its first expand, a click opens a file, and the tree follows saves and shell
-  commands. Keyboard and screen-reader support follow the WAI-ARIA tree pattern. Files no longer have to be opened by
-  typing their path.
-
-### Fixed
-
-- **The Users screen offers a new account key every scope its account holds.** The API keys tab built its scope picker
-  once, over the account as its dialog opened, so a grant saved from the same dialog's Scopes tab was never offered —
-  `setup`'s administrator, raised to every scope, still saw only its first ten, without `task`, `evaluate`,
-  `metrics:read` and `network:read` — and a scope taken away still was. The picker now follows the account. The server's
-  check is unchanged: a key never holds a scope its account does not.
-- **The coding sandbox on AppArmor 4 hosts (Debian 13, Ubuntu 24.04).** The sandbox's AppArmor profile is pinned to the
-  3.0 policy ABI. Without that, the kernel refused every bubblewrap cage its user namespace, so the sandbox never became
-  healthy (`bwrap: Creating new namespace failed: Permission denied`). Reload it with `deno task setup --only apparmor`.
-- **The coding sandbox starts on AppArmor hosts (Ubuntu, Debian).** Docker's `docker-default` AppArmor profile denies
-  every mount, so bubblewrap could not build a cage: the sandbox restarted with
-  `bwrap: Failed to make / slave: Permission denied`, and the gateway, which waits for it, never started. The sandbox
-  now runs under `tykotech-sandbox` (`docker/apparmor-sandbox`): `docker-default` with only that denial lifted.
-  `deno task setup` installs and loads it through `sudo` on an AppArmor host (a new `apparmor` unit, last, after the
-  credentials are shown), and when it cannot, exits 1 naming AppArmor as the cause, with the two commands to run by
-  hand. The sandbox's start-up error names the profile too. **Upgrading:** on an AppArmor host, run `deno task setup`
-  again before the next `docker compose up`. Hosts without AppArmor need nothing.
-- **The Compose stack starts on Linux without `sudo`.** `setup` wrote its secrets `0600`, and a Compose file secret is a
-  bind mount that keeps the host's owner and mode (Compose ignores `uid`/`gid`/`mode` for file secrets), so the uid-1993
-  gateway restarted with `Permission denied` until the operator found the manual `chgrp`. `secrets/` is now `0700` and
-  its files `0644`: private on the host through the directory, readable in the containers, with rootless Docker and
-  Docker Desktop too. Re-running `setup` repairs an existing checkout.
-- **`setup`'s credentials reach the stack's features.** The `client` key and the administrator held the default grant,
-  so the sandbox, agent, A2UI, model and memory-write tools were withheld from them. They now hold `mcp:invoke`,
-  `view:watch`, `view:control`, `files:read`, `files:write`, `sandbox:execute`, `agent:invoke`, `model:invoke` and
-  `a2ui:publish` (the administrator also `admin`). `DEFAULT_SCOPES` is unchanged.
-- **API-key reload works in the containers.** `docker/seccomp-chromium.json` lacked `inotify_init1`, so the gateway's
-  key-file watcher never started under the stack's profile ("cannot watch the API key file") and a key added to the file
-  waited for a restart.
-- **`deno task ok` passes on a fresh checkout.** The B6.3 cache-policy test fetched `/assets/app.css`, which exists only
-  after `build:web`; it now checks a hand-written asset, and the bundle's stylesheet when it was built.
-- **`test:agents:compose` runs.** Its fixture never replaced the base file's `ttk_db_key`, so the proof refused itself
-  before starting; it now brings its own key, and both Compose proofs bring the stack's new files and pin the peer to
-  the tree's gateway image.
-- **`deno task cov` runs.** `cov:unit`, `cov:agents` and `cov:browser` restated their tiers' matrices and had drifted:
-  `cov:unit` granted path-scoped read and write, which Deno 2.9's `Deno.symlink` refuses, so two sandbox unit tests
-  failed under it. Each now runs its tier's task with `--coverage`. `admin:generate` is removed (`setup` creates the
-  administrator, `doctor --new-admin admin --force` replaces one).
-- **Every image base is an `ARG`.** `docker/Dockerfile.agent-runner` and `docker/Dockerfile.sandbox-workspace` named
-  theirs literally; they now take `DENO_IMAGE` (and `RUNTIME_IMAGE`) like the others, defaulting to the same pins.
-- The environment reference listed `TTK_GATEWAY_HEAP_MB`'s default as 768; Compose uses 1024.
-
-- **A surface's "Try it" controls did nothing visible.** A Slider moved its own value only: nothing in the catalog could
-  compute another component's text from it. With `formatString`/`formatNumber` a bound input now drives computed text on
-  the page.
-
-- **`a2ui_publish` refused specification clients with `message: Invalid input`.** A message sent as JSON text, without
-  `version`, or naming the A2UI basic catalog's id now publishes; a refusal names the field and the expectation of the
-  closest message shape instead of `Invalid input`.
-- **`a2ui_delete` and `a2ui_publish` on a missing surface answered
-  `file-unavailable … check the service
-  configuration`.** They now answer
-  `invalid-arguments: you have no A2UI surface "<id>"`, and store refusals (duplicate surface, cyclic tree, surface
-  limit) carry their own words.
-- **`browser_wait_for` with `selector` or `text` never matched a page no tool had read yet.** Chromium's DOM agent
-  searches only a document it has been asked for, so a wait straight after a navigation timed out against a page that
-  matched. The search now requests the document first (`browser_find` and `browser_verify_locator` share it).
-- **`browser_verify_locator` with a bare `id`, `testid` or `name` value counted plain-text matches.**
-  `{kind: "id", value: "username"}` went to the browser search as the word `username` (4 matches on a login page); a
-  bare value now means its selector (`#username`, `[data-testid="…"]`, `[name="…"]`). The selectors
-  `browser_locator_candidates` emits pass unchanged.
-- **A read-only browser tool with no default session answered `no session with id default`**, which read as a broken
-  server next to a parameter described as "created on first use". It now says the default session is created by the
-  first tool that opens a page, and that the read-only tool never creates one (same `unknown-session` code).
-- **Every tool: a value sent as JSON text where the schema wants a number, boolean, object or array** (`{"limit": "5"}`)
-  is read as the value it spells and validated again, instead of failing with `expected number, received string`.
-
 ### Breaking
 
+- **The A2A HTTP+JSON binding answers errors as A2A 1.0 specifies, not as problem documents.** The body is
+  `{ "error": { "code", "status", "message", "details" } }`, and a finished task's cancel is `400`, not `409`. JSON-RPC
+  codes are unchanged except `-32007` (was `-32004`) for an unconfigured extended card.
 - **stdio and stateful-session clients see grouped tool lists by default.** A client that does not re-list on
   `tools/list_changed` sees only the `use_*` entry tools; set `TTK_MCP_TOOL_GROUPS=false` to keep the flat list. Tool
   names and parameters are unchanged.
 - **Secrets rest only encrypted, in `<TTK_DATA_DIR>/ttk.db` (D-154).** Set `TTK_DB_KEY_FILE` (32 bytes;
-  `deno task
-  setup` or `doctor --new-db-key` writes one; Compose mounts `secrets/ttk_db_key`). With a data directory,
-  a providers file carrying a key or `TTK_SECRETS(_FILE)` refuses startup without it, and signed links default off
-  without it. The providers file and `TTK_SECRETS(_FILE)` are now seeds: copied into the database once, never re-read
-  after that unless `seed --force`. A plaintext `link-signing.key` is moved into the database and deleted.
-- **`GET`/`PUT /api/v1/system/model-providers` changed shape (D-154):** `{ seed, store, default, providers }`; key modes
-  `keep`, `set`, `none` (no `file`); no `extra_models`, `operator` or `default_source`.
-- **`doctor --new-admin` no longer overwrites `secrets/ttk_admin_user.json` without `--force` (D-154).**
-
-- **Exporting OpenTelemetry needs an allowlist and six granted names (D-137).** With `OTEL_DENO=true` the server refuses
-  to start until `TTK_OTEL_ENDPOINTS` names the origin of every configured OTLP endpoint; a launcher that exports must
-  grant `OTEL_DENO`, `OTEL_DENO_VSOCK` and the four `OTEL_EXPORTER_OTLP_*ENDPOINT` names in `--allow-env` (one that
-  grants only `TTK_*` is refused, naming the grant), and the slim image refuses `OTEL_DENO=true` instead of silently not
-  exporting. Nothing changes while OpenTelemetry is off.
-- **Signed links are `v2` (D-140):** `v1` tokens (at most 300 s old) stop working at once.
-- **`TTK_A2UI_ACTIONS` refuses startup when an action names a tool that cannot run indirectly (D-141):** the
-  confirmation set, `browser_file_link`, `browser_live_ticket`, `browser_live_view`, `browser_request_human`,
-  `agent_run_tool` and the sampling tools. A button that reached the store anyway is refused before it runs. Call those
-  tools directly.
+  `deno task setup` or `doctor --new-db-key` writes one; Compose mounts `secrets/ttk_db_key`). With a data directory, a
+  providers file carrying a key or `TTK_SECRETS(_FILE)` refuses startup without it, and signed links default off without
+  it. The providers file and `TTK_SECRETS(_FILE)` are now seeds: copied into the database once, never re-read after that
+  unless `seed --force`.
 - **`admin` is no longer in the default grant (C7, D-098).** `DEFAULT_SCOPES` is `mcp:invoke`, `view:watch`,
   `view:control`, `files:read`. API keys without `scopes`, the anonymous loopback principal and stdio clients (with
   `TTK_ANON_SCOPES` unset) lose session, account and origin administration, diagnostics, `browser_close_all` and the
-  cross-principal audit read; name `admin` to keep them. Stored accounts keep it: the first start upgrades `users.json`,
-  a cluster KV and a scope-less `TTK_ADMIN_USER` seed to version 2 with the previous five-scope grant written out, and
-  `doctor --new-admin` names `admin` explicitly.
-- **The web UI signs in with an HttpOnly cookie (B4, D-097).** The `ttk.login` storage key is gone: a token left there
-  is revoked and removed on first load, so every browser signs in once more. Cookie-authenticated changes need the
-  `x-ttk-csrf` header and an allowed `Origin`; a raw OAuth access token can no longer sign in to the web UI. Bearer
-  clients are unchanged.
-- **`TTK_BROWSER_ARGS` is validated at startup (D-094).** An entry that is not a `--switch`, a sandbox-weakening switch
-  (including any `*sandbox*` switch and `--disable-features` naming a sandbox feature), a launcher-owned switch
-  (`--remote-debugging-*`, `--remote-allow-origins`, `--user-data-dir`) or a program-running switch (`*-cmd-prefix`,
-  `*-launcher`, `--browser-subprocess-path`) refuses startup.
-- **With `TTK_ALLOWED_DOMAINS` set, the browser enforces it (D-095):** a redirect off the list ends on `about:blank`
-  (the tool answers `url: "about:blank"`), and an off-list new tab is closed. `<secret>` in
-  `browser_type`/`browser_fill` is checked against the frame the keystrokes land in (D-096). `browser_health`'s
-  `browser_ok` counts browsers that answer a `Browser.getVersion` probe, so a poll can take up to 2 s (D-096).
-- **An invalid `TTK_ADMIN_USER`/`TTK_ADMIN_USER_FILE` refuses startup (C6, D-099),** as do both forms set and a present
-  but invalid `secrets/ttk_admin_user.json`. The sign-in route refuses a `ttks_` token sent as `apiKey`/`token` with
-  `400` (C14, D-099).
-- **Request bodies are capped before anything parses them (D-100, E-83):** over `TTK_MAX_BODY_KB` (default 256 KiB) on
-  `/api/v1/*` and `/a2a`, or over 4 MiB on `/mcp`, is `413 payload-too-large`. A2A bodies default to 256 KiB (the A2A
-  reader allows 512 KiB).
-- **`TTK_MCP_STATEFUL` together with `TTK_CLUSTER_KV` refuses to start (D-102).**
-- **`deno task dev` no longer prompts (E-82):** it grants the resolved browser, `TTK_FFMPEG`, `tests/.scratch` and the
-  temporary directories and runs with `--no-prompt`, so a `TTK_DATA_DIR` outside those is refused rather than prompted
-  for.
-
-- **Administrator logins no longer hold the explicit-only scopes by default (GW-2, D-065).** An admin record without a
-  `scopes` array now gets `DEFAULT_SCOPES`, not every scope; `evaluate`, `task`, `sandbox:execute`, `agent:invoke` and
-  `a2ui:publish` must be named. To keep them, add a `scopes` array to `secrets/ttk_admin_user.json`;
-  `doctor --new-admin` takes `--scopes`.
+  cross-principal audit read; name `admin` to keep them. Stored accounts keep it: the first start upgrades `users.json`
+  and a scope-less `TTK_ADMIN_USER` seed to version 2 with the previous grant written out. An account record without a
+  `scopes` array gets `DEFAULT_SCOPES`, never the explicit-only scopes (`evaluate`, `task`, `sandbox:execute`,
+  `agent:invoke`, `a2ui:publish`, …), which must be named (GW-2, D-065); `doctor --new-admin` takes `--scopes`.
+- **Every credential that names no scopes holds `files:read` (D-075),** the library's read scope; name an explicit
+  `scopes` array to withhold it. `files:write` is never implied.
+- **`TTK_ADMIN_USER` is a seed (D-074).** On the first start with `TTK_DATA_DIR` the record is copied into
+  `<TTK_DATA_DIR>/users.json`, which is the authority from then on. An invalid `TTK_ADMIN_USER`/`TTK_ADMIN_USER_FILE`,
+  both forms set, or a present but invalid `secrets/ttk_admin_user.json` refuses startup (C6, D-099).
+  `doctor --new-admin` no longer overwrites `secrets/ttk_admin_user.json` without `--force` (D-154).
+- **The web UI signs in with an HttpOnly cookie (B4, D-097).** The `ttk.login` storage key is no longer read, so every
+  browser signs in once more. Cookie-authenticated changes need the `x-ttk-csrf` header and the server's own `Origin`.
+  Bearer clients are unchanged.
+- **`POST /api/v1/auth/login` with an API key answers with a `ttks_` session token, not the key (D-073),** bound to the
+  key and ended when it is rotated or removed; sessions live `TTK_LOGIN_TTL_S` (default seven days). A `ttks_` token
+  sent as `apiKey`/`token` is `400` (C14, D-099). Sign-in and password errors are `application/problem+json`: a failed
+  sign-in is `401 unauthenticated`, a missing credential `400 invalid-request`, repeated failures `429 rate-limited`
+  with `Retry-After`, a body over 16 KiB `413 payload-too-large` (D-078).
 - **API-key ids are constrained (GW-4):** at most 128 printable characters, never beginning `admin:`. A key file that
   breaks the rule is refused at startup and on reload.
-- **Agent tasks that wait more than 120 s to start fail (D-071),** and tasks, delegations and streams end when their
-  submitting key is rotated or removed, or the admin logs out.
-- **`POST /api/v1/auth/login` with an API key answers with a `ttks_` session token, not the key (D-073).** A client that
-  expected the key echoed back must use the returned `token`; it is bound to the key and ends when the key is rotated or
-  removed. Sessions live `TTK_LOGIN_TTL_S` (default seven days, was one day in memory).
-- **Every credential that names no scopes now holds `files:read` (D-075).** The default grant gained the library's read
-  scope, so an API key or account without a `scopes` array can list and read the share, skills and prompts. Name an
-  explicit `scopes` array to withhold it; `files:write` is never implied.
-- **`TTK_ADMIN_USER` is now a seed (D-074).** On the first start with `TTK_DATA_DIR` the record is copied into
-  `<TTK_DATA_DIR>/users.json`, which is the authority from then on: editing the secret later changes nothing until that
-  file is removed. Without a data dir the account works but cannot be changed.
-
-- **`POST /api/v1/auth/login` and `POST /api/v1/auth/password` answer errors as `application/problem+json` (D-078).** A
-  failed sign-in is `401` with type `…/problems/unauthenticated` (was a hand-written `…/unauthorized` body), a missing
-  credential `400 invalid-request`; repeated failures now get `429 rate-limited` with `Retry-After`, and a body over 16
-  KiB `413 payload-too-large`.
-- **With `TTK_OAUTH_ISSUER` and no `TTK_OAUTH_JWKS_URL`, keys come from the provider's metadata (D-083),** and
-  `/.well-known/oauth-authorization-server` serves the provider's own document instead of invented `<issuer>/authorize`
-  and `<issuer>/token` endpoints; when the provider publishes no metadata that route answers `500` rather than a guess.
-
-- **Live-view tickets (D-088):** a non-upgrade request to `/live/{id}/ws` now answers 426 without consuming the ticket,
-  and an unknown or wrong-session ticket answers `403 ticket-invalid` (was `401 unauthenticated`). A foreign `Host`
-  answers `400 host-forbidden` as problem+json (was a JSON-RPC `403 Invalid Host` body).
-- **A2A `SendMessage` is idempotent per principal (D-085):** a repeated `messageId` returns the first task instead of
-  starting another. A client that reused message ids for different messages must generate fresh ones.
+- **`TTK_BROWSER_ARGS` is validated at startup (D-094).** An entry that is not a `--switch` refuses startup, as does a
+  sandbox-weakening switch (any `*sandbox*` switch, `--in-process-gpu`, `--disable-features` naming a sandbox or
+  site-isolation feature), a site-isolation, web-security, file-access or unpacked-extension switch, `--js-flags` with
+  V8 sandbox or `--allow-natives-syntax` flags, a launcher-owned switch (`--remote-debugging-*`,
+  `--remote-allow-origins`, `--user-data-dir`) or a program-running switch (`*-cmd-prefix`, `*-launcher`,
+  `--browser-subprocess-path`).
+- **With `TTK_ALLOWED_DOMAINS` set, the browser enforces it (D-095, D-115).** Every off-list document request — clicked
+  links, script and meta-refresh navigations, form posts, each redirect hop, pop-ups and iframes — is refused before it
+  is sent; the tab keeps its page and an unloaded pop-up is closed. `browser_navigate` and `browser_go_back` through a
+  refused redirect answer `navigation-blocked` naming the origin, only for their own request chain (R2-2). A page that
+  commits an off-list document anyway is parked on `about:blank`. `<secret>` in `browser_type`/`browser_fill` is checked
+  against the frame the keystrokes land in, and `browser_health`'s `browser_ok` counts browsers that answer a
+  `Browser.getVersion` probe, so a poll can take up to 2 s (D-096).
+- **Request bodies are capped before anything parses them (D-100, E-83):** over `TTK_MAX_BODY_KB` (default 256 KiB) on
+  `/api/v1/*` and `/a2a`, or over 4 MiB on `/mcp`, is `413 payload-too-large`.
+- **Live-view tickets (D-088):** a non-upgrade request to `/live/{id}/ws` answers `426` without consuming the ticket, an
+  unknown or wrong-session ticket answers `403 ticket-invalid` (was `401 unauthenticated`), and a foreign `Host` answers
+  `400 host-forbidden` as problem+json.
+- **Agent tasks that wait more than 120 s to start fail (D-071),** and tasks and streams end when their submitting key
+  is rotated or removed, or the admin logs out. **A2A `SendMessage` is idempotent per principal (D-085):** a repeated
+  `messageId` returns the first task; a client that reused message ids must generate fresh ones.
+- **`deno task dev` no longer prompts (E-82):** it grants the resolved browser, `TTK_FFMPEG`, `tests/.scratch` and the
+  temporary directories and runs with `--no-prompt`, so a `TTK_DATA_DIR` outside those is refused.
 
 ### Security
 
-- **A model provider with `allow_http` may carry an API key to a private or named host (an owner decision, a deliberate
-  relaxation).** Plain `http:` to a private address (RFC 1918, unique-local) or a service name is admitted with
-  `allow_http` and a key, as loopback already was, so the key crosses the network unencrypted; that provider's start-up
-  warning now ends `its API key travels in plaintext`. `http:` to a public or link-local address is still refused
-  whatever the flag. An `https:` public address with `allow_http` and a key is still refused, now as
-  `allow_http with a key needs a loopback, private or named host` (was `a key never travels in plaintext off the host`).
-- **OpenTelemetry export is allowlisted at the process edge (D-137):** before any subcommand runs, the CLI judges every
-  non-empty OTLP endpoint — the base one included — against `TTK_OTEL_ENDPOINTS`, and refuses the runtime default
-  `http://localhost:4318`, credentials in an endpoint URL, an empty base endpoint and vsock export; a malformed
-  `TTK_OTEL_ENDPOINTS` refuses start in every mode. A refusal is one `tykotech-mcp: refusing to start:` line on stderr
-  (passwords redacted) and a natural exit, so nothing is exported; a non-loopback plain-`http:` collector starts with a
-  warning. `OTEL_EXPORTER_OTLP_HEADERS` is never read or granted.
-- **The bundled image's health probe runs with `OTEL_DENO` unset (`/usr/bin/env -u OTEL_DENO`), so it never exports
-  (D-137).**
-- **`deno task dev` judges OpenTelemetry egress before its file watcher starts (D-137, SEC-1W).** The `--watch` runner
-  shares the server's process and used to log its own lines to the configured endpoint, an off-list one included; a
-  gate-only pre-step (`packages/cli/gate.ts`, joined by `&&`) now refuses first. Hot reload is unchanged.
-- **A signed link minted by an agent task's delegated MCP bearer never outlives that bearer (D-140, SEC-2).** Under an
-  API-key or account delegator such a link used to live the full hour; it is now capped at the delegation's expiry.
-- **The `dev`, `stdio`, `serve:cluster` and `doctor` tasks no longer export from their grant-computing helpers (D-137,
-  SEC-1).** Each `$( … deno task … )` substitution runs with `OTEL_DENO=false`, so only the gated process can export;
-  rule T5 refuses a shipped substitution without it. The `deno task` runner's own header line is still logged when you
-  run a task without `-q`.
-- **`doctor --new-key`, `--new-key-set` and `--new-admin` are refused while OpenTelemetry exports (D-142),** because the
-  console they print a credential to is exported. `doctor --grant` still runs.
-- **`<link rel=prefetch>` and `<link rel=prerender>` hints to off-list hosts are refused before they are sent, in the
-  default scope too (D-139, E-115).**
-- **A signed link ends early with its session and its credential (D-140, G6):** a session closed, or recreated under the
-  same id, answers `404`; an API key removed or rotated under the same id, an account whose password changed or that was
-  disabled or removed, and OAuth no longer configured answer `401`. An OAuth link is capped at the expiry of the access
-  token it was minted under; with less than 10 s left, or no known expiry, the mint is `scope-required`. The token
-  carries a keyed credential epoch, never a credential or an unkeyed fingerprint.
-- **A `navigation` event record's `path` drops `;matrix=params` and keeps only a `data:` URL's media type, exactly like
-  the request log (NF-2).**
-- **With `TTK_ALLOWED_DOMAINS` set, off-list documents are refused before their request is sent (R3, D-115, E-94):**
-  S-11 is closed — navigations a loaded page makes by itself (clicked links, script and meta-refresh navigations, form
-  posts, each redirect hop, pop-ups and iframes) are checked, before the request rather than after. Speculation rules
-  cannot take the browser off the list either: the launched profile starts with preloading off, and a page that commits
-  an off-list document anyway is parked on `about:blank` and recorded (R2-1, E-110, E-94).
-- **The inspection tools keep credentials out (D-116):** request-log values of credential-named headers — among them
-  `Sec-WebSocket-Protocol` and names containing `pass`, `pwd`, `credential`, `signature`, `jwt`, `bearer`, `otp`,
-  `dpop`, `assertion` or `principal` (R2-3) — are stored only as `[redacted]`, and request bodies are never read.
-  Without `network:read` every query and fragment in every header value is cut, `path` drops `;matrix` parameters, and a
-  `data:` URL shows only its media type (R2-3). Every string the inspection tools return passes the server's secret
-  redaction, applied before any text is cut to its cap in the request log, the console log and `body_for` (R2-7).
-- **Every multi-round `requestState` is HMAC-sealed and bound to the method and the authenticated client (D-126).** A
-  tampered, expired or another principal's state is refused before any handler runs.
-- **Chromium and the recorder's ffmpeg receive the `OTEL_*` exporter settings and the inline `TTK_API_KEYS`,
-  `TTK_SECRETS`, `TTK_ADMIN_USER`, `TTK_SANDBOX_TOKEN` and `TTK_AGENT_BRIDGE_TOKEN` blank (D-127);** proxy settings
-  still pass through. A startup warning says, when OTLP export is on, that the runtime exports URLs with query strings
-  and console output outside the permission matrix (since D-137: to the allowlisted collector).
-- **No structured task runs a tool that needs its caller, a person or the client in the loop (D-121, R1-3, R1-5).** Over
-  MCP (`agent_run_tool`), A2A, its HTTP+JSON binding and REST, a task naming the confirmation set, a sampling tool, the
-  handoff, a live-view tool or `browser_file_link` fails before the tool runs and keeps no artifact, so no ticket or
-  link URL is kept in `tasks.json` or push bodies; the extended card lists none of them. An A2A or REST client that ran
-  one of these as a task must call it directly. Secret-provider failures refuse the start and never reveal the token,
-  the value or the reference path (D-123).
+- **`TTK_ALLOWED_DOMAINS_SCOPE=all` also covers WebRTC.** Every document loses `RTCPeerConnection` and the other RTC
+  interfaces before its own script runs (child frames and pop-ups included), and Chromium launches with WebRTC's UDP off
+  (`webrtc.ip_handling_policy = disable_non_proxied_udp`), leaving only TCP, which the resolver rules refuse for every
+  off-list name and address. `<link rel=prefetch>` and `prerender` hints to off-list hosts are refused before they are
+  sent in every scope (D-139), and the launched profile starts with preloading off (R2-1).
+- **A stored browser secret never comes back out (Critical).** Every tool result, error and session resource has stored
+  secret values replaced by `[secret]`, and a field a secret was filled into is masked like a password field (in the
+  vendored DOM serializer).
+- **Docker sandbox backend: no cross-tenant file access after a session ends (Critical, `TTK_SANDBOX_BACKEND=docker`
+  only).** A session ends only after its cleanup proves the container empty (otherwise the container is stopped), and
+  file operations run inside a workspace's container while it runs. The backend holds the Engine socket, which is
+  root-equivalent (D-108): it is opt-in, mounted into the sandbox service only, warned about at every start, and every
+  container and exec body is validated. `/run/harbour` is read-only, only `/workspace` and `/home/sandbox` are writable,
+  and disk use is measured with the container paused and fails closed (E-90, E-91).
+- **A live sandbox shell cannot race the service's file operations out of its workspace (D-077).** While a workspace has
+  an open session, `sandbox_read`, `sandbox_write` and the listing run in a cage that sees only that checkout.
+  Workspaces enforce their disk budget while commands run, through unreadable directories, with a 6 GiB per-owner cap
+  (SB-1, D-072). The sandbox drops its read grant on its bearer after start-up and checks file identity on read and
+  write (SB-5).
+- **`hono` 4.13.19** (was 4.13.14): GHSA-4m76-xfj5-7975, GHSA-46wx-v44x-9hh2, GHSA-3gg2-335m-rxc6, GHSA-h7mg-cq63-vhpq
+  and GHSA-4h7h-rv7c-7m2v. None was reachable here; `deno audit` is clean.
+- **Live-view sockets end with their credential.** A socket re-checks the credential that minted its ticket every 300 s
+  and on every credential change: losing `view:control` makes it watch-only and releases the lock, losing both view
+  scopes or the credential closes it (4001 `unauthorized`). A viewer seat is reserved before the upgrade, so
+  `TTK_MAX_VIEWERS` holds under concurrent upgrades; a client frame over 64 KiB closes the socket (1009). The socket
+  never accepts the sign-in cookie.
+- **Agent tasks and A2UI and A2A streams are bound to the credential that started them (GW-1, GW-3, D-071, A6, D-106).**
+  They are re-authorized at start, before each tool call, and on key reload or sign-out; streams re-check every 300 s
+  and end at 1800 s. A2UI routes are gated by exact route (GW-6).
+- **The web UI's session token is out of page script's reach (B4, D-097):** an HttpOnly, `SameSite=Strict` cookie.
+  Cookie sign-in and cookie-authenticated changes must come from the server's exact origin, a cookie sign-in must be
+  `application/json`, and duplicate or malformed sign-in cookies are refused and cleared (E-88). The sign-in route has
+  per-source and per-username backoff with no hard lockout, equal failure timing for unknown and real accounts, and a
+  log line for every failed sign-in and account change (D-078); wrong current passwords on `POST /api/v1/auth/password`
+  count toward it.
+- **The SPA document is not served from `/assets/`,** where it had no anti-framing headers; every asset now carries
+  them. The SPA's CSP allows `connect-src 'self'` only.
+- **Request paths with dot segments, encoded slashes, empty segments or percent-encoded unreserved or control characters
+  are `400` (E-89),** so no spelling reaches a route past the body cap and the drain gate. Every JSON-typed body is
+  capped before it is parsed, on every path (D-100).
+- **`GET /api/v1/system/diagnostics` requires `admin` (D-070).**
+- **The sandbox token is a host-written, read-only secret in both containers (D-25),** so a compromised sandbox cannot
+  plant a link that makes the gateway send another secret file as its bearer.
+- **A stored provider key goes only to its own host.** A provider whose `base_url` is not its key's host is refused, as
+  is keeping a key across a host or scheme change, a header named `host`, or a `base_url` with an empty `?` or `#`.
+  Plain `http:` with a key is admitted to loopback, and with `allow_http` to a private address or a service name (an
+  owner decision); that provider's start-up warning ends `its API key travels in plaintext`. `http:` to a public or
+  link-local address is refused whatever the flag.
+- **`TTK_DB_KEY_FILE` inside `TTK_DATA_DIR` refuses start.**
+- **Chromium without its sandbox is one deliberate setting (D-094):** `TTK_CHROMIUM_NO_SANDBOX`, never set in the
+  images; it warns, shows in the diagnostics and is advertised to clients.
+- **Chromium and the recorder's ffmpeg receive secret-bearing environment names blank (D-127, D-143):** the `OTEL_*`
+  exporter settings, the inline `TTK_API_KEYS`, `TTK_SECRETS`, `TTK_ADMIN_USER` and `TTK_SANDBOX_TOKEN`,
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `TTK_MODEL_API_KEY`, and the launcher's `CHROMIUM_FLAGS` and
+  `CHROMIUM_USER_FLAGS`. Proxy settings still pass through.
+- **Pages get no clipboard access** (it was granted to every origin without a prompt).
+- **Recording starts are reserved before the first await,** so two concurrent starts cannot orphan an encoder past the
+  30-minute cap, nor two owners claim one name.
+- **The file share and recordings share one disk budget,** `TTK_DISK_BUDGET_MB` (default 2048 MiB): an upload past it is
+  `413 payload-too-large` and a recording stops at it.
+- **Saved storage states are per owner in `owner` mode** (`storage/owners/<digest>/`). **Upgrading:** in `owner` mode,
+  states saved before this release are no longer loadable; save them again.
+- **`agent_delegate` data parts are limited to `browser_head`, `browser_health` and `browser_file_policy`,** never name
+  a session, task, workspace or surface, and need `mcp:invoke` plus that tool's scope here: every local owner is one
+  principal on a peer. **Breaking for callers** that delegated other tools.
+- **`browser_find` refuses `href_pattern` values that can backtrack catastrophically** and skips hrefs over 2 048
+  characters. **`browser_head` refuses IPv4-compatible `::/96` and local-use NAT64 `64:ff9b:1::/48` literals.**
+- **The sandbox's registry proxy requires the TLS SNI to match the `CONNECT` host** (Encrypted Client Hello is refused),
+  and one owner holds at most 2 live sessions and 1 running command or diff (429 `busy` past that).
+- **Proxy credentials answer only a proxy's challenge,** never a site's 401 (latent: nothing configures a proxy today).
+- **The gateway image strips every setuid/setgid bit except Chromium's sandbox helper,** and Compose sets
+  `pids_limit: 4096` on the gateway.
+- **`gate:tasks` reads short permission flags (`-A`, `-R`, `-P`…), requires absolute `--allow-run` entries and checks
+  every task** and the helpers shipped tasks run; the excused tooling tasks are listed with reasons. `dev` and `stdio`
+  resolve their paths through the narrower `paths:serve` helper.
+- **CI** runs with `permissions: contents: read`, `persist-credentials: false`, and actions pinned to commit SHAs.
+- **Signed links (D-119, D-140)** are HMAC-SHA256 `v2` tokens. The route re-checks that the minting owner still holds
+  `mcp:invoke`, sends `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, and never logs the URL. A link ends
+  early with its session (`404` once closed or recreated under the same id) and its credential (`401` once the API key
+  is removed or rotated, or the account's password changed or the account is disabled or removed); the token carries a
+  keyed credential epoch, never a credential.
+- **The inspection tools keep credentials out (D-116):** request-log values of credential-named headers are stored only
+  as `[redacted]`, and request bodies are never read. Without `network:read` every query and fragment in every header
+  value is cut, `path` drops `;matrix` parameters, and a `data:` URL shows only its media type; a `navigation` event's
+  `path` follows the same rules (NF-2). Every string the inspection tools return passes the server's secret redaction
+  before it is cut to its cap (R2-7). The accessibility snapshot never returns field values (D-120, R2-4).
+- **Every multi-round `requestState` is HMAC-sealed and bound to the method and the authenticated client (D-126).**
+- **No background task runs a tool that needs its caller, a person or the client in the loop (D-121, D-141).** Over MCP
+  (`agent_run_tool`), A2A, its HTTP+JSON binding, REST and A2UI buttons, a task naming the confirmation set, a sampling
+  tool, `browser_request_human`, a live-view or MCP Apps ticket tool, `browser_file_link` or `agent_run_tool` fails
+  before the tool runs, so no ticket or link URL is kept in `tasks.json` or push bodies; `TTK_A2UI_ACTIONS` naming one
+  refuses startup.
 - **No refusal quotes a secret-bearing value (D-123, R1-1, E-109).** `TTK_API_KEYS` or `TTK_SECRETS` that is not valid
-  JSON — inline, from a file, on a key-file reload or from a `*_REF` provider — is refused as `not valid JSON` (with the
-  position), never with the parser's message, and an invalid secret name is located by entry, not repeated. A corrupt
-  storage-state file no longer puts cookie text into the log.
-- **The REST live-ticket mint narrows a body `origin` by the per-token origin overlay (D-040, R1-3)**, as the front
-  narrows an `Origin` header; outside it, `403 origin-forbidden`.
-- **Sandbox permission matrix (D-131):** the sandbox image's command and the Docker overlay's grant
-  `TTK_SANDBOX_GIT_HOSTS`, `TTK_SANDBOX_GIT_REMOTES_FILE` and read on `/run/secrets/ttk_git_remotes`; no run or net
-  change; both argv lists are pinned whole by `tests/unit/images_test.ts`. A clone runs a fixed script in the
-  provisioning cage: https only, no redirects, no hooks, every object checked, no submodules or tags. A clone holds its
-  workspace from before its record exists, and every operation but `remove` on a provisioning workspace answers
-  `409 run_busy`, so no shell or command starts before `.git` is in place and read-only (R3-1). Credentialed clones go
-  through a service-side forwarder that serves upload-pack only (push refused), dials checked public addresses and
-  verifies TLS for the remote's name (D-132); the remotes file is read once and its grant revoked, and credentials —
-  their JSON-escaped forms included (R3-8) — are cut from every log line. The workspace diff runs git with
-  `core.hooksPath=/dev/null`.
-- **Signed links (D-119):** tokens are HMAC-SHA256 with a single accepted spelling, minted for at most 300 s (an hour
-  since D-140) and verified with an expiry up to 30 s beyond that accepted, for a minting node whose clock runs ahead,
-  and none after it expires (R1-4). The route re-checks that the minting owner still holds `mcp:invoke` (an OAuth owner:
-  that and nothing more), verifies before any cluster forward, answers an unreachable owner node with a causeless 503
-  and names no node (no `x-ttk-served-by`, R1-6), sends `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
-  and never logs the URL. The link key is file-only or generated with mode 0600, with startup refusals. The
-  accessibility snapshot never returns field values: it blanks any name or description that carries a typed field value,
-  and masking bullets beside a password field (D-120, R2-4).
-- **MCP Apps embed tickets (D-134, D-135)** are origin-bound, single-use and live 30 s, limited to
-  `TTK_MCP_APPS_ORIGINS` narrowed by the per-token origin overlay and to the `TTK_MCP_APPS` mode. The embeds' inline
-  code is pinned by hash in a `default-src 'none'` CSP whose only connect source is the gateway's socket origin, and no
-  spelling of `/assets/embed_*` — percent-encoded or case-changed — serves an embed as a page of the gateway origin
-  (R1-2). An embed ticket needs the minting principal; a tool-executor context is refused (R1-3). MCP Apps refuses to
-  start in a cluster.
-
-- **Every JSON-typed request body is size-capped before anything parses it, on every path (D-100);** a JSON-typed share
-  upload no longer escapes the cap. **Cookie sign-in and cookie-authenticated changes must come from the server's exact
-  origin** — scheme, host and port — and a cookie sign-in must be `application/json` (E-88); duplicate or malformed
-  sign-in cookies are refused and cleared. Request paths with dot segments, encoded slashes or empty segments are
-  refused with `400` (E-89). `--in-process-gpu` is refused in `TTK_BROWSER_ARGS` (D-094).
+  JSON is refused as `not valid JSON` (with the position), an invalid secret name is located by entry, a corrupt
+  storage-state file puts no cookie text into the log, and secret-provider failures never reveal the token, the value or
+  the reference path.
+- **The REST live-ticket mint narrows a body `origin` by the per-token origin overlay (D-040, R1-3);** outside it,
+  `403 origin-forbidden`.
 - **`<secret>` typing at the focus follows focus into `<object>` and `<embed>` documents and refuses frames it cannot
-  name (D-096);** isolated-world context ids are no longer reused across navigations (E-93); an unbracketed IPv6 or `..`
-  host in `TTK_ALLOWED_DOMAINS` no longer widens the browser's policy beyond the tools' (E-92).
-- **Sandbox Docker backend (E-90, E-91):** `/run/harbour` is mounted read-only, and only `/workspace` and
-  `/home/sandbox` are writable; disk use is measured by the service with the container paused and fails closed
-  (cleanup-only). **Agents:** push configs are re-validated against the allowlist on restore and before every delivery
-  (D-104, D-106).
-
-- **Chromium without its sandbox is one deliberate setting (D-094):** `--no-sandbox` and its equivalents can no longer
-  be passed through `TTK_BROWSER_ARGS` (C5/F7); `TTK_CHROMIUM_NO_SANDBOX` is the only way, never set in the images, and
-  it warns, shows in the diagnostics and is advertised to clients.
-- **The domain allowlist reaches the browser (C1, D-095):** redirects, load-time script navigations and pop-ups that
-  leave `TTK_ALLOWED_DOMAINS` are contained; blocked URLs never reach the event ring or the logs, only their origin
-  (E-78). Secret substitution can no longer type a top-page secret into a cross-origin frame (A2, D-096).
-- **The web UI's session token is out of page script's reach (B4, D-097):** an HttpOnly, `SameSite=Strict` cookie;
-  cookie-authenticated changes need the CSRF value and an allowed `Origin`; a cookie sign-in needs an allowed `Origin`;
-  the live-view socket never accepts the cookie. Administration is no longer granted to credentials that never asked for
-  it (D-098).
-- **A2A streams end when their credential is revoked (A6, D-106),** closing D-071's X-1. Push notifications are gated on
-  an operator host list and a proven outbound grant; private addresses are refused in configuration and on every
-  delivery; no redirects; bounded attempts. `agents/tasks.json` and `agents/surfaces.json` are mode 0600 and hold no
-  scopes or credential fingerprints; push tokens are stored but never returned (D-104).
-- **The Docker workspace backend holds the Engine socket, which is root-equivalent (D-108):** it is opt-in, mounted into
-  the sandbox service only, warned about at every start, and every container and exec body is validated; rootless Docker
-  is recommended.
-- **Agent HTML is served under `sandbox; default-src 'none'` and framed with an empty sandbox attribute (D-111);** the
-  page CSP gains only `media-src 'self' data: blob:`.
-- **`/mcp` bodies are capped at 4 MiB, and every capped body is bounded before the adapter's pre-authentication parse
-  (E-83, D-100).**
-
-- **A live sandbox shell could race the service's file operations out of its workspace (D-077).** While a workspace has
-  an open session, `sandbox_read`, `sandbox_write` and the listing now run in a cage that sees only that checkout, so a
-  link the shell swaps in can never resolve to another workspace or the owner records. Found by the 2026-10-01 audit in
-  D-076 itself; the overlay had not been deployed.
-- **The sign-in route is guarded (D-078):** per-source and per-username backoff with no hard lockout, equal failure
-  timing for unknown and real accounts, a 16 KiB body cap, and a log line for every failed sign-in and account change.
-
-- **Agent tasks, ACP delegations and A2UI/task event streams are bound to the credential that started them (GW-1, GW-3,
-  D-071).** They are re-authorized at start, before each tool call and delegation, and immediately on key reload or
-  logout; the A2UI and REST task streams re-check every 300 s and end at 1800 s (300 s for OAuth). Before, a queued task
-  ran after its key was revoked and a post-rotation delegation could be issued to a pre-rotation task.
-- **Coding workspaces enforce their disk budget while commands run (SB-1, D-072).** A command could hide its usage from
-  the budget with `chmod 000` and fill the host disk; usage is now measured through unreadable directories and watched
-  every 250 ms, with a 6 GiB per-owner cap; a sandbox request cancelled while queued now answers 499 `cancelled`.
-- **A2UI routes are gated by exact route (GW-6),** the login route refuses delegated `ttkd_` tokens (GW-11), a
-  delegation token split across agent output chunks or JSON-escaped is redacted (AG-8), and the sandbox drops its read
-  grant on its bearer after start-up and checks file identity on read/write (SB-5).
-- **`GET /api/v1/system/diagnostics` requires the `admin` scope (D-070).** It returned the deployment's posture — bind
-  address, public URL, origin and domain allow-lists, the API-key count, and which defences are off — to any
-  authenticated principal, including watch-only keys, while the SPA told operators the route was admin-only. A
-  credential without `admin` now gets `403 forbidden-scope`. Admin logins and admin keys are unaffected.
+  name (D-096);** isolated-world context ids are not reused across navigations (E-93); an unbracketed IPv6 or `..` host
+  in `TTK_ALLOWED_DOMAINS` does not widen the browser's policy beyond the tools' (E-92).
+- **Git clones in the sandbox (D-131, D-132)** run a fixed script in the provisioning cage: https only, no redirects, no
+  hooks, every object checked, no submodules or tags. Every operation but `remove` on a provisioning workspace answers
+  `409 run_busy` (R3-1). Credentialed clones go through a service-side forwarder that serves upload-pack only, dials
+  checked public addresses and verifies TLS for the remote's name; the remotes file is read once and its grant revoked,
+  and credentials, JSON-escaped forms included, are cut from every log line (R3-8). The workspace diff runs git with
+  `core.hooksPath=/dev/null`.
+- **MCP Apps embed tickets (D-134, D-135)** are origin-bound, single-use and live 30 s, limited to
+  `TTK_MCP_APPS_ORIGINS` narrowed by the per-token origin overlay. The embeds' inline code is pinned by hash in a
+  `default-src 'none'` CSP whose only connect source is the gateway's socket origin, and no spelling of
+  `/assets/embed_*` serves an embed as a page of the gateway origin (R1-2).
+- **A2A push notifications** are gated on `TTK_A2A_PUSH_ALLOWED_HOSTS`; private addresses are refused in configuration
+  and on every delivery; no redirects; bounded attempts; configs are re-validated on restore and before every delivery
+  (D-104, D-106). `agents/tasks.json` and `agents/surfaces.json` are mode 0600 and hold no scopes or credential
+  fingerprints; push tokens are sealed and never returned.
+- **Agent HTML is served under `sandbox; default-src 'none'` and framed with an empty sandbox attribute (D-111).**
 
 ### Added
 
-- **Agent management (D-158).** System › Agents lists the built-in model agent, SlopLord, the ACP coding agent and the
-  A2A peers; each agent's dialog sets its default model, its A2A / ACP / A2UI switches and its memory switch, stored in
-  `ttk.db` and applied to the next task (`GET`/`PUT /api/v1/system/agents`).
-- **Fetch a provider's models (D-158).** The provider dialog's reload button lists the models the provider serves
-  (`POST /api/v1/system/model-providers/models`), each a chip to add or remove; typing them by hand still works. Only a
-  saved provider's host is dialled.
-- **New chat and an in-chat settings panel on the Agents screen (D-158).** New chat starts an empty conversation
-  (earlier turns one click away); the settings icon opens System › Agents in a right-side panel instead of leaving the
-  chat.
-- **Stored-data overview (D-155).** `GET /api/v1/overview` returns counts and byte totals of what the caller can read —
-  sessions, profiles, storage states, recordings, share files, skills, prompts, memory, workspaces, agent tasks by
-  state, surfaces, model providers, and (admin) the data directory's size. Each section only with the scope that already
-  reads that data; owner-scoped like its own listing; never a name or content; walks capped and cached 10 s. The
-  Sessions screen opens on a dashboard of these as linked tiles (it replaces the sessions-only strip).
-- **SlopLord, the built-in coding agent, served over A2A (D-156).** Always present, nothing to configure: the built-in
-  model agent with a fixed coding prompt and a fixed tool list (sandbox, memory and file-share tools, narrowed by the
-  caller's scopes). Its own A2A agent: public card `/a2a/agents/sloplord/.well-known/agent-card.json`, JSON-RPC
-  `/a2a/agents/sloplord`, HTTP+JSON `/a2a/agents/sloplord/v1`; also `metadata.agent: "sloplord"` on `/a2a` and
-  `agent: "sloplord"` on `POST /api/v1/agent/tasks`. Runs where the coding sandbox and a reachable default provider
-  exist (the default Compose stack once a provider is added); needs `model:invoke`, `mcp:invoke`, `sandbox:execute`.
-  Tasks carry `metadata.agent`. `GET /api/v1/agent/providers` adds `agents`. The Agents screen offers **SlopLord
-  (coding)**; Resources › Agents › SlopLord shows its endpoints.
-- **SQLite database with sealed secrets, seed-once sources and agent memory (D-154).** `ttk.db` holds model providers
-  (all editable in System › Agents), browser secrets and the link-signing key (AES-256-GCM), and the agents' vector
-  memory: `memory_save`, `memory_search`, `memory_delete`, `memory_list` (built-in lexical embedder or a provider's
-  `/embeddings`), `GET`/`PUT /api/v1/system/memory`. stdio opens the same database. New commands: `setup` and `seed`
-  (both `--force`/`-Force`), `doctor --new-db-key`, and `ttk` inside both images. QUICK-START.md.
-
-- **A built-in model agent (D-143).** A text task can run inside the server on an OpenAI-compatible or Anthropic
-  provider named in the new `TTK_MODEL_PROVIDERS_FILE`
-  (`{ version: 1, default?, providers: [{ id, kind, base_url,
-  models, api_key | api_key_file, … }] }`, the only place
-  a provider key may live): a bounded tool-calling loop over the caller's own taskable catalog, each call re-authorized
-  and passed through the executor's scope, takeover-lock and confirmation checks, with fixed bounds (`max_steps` 24,
-  `token_budget` 400 000, a 768 KiB transcript, 120 s per provider call, the task timeout) and the key redacted from
-  everything the task emits. Both wire formats are spoken with `fetch`; no SDK, no dependency. A configured ACP agent
-  keeps running text tasks exactly as before; a default provider serves only deployments without one. `doctor` prints a
-  `model providers` line, the diagnostics report `modelProviders` and `builtinAgent`, and the agent card lists a
-  `builtin-model` skill while a provider is reachable.
-- **The `model:invoke` scope (D-144),** held only when named: it gates naming a provider on a task and the bridge-less
-  default. `SCOPES` has fourteen members; `doctor --new-key-set` mints one more key.
-- **Provider egress is operator-elected on the bundled image (D-145):** no grant changes; a provider whose host is not
-  in `--allow-net` is listed `reachable: false` (`no-net-grant`) and never dialled until the operator adds the host in a
-  Compose `command:` override (`docker-compose.yml` carries the commented secret opt-in). On the slim image the file is
-  the only egress control. `gate:tasks` rule T6 pins `TTK_MODEL_PROVIDERS_FILE` under every shipped grant and refuses
-  any shipped task that grants or sets a `*_API_KEY`, `OPENAI*` or `ANTHROPIC*` variable. `server.json` lists
-  `TTK_MODEL_PROVIDERS_FILE` as an `isSecret` environment entry, and the binary `scripts/compile.ts` builds for the slim
-  image covers the name with its baked bare `--allow-env`.
-- **`GET /api/v1/agent/providers`** (`agent:invoke`): the configured providers and models — `invocable`, `acp`,
-  `default`, and per provider `id`, `kind`, `label`, `models`, `default_model`, `reachable`, plus `host` and `reason`
-  for a caller holding `model:invoke`; never a key, URL path or header.
-- **`GET /api/v1/a2ui/actions`** (`agent:invoke`): `{ names }`, the action names a surface button may bind.
-- **`capabilities.tykotech.model`** `{ providers, builtin_agent }` for a `model:invoke` holder.
-- **Web UI — one Resources screen.** Resources and the Library are one tree (Server, Sessions, Files, Skills, Prompts,
-  Templates) with one viewer; JSON documents render as facts with raw as the advanced view, the Files group carries a
-  path crumb, a worded Grid · List switch, one **Add** menu and a standing drop strip, and skill and prompt editors are
-  drawers. The dock has eight items; `#/library[/<tab>]` redirects to `#/resources/<group>`.
-- **Web UI — System configuration.** The raw diagnostics block becomes a Configuration panel of labelled facts with
-  source and reach tags, raw JSON moves to one modal, and a configuration composer generates a `TTK_*` block, a Compose
-  override and a providers file (with `REPLACE_WITH_KEY`, never a real key) from presets, with a diff against the
-  running values. Nothing is sent to the server.
-- **Web UI — Agents.** A task composer for the three task kinds (a question to an agent or a model with a provider and
-  model picker, a tool run with a schema-driven form, a delegation to a peer), task cards with kind and backend chips,
-  and a surface builder from templates (status card, form, table, image with caption, note) with preview and the raw
-  JSON as the advanced view.
-- **`TTK_ALLOWED_DOMAINS_SCOPE=all` (D-138, E-114, E-116):** with an allowlist, the browser refuses every off-list
-  request before it is sent — subresources, `fetch`/XHR (including `browser_evaluate`), beacons, workers and service
-  workers — and a resolver layer makes off-list names, IP literals and WebSockets unresolvable in a locally launched
-  browser. Under a proxy flag WebSockets to off-list hosts are not refused, and the server and `doctor` say so; an
-  allowlist host containing `_` cannot be written as a resolver rule, so under `all` it is left out with a startup
-  warning and does not resolve; an entry containing `*` (which matches nothing in any layer) is left out the same way,
-  so it can never write an `EXCLUDE *` that would void the layer. The default, `documents`, is unchanged apart from
-  hints.
-- **`TTK_OTEL_ENDPOINTS` (D-137);** `doctor` prints an `otel` line (`off`, or each signal's collector origin) and a
-  `scope` line, with the WebSocket caveat for `TTK_ALLOWED_DOMAINS_SCOPE=all` under a proxy. Admin diagnostics gain
-  `config.otelEndpoints` and `config.allowedDomainsScope`.
-- **System screen:** the Network panel lists the OpenTelemetry collectors `TTK_OTEL_ENDPOINTS` allows ("Telemetry
-  collectors", origins only) while exporting or once listed, and Allowed domains carries a `documents only` /
-  `all requests` tag; a gateway reporting neither reads "not reported".
-- **`browser_network_log`, `browser_console_log` and `browser_har_export` (R4, D-116):** a bounded per-session request
-  log (500 requests or 512 KiB, credentials redacted by header name, no request bodies), the page console on a tool-held
-  claim released after 10 idle minutes, and a cookie-free HAR 1.2 export of at most 1 MiB. Full URLs, URLs inside
-  headers and response bodies need the new explicit scope `network:read` (13 scopes).
-- **`browser_request_human` (D-124)** hands a browser session to a person through the live view (URL elicitation, or the
-  link). Off unless `TTK_HUMAN_HANDOFF=true`; never on stdio.
-- **`browser_pdf` (D-118):** print the focused tab to PDF, inline up to 1 MiB or kept as a session file up to 64 MiB;
-  the print is streamed, and reading stops at 64 MiB (R2-7). **Session artifacts (D-119):** server-made files (`art-`
-  ids) listed and served beside downloads, at most 32 / 128 MiB per session; a new one sends `resources/list_changed`
-  like a finished download, and `browser_download` never reports one as its download (K-1, K-3).
-  **`browser_save_to_share` (D-119):** a library tool (`files:write`) that copies a session file into the share, up to
-  64 MiB, returning its SHA-256.
-- **Signed links (D-119):** `TTK_SIGNED_LINKS`, `TTK_SIGNED_LINK_TTL_S` and `TTK_SIGNED_LINK_KEY_FILE`; the
-  `browser_file_link` tool; the public `GET`/`HEAD /api/v1/links/file`.
-- **`browser_accessibility_snapshot` and `browser_performance` (D-120, E-97):** the accessibility tree, nested and as an
-  outline, without field values; Core Web Vitals read in an isolated world, and runtime counters.
-- **MCP Apps, off by default (D-134–D-136).** With `TTK_MCP_APPS=watch|control`, `TTK_MCP_APPS_ORIGINS` and the optional
-  `TTK_MCP_APPS_DOMAIN`, the gateway serves `ui://tykotech/live-view` and `ui://tykotech/a2ui-surface` and offers
-  `browser_live_view` and the app-only `browser_live_ticket`; `a2ui_publish` links to the read-only A2UI embed. The live
-  embed's Watch is a white label on brand 50 in both themes (4.59:1); a refused view tells the chat user one sentence
-  and folds the server's words under **Details** (RV-1, RV-10); an administrator's embed ticket carries the
-  `Administrator (<name>)` holder label (B4). In the A2UI embed a share-file image shows a note, and each media note
-  carries its own description (RV-6).
+- **One-step start.** `start.cmd` / `start.ps1` (Windows) and `start.sh` (macOS, Linux) check Docker, build the images,
+  run `setup` inside the gateway image (no Deno needed), load the sandbox's AppArmor profile on Linux hosts that use
+  AppArmor, start `docker-compose.yml` and open the web app. They stop with a plain explanation when an earlier
+  install's data volume survives its key. `.env.example` holds the settings most people change.
+- **`deno task setup` writes every file the Compose stack mounts** — the database key, the administrator, the `client`
+  API key, the browser-secrets (`{}`) and git-remotes placeholders, the sandbox token — and `.env` from `.env.example`,
+  and on an AppArmor host loads the sandbox's profile. `--only <names>` limits it to some files and, with `--force`,
+  rotates exactly those. `secrets/` is `0700` and its files `0644`, so the containers read them without `sudo`. The
+  `client` key and the administrator hold the scopes the stack's features need (`mcp:invoke`, `view:watch`,
+  `view:control`, `files:read`, `files:write`, `sandbox:execute`, `agent:invoke`, `model:invoke`, `a2ui:publish`; the
+  administrator also `admin`); `DEFAULT_SCOPES` is unchanged. Every file is described in `secrets/README.md`.
+  **Upgrading:** run `deno task setup` before the next `docker compose up`; it adds the new files and keeps yours.
+- **The default Compose stack** runs the gateway and the coding sandbox, mounts browser-typed secrets
+  (`TTK_SECRETS_FILE`) and credentialed git remotes (`TTK_SANDBOX_GIT_REMOTES_FILE`) from `setup`'s placeholders, reads
+  `TTK_ALLOWED_DOMAINS` from `.env`, and gives the gateway `mem_limit: ${TTK_GATEWAY_MEMORY:-1536m}` and a heap of
+  `${TTK_GATEWAY_HEAP_MB:-1024}` MiB.
+- **`ttk.db`, a SQLite database with sealed secrets (D-154).** It holds model providers, browser secrets and the
+  link-signing key (AES-256-GCM) and the agents' vector memory. New commands: `setup` and `seed` (both
+  `--force`/`-Force`), `doctor --new-db-key`, and `ttk` inside the gateway image; stdio opens the same database.
+  QUICK-START.md.
+- **Agent memory:** `memory_save`, `memory_search`, `memory_delete`, `memory_list` (built-in lexical embedder or a
+  provider's `/embeddings`), `GET`/`PUT /api/v1/system/memory`.
+- **`doctor --new-key <id> --save`** adds (or replaces, by id) the record in `secrets/ttk_api_keys.json` in place, so
+  the running gateway admits the key without a restart. **`doctor --grant`** repairs an account's scopes offline
+  (D-098).
+- **Every task has a description**, so `deno task` lists what each does.
+- **Grouped tool lists.** On stdio and on a 2025-era client's stateful session, `tools/list` starts with one entry tool
+  per group — `use_browser`, `use_library`, `use_sandbox`, `use_agent`, `use_memory`, `use_a2ui`. Calling one adds that
+  group's tools to the connection's list, announces `tools/list_changed` once, and returns each tool's name, title and
+  description. Every tool still answers `tools/call` by name; the stateless 2026-07-28 mount and the web app list every
+  tool. `capabilities.tykotech.tool_groups` names the groups; `TTK_MCP_TOOL_GROUPS=false` restores the flat list.
+- **MCP change push.** 2025-era clients get stateful sessions by default (`TTK_MCP_STATEFUL` defaults on), whose
+  standalone stream carries `notifications/tools/list_changed`. Session records (no token or scope) survive a restart in
+  `<TTK_DATA_DIR>/mcp/sessions.json`, so a reconnecting client is told to re-list. A scope change rebuilds that
+  credential's sessions; a revoked credential closes them. A session answers only the principal that opened it.
+- **MCP protocol completeness (D-079–D-082, D-112–D-114, D-129).** A cancelled call stops the tool; calls past one
+  second send `notifications/progress` to a caller with a `progressToken`, with a total from `browser_run_task`,
+  `sandbox_exec`, `browser_wait_for` and `browser_download`; the stateful mount and stdio push `resources/list_changed`
+  and `resources/updated` (`resources/subscribe` is served); `completion/complete` completes session ids, resource
+  kinds, file ids, share paths and skill names; `tools_withheld` names every tool family; the sandbox is re-probed every
+  30 s, its tools appearing and disappearing with it. Every tool states `openWorldHint`, and mutating tools state
+  `destructiveHint` and `idempotentHint`. Every `sandbox_`, `agent_`, `a2ui_`, `file_`, `skill_` and `prompt_` tool has
+  a typed `outputSchema` inside `{ result }`.
+- **A library on the data volume (D-075):** `file_*` (list, stat, read, write, mkdir, delete, move), `skill_*` (list,
+  get, read_file, put, delete) and `prompt_*` (list, get, put, delete, render) tools; `ttk://share/{path}` and
+  `ttk://skill/{name}` resources; every stored prompt and skill served as a native MCP prompt; `/api/v1/share` routes
+  for binary upload and download. New scopes `files:read` (default) and `files:write` (explicit).
+- **Browser tools.** `browser_network_log`, `browser_console_log` and `browser_har_export` (D-116; full URLs and
+  response bodies need the new explicit scope `network:read`); `browser_pdf` and server-made session artifacts (D-118,
+  D-119); `browser_save_to_share` (`files:write`); `browser_accessibility_snapshot` and `browser_performance` (D-120);
+  `browser_request_human` (D-124), which hands a session to a person through the live view, offered over HTTP while
+  `TTK_HUMAN_HANDOFF` is on (the default); `browser_file_link` and the public `GET`/`HEAD /api/v1/links/file` (D-119),
+  with `TTK_SIGNED_LINKS`, `TTK_SIGNED_LINK_TTL_S` (10–3600, default 3600) and `TTK_SIGNED_LINK_KEY_FILE`.
+  `browser_health.sessions.browser_unresponsive`; navigation events gain `blocked` and `containment`.
 - **Confirmations (D-125):** with `TTK_CONFIRM_DESTRUCTIVE` (default on), clients that declare form elicitation are
-  asked to confirm `browser_close_all`, `sandbox_delete`, `file_delete`, `skill_delete`, `prompt_delete` and
-  `a2ui_delete`. A refusal is the new tool error `user-declined` (20 codes). `browser_fill_secret` lets a form-capable
-  client's human choose a secret permitted on the page when the named one is unknown or not permitted; names only.
-- **`browser_run_task` hands the eight actions to clients that declare `sampling.tools` (D-126).**
-- **`agent_run_tool` and `agent_list_tasks` (D-121):** run one tool call as a background task you own and get the task
-  at once; list your tasks (active or finished, newest first). Both need `agent:invoke`. In a cluster, every task a node
-  creates — over MCP, A2A or REST — is found by id from any node, including one not yet recorded, and the list spans
-  every node (R3-5).
-- **Server identity (D-122):** a title, description, website and SVG icon, plus per-credential `instructions`, on
-  `initialize` and `server/discover` (no website or icon on stdio, or when the public URL's host is a wildcard bind
-  address such as `0.0.0.0`, B3); `server.json` (an MCP Registry entry, not published) and the
-  `io.modelcontextprotocol.server.name` label on both images.
+  asked to confirm `browser_close_all`, `sandbox_delete`, `file_delete`, `skill_delete`, `prompt_delete`, `a2ui_delete`
+  and `memory_delete`; a refusal is the new tool error `user-declined`. `browser_fill_secret` lets a form-capable
+  client's human choose a permitted secret by name. `browser_run_task` hands its actions to clients that declare
+  `sampling.tools` (D-126).
+- **`TTK_ALLOWED_DOMAINS_SCOPE=all` (D-138):** with an allowlist, the browser refuses every off-list request before it
+  is sent — subresources, `fetch`/XHR (including `browser_evaluate`), beacons, workers and service workers — and a
+  resolver layer makes off-list names, IP literals and WebSockets unresolvable in a locally launched browser. Allowlist
+  entries a resolver rule cannot express are left out with a startup warning. The default, `documents`, is unchanged.
+- **`TTK_SESSION_OWNERSHIP=owner` (D-128)** binds each browser session to the principal that created it at every
+  surface; other principals get `unknown-session`, `admin` reaches everything, and `default` is per owner.
 - **External secret providers (D-123):** `TTK_API_KEYS_REF` and `TTK_SECRETS_REF` read API keys and browser secrets at
-  startup from HashiCorp Vault KV v2 or 1Password Connect, with `TTK_VAULT_ADDR`, `TTK_VAULT_TOKEN_FILE`,
-  `TTK_VAULT_NAMESPACE`, `TTK_OP_CONNECT_URL`, `TTK_OP_CONNECT_TOKEN_FILE` and `TTK_SECRET_PROVIDER_CA_FILE`. Every
-  reference and provider setting is checked before any file is read (R1-7). `doctor` reports them as "configured, not
-  contacted".
-- **`TTK_SESSION_OWNERSHIP=owner` (D-128)** binds each browser session to the principal that created it at every surface
-  — tools, resources, completions, the event stream, files, live tickets, recordings and the admin session routes. Other
-  principals get `unknown-session`, `admin` reaches everything, and `default` is per owner. An admin's
-  `GET /api/v1/sessions` items carry `owner`, and the Sessions screen shows it on each card (RV-7).
-- **Resource-template completions (D-129):** `completion/complete` for session ids, resource kinds, file ids, share
-  paths and skill names, filtered per caller.
-- **OpenTelemetry tool spans (D-127):** with `OTEL_DENO=true` in the bundled image, every tool call is a `ttk.tool` span
-  and a `ttk.tool.calls` count, carrying only the tool and the outcome.
-- **Workspaces from a git remote (R12, D-131, D-132):** `sandbox_clone {url | remote, ref?, depth?, name?, timeout_ms?}`
-  (`sandbox:execute`) creates an owned workspace from an `https://` URL on a host the sandbox lists in
-  `TTK_SANDBOX_GIT_HOSTS`, or from an operator remote by id from `TTK_SANDBOX_GIT_REMOTES_FILE`
-  (`/run/secrets/ttk_git_remotes`), whose credential the sandbox adds itself and never puts in a cage. Shallow by
-  default (depth 1); `.git` is read-only afterwards; the result carries `commit` and `ref`; a failed clone says why
-  under `feature-unavailable`, in fixed words (R3-9). Off by default; offered only while the sandbox's `/healthz` says
-  `clone: true`. `sandbox_list` names the allowed hosts and remote ids.
-- **Reporting:** `capabilities.tykotech.sessions.ownership`; admin diagnostics `confirmations`, `humanHandoff`,
-  `sandboxClone`, `secretProvider`, `sessionOwnership`, `telemetry`, `mcpApps` and `signedLinks`; System screen tiles
-  for session ownership, MCP Apps, signed links, confirmations, human handoff, secret provider, OpenTelemetry and git
-  clone, each with a glyph the screen draws nowhere else and dimmed to no less than 3:1 when off (E-113); the
-  `network:read` scope glyph.
-
-- **`TTK_CHROMIUM_NO_SANDBOX` (D-094)** (default `false`; startup warning; diagnostics `chromiumSandboxed`; capability
-  `browser.sandboxed`; never set in the images); `browser_health.sessions.browser_unresponsive`; navigation events gain
-  `blocked` and `containment` (D-095, D-096).
-- **Cookie sign-in for the web UI (D-097):** `"session": "cookie"` on `POST /api/v1/auth/login` (`ttk_session`, or
-  `__Host-ttk_session` with `Secure` on https; answers `{ expires, user, csrf }`), `csrf` in `/api/v1/auth/me` for
-  cookie requests, logout clears the cookie, and the problem slug `csrf-failed` (403).
-- **The explicit scope `metrics:read` (12 scopes), `doctor --grant` (D-098, E-80)** to repair an account's scopes
-  offline (in `users.json`, or the cluster KV with `--unstable-kv`), the account count in `doctor`'s output, and a
-  startup warning when no enabled account holds `admin`.
-- **`GET /metrics` (D-101)** with `TTK_METRICS=true`, readable with `metrics:read` or `admin`: requests, tool calls,
-  sessions, viewers, rate limiting, failed sign-ins and process memory.
-- **Durable agent tasks and A2UI surfaces (D-104):** `agents/tasks.json` and `agents/surfaces.json` under
-  `TTK_DATA_DIR`; unfinished work comes back `FAILED` "interrupted by restart" and is never run again; restored
-  surfaces' buttons stay disabled until republished; `TTK_AGENT_TASK_RETENTION_S` (default 86400).
-- **`TTK_AGENT_TASK_TIMEOUT_S` (D-105)** (default 600) bounds text and delegation tasks; tool tasks take their tool's
-  bound.
-- **A2A push notifications (D-106),** offered only with `TTK_A2A_PUSH_ALLOWED_HOSTS` and an outbound grant for those
-  hosts, and under a scoped grant only once a startup probe proves the DNS resolver is permitted (https; address
-  re-checked on every delivery; token echoed); `GetExtendedAgentCard` and `GET /a2a/v1/extendedAgentCard`; the A2A
-  HTTP+JSON binding at `/a2a/v1`. The editor ACP proxy forwards the agent's `loadSession` and image, audio and
-  embedded-context capabilities and relays `session/load` (D-107).
-- **An opt-in Docker workspace backend for the coding sandbox (D-108, D-109):** `TTK_SANDBOX_BACKEND=docker`,
-  `docker-compose.sandbox-docker.yml` and `docker/Dockerfile.sandbox-workspace` (`tykotech-sandbox-workspace:0.2.0`) — a
-  hardened container per workspace, validated create and exec bodies, `NetworkMode: none`, named-volume subpath mounts,
-  idle stop and startup reconciliation. Sandbox settings `TTK_SANDBOX_BACKEND`, `TTK_SANDBOX_DOCKER_SOCKET`,
-  `TTK_SANDBOX_WORKSPACE_IMAGE`, `TTK_SANDBOX_DOCKER_VOLUME`, `TTK_SANDBOX_DOCKER_SOCK_VOLUME` and the Compose variable
-  `TTK_SANDBOX_DOCKER_GID`; the sandbox's `/healthz` reports its backend, as do the diagnostics (`sandboxBackend`) and
-  `capabilities.tykotech.sandbox` for `sandbox:execute` callers (D-110); `test:sandbox --image <tag>`;
-  `tests/sandbox/verify_docker_backend.ts`.
+  startup from HashiCorp Vault KV v2 or 1Password Connect (`TTK_VAULT_ADDR`, `TTK_VAULT_TOKEN_FILE`,
+  `TTK_VAULT_NAMESPACE`, `TTK_OP_CONNECT_URL`, `TTK_OP_CONNECT_TOKEN_FILE`, `TTK_SECRET_PROVIDER_CA_FILE`).
+- **Server identity (D-122):** a title, description, website and icon, plus per-credential `instructions`, on
+  `initialize` and `server/discover`; `server.json` (an MCP Registry entry, not published) and the
+  `io.modelcontextprotocol.server.name` image label.
+- **Accounts and sign-in (D-073, D-074, D-097):** user management over `/api/v1/users` and the Users screen (add,
+  scopes, account API keys, disable, password reset, sign-out everywhere; the last enabled administrator cannot be
+  removed); accounts and sign-ins persist in `TTK_DATA_DIR` (`users.json`, `logins.json` with token hashes only); cookie
+  sign-in with `"session": "cookie"` (`ttk_session`, or `__Host-ttk_session` on https) and the problem slug
+  `csrf-failed`; `TTK_LOGIN_TTL_S` (default 604800).
+- **`GET /metrics` (D-101)** with `TTK_METRICS=true`, readable with the new explicit scope `metrics:read` or `admin`.
+  Startup warns when no enabled account or key holds `admin`.
+- **The built-in model agent (D-143, D-144, D-158).** A text task runs inside the server on an OpenAI-compatible or
+  Anthropic provider: a bounded tool-calling loop over the caller's own taskable catalog, each call re-authorized and
+  passed through the scope, takeover-lock and confirmation checks (`max_steps` 24, `token_budget` 400 000, a 768 KiB
+  transcript), the key redacted from everything the task emits. Providers live in `ttk.db`, edited in System › Agents
+  (which can fetch a provider's model list) or seeded from `TTK_MODEL_PROVIDERS_FILE`; the gateway dials only their
+  `base_url`, with no redirects, and lists a host its `--allow-net` does not cover as `reachable: false`
+  (`no-net-grant`). The new `model:invoke` scope gates naming a provider, and is re-checked before every provider call.
+  `POST /api/v1/agent/tasks` and A2A take `provider` and `model` (a `model` without a `provider` is
+  `-32602 model requires provider`); every task carries `metadata` (`kind`, and for a text task `provider`, `model`,
+  `steps`, `usage`). `GET /api/v1/agent/providers`, `capabilities.tykotech.model`, per-agent settings at
+  `GET`/`PUT /api/v1/system/agents`, and `GET`/`PUT /api/v1/system/model-providers`
+  (`{ seed, store, default, providers }`). `gate:tasks` rule T6 refuses a shipped task that grants or sets a
+  provider-key variable.
+- **SlopLord, the built-in coding agent (D-156).** The model agent with a fixed coding prompt and tool list (sandbox,
+  memory and file-share tools, narrowed by the caller's scopes), served as its own A2A agent at `/a2a/agents/sloplord`
+  and as `agent: "sloplord"` on `/a2a` and `POST /api/v1/agent/tasks`. Needs the coding sandbox, a reachable default
+  provider, `agent:invoke`, `model:invoke`, `mcp:invoke` and `sandbox:execute`.
+- **Agent tasks and A2A (D-104–D-107, D-121).** `agent_run_tool` and `agent_list_tasks`; tasks and surfaces persist in
+  `agents/tasks.json` and `agents/surfaces.json` (unfinished work comes back `FAILED` "interrupted by restart" and is
+  never re-run); `TTK_AGENT_TASK_RETENTION_S` (default 86400) and `TTK_AGENT_TASK_TIMEOUT_S` (default 600); each owner
+  runs at most 2 of the 4 concurrent tasks. A2A push notifications with `TTK_A2A_PUSH_ALLOWED_HOSTS`,
+  `GetExtendedAgentCard` and `GET /a2a/v1/extendedAgentCard`, and the A2A HTTP+JSON binding at `/a2a/v1`.
 - **A2UI on the v0.9 basic catalog (D-111):** Image, Icon, List, Tabs, Modal, Slider, DateTimeInput, ChoicePicker,
-  Video, AudioPlayer and Text variants; `createSurface.theme`; a sandboxed `Html` component served by
-  `GET /api/v1/a2ui/surfaces/{surfaceId}/html/{componentId}`.
-- **Typed `outputSchema` for every `sandbox_`, `agent_`, `a2ui_`, `file_`, `skill_` and `prompt_` tool (D-113),** inside
-  `{ result }`; progress with a total from `browser_run_task`, `sandbox_exec`, `browser_wait_for` and `browser_download`
-  (D-114); a System "Coding sandbox" tile with the backend.
-- **Container verifier `--shape`, a derived tool set and Chromium sandbox assertions (D-103).**
-
-- **A redesigned control plane on a component kit (D-089–D-091).** The SPA is built on Web Awesome 3.14 (MIT) with
-  Lucide icons (ISC) from one same-origin sprite: a floating dock with count badges, a context bar, a command palette
-  (Ctrl/⌘+K), dark and light themes, number-first tiles, cards instead of rows, icon-only controls with tooltips and
-  accessible names, illustrated empty states, and confirmation in a popover beside the button. Every screen was redrawn;
-  behaviour, routes and API calls are unchanged. The sign-in form recognises an API key as it is typed and folds the
-  password field away; the user popover says how the browser is signed in.
-- **Wave 2 of the specification audit (D-084–D-088).** Accounts and sign-ins shared through the cluster store
-  (`TTK_CLUSTER_KV`); A2A follow-up messages answer pending permissions, task history keeps the agent's turns, tool
-  calls and plans reach subscribers; ACP `authenticate` with `TTK_AGENT_AUTH_METHOD`; configured A2UI tool actions
-  (`TTK_A2UI_ACTIONS`); `agent_delegate` structured parts; `sandbox_create` returns its limits and can seed from a share
-  folder (`from_share`), `sandbox_write` returns its path, `sandbox_list` lists inside a workspace; crash →
-  `browser-crashed` and teardown; a drain stage on shutdown (`503 service-unavailable`); `doctor` resolves the browser.
-
-- **MCP protocol completeness (D-079–D-082).** A client that cancels a call (dropping the request, or
-  `notifications/cancelled`) now stops the tool; calls past one second send `notifications/progress` to a caller that
-  sent a `progressToken`; the stateful 2025 mount and stdio push `resources/list_changed` and, for subscribed URIs,
-  `resources/updated` (`resources/subscribe` is served); `tools_withheld` names every tool family; and the sandbox and
-  ACP runner are re-probed every 30 s, their tools appearing and disappearing with them (`tools/list_changed`).
-
-- **A library on the data volume: file share, skills and prompts (D-075).** New MCP tools `file_*` (list, stat, read,
-  write, mkdir, delete, move), `skill_*` (list, get, read_file, put, delete) and `prompt_*` (list, get, put, delete,
-  render); `ttk://share/{path}` and `ttk://skill/{name}` resources; every stored prompt and every skill (`skill:<name>`)
-  served as a native MCP prompt; HTTP routes under `/api/v1/share` for binary upload and download; a Library screen in
-  the SPA. Two new scopes: `files:read` (in the default grant) and `files:write` (explicit). Served by the gateway and
-  the stdio mount whenever `TTK_DATA_DIR` is set.
-- **Live shell sessions in the coding sandbox (D-076).** `sandbox_session_open`, `sandbox_session_input`,
-  `sandbox_session_read` and `sandbox_session_close` run a line-mode shell in the same bubblewrap cage a command uses,
-  beside file reads and writes; `/api/v1/sandbox/sessions` streams it to the new Workspaces screen. One session per
-  workspace, four per service, 30 min idle, 4 h lifetime.
-- **Tools console chips follow the server, not the browser catalog:** Browser, Files, Skills, Prompts, Sandbox, Agents,
-  Surfaces.
-- **User management in the SPA (`#/users`) and over `/api/v1/users` (D-074).** An administrator lists accounts, adds one
-  (with a chosen or a generated password, shown once), edits scopes with the explicit-only grants marked, disables and
-  enables, resets a password, ends every sign-in of an account, and deletes it; every account can change its own
-  password. The store refuses to remove the last enabled administrator, and an administrator cannot delete, disable or
-  de-scope themself. Accounts and sign-ins persist in `TTK_DATA_DIR` (`users.json`, `logins.json` holding token hashes
-  only).
-- **Staying signed in (D-073, D-097).** The SPA's `ttks_` sign-in session — never a raw API key or a password — survives
-  a reload and a gateway restart for up to `TTK_LOGIN_TTL_S`; it is held in an HttpOnly cookie (see Breaking). A session
-  the server refuses is forgotten at once. `TTK_LOGIN_TTL_S` is new (default `604800`, 60–31536000).
-- **A Tools console in the SPA (`#/tools[/:name]`).** Every tool `tools/list` serves the credential, with one filter
-  chip per **server** the credential can reach (Browser, Files, Sandbox, Agents, Surfaces) and the catalog families
-  (Navigation, Interaction, Perception, Session, Files) as headings inside the list. The screen spans the window on wide
-  displays instead of sitting in a centred column. Each tool gets a form generated from its JSON Schema, with a JSON
-  editor for anything the generator does not model, so no argument is unreachable. Results render images, structured
-  JSON, text and resource links; the last 25 calls are kept in memory, never persisted. Tools that need MCP sampling say
-  so, because the console has no model.
-- **A Resources browser (`#/resources[/:uri]`).** `resources/list` grouped by session with `ttk://capabilities` pinned,
-  resource templates as fill-in forms, and live `resources/read` rendered as JSON, text, an image or a binary download.
-  It also asks `prompts/list`, and says that this server publishes none.
-- **A Live View inspector.** Quick actions (screenshot, full page, page state, session info, frames, audit log, go back,
-  record where served, close session), viewport presets and a custom size, the tab list with focus and close,
-  storage-state save/load, session downloads fetched with the bearer, a live event log over the existing socket's
-  `events.subscribe`, and an output pane. Every action is a `tools/call`, so it obeys the takeover lock as an agent
-  does: while anyone holds the lock the mutating controls are disabled with the reason as a tooltip, and reads keep
-  working.
-- **Sessions and System gain operator actions.** Sessions has a KPI strip, a 5 s auto-refresh, a screenshot preview per
-  row (the `ttk://session/{id}/screenshot` resource), confirm-to-close, and an admin-only **Close all**
-  (`browser_close_all`). System adds an MCP-capabilities panel (from `ttk://capabilities`), a live-view origins panel
-  that edits this token's overlay through `PUT /api/v1/live/origins` when the server reports it writable, a heap meter,
-  and an auto-refresh toggle.
-- **Agents: Follow a task's events.** A running task's `GET /api/v1/agent/tasks/:id/events` stream is read with a
-  fetch-based SSE reader (`streamEvents`), since `EventSource` cannot carry the `Authorization` header. Streams stop
-  when the screen is left.
-- **`packages/web/src/mcp.ts`, a stateless JSON-RPC client for `POST /mcp`.** It uses the same bearer as the REST calls
-  and sends no `initialize`: a 2025 `initialize` would be routed to the stateful mount and leave a transport session
-  behind. It accepts a JSON or an SSE reply and caches `tools/list` for the page.
+  Video, AudioPlayer and Text variants; `createSurface.theme` and an optional `workspaceId`; the `formatString` and
+  `formatNumber` functions, so a bound input drives computed text; a sandboxed `Html` component served by
+  `GET /api/v1/a2ui/surfaces/{surfaceId}/html/{componentId}`; configured tool actions for buttons (`TTK_A2UI_ACTIONS`).
+  The current specification's basic catalog id is accepted like the older one.
+- **The coding sandbox:** live shell sessions (`sandbox_session_open`, `_input`, `_read`, `_close`; D-076) streamed over
+  `/api/v1/sandbox/sessions`; `sandbox_clone` from an `https://` URL on a host in `TTK_SANDBOX_GIT_HOSTS` or an operator
+  remote in `TTK_SANDBOX_GIT_REMOTES_FILE` (D-131, D-132); `sandbox_create` can seed from a share folder (`from_share`).
+  An opt-in Docker workspace backend (D-108–D-110): `TTK_SANDBOX_BACKEND=docker`, `docker-compose.sandbox-docker.yml`
+  and `docker/Dockerfile.sandbox-workspace` — a hardened container per workspace with `NetworkMode: none`; the sandbox's
+  `/healthz` answers `{ ok, backend, clone }`.
+- **MCP Apps, off by default (D-134–D-136).** With `TTK_MCP_APPS=watch|control`, `TTK_MCP_APPS_ORIGINS` and the optional
+  `TTK_MCP_APPS_DOMAIN`, the gateway serves the live-view, terminal and A2UI embeds and offers `browser_live_view`. The
+  terminal embed's **Attach** streams a shell session and the A2UI embed's **Follow live** renders every new revision,
+  over 30 s single-use tickets minted by the app-only `browser_live_ticket`, `sandbox_session_ticket` and
+  `a2ui_surface_ticket` and redeemed by `/live/{id}/ws`, `/live/terminal/{id}/ws` and `/live/surface/{id}/ws`.
+- **Browser memory and usage.** `GET /api/v1/system/usage` reports each session's browser memory (Chromium's own dump
+  over CDP); `TTK_MEMORY_LIMIT` is the limit the Sessions screen's meters use.
+- **Reporting:** `capabilities.tykotech` gains `sessions.ownership`, `browser.sandboxed`, `sandbox` and `model`; the
+  admin diagnostics report every new switch.
 
 ### Changed
 
 - **Dependencies updated.** The MCP TypeScript SDK (`@modelcontextprotocol/server` and `client`) 2.0.0 → 2.4.0,
-  `@modelcontextprotocol/hono` 2.0.2, `hono` 4.13.14, `jose` 6.2.13, `zod` 4.6.7, and the `@std/*` packages to their
-  latest 1.x. SDK 2.4.0 enforces SEP-2243 on the 2026-07-28 HTTP era: every request carries `MCP-Protocol-Version` and
-  `Mcp-Method` (and `Mcp-Name` where the method names a tool, resource or prompt), and `initialize` under a modern
-  header is refused. The SDK's clients send them; nothing changes for the 2025 era or the web app.
-- **Larger filter chips and logos.** The Resources filter chips are 15% larger again, with count bubbles in inverted
-  text colour for contrast; the dock logo is 20% larger and the Sessions empty-state logo 40% larger.
-- **Brand: Multi-MCP.** The dock shows the Multi-MCP logo and wordmark; the TykoTech logo sits at the dock's foot (full
-  logo with the dock open, its lettering alone when narrow; hidden on the phone bar). Assets:
-  `packages/web/static/brand/` (served at `/assets/brand/…`). The sign-in screen shows the Multi-MCP wordmark; the tab
-  icon and the MCP `serverInfo` icon are the raster Multi-MCP mark (`favicon-32.png`, `icon-192.png`), replacing the
-  generated `favicon.svg`. The display name "TykoTech MCP" is now "Multi-MCP" (page title, `serverInfo.title`,
-  instructions, A2A card, OAuth resource name); the wire name `tykotech-mcp` is unchanged (E-117).
-
-- **Resources counts name what was added (D-155).** Each group's card and tree count is its sessions, files, skills,
-  prompts, workspaces, agent tasks or surfaces, in that noun (`2 sessions`, `0 prompts`), from `/api/v1/overview` — not
-  its tree leaves; the Server group shows tools only. Filter toggles say they count tree entries.
-- **`POST /api/v1/agent/tasks` and A2A `SendMessage`/`SendStreamingMessage` accept a provider selection (D-143):**
-  `provider` and `model` beside `message` on the REST body, and under the request-level `metadata` on A2A, each a string
-  of at most 64 characters. Naming a provider without `model:invoke` is `403 forbidden-scope` / `-32600`; an unknown
-  provider or model is `-32602`, an unreachable one `-32004`, and on REST both arrive as `400 invalid-request` with the
-  text in `detail`. The no-backend text is now "Text execution requires a configured ACP agent or a model provider".
-- **Every agent task carries `metadata`** — `kind` (`text` | `tool` | `delegation`), and for a text task `backend`
-  (`model` | `acp`), `provider`, `model`, `steps` and `usage` — on every binding and in `agents/tasks.json`.
-- **Three model-key names are blanked for Chromium and ffmpeg (D-143):** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
-  `TTK_MODEL_API_KEY` join `CHILD_ENV_BLANKED` (25 names). The server never reads them.
-- **The dock has eight sections, not nine:** the Library is absorbed into Resources, and `#/library[/<tab>]` redirects
-  to `#/resources/<group>` with no history entry.
-- **Signed links live up to an hour (G5, D-140):** `TTK_SIGNED_LINK_TTL_S` is 10–3600, default 3600, and
-  `browser_file_link.ttl_seconds` 10–3600.
-- **The shipped tasks, the bundled `CMD` and both Compose overlays grant the six OpenTelemetry names the egress check
-  reads (`OTEL_DENO`, `OTEL_DENO_VSOCK` and the four `OTEL_EXPORTER_OTLP_*ENDPOINT` names) by name (D-137),** pinned by
-  `gate:tasks` rule T5; the HEALTHCHECK is narrowed to run without `OTEL_DENO`.
+  `@modelcontextprotocol/hono` 2.0.2, `hono` 4.13.19, `zod` 4.6.7, and the `@std/*` packages to their latest 1.x. SDK
+  2.4.0 enforces SEP-2243 on the 2026-07-28 HTTP era: every request carries `MCP-Protocol-Version` and `Mcp-Method` (and
+  `Mcp-Name` where the method names a tool, resource or prompt), and `initialize` under a modern header is refused. The
+  SDK's clients send them; nothing changes for the 2025 era or the web app.
+- **Brand: Multi-MCP.** The display name "TykoTech MCP" is now "Multi-MCP" (page title, `serverInfo.title`,
+  instructions, A2A card); the wire name `tykotech-mcp` is unchanged (E-117).
+- **The web app is redesigned (D-089–D-093, D-159).** It is built on Web Awesome 3.14 with Lucide icons, in dark and
+  light themes, with a rail of five sections: **Sessions** (session cards with memory, Watch and Close; admin memory
+  meters; the Live View; Workspaces with a file tree, an editor and a live shell), **Resources** (the file share),
+  **Agents** (a chat where every send starts its own task, `#/agents/chat/<task>`, with your tasks beside it, and the
+  A2UI **Surfaces**), **Users**, and **System** (Overview, Agents for model providers, Configuration). Destructive
+  actions confirm in a popover. The Live View's URL field also navigates while nobody holds the session. Every screen
+  but Connect, Sessions and the Live View is a lazy chunk with its own stylesheet; first paint stays under 160 KB of
+  gzip JavaScript and 50 KB of gzip CSS.
 - **In the default scope an allowlisted browser briefly pauses fetch, XHR and EventSource requests for inspection (about
   0.5 ms each, D-139).** A refused subresource or hint appears in `browser_network_log` as
-  `net::ERR_BLOCKED_BY_CLIENT.Inspector` and in the log at `info` (origin only, rate-limited), never on the event ring.
-  `browser_evaluate`'s description now says the allowlist constrains an evaluated fetch under
-  `TTK_ALLOWED_DOMAINS_SCOPE=all`.
-- **Every coding-sandbox tool names a failure by the sandbox's code in fixed words (FXC-N1);** `sandbox_clone` keeps its
-  own five texts, `cage_failed` and unknown codes keep the generic text, and nothing from the service is passed on.
-- **System shows no glyph twice outside the dock (D-092 amended):** copy and Remove are the only per-row repeats, list
-  entries and group labels carry no glyph, Save overlay is a text button shown only with unsaved changes, and capability
-  tiles show on/off as a drawn mark (disc, ring, `!`, `?`).
-- **`deno task test:unit` and `cov:unit` include `packages/cli/` (D-137, N1).**
-- **With `TTK_ALLOWED_DOMAINS` set, Chromium refuses every off-list document request before it is sent, instead of
-  containing it afterwards (R3, D-115, E-94).** This covers clicked links, script and meta-refresh navigations, form
-  posts, each redirect hop, pop-ups and iframes. The off-list host receives no request, the tab keeps its page, a pop-up
-  that never loaded is closed, and the navigation event carries `containment: "request-blocked"`. New tabs, pop-ups and
-  out-of-process frames start paused until the veto is armed on them.
-- **`browser_navigate` and `browser_go_back` through a refused redirect answer `navigation-blocked` naming the origin**
-  (this replaces the `url: "about:blank"` answer listed under Breaking, which remains only where the browser could not
-  refuse the request); the live view's `navigate` answers `navigation-blocked`; `browser_download` through a refused
-  redirect or script navigation keeps its `navigation-blocked` text but leaves no canceled ledger row. Each answers
-  `navigation-blocked` only for its own request chain: a page that leaves the list by itself after the tool's navigation
-  landed is recorded, but does not fail the tool (R2-2).
-- **`deno task dev`, `stdio`, `serve:cluster`, `doctor` and `admin:generate` deny FFI first, and the task gate enforces
-  it on each Deno invocation's own flags (rule T4, E-103).** `admin:generate` also runs with `--no-prompt`. The
-  sandbox's `/healthz` answers `{ ok, backend, clone }`.
-- **`test:compose` and `test:agents:compose` require `--tag <t>` and run images built from this tree (E-112).** Deployed
-  tags are refused and nothing is pulled; every secret, a synthetic administrator record included, comes from a scratch
-  folder checked after `compose config`; the agents proof builds `tykotech-agent-runner:<t>` and its fixture instead of
-  rebuilding `:0.2.0`.
-- **`deno task build:web` also writes `dist/embed_live.html` and `dist/embed_a2ui.html` (D-135; no new grant).** The
-  Tools console hides app-only tools and lists the new browser tools under Perception, Files and Session (RV-5), and
-  `/assets/embed_*` is not served (D-134).
-
-- **Startup warns, naming the fix, when API keys are configured and no key and no account holds `admin` (D-098).**
-  Traversal spellings of file ids answer `400` instead of `404` (E-89).
-- **Each owner runs at most 2 of the 4 concurrent agent tasks (D-105).** Docker workspace containers are named and
-  labelled per deployment and replaced when their create body or image changed (D-108, E-90).
-
-- **Explicit tool annotations (D-112):** `openWorldHint` is always stated; `destructiveHint` and `idempotentHint` are
-  always stated on mutating tools; `file_delete`, `skill_delete` and `prompt_delete` are destructive; most non-web tools
-  are closed-world. Cancellation stops `browser_run_task`, `browser_get_state`, `browser_find`, `browser_screenshot`,
-  the download wait, `browser_head`, library reads and the agent and sandbox waits (D-114). The Agents screen's Delete
-  surface is a quiet confirm button.
-- **Agent tasks (D-104–D-106):** finished tasks are kept 24 h by default (was 1 h), also without a data dir; execution
-  bounds follow the task's kind (`sandbox_exec` timeout + 150 s; `browser_wait_for` timeout + 30 s, 40 s at its default;
-  other tools 120 s; text and delegation `TTK_AGENT_TASK_TIMEOUT_S`); A2A streams are re-checked every 300 s and end at
-  1800 s, on rotation, logout and shutdown, with a terminal `-32000` event; the agent card says
-  `extendedAgentCard: true`, lists the HTTP+JSON interface, and its `pushNotifications` follows the push gate.
-  `readyExpansion` is removed from the `@tykotech/gateway` exports (D-107).
-- **`users.json` is schema version 2 with a one-time upgrade (D-098)** (cluster marker `["ttk","schema","users"]`); the
-  bind policy counts user accounts as credentials (C9, D-099).
+  `net::ERR_BLOCKED_BY_CLIENT.Inspector` and in the log at `info` (origin only, rate-limited).
+- **Every coding-sandbox tool names a failure by the sandbox's code in fixed words (FXC-N1).**
+- **Finished agent tasks are kept 24 h by default (was 1 h); execution bounds follow the task's kind (D-104, D-105):**
+  `sandbox_exec` timeout + 150 s, `browser_wait_for` timeout + 30 s, other tools 120 s, text and delegation
+  `TTK_AGENT_TASK_TIMEOUT_S`. The agent card says `extendedAgentCard: true` and lists the HTTP+JSON interface.
+- **`users.json` is schema version 2 with a one-time upgrade (D-098);** the bind policy counts user accounts as
+  credentials (C9, D-099). Traversal spellings of file ids answer `400` instead of `404` (E-89).
+- **`TTK_MAX_BODY_KB` is enforced (D-100).** Base images are pinned by digest, and every image and CI run Deno 2.9.7.
+- **`deno task dev`, `stdio` and `doctor` deny FFI first (E-103);** `dev` and `stdio` grant the resolved browser and
+  `TTK_FFMPEG`, pin `TTK_BROWSER_PATH` and run with `--no-prompt` (E-82). The task gate enforces `--deny-ffi` on each
+  Deno invocation's own flags (rule T4). `deno task test:unit` includes `packages/cli/`.
+- **`test:compose` requires `--tag <t>` and runs images built from this tree (E-112);** deployed tags are refused and
+  nothing is pulled.
+- **`deno task build:web` also writes the MCP Apps embeds (`dist/embed_*.html`, D-135);** `/assets/embed_*` is not
+  served (D-134).
 - **`accept_downloads` applies at run time (E-77);** the serializer no longer treats `pointer-events: none` layers as
   covering (E-76); `browser_element_at` and the live view's hover resolve pseudo-element hits (D-096).
-- **`TTK_MAX_BODY_KB` is enforced (D-100).** Base images are pinned by digest, every image and CI runs Deno 2.9.7 (the
-  sandbox-workspace image takes its Deno binary from the same digest), and the CI slim leg is tagged `:ci-slim` and
-  verified as slim (D-103).
-- **`dev`, `stdio` and `serve:cluster` grant the resolved browser and `TTK_FFMPEG`, pin `TTK_BROWSER_PATH`, grant the
-  temporary directories and run with `--no-prompt`; `scripts/compile.ts` chooses its `--chromium` default per target
-  (E-82).**
-- **The sandbox image contains an empty `/run/ttk-sandbox-sock` (its `CMD` is unchanged);** the internal `scratch` exec
-  mode and `LIMITS.sessionProcesses` are removed (no API change) (D-109, D-110).
-
-- **The logo opens and closes the dock; Tools is a workbench (D-093).** The page title left the context bar (the
-  highlighted dock item names the screen). Clicking the logo widens the dock to show each section's name beside its
-  icon, and the choice is remembered. Tools gives its list more room, fits the server filters on one row, merges the
-  tool's header and arguments into one compact card, and puts the result beside it on wide screens. Resources uses the
-  full width, other screens widen to 1680 px, and Library no longer shows Upload twice in an empty folder.
-- **Every control has one home; metrics are a compact strip (D-092).** The dock only navigates (the brand is a mark,
-  Sign out moved to the account popover), the context bar drops the repeated section glyph and puts the screen's actions
-  at the right, refresh buttons are gone from screens that keep themselves current (Users and Workspaces now poll), an
-  empty list's create action lives in its empty state only, destructive buttons stay quiet until hovered, and the metric
-  cards became one glass strip sized to its content. Password change opens from the account popover for any password
-  account. Workspaces and Library no longer report missing scopes for a moment after a reload.
-- **SPA build (D-089, D-090).** `build:web` now also bundles `src/styles/app.css` into `dist/app.css` and writes
-  `dist/icons.svg` and `dist/favicon.svg` (`scripts/build_icons.ts`); `static/app.css` is gone. Every screen but
-  Connect, Sessions and the Live View is a lazy chunk, so `app.js` is about 31 KB; a first paint, the kit included, must
-  stay under 160 KB of gzip JavaScript. New pinned dependencies: `@awesome.me/webawesome@3.14.0`,
-  `lucide-static@1.49.0`.
-- **Destructive actions confirm in a popover (D-091)** instead of asking for a second click within three seconds.
-- **The theme preference is stored** under `localStorage['ttk.theme']` (`dark` or `light` only); with `ttk.dock`, it is
-  all the SPA keeps in storage.
-- **The SPA is redesigned around a left icon rail, a top bar and one full-width scroll region.** `renderShell` builds
-  the 56 px rail (Sessions, Live View, Tools, Resources, Agents, System, Sign out), the 48 px top bar (title, page
-  actions, a gateway health chip polling the public `/healthz` every 20 s, the user chip) and the main region for every
-  authenticated screen. See `SPECS/DESIGN-SYSTEM.md`.
-- **UI text is set in the system sans; monospace is kept for data.** Ids, URLs, URIs, tool names and JSON use `--mono`;
-  the rest uses `--font`. No font file is loaded.
-- **Icons are inline SVG**, built with `createElementNS` from a compact path DSL in `icons.ts` — no icon font, no CDN,
-  no `innerHTML`. Motion is CSS keyframes only, and `prefers-reduced-motion: reduce` switches all of it off.
-- **The Live View URL field also navigates when nobody holds the session.** Enter sends `navigate` over the socket while
-  driving, and calls `browser_navigate` while the session is free; it stays read-only while someone else drives.
-- **`build:web` code-splits.** It now cleans `packages/web/dist` and runs
-  `deno bundle --platform browser --minify --code-splitting --outdir packages/web/dist packages/web/src/app.ts`.
-  `app.js` is ~68 KB; `ws.ts` and `a2ui.ts` — the only runtime users of the Zod wire schemas — are dynamically imported,
-  so the shared wire + Zod chunk (~98 KB) loads only when a Live View or the Agents screen opens. The SPA entry is
-  renamed `src/entry.ts` → `src/app.ts`. No gateway or `scripts/compile.ts` change: both already take every file under
-  `dist/`. The 150 KB budget now applies to `app.js` and to each lazy chunk separately (D-069), asserted by a web unit
-  test whenever `dist/` is built.
-- `LiveViewSocket` takes an optional `onEvent` hook for session event records.
+- **The coverage gate is 60%** line coverage over `packages/mcp` and `packages/gateway` (was 80%).
+- **The documentation is five pages:** `docs/guide.md`, `docs/security.md`, `docs/development.md` and
+  `docs/reference/{mcp,api,environment-variables}.md`.
 
 ### Removed
 
-- **`docker-compose.sandbox.yml`**, and `ttk_sandbox_token` from `deno task setup` (`--only sandbox-token` is no longer
-  a name). The coding sandbox runs in `docker-compose.yml` with a token it generates into the `ttk-sandbox-token`
-  volume, so the overlay only swapped that token for a file and nothing needed it. **Upgrading:** drop
-  `-f docker-compose.sandbox.yml` from your command; `secrets/ttk_sandbox_token` can be deleted. A sandbox run outside
-  Compose still reads its token from `TTK_SANDBOX_TOKEN_FILE`.
-- **The Library screen.** Its files, skills and prompts are groups of the Resources tree; every behaviour (upload, new
-  folder and file, move, delete, download, grid and list, the skill and prompt editors, `files:write` gating) has one
-  home there. Nothing on the wire changes.
+- **Cluster mode.** `TTK_CLUSTER_KV`, `TTK_ROLE`, `TTK_NODE_ID`, `TTK_NODE_URL`, the `serve:cluster` task and the
+  `--unstable-kv` flag are gone; the server is one node. **Upgrading:** a deployment that set these variables starts as
+  a single node.
+- **The OAuth resource server.** `TTK_OAUTH_ISSUER`, `TTK_OAUTH_AUDIENCE`, `TTK_OAUTH_JWKS_URL` and the
+  `/.well-known/oauth-*` routes are gone; API keys and accounts authenticate. `jose` is no longer a dependency.
+- **The slim image and the compiled binary.** `Dockerfile.slim`, `scripts/compile.ts` and the `compile`,
+  `build:image:slim`, `test:compile` and `test:container:slim` tasks are gone; one image ships.
+- **The ACP agent runner.** `docker-compose.agents.yml`, `docker/Dockerfile.agent-runner`, the `acp` command and task,
+  the `agent_prompt` tool, the `TTK_AGENT_BRIDGE_*`, `TTK_AGENT_DEFAULT`, `TTK_AGENT_AUTH_METHOD` and
+  `TTK_AGENT_MCP_URL` variables, delegated `ttkd_` bearers and the task permission flow are gone. Text tasks run on the
+  built-in model agent.
+- **`docker-compose.sandbox.yml`.** The coding sandbox runs in `docker-compose.yml`, which mounts
+  `secrets/ttk_sandbox_token` read-only into the gateway and the sandbox. The gateway no longer `depends_on` the
+  sandbox: it starts without it and offers the sandbox tools while the sandbox answers (D-25). **Upgrading:** drop
+  `-f docker-compose.sandbox.yml` from your command and run `deno task setup` once before `docker compose up -d`.
+- **`GET /api/v1/agent/tasks/{id}/events`.** Follow a task over A2A streaming or poll `GET /api/v1/agent/tasks/{id}`.
+- **The `admin:generate` task.** `setup` creates the administrator; `doctor --new-admin <user> --force` replaces one.
+- **The old documentation tree and the hand-maintained SBOM** (`docs/guides/`, `docs/concepts/`, `docs/design/`,
+  `docs/index.md`, `docs/reference/sbom.md` and its CycloneDX file); `deno.lock` and the digest-pinned images are the
+  inventory.
 
 ### Fixed
 
-- **A `model` named without a `provider` is refused (D-143):** `-32602 "model requires provider"` on A2A,
-  `400
-  invalid-request` with that `detail` on REST; the server no longer guesses the provider.
-- **A credential that loses `model:invoke` mid-task stops the loop (D-143):** the scope is re-checked before every
-  provider call, and the task fails with "model:invoke scope required" at the next step.
-- **The `REPLACE_WITH_KEY` placeholder is refused in a providers file:** a preset copied from the composer with its key
-  unedited fails `doctor` ("the key is the composer placeholder, entry N, field api_key") instead of dialling a
-  provider.
-- **A providers file with CRLF line endings loads** as one saved with LF does.
-- **`doctor` prints each provider's host as `host:port`** — the `--allow-net` spelling the override needs.
-- **Web UI — the Agents task composer submits on first use:** its submit gate no longer stays disabled until a field is
-  re-edited, and a failed providers fetch offers a retry instead of an empty target list.
-- **Web UI — Resources:** a sub-folder expands again after the tree is re-listed, and the **Add** menu stays visible in
-  an empty folder; drawers close on navigation instead of outliving the screen that opened them.
-- **Web UI — System:** the Configuration panel sits on its own full-width row, and the composer's diff table keeps its
-  key column on one line (only the before/after cells wrap).
-- **`OTEL_DENO=TRUE` on a build that is not exporting is refused like `true` (D-137, DX-2).** Deno reads the value
-  case-insensitively, so the gate now does too; it used to start silently with nothing exported.
-- **Tabbing into a field inside a hovered tooltip owner (a Library field) hides that owner's tooltip (BUG-4, FE-1,
-  CR-5).** It used to stay open over the field being typed in; Tab between tooltip owners still moves the tip (RV-13).
-- **An OAuth token with a fractional `exp` can mint signed links again (D-140, BUG-3).** Its expiry is floored to whole
-  milliseconds, so the link cap reads it instead of refusing the token as having no known expiry.
-- **`browser_file_link` refuses identifiers a link cannot carry (D-140, BUG-2)** — an owner past 512 characters or a
-  token body past 1800 — with `invalid-arguments`, instead of returning a link that answered `401` on every follow.
-- **One secret store per mount (NF-3):** the HTTP server and stdio each build one `SecretStore`, so log redaction and
-  the tools' secret handling read the same secrets.
-- **Diagnostics `hasAdminUser` is `true` only when an enabled account holds `admin` (RV-14).**
-- **The System screen's capability tiles are reachable by keyboard (RV-13):** Tab draws a ring and shows the tile's name
-  and state, and Tab from one tooltip owner straight to another now shows the second tooltip. The Tools screen's
-  selected row title is 5.54:1 in light (was 3.63:1) and 6.56:1 in dark (RV-15). The Live View Inspector's event stream
-  survives a reconnect while Streaming is on, and not once it is off (FXD-N3).
-- **A late `browser_run_task` answer for a replaced run no longer drives the new run (F3, D-126).** A cluster fan-out
-  whose local answer could not be merged returned an already-consumed body; it now passes the answer through intact
-  (D-121). The documented OpenTelemetry switch is `OTEL_DENO=true`; `OTEL_DENO=1` is rejected by Deno 2.9.7 (D-127).
+- **A2A errors say the same thing on every binding, as A2A 1.0 specifies.** Cancelling a finished task answered `409`
+  over HTTP+JSON but a bare `400` with no detail on `/api/v1/agent/tasks/{id}/cancel`. Now every binding takes its
+  status from the spec's table (`400` here) and gives the runtime's message:
+  `Task cannot be canceled: it has already
+  ended (completed)`. HTTP+JSON errors are `google.rpc.Status` bodies with an
+  `ErrorInfo` reason, and JSON-RPC errors carry the same `ErrorInfo` in `data`. An unconfigured extended card is
+  `-32007`, and a scope the runtime refuses is `403` over HTTP.
+- **The takeover lock is proven over the whole catalog.** A test now walks every mutating tool and requires
+  `human-has-control` while a person holds the session, so a new tool cannot skip the check. `tools_withheld` no longer
+  lists `human-has-control` as a possible reason: the lock refuses a call, it never hides a tool.
+- **`last_input_at` reports a person's live-view input.** Nothing set it, so `browser_get_session` and
+  `browser_list_sessions` always answered `null`, and an agent waiting out `human-has-control` could not tell a person
+  at work from one who walked away.
+- **Closing a browser on Windows no longer leaves its processes running.** The kill reached only the spawned process, so
+  the browser's helpers (one holding the debug port) survived every close that skipped CDP `Browser.close`; the launcher
+  now sends `Browser.close` first. A launch that never opens its debug port can still leave Edge running on Windows
+  ([development](docs/development.md#test-tiers)).
+- **A live viewer whose browser crashed gets a `bye` the web app understands.** It carried `reason: browser-crashed`,
+  outside the wire's three reasons, so a strict client dropped it; it now says `session-closed` after the
+  `browser-crashed` error frame.
+- **The image's health check runs with `--deny-ffi`,** like every other Deno command the images run.
+- **Messages and docs match the code.** The Host-refusal warning names `400 host-forbidden`; setup's AppArmor error no
+  longer says the gateway waits for the sandbox; `network:read` is described as what it gates (full URLs and response
+  bodies, not headers); the signed-links default no longer mentions a single node; `docs/` was checked line by line
+  against the code.
+- **The origins tests clean up after themselves** instead of leaving about 15 folders in `tests/.scratch` per run.
+- **A memory reading no longer outlives its browser.** A dump in flight when its session or the gateway closed waited
+  out its 10 s timeout; it now ends when the browser does.
+- **The CDP client's real-browser tests run.** They sat in the unit tier, which grants no browser, so they always
+  skipped, and failed the coverage job under `BUA_REQUIRE_BROWSER`; they now run in the browser tier.
+- **The coding sandbox starts on AppArmor hosts (Ubuntu, Debian; AppArmor 4 included).** Docker's `docker-default`
+  profile denies every mount, so bubblewrap could not build a cage. The sandbox now runs under `tykotech-sandbox`
+  (`docker/apparmor-sandbox`): `docker-default` with only that denial lifted, pinned to the 3.0 policy ABI.
+  `deno task
+  setup` installs and loads it through `sudo` on an AppArmor host, and when it cannot, exits 1 naming
+  AppArmor as the cause, with the commands to run by hand. **Upgrading:** on an AppArmor host, run
+  `deno task setup --only apparmor` before the next `docker compose up`. Hosts without AppArmor need nothing.
+- **API-key reload works in the containers.** `docker/seccomp-chromium.json` lacked `inotify_init1`, so the key-file
+  watcher never started under the stack's profile and a key added to the file waited for a restart.
+- **`a2ui_publish` accepts specification clients.** A message sent as JSON text, without `version`, or naming the A2UI
+  basic catalog's id now publishes; a refusal names the field and the closest message shape instead of `Invalid input`.
+  `a2ui_delete` and `a2ui_publish` on a missing surface answer `invalid-arguments: you have no A2UI surface "<id>"`, and
+  store refusals carry their own words.
+- **`browser_wait_for` with `selector` or `text` never matched a page no tool had read yet.** The search now requests
+  the document first (`browser_find` and `browser_verify_locator` share it).
+- **`browser_verify_locator` with a bare `id`, `testid` or `name` value counted plain-text matches;** a bare value now
+  means its selector (`#username`, `[data-testid="…"]`, `[name="…"]`).
+- **A read-only browser tool with no default session answered `no session with id default`;** it now says the default
+  session is created by the first tool that opens a page (same `unknown-session` code).
+- **Every tool: a value sent as JSON text where the schema wants a number, boolean, object or array** (`{"limit": "5"}`)
+  is read as the value it spells and validated again, instead of failing with `expected number, received string`.
+- **A late `browser_run_task` answer for a replaced run no longer drives the new run (F3, D-126).**
 - **A HEAD on `/api/v1/sessions/{id}/files/{fileId}` releases the file at once (K-2)**; it held the file lease until the
   session closed.
-- **Live View: a ticket refused as `unknown-session` ends the view at once (RV-2)**, with one way back ("Back to
-  sessions") instead of retrying for ten minutes; the inspector, Go back and Screenshot wait until the view connects.
+- **Live View: a ticket refused as `unknown-session` ends the view at once (RV-2)**, with one way back, instead of
+  retrying for ten minutes.
 - **The control plane runs Zod `jitless` from its entry (K-5)**, so the first Live View no longer reports a
-  `script-src eval` violation; the validator stays out of the first paint.
-- **`browser_head` reports refused, TLS and DNS failures as `refused`, `tls` and `dns` (K-8, D-042)**: Deno's `fetch`
-  puts the detail in the error's `cause`, which the classifier now reads, so these had all reported `protocol`.
-
-- **Sign-out clears the cookie even if the server cannot end the session (`500`, logged) and is no longer
-  rate-limited;** the web UI says signed out only when the server confirmed it (otherwise it shows the error, retries
-  and asks before a reload); share uploads from the web UI keep their content type, so binary files no longer fail as
-  Invalid JSON; `/api/v1/auth/me` is not cacheable (D-097, E-88).
-- **Sandbox Docker backend (D-108):** the volume check runs once at start-up in its own bounded container and never
-  writes in a workspace's home. **Agents (D-104):** `tasks.json` and `surfaces.json` writes are synced to disk; restored
-  A2UI surfaces are re-validated, theme included.
-- **A2UI share media is de-duplicated, bounded (8 concurrent, 32 MiB per surface), aborted and released when the Agents
-  screen is left or a load fails (D-111);** surface themes reach checkboxes, the active tab, the Button and the dialog
-  radius; Button labels pick black or white for contrast; a disabled Button is readable; tab panels are tighter. System
-  capability tiles are centred, and the sign-in screen no longer shows a stray scrollbar.
-
+  `script-src eval` violation.
+- **`browser_head` reports refused, TLS and DNS failures as `refused`, `tls` and `dns` (K-8, D-042)** instead of
+  `protocol`.
+- **Diagnostics `hasAdminUser` is `true` only when an enabled account holds `admin` (RV-14).**
+- **Sign-out clears the cookie even if the server cannot end the session and is never rate-limited;** share uploads keep
+  their content type, so binary files no longer fail as invalid JSON; `/api/v1/auth/me` is not cacheable (D-097, E-88).
 - **`browser_element_at` answered `none` under `pointer-events: none` covers, icon `::before` glyphs and stretched links
   (A1, D-096); `browser_health` reported a wedged Chromium healthy (A4); `accept_downloads` was always unsupported (A3,
   E-77).**
-- **A `sandbox_exec` submitted as an A2A or REST task is no longer cut at 120 s (C4, D-105);** a `null` ACP result no
-  longer kills the transport (E-84).
-- **The sandbox client keeps `file_timeout` and `file_failed` instead of reporting `unavailable` (C15, D-110).**
-- **The System "Sandboxed Chromium" tile reported the coding sandbox;** it reports Chromium's own sandbox
-  (`chromiumSandboxed`, unknown when the gateway does not report it) (C12).
-- **`TTK_CLUSTER_KV` works in the bundled image and both overlays (D-102);** `deno task stdio` can launch a browser when
-  an MCP client starts it (E-82); `version_test` covers all eleven manifests; stale comments and the slim uid note.
-
-- **Agent capacity, protocol robustness and resource hygiene (agent-expansion review).** Finished tasks no longer hold
-  the task caps for their hour of retention (AG-1); a refused or malformed editor permission reply no longer ends the
-  ACP proxy session (AG-2); agent stderr is drained without a lifetime cap that killed chatty agents (AG-3); an attached
-  event stream or in-flight turn keeps a connection from being reaped, and a prompt timeout cancels that turn instead of
-  killing the agent (AG-4); editor `session/new` uses the runner's workspace (AG-5); cancelling during connection setup
-  no longer leaks a runner connection (AG-6); plus AG-7, AG-9, AG-10, AG-11, AG-13, AG-14 and sandbox SB-3, SB-4, SB-6
-  to SB-10.
-- **Test infrastructure:** the live-socket harness no longer leaks re-probe timers, and the agent-runner and agent
-  Compose proofs have tasks (`test:agents:runner`, `test:agents:compose`).
-- **A stray scrollbar and an empty gutter no longer sit mid-window on System.** The centred `.screen` container scrolled
-  itself, leaving a light scrollbar beside an empty strip that read as an unused side panel. The main region is now the
-  page's one scroll container, full width, so the scrollbar sits at the window edge.
-- **The Live View's top bar follows the focused tab.** The page title is taken from the focused entry of every `tabs`
-  message as well as from `state`, so switching tabs updates it.
+- **A `sandbox_exec` submitted as an A2A or REST task is no longer cut at 120 s (C4, D-105).** The sandbox client keeps
+  `file_timeout` and `file_failed` instead of reporting `unavailable` (C15, D-110).
+- **`deno task stdio` can launch a browser when an MCP client starts it (E-82).**
+- **Finished agent tasks no longer hold the task caps for their retention (AG-1);** plus sandbox fixes SB-3, SB-4 and
+  SB-6 to SB-10.
 
 ## [0.2.0] - 2026-09-10
 

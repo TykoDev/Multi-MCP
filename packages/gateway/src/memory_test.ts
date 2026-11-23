@@ -1,14 +1,4 @@
-/**
- * D-154: the agents' vector memory.
- *
- * Proven here, in an in-memory database and against a stub provider on loopback only: the built-in embedder is
- * deterministic, normalised and pinned (its id names its vector space); ranking puts the relevant item first; owners
- * never see one another's memory, through the store and through the MCP tools; a collection keeps the embedder it was
- * created with, and refuses when that embedder is gone; every bound refuses; saves upsert; deletes and drops remove
- * exactly what they say, the drop by cascade; the similarity refuses vectors of different lengths instead of scoring
- * them; the provider embedder sends the OpenAI shape with the key only as a bearer header, refuses redirects, and never
- * echoes a key or an upstream body; the control-plane helpers validate strictly.
- */
+/** The agents' vector memory. */
 import { assert, assertEquals, assertFalse, assertRejects, assertStringIncludes, assertThrows } from '@std/assert';
 import {
 	createToolExecutor,
@@ -91,10 +81,7 @@ interface Seen {
 	readonly body: { model?: string; input?: string[] };
 }
 
-/**
- * A stub embeddings endpoint on 127.0.0.1. `answer` decides each response; by default it answers a 3-dimensional
- * vector per input, in reverse order with `index` set, so the client must sort.
- */
+/** A stub embeddings endpoint on 127.0.0.1. */
 function stubProvider(answer?: (seen: Seen) => Response | Promise<Response>) {
 	const seen: Seen[] = [];
 	const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen: () => {} }, async (request) => {
@@ -128,8 +115,7 @@ Deno.test('memory: the built-in embedder is deterministic, normalised and pinned
 	assert(buckets(lexicalEmbed('The dog sat on the mat')).join() !== buckets(a).join());
 	// No letters or digits: a zero vector, which scores 0 against everything.
 	assertEquals(buckets(lexicalEmbed('?! …')), []);
-	// Pinned: `builtin:lexical-512` names exactly this hashing. If this fails, the hashing changed and every stored
-	// vector would silently sit in another space — give the new algorithm a new id instead.
+	// Pinned: `builtin:lexical-512` names exactly this hashing.
 	assertEquals(buckets(lexicalEmbed('Hello, world')), [[110, -0.57735], [236, -0.57735], [313, 0.57735]]);
 	assertEquals(buckets(lexicalEmbed('ÉCOLE école ｅｃｏｌｅ')), [
 		[134, 0.69903],
@@ -419,7 +405,7 @@ Deno.test('memory: a provider that changes dimensions under a collection is refu
 	}
 });
 
-Deno.test('memory (E-120): a bare-origin provider embeds at /v1/embeddings, as the chat client calls /v1', async () => {
+Deno.test('memory: a bare-origin provider embeds at /v1/embeddings, as the chat client calls /v1', async () => {
 	const stub = stubProvider();
 	const db = Database.memory();
 	try {

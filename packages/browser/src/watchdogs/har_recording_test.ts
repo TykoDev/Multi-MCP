@@ -1,6 +1,5 @@
 /**
- * `HarRecordingWatchdog` contract (ARCHITECTURE.md §6.13; COMPLETIONS-CRITERIA.md §3.2 watchdog row
- * 13: "Network event capture, HAR 1.2 JSON on stop").
+ * `HarRecordingWatchdog` contract: `Network.*` event capture, HAR 1.2 JSON on stop.
  *
  * Real bus, real `CdpClient`, real `Network.*` frames over `ChromeFixture`, real files in
  * `tests/.scratch`. The centrepiece is {@linkcode harProblems}: a structural validator for the HAR
@@ -439,7 +438,7 @@ Deno.test('har: a failed request is still an entry, carrying the error text', as
 });
 
 // ---------------------------------------------------------------------------
-// recordHarContent / recordHarMode (ERRATUM(M1-watchdogs-rest-10))
+// recordHarContent / recordHarMode
 // ---------------------------------------------------------------------------
 
 Deno.test('har: embed puts the body inline in content.text', async () => {
@@ -557,7 +556,7 @@ Deno.test('har: an empty capture is still a valid HAR with no pages and no entri
 	assertEquals(document.log.pages, []);
 });
 
-Deno.test('ERRATUM(CANCEL-3): an abandoned stop drops the body drain but still writes the HAR', async () => {
+Deno.test('har: an abandoned stop drops the body drain but still writes the HAR', async () => {
 	await using h = await harness({ recordHarContent: 'embed' });
 	await record(h);
 	assertEquals(h.watchdog.entries.length, 1);

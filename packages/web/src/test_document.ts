@@ -1,14 +1,13 @@
 /**
- * Test support only — never imported by the application: a minimal document for asserting what the primitives in
- * `ui.ts`, `json_facts.ts` and `schema_form.ts` build, without a browser. Enough of the DOM for `el()`, `icon()`,
- * attributes, text, classes, listeners and focus; it has no `innerHTML` and no parser, so a path through it that
- * needed one would throw rather than pass (the same construction as the fake in `a2ui_test.ts`, which stays private
- * to that file because importing a test module re-registers its tests).
+ * Test support only — never imported by the application: a minimal document for asserting what the agent chat, the
+ * task composer, the users view and the workspace tree build, without a browser. Enough of the DOM for `el()`,
+ * `icon()`, attributes, text, classes, listeners and focus; it has no `innerHTML` and no parser, so a path through it
+ * that needed one would throw rather than pass (the same construction as the fake in `a2ui_test.ts`, which stays
+ * private to that file because importing a test module re-registers its tests).
  *
  * Not modelled: the kit's property getters. A `wa-select`'s `value` here is a plain property, while the real one
- * filters against an option cache rebuilt a microtask after `replaceChildren` and reads `''` until then (F-01); a
- * test that needs that reading blanks the property by hand (`task_composer_test.ts`). Nor `querySelector`: a
- * primitive that calls it (`busy()`) gets a per-instance stub from the test that drives it.
+ * filters against an option cache rebuilt a microtask after `replaceChildren` and reads `''` until then. Nor
+ * `querySelector`, so `busy()` cannot run here.
  */
 
 export class FakeText {
@@ -21,7 +20,6 @@ export class FakeText {
 
 export interface FakeEventInit {
 	readonly key?: string;
-	readonly relatedTarget?: unknown;
 }
 
 export interface FakeEvent {
@@ -68,7 +66,7 @@ export class FakeElement {
 	parentNode: FakeElement | null = null;
 	readonly listeners = new Map<string, Array<(event: FakeEvent) => void>>();
 	readonly classList = new FakeClassList(this);
-	/** CSSOM writes land here (`meterBar` sets `--fill`). */
+	/** CSSOM writes land here (the workspace tree sets `--level`). */
 	readonly style = {
 		properties: new Map<string, string>(),
 		setProperty: (name: string, value: string): void => {
@@ -137,10 +135,6 @@ export class FakeElement {
 			this.childNodes.push(child);
 		}
 	}
-	prepend(...nodes: Array<FakeElement | FakeText | string>): void {
-		const adopted = nodes.map((node) => this.adopt(node));
-		this.childNodes.unshift(...adopted);
-	}
 	replaceChildren(...nodes: Array<FakeElement | FakeText | string>): void {
 		for (const child of this.childNodes) if (child instanceof FakeElement) child.parentNode = null;
 		this.childNodes = [];
@@ -150,19 +144,6 @@ export class FakeElement {
 		if (this.parentNode === null) return;
 		this.parentNode.childNodes = this.parentNode.childNodes.filter((child) => child !== this);
 		this.parentNode = null;
-	}
-	replaceWith(node: FakeElement | FakeText): void {
-		const parent = this.parentNode;
-		if (parent === null) return;
-		const index = parent.childNodes.indexOf(this);
-		parent.childNodes[index] = parent.adopt(node);
-		this.parentNode = null;
-	}
-	/** Tag-name selectors only (`'wa-dialog, wa-drawer'`), which is all the primitives ask for. */
-	closest(selector: string): FakeElement | null {
-		const tags = selector.split(',').map((part) => part.trim());
-		if (tags.includes(this.tagName)) return this;
-		return this.parentNode?.closest(selector) ?? null;
 	}
 	focus(): void {
 		this.document.activeElement = this;
@@ -242,10 +223,6 @@ export function byTag(root: FakeElement, tag: string): FakeElement[] {
 
 export function byClass(root: FakeElement, name: string): FakeElement[] {
 	return all(root).filter((node) => node.classList.contains(name));
-}
-
-export function byRole(root: FakeElement, role: string): FakeElement[] {
-	return all(root).filter((node) => node.getAttribute('role') === role);
 }
 
 /** The element a primitive returned, as the fake it is. */

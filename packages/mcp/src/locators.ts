@@ -1,18 +1,4 @@
-/**
- * The locator model (DD-4, `report_design.md` §5).
- *
- * A locator candidate is one of seven kinds, ranked in the intake's order, each carrying the number of
- * matches **in the element's own document** and the frame that count was made in. The counts here are
- * answered from the serializer's own index of the merged tree — a walk over data already in memory,
- * never a CDP round trip — because computing seven `DOM.performSearch` calls for 1200 elements is not
- * a tool call, it is an outage. The count is therefore "as of the capture the state token names";
- * `browser_verify_locator` is the tool that asks the browser what it matches today.
- *
- * Kinds that need the element's own text or accessible name read it through the same gates the rest
- * of the element record uses, so a password field never yields a `text` or `label` candidate built
- * from its value (DD-7): `text` reads children text, never `value`, and `label` reads the associated
- * `<label>` or `aria-label`, never the field.
- */
+/** The locator model. */
 import { type EnhancedDomTreeNode, getAllChildrenText, normalizeWhitespace, walkTree } from '@tykotech/browser';
 import { ToolError } from './errors.ts';
 
@@ -34,7 +20,7 @@ export interface LocatorCandidate {
 }
 
 /** The four test-id spellings, resolved in this order and always emitted as `data-testid`. */
-export const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-qa'] as const;
+const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-qa'] as const;
 
 /** `text=` values are capped here; a paragraph is not a locator. */
 export const MAX_TEXT_LOCATOR_CHARS = 80;
@@ -47,13 +33,7 @@ const ELEMENT_NODE = 1;
 /** A CSS identifier that needs no escaping; anything else is spelled `[id="…"]`. */
 const CSS_IDENT = /^-?[A-Za-z_][A-Za-z0-9_-]*$/;
 
-/**
- * Per-document counts of every locator value this model can produce.
- *
- * Built once per observation from the merged tree, so answering `matches` for 1200 elements is 1200
- * map lookups rather than 1200 walks. Keyed by `frameId`, because DD-4 measures uniqueness in the
- * element's own document and a value that is unique inside an iframe is not unique in the page.
- */
+/** Per-document counts of every locator value this model can produce. */
 export interface DocumentIndex {
 	readonly byFrame: ReadonlyMap<string, FrameCounts>;
 }
@@ -192,9 +172,8 @@ function nthOfType(node: EnhancedDomTreeNode): number | null {
 }
 
 /**
- * A structural path from the nearest id-bearing ancestor, at most {@linkcode MAX_CSS_SEGMENTS}
- * segments, `:nth-of-type` only where a tag alone is ambiguous. `undefined` when the element has no
- * anchor within reach, because a path from the document root is fragile enough to be worthless.
+ * A structural path from the nearest id-bearing ancestor, at most {@linkcode MAX_CSS_SEGMENTS} segments,
+ * `:nth-of-type` only where a tag alone is ambiguous.
  */
 export function cssPathOf(node: EnhancedDomTreeNode): string | undefined {
 	const segments: string[] = [];
@@ -216,9 +195,8 @@ export function cssPathOf(node: EnhancedDomTreeNode): string | undefined {
 }
 
 /**
- * Evaluates a path {@linkcode cssPathOf} produced against the in-memory frame: every id-bearing
- * anchor, then the segments as a strict child descent. It matches exactly what the path means, so
- * disagreement with the browser can only come from a page that changed since the capture.
+ * Evaluates a path {@linkcode cssPathOf} produced against the in-memory frame: every id-bearing anchor, then the
+ * segments as a strict child descent.
  */
 function countCssPath(path: string, counts: FrameCounts): number {
 	const [anchor, ...rest] = path.split(' > ');
@@ -248,12 +226,7 @@ function countCssPath(path: string, counts: FrameCounts): number {
 	return frontier.length;
 }
 
-/**
- * Every candidate the element supports, in DD-4 kind order, at most one per kind.
- *
- * A kind that cannot be computed is absent, not present with a sentinel; `[]` is legal and means a
- * bare `<div>` with a click listener.
- */
+/** Every candidate the element supports, in ranked kind order, at most one per kind. */
 export function locatorCandidates(node: EnhancedDomTreeNode, index: DocumentIndex): LocatorCandidate[] {
 	const counts = index.byFrame.get(node.frameId);
 	if (counts === undefined) return [];
@@ -299,18 +272,13 @@ export function locatorCandidates(node: EnhancedDomTreeNode, index: DocumentInde
 }
 
 /** A locator as a caller states it, parsed into what its kind needs. */
-export type ParsedLocator =
+type ParsedLocator =
 	| { kind: 'testid' | 'id' | 'name' | 'css'; selector: string }
 	| { kind: 'text'; text: string }
 	| { kind: 'aria'; role: string; name: string }
 	| { kind: 'label'; label: string };
 
-/**
- * The selector a bare `id`, `testid` or `name` value means. `browser_locator_candidates` emits these kinds as full
- * selectors (`#username`, `[data-testid="x"]`, `input[name="q"]`) and those pass unchanged; a caller that writes the
- * bare attribute value (`{kind: 'id', value: 'username'}`) means the same element, but the bare text went to
- * `DOM.performSearch`, which also matches plain text, and counted every element mentioning the word instead.
- */
+/** The selector a bare `id`, `testid` or `name` value means. */
 function selectorOfBare(kind: 'testid' | 'id' | 'name', value: string): string {
 	const bare = value.trim();
 	switch (kind) {
@@ -324,10 +292,8 @@ function selectorOfBare(kind: 'testid' | 'id' | 'name', value: string): string {
 }
 
 /**
- * Parses `{kind, value}` into its kind's own syntax, refusing a malformed value as a caller error:
- * an `aria` string that is not `role=…[name="…"]`, a `label=`/`text=` value without its prefix, an
- * empty selector. A CSS selector is not validated here — the browser is the matcher, and a selector
- * it cannot parse simply matches nothing.
+ * Parses `{kind, value}` into its kind's own syntax, refusing a malformed value as a caller error: an
+ * `aria` string that is not `role=…[name="…"]`, a `label=`/`text=` value without its prefix, an empty selector.
  */
 export function parseLocator(kind: LocatorKind, value: string): ParsedLocator {
 	const malformed = (detail: string) => new ToolError('invalid-arguments', `locator ${kind}: ${detail}`);

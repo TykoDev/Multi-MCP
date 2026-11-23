@@ -1,7 +1,6 @@
 /**
  * Raw CDP WebSocket transport.
  *
- * Contract: SPECS/ARCHITECTURE.md §7.1, SPECS/DECISION-REGISTER.md D-CDP1 / REJ-4.
  * Native `WebSocket` only — no puppeteer, no playwright, no `ws`. This file owns socket lifecycle,
  * frame decoding, and the inbound frame budget. It knows nothing about ids, domains, or sessions;
  * that is `client.ts`.
@@ -9,10 +8,10 @@
 
 import { CdpError, CdpFrameTooLargeError, toCdpError } from './errors.ts';
 
-/** Inbound frame budget: 200 MB (SPECS/ARCHITECTURE.md §7.1, COMPLETIONS-CRITERIA.md §3.1). */
+/** Inbound frame budget: 200 MB. */
 export const MAX_INBOUND_FRAME_BYTES = 200 * 1024 * 1024;
 
-/** WebSocket-open budget, a sub-budget of the 15 s `connect()` cap in ARCHITECTURE §7.4. */
+/** WebSocket-open budget, a sub-budget of the 15 s `connect()` cap. */
 export const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 
 /** How many leading characters of an oversized frame are scanned for its correlation id. */
@@ -28,7 +27,7 @@ export interface CdpWireFrame {
 	sessionId?: string;
 }
 
-/** Why and how the socket ended. Consumed by `@tykotech/browser`'s reconnect policy (ARCHITECTURE §7.4). */
+/** Why and how the socket ended. Consumed by `@tykotech/browser`'s reconnect policy. */
 export interface CdpCloseInfo {
 	code: number;
 	reason: string;
@@ -68,13 +67,10 @@ export interface CdpTransportOptions {
 /**
  * Measure an inbound frame against the byte budget.
  *
- * ERRATUM(M0-cdp-transport-3): the specs say "200MB" without saying what is measured; see
- * errata-M0.md for the reasoning behind the choice below.
- *
  * Binary frames are measured exactly. Text frames are measured in UTF-16 code units, which is a
  * *lower* bound on their UTF-8 byte length — exact counting would need a full `TextEncoder` pass,
  * i.e. a second allocation the size of the frame we are trying not to allocate. CDP frames are
- * JSON with base64 bodies, so in practice the two counts coincide. See README "Frame budget".
+ * JSON with base64 bodies, so in practice the two counts coincide.
  */
 export function measureFrameBytes(data: string | ArrayBufferLike | ArrayBufferView): number {
 	if (typeof data === 'string') return data.length;
@@ -150,7 +146,7 @@ export class CdpTransport {
 				socket.onclose = null;
 			};
 
-			// Teardown-on-timeout keeps a retry starting from a clean slate (ARCHITECTURE §7.4).
+			// Teardown-on-timeout keeps a retry starting from a clean slate.
 			const fail = (error: Error) => {
 				if (settled) return;
 				settled = true;
@@ -297,7 +293,7 @@ export class CdpTransport {
  * Validate a CDP WebSocket URL.
  *
  * An http(s) URL is a caller mistake with an exact remedy: `fetchWebSocketDebuggerUrl()` performs
- * the `/json/version` handshake (ARCHITECTURE §7.4) and hands back the `ws://` URL this wants.
+ * the `/json/version` handshake and hands back the `ws://` URL this wants.
  */
 export function parseCdpWebSocketUrl(url: string): string {
 	let parsed: URL;

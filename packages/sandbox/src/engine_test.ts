@@ -57,7 +57,7 @@ function scripted(
 	};
 }
 
-Deno.test('D-108 engine: JSON answers by length and chunked; paths carry the pinned API version', async () => {
+Deno.test('engine: JSON answers by length and chunked; paths carry the pinned API version', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const fake = new FakeEngine({ workDir: 'tests/.scratch' });
 	const engine = new Engine(fake.dial);
@@ -82,7 +82,7 @@ Deno.test('D-108 engine: JSON answers by length and chunked; paths carry the pin
 	await fake.settle();
 });
 
-Deno.test('R2-2 engine: pause and unpause by validated id; a paused container still counts as running', async () => {
+Deno.test('engine: pause and unpause by validated id; a paused container still counts as running', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const fake = new FakeEngine({ workDir: 'tests/.scratch' });
 	const engine = new Engine(fake.dial);
@@ -110,7 +110,7 @@ Deno.test('R2-2 engine: pause and unpause by validated id; a paused container st
 	await fake.settle();
 });
 
-Deno.test('D-108 engine: a daemon failure keeps its status and only cleaned words; bounds and bad answers refuse', async () => {
+Deno.test('engine: a daemon failure keeps its status and only cleaned words; bounds and bad answers refuse', async () => {
 	const failing = scripted(async (_, conn) => {
 		const body = JSON.stringify({ message: 'no such image:\u0007 x\n' });
 		await conn.write(encoder.encode(`HTTP/1.1 404 Not Found\r\nContent-Length: ${body.length}\r\n\r\n${body}`));
@@ -137,7 +137,7 @@ Deno.test('D-108 engine: a daemon failure keeps its status and only cleaned word
 	assertEquals((await assertRejects(() => new Engine(badChunk.dial).ping(), EngineError)).status, 502);
 });
 
-Deno.test('D-108 engine: a daemon that never answers costs one call, ended at the deadline', async () => {
+Deno.test('engine: a daemon that never answers costs one call, ended at the deadline', async () => {
 	let held: EngineConn | null = null;
 	const silent = scripted((_, conn) => {
 		held = conn;
@@ -150,7 +150,7 @@ Deno.test('D-108 engine: a daemon that never answers costs one call, ended at th
 	(held as EngineConn | null)?.close();
 });
 
-Deno.test('D-108 engine: a refused body or a bad name never opens a connection', async () => {
+Deno.test('engine: a refused body or a bad name never opens a connection', async () => {
 	const daemon = scripted(() => Promise.reject(new Error('must not be reached')));
 	const engine = new Engine(daemon.dial);
 	const body = containerBody(TARGET) as unknown as Record<string, Record<string, unknown>>;
@@ -173,7 +173,7 @@ Deno.test('D-108 engine: a refused body or a bad name never opens a connection',
 	assertEquals(daemon.dials(), 0);
 });
 
-Deno.test('D-108 engine: an attached exec is demultiplexed across reads; input is written raw and then closed', async () => {
+Deno.test('engine: an attached exec is demultiplexed across reads; input is written raw and then closed', async () => {
 	const execId = 'e'.repeat(64);
 	let input = '';
 	const daemon = scripted(async (request, conn) => {

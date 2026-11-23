@@ -2,10 +2,9 @@
  * @module
  * Dropdown inspection and selection — native `<select>` **and** the ARIA/framework path.
  *
- * Contract owner: SPECS/ARCHITECTURE.md §6.10 ("dropdown inspect/select (native select + ARIA/
- * framework paths)"), SPECS/DATA-MODEL.md §5.1.1 (`GetDropdownOptionsEvent` → `Record<string,string>`
- * keyed `shortTermMemory`/`longTermMemory`; `SelectDropdownOptionEvent` → the same shape) and §7.4
- * #19/#20 ("failure returns available options as structured memory, not throw").
+ * `GetDropdownOptionsEvent` and `SelectDropdownOptionEvent` both answer a `Record<string,string>`
+ * keyed `shortTermMemory`/`longTermMemory`; a failed selection returns the available options as
+ * structured memory rather than throwing.
  *
  * ## Two mechanisms, because there are two kinds of dropdown
  *
@@ -139,7 +138,7 @@ export interface NativeSelectResult {
 /**
  * Matching, in three passes: exact option text → exact `value` → case-insensitive text.
  *
- * §7.4 #20 says the parameter is "exact option text/value", so the exact passes come first and the
+ * The parameter is documented as "exact option text/value", so the exact passes come first and the
  * case-insensitive one only rescues an LLM that lower-cased a label it read off the page.
  */
 const SELECT_NATIVE_FUNCTION = `function (wanted) {
@@ -200,7 +199,7 @@ const FIND_ARIA_OPTION_FUNCTION = `function (wanted) {
  * real click cascade rather than a JS `.click()` the framework may not honour.
  *
  * Returns `null` when no option matches — the caller then answers with the available options as
- * structured memory (§7.4 #20), never a throw.
+ * structured memory, never a throw.
  */
 export async function findAriaOptionNode(handle: NodeHandle, text: string): Promise<number | null> {
 	const controlObjectId = await resolveNodeObject(handle);
@@ -243,7 +242,7 @@ export function needsExpansion(info: DropdownInfo): boolean {
 	return info.expanded === false;
 }
 
-/** Renders options the way the agent's `<read_state>` block shows them (§7.4 #19). */
+/** Renders options the way the agent's `<read_state>` block shows them. */
 export function formatOptions(options: readonly DropdownOption[]): string {
 	if (options.length === 0) return 'no options found';
 	return options

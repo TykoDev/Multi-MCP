@@ -1,6 +1,6 @@
 {
 	"name": "basic_page",
-	"pins": "§6.4 base line forms: [Start of page]/[End of page], bare text nodes, [idx] tag lines, structural pass-through depth",
+	"pins": "base line forms: [Start of page]/[End of page], bare text nodes, [idx] tag lines, structural pass-through depth",
 	"options": { "pixelsAbove": 0, "pixelsBelow": 0 },
 	"tree": {
 		"tag": "HTML",

@@ -60,7 +60,7 @@ Deno.test('extensions: optional tools disappear when unconfigured and duplicate 
 	}
 });
 
-Deno.test('extensions (D-154): the memory tools take the library scopes, need an owner and no service, and envelope', async () => {
+Deno.test('extensions: the memory tools take the library scopes, need an owner and no service, and envelope', async () => {
 	const owners: string[] = [];
 	const tools = extensionTools({
 		memory_save: (_args, ctx) => {
@@ -71,7 +71,6 @@ Deno.test('extensions (D-154): the memory tools take the library scopes, need an
 		memory_delete: () => Promise.resolve({ collection: 'c', deleted: 0, dropped: false }),
 		memory_list: () => Promise.resolve({ default_embedder: 'builtin:lexical-512', collections: [] }),
 	});
-	// D-075: persistent data on the data volume — reading is files:read, changing it files:write.
 	assertEquals(tools.map((tool) => [tool.name, tool.scope, tool.mutates]), [
 		['memory_save', 'files:write', true],
 		['memory_search', 'files:read', false],
@@ -81,7 +80,6 @@ Deno.test('extensions (D-154): the memory tools take the library scopes, need an
 	assert(tools.every((tool) => tool.available === undefined), 'no private service, so no health gate');
 	const registry = new SessionRegistry();
 	try {
-		// The base grant plus the library's read grant: listing is allowed, saving is not.
 		const call = createToolExecutor(
 			{ registry, version: 'test', extraTools: tools },
 			'owner',
@@ -100,7 +98,6 @@ Deno.test('extensions (D-154): the memory tools take the library scopes, need an
 		const saved = await writer('memory_save', { collection: 'c', items: [{ text: 'x' }] });
 		assert(!('isError' in saved && saved.isError));
 		assertEquals(owners, ['api-key:alice']);
-		// Bounds a model reads in the schema: a name that is not lower-case, and an empty batch, never reach the action.
 		for (const args of [{ collection: 'Notes', items: [{ text: 'x' }] }, { collection: 'c', items: [] }]) {
 			const refused = await writer('memory_save', args);
 			assert('isError' in refused && refused.isError);

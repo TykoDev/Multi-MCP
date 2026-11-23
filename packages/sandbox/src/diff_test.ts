@@ -28,7 +28,7 @@ Deno.test("diff: git works on a temporary index and object store, never the chec
 	assertStringIncludes(script, '--no-renames --no-color --no-ext-diff --no-textconv HEAD');
 	// Nothing git could be told by the repository runs: no external diff, no text conversion.
 	assertStringIncludes(script, '-c core.fsmonitor=false');
-	// R12: a checkout may come from a remote; no hook ever runs in a diff, on every git call of it.
+	// A checkout may come from a remote; no hook ever runs in a diff, on every git call of it.
 	const calls = script.split("git -c safe.directory='*'").length - 1;
 	assertEquals(calls, 4);
 	assertEquals(script.split('-c core.hooksPath=/dev/null').length - 1, calls);
@@ -94,7 +94,7 @@ Deno.test('diff: a very long list stops at the limit', () => {
 
 const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 
-Deno.test('SB-6 diff: a reply that fits is left as it is', () => {
+Deno.test('diff: a reply that fits is left as it is', () => {
 	const result = {
 		patch: onePatch('a.txt'),
 		files: [{ path: 'a.txt', change: 'modified' as const }],
@@ -103,7 +103,7 @@ Deno.test('SB-6 diff: a reply that fits is left as it is', () => {
 	assertEquals(fitDiff(result, LIMITS.responseBytes), result);
 });
 
-Deno.test('SB-6 diff: a patch of control bytes, six times longer as JSON, is cut to whole files that fit', () => {
+Deno.test('diff: a patch of control bytes, six times longer as JSON, is cut to whole files that fit', () => {
 	// A 7 MiB patch is within patchBytes, but each control byte is six bytes once escaped.
 	const control = String.fromCharCode(1).repeat(1024 * 1024);
 	const patch = Array.from({ length: 7 }, (_, i) => onePatch(`f${i}.bin`, `+${control}\n`)).join('');
@@ -118,7 +118,7 @@ Deno.test('SB-6 diff: a patch of control bytes, six times longer as JSON, is cut
 	assertEquals(fitted.patch.split(/^diff --git /m).length - 1, 1);
 });
 
-Deno.test('SB-6 diff: a file list of escaped names keeps at most a quarter of the room', () => {
+Deno.test('diff: a file list of escaped names keeps at most a quarter of the room', () => {
 	const name = String.fromCharCode(2).repeat(4000);
 	const files = Array.from({ length: 200 }, (_, i) => ({ path: `${i}${name}`, change: 'added' as const }));
 	const fitted = fitDiff({ patch: onePatch('a.txt'), files, truncated: false }, 1024 * 1024);

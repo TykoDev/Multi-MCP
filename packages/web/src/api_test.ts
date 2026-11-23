@@ -1,6 +1,6 @@
 /// <reference lib="deno.ns" />
 /**
- * The SPA's HTTP client: what `send()` puts on the wire (R1-6) and what a sign-out may claim (R1-3).
+ * The SPA's HTTP client: what `send()` puts on the wire and what a sign-out may claim.
  *
  * `fetch` is replaced for each test and restored after it; nothing here reaches a network. The package's `lib` is
  * browser-only, so this file opts back into the runtime types it needs, as `web_test.ts` does.
@@ -31,7 +31,7 @@ async function withFetch(
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
 	new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 
-Deno.test("R1-6: send() keeps a caller's content type; only an untyped body is sent as JSON", async () => {
+Deno.test("send() keeps a caller's content type; only an untyped body is sent as JSON", async () => {
 	await withFetch(() => Promise.resolve(json(201, { name: 'b.bin' })), async (calls) => {
 		const { api, send } = await import('./api.ts');
 		const file = new Blob([new Uint8Array([0, 1, 2, 0xff])]);
@@ -52,7 +52,7 @@ Deno.test("R1-6: send() keeps a caller's content type; only an untyped body is s
 	});
 });
 
-Deno.test('R1-3: a sign-out is reported only when the server confirmed it', async () => {
+Deno.test('a sign-out is reported only when the server confirmed it', async () => {
 	let reply: () => Promise<Response> = () => Promise.resolve(new Response(null, { status: 204 }));
 	await withFetch(
 		(call) => call.path === '/api/v1/auth/logout' ? reply() : Promise.resolve(json(200, {})),
@@ -97,7 +97,7 @@ Deno.test('R1-3: a sign-out is reported only when the server confirmed it', asyn
 	);
 });
 
-Deno.test('R1-3: the shell signs out only on a confirmed outcome and keeps a failed one retrying', async () => {
+Deno.test('the shell signs out only on a confirmed outcome and keeps a failed one retrying', async () => {
 	const shell = await Deno.readTextFile(new URL('./shell.ts', import.meta.url));
 	assert(!/logout\(\)[\s\S]{0,40}\.finally\(/.test(shell), 'no sign-out that clears the page whatever the server said');
 	assert(/endSession\(\)/.test(shell), 'the shell asks endSession() what happened');

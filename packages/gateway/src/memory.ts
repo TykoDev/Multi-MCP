@@ -1,26 +1,4 @@
-/**
- * D-154 (owner-requested): the agents' vector memory, in the gateway database (`database.ts`).
- *
- * The built-in model agent acts only through the MCP tool list, so memory is offered as tools (`memory_tools.ts`)
- * over this store. Nothing here loads a native extension (`sqlite-vec` cannot be loaded under `--deny-ffi`, and must
- * not be): a vector is a little-endian Float32 BLOB, L2-normalised on write, so cosine similarity is a dot product,
- * and ranking is one SQL statement over a deterministic scalar function this module registers ({@linkcode DOT_SQL}).
- *
- * - **Owner scoping.** Every collection and item belongs to the realm-qualified owner (`expansionOwner`, D-068) the
- *   MCP extension seam hands an action; every statement here filters on it, so one principal never sees, searches or
- *   deletes another's memory. The credential-less mounts (loopback development, stdio) share their one owner.
- * - **One vector space per collection.** A collection is bound at creation to the embedder then in force and to the
- *   length of its vectors; every later save and search on it uses that embedder, so changing the default never mixes
- *   spaces. A collection whose embedder is no longer configured refuses rather than embedding with another.
- * - **Lengths are checked, never assumed.** {@linkcode DOT_SQL} answers SQL `NULL`, never a number, for vectors of
- *   different lengths; the search sorts such a row first and refuses, so a corrupt or foreign row fails the search
- *   instead of producing a wrong score.
- * - **Provider embeddings** reuse the model transport's discipline (`packages/agents/src/model/transport.ts`): the
- *   provider's own admitted `base_url` is the only URL dialled, redirects are refused, the call and the body are
- *   bounded, and an error answer's body — which may quote the key — is never read. No key or body reaches an error.
- *
- * Node-local, like the database: in a cluster each node keeps its own memory.
- */
+/** The agents' vector memory, in the gateway database (`database.ts`). */
 import * as z from 'zod';
 import { ulid } from '@std/ulid';
 import { PROVIDER_BODY_LIMIT, providerEndpoint } from '@tykotech/agents';
@@ -30,12 +8,7 @@ import { HttpProblem } from './problem.ts';
 
 // --- bounds ---------------------------------------------------------------------------------------------------------
 
-/**
- * The fixed bounds. A search is a full scan of one collection through a JavaScript function, so the item cap and the
- * vector cap bound its cost (10 000 rows × 4096 floats is tens of milliseconds); the text and metadata caps bound a row
- * and a result list (20 hits × 16 KiB); the batch cap bounds one provider call's input and answer, which must fit the
- * transport's body limit ({@linkcode PROVIDER_BODY_LIMIT}: 32 × 4096 floats as JSON is under 3 MiB).
- */
+/** The fixed bounds. */
 export const MEMORY_LIMITS = {
 	/** One item's text, UTF-8 bytes. Also the query's. */
 	textBytes: 16 * 1024,
@@ -66,15 +39,14 @@ export const MEMORY_COLLECTION_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 export const MEMORY_FILTER_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** The `settings` key holding the default embedder: `builtin` (also when unset) or `<providerId>/<model>`. */
-export const MEMORY_EMBEDDER_SETTING = 'memory.embedder';
+const MEMORY_EMBEDDER_SETTING = 'memory.embedder';
 
 /** The SQL function name of the similarity. */
 export const DOT_SQL = 'ttk_dot';
 
 /**
- * The built-in embedder's id. The id names the vector space: the hashing below must never change under it — a
- * changed tokeniser or hash would silently put new vectors in a different space from the stored ones. A new
- * algorithm takes a new id; `memory_test.ts` pins this one's output.
+ * The built-in embedder's id. The id names the vector space: the hashing below must never change under it — a changed
+ * tokeniser or hash would silently put new vectors in a different space from the stored ones.
  */
 export const BUILTIN_EMBEDDER_ID = 'builtin:lexical-512';
 
@@ -82,7 +54,7 @@ export const BUILTIN_EMBEDDER_ID = 'builtin:lexical-512';
 export const LEXICAL_DIMS = 512;
 
 /** One provider embedding call, below the tool-call bound so a hung provider ends as a provider failure. */
-export const EMBED_CALL_TIMEOUT_MS = 60_000;
+const EMBED_CALL_TIMEOUT_MS = 60_000;
 
 /** One SQL value as `node:sqlite` binds and returns it (through `database.ts`, the one module that imports it). */
 type SqlValue = Row[string];
@@ -150,12 +122,8 @@ export function decodeVector(bytes: Uint8Array): Float32Array {
 }
 
 /**
- * The SQL similarity: the dot product of two stored vectors, or SQL `NULL` for anything it cannot score (not two
- * blobs, different lengths, not whole floats) — never a number for a mismatch.
- *
- * It answers `NULL` rather than throwing because, in Deno 2.9, `StatementSync.all()` never returns once a user
- * function throws (`get()` does): a throw here would hang the process. Two named parameters, not a rest list, because
- * `node:sqlite` registers a function with the arity of its `length`.
+ * The SQL similarity: the dot product of two stored vectors, or SQL `NULL` for anything it cannot score (not two blobs,
+ * different lengths, not whole floats) — never a number for a mismatch.
  */
 function dot(a: SqlValue, b: SqlValue): SqlValue {
 	if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array)) return null;
@@ -230,7 +198,7 @@ function avalanche(hash: number): number {
  * The built-in lexical embedding of one text: NFKC, lower-cased, split into letter/digit tokens; each token and each
  * adjacent pair is a feature, hashed into {@linkcode LEXICAL_DIMS} buckets (low bits of the mixed hash) with a sign
  * (its top bit) so collisions cancel rather than pile up, weighted by sublinear term frequency `1 + ln tf`, then
- * L2-normalised. Deterministic, offline and dependency-free — and lexical: it matches shared words, not meaning.
+ * L2-normalised.
  */
 export function lexicalEmbed(text: string): Float32Array {
 	const tokens = text.normalize('NFKC').toLowerCase().match(TOKEN) ?? [];
@@ -252,7 +220,7 @@ export function lexicalEmbed(text: string): Float32Array {
 }
 
 /** The built-in embedder. */
-export const LEXICAL_EMBEDDER: Embedder = {
+const LEXICAL_EMBEDDER: Embedder = {
 	id: BUILTIN_EMBEDDER_ID,
 	dims: LEXICAL_DIMS,
 	embed: (texts) => Promise.resolve(texts.map(lexicalEmbed)),
@@ -329,11 +297,9 @@ function vectorsOf(parsed: unknown, count: number): Float32Array[] {
 
 /**
  * An OpenAI-compatible embedder (`POST {base_url}/embeddings`, a bare origin getting `/v1` first as the chat client's
- * does — ERRATUM(E-120), `providerEndpoint`; `{ model, input }`) over one configured provider. The
- * headers are built as the chat client builds them (`requestHeaders`): the operator's lower-cased, then the fixed
- * ones, then `authorization` — sent only when the provider has a key, and last, so nothing displaces it.
+ * does — `providerEndpoint`; `{ model, input }`) over one configured provider.
  */
-export function providerEmbedder(
+function providerEmbedder(
 	provider: ModelProviderSettings,
 	model: string,
 	options: ProviderEmbedderOptions = {},
@@ -556,7 +522,7 @@ export class MemoryStore {
 	/**
 	 * The embedders an administrator may choose: the built-in one, then one per model listed on each OpenAI-compatible
 	 * provider (an embedding model must be listed on its provider like any other model — the providers file and the
-	 * control plane remain the only places a model is named). Anthropic providers have no embeddings API.
+	 * control plane remain the only places a model is named).
 	 */
 	availableEmbedders(): EmbedderInfo[] {
 		const out: EmbedderInfo[] = [BUILTIN_INFO];
@@ -586,8 +552,7 @@ export class MemoryStore {
 
 	/**
 	 * Chooses the default embedder for new collections; existing collections keep theirs. Takes the setting's spelling
-	 * (`builtin`, `<providerId>/<model>`) or an embedder id; refuses one not in {@linkcode availableEmbedders}. Returns
-	 * the embedder id now in force.
+	 * (`builtin`, `<providerId>/<model>`) or an embedder id; refuses one not in {@linkcode availableEmbedders}.
 	 */
 	setEmbedder(value: string): string {
 		const id = value === 'builtin'
@@ -659,8 +624,6 @@ export class MemoryStore {
 
 	/**
 	 * Saves (upserts) `items` into `owner`'s `collection`, creating it — bound to the default embedder — when absent.
-	 * Embedding happens before the write; the write is one transaction that re-checks the binding and the caps, so a
-	 * concurrent save or drop cannot slip a vector of another space in.
 	 */
 	async save(
 		owner: string,
@@ -829,8 +792,7 @@ export class MemoryStore {
 
 	/**
 	 * Removes `owner`'s `collection` with every item in it (the foreign key cascades) and its embedder binding, so the
-	 * name can be reused with the embedder then in force. Returns the number of items removed, or `null` when there was
-	 * no such collection.
+	 * name can be reused with the embedder then in force.
 	 */
 	drop(owner: string, collection: string): number | null {
 		checkCollection(collection);
@@ -910,8 +872,8 @@ export function parseMemoryConfigBody(body: unknown): { readonly embedder: strin
 }
 
 /**
- * `PUT /api/v1/system/memory`: validates the body, sets the default embedder and answers the new view. An embedder
- * that is not available is `400 invalid-request`. Existing collections keep their own embedder.
+ * `PUT /api/v1/system/memory`: validates the body, sets the default embedder and answers the new view. An embedder that
+ * is not available is `400 invalid-request`. Existing collections keep their own embedder.
  */
 export function applyMemoryConfig(store: MemoryStore, body: unknown): MemorySystemView {
 	const { embedder } = parseMemoryConfigBody(body);

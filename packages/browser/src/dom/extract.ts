@@ -1,9 +1,8 @@
 /**
  * DOM extraction — the public face of the `DOMSnapshot` × `DOM` × `Accessibility` merge.
  *
- * Contract: SPECS/DATA-MODEL.md §6.1–§6.2 (the IR), SPECS/ARCHITECTURE.md §6.7 (DOMWatchdog budget:
- * ≤2 s pending-network probe with a 0.3 s stability pause, 20 s combined with the screenshot, a
- * minimal recovery state on failure instead of a throw), §8 (timeout hierarchy).
+ * Budget: a ≤2 s pending-network probe with a 0.3 s stability pause, 20 s combined with the
+ * screenshot, and a minimal recovery state on failure instead of a throw.
  *
  * Two entry points, deliberately separated:
  *
@@ -76,9 +75,7 @@ import { type FrameRecord, mergeDomTrees } from './extract_merge.ts';
 /**
  * Failure inside the DOM pipeline.
  *
- * `@tykotech/browser`'s shared error taxonomy (DATA-MODEL §4.4 `BrowserError` and friends) lives in
- * `src/errors.ts`, which this builder does not own; this class is the DOM-local placeholder and SHOULD
- * be re-parented onto `BrowserError` once that file exists. Never a bare string (AGENTS.md §3).
+ * DOM-local, separate from the shared `BrowserError` taxonomy in `src/errors.ts`. Never a bare string.
  */
 export class DomExtractionError extends Error {
 	readonly phase: 'capture' | 'merge' | 'probe';
@@ -93,7 +90,7 @@ export class DomExtractionError extends Error {
 /** Options for {@linkcode extractDomTree}. */
 export interface ExtractDomTreeOptions {
 	readonly client: CdpClient;
-	/** The page session to build from. SessionManager owns its lifecycle (ARCHITECTURE §7.3). */
+	/** The page session to build from. SessionManager owns its lifecycle. */
 	readonly root: DomTargetSession;
 	readonly resolveChildSession?: ChildSessionResolver;
 	/** Defaults to on; the census is the only source of `hasJsClickListener`. */
@@ -105,7 +102,7 @@ export interface ExtractDomTreeOptions {
 	readonly waitForNetwork?: boolean;
 	/**
 	 * Wall-clock ceiling for probe + capture + merge. Defaults to {@linkcode DOM_BUILD_BUDGET_MS},
-	 * which ARCHITECTURE §6.7 shares with the screenshot — a caller running both in parallel should
+	 * which the DOM build shares with the screenshot — a caller running both in parallel should
 	 * pass the *remaining* budget, not the full one.
 	 */
 	readonly budgetMs?: number;
@@ -115,19 +112,19 @@ export interface ExtractDomTreeOptions {
 /**
  * The DOM pipeline's output.
  *
- * There is no failure channel: ARCHITECTURE §6.7 requires the DOMWatchdog to answer with a minimal
+ * There is no failure channel: the DOMWatchdog answers with a minimal
  * recovery state carrying `browserErrors` rather than to throw, so a failed build surfaces as
  * `root === null` with `recovered: true` and the reason in `browserErrors`. Callers assembling a
- * `BrowserStateSummary` (§5.3) copy `browserErrors` straight across.
+ * `BrowserStateSummary` copy `browserErrors` straight across.
  */
 export interface DomExtractionResult {
 	readonly root: EnhancedDomTreeNode | null;
-	/** `${sessionId}:${backendNodeId}` → node — the identity R6.2/R6.3 are defined over. */
+	/** `${sessionId}:${backendNodeId}` → node — the identity new-element marking and the reverse map use. */
 	readonly byKey: ReadonlyMap<string, EnhancedDomTreeNode>;
 	readonly nodeCount: number;
 	/** Non-fatal observations (skipped OOPIFs, a dropped census, unmapped node types). */
 	readonly warnings: readonly string[];
-	/** DATA-MODEL §5.3 `browserErrors`. Empty on success. */
+	/** `BrowserStateSummary.browserErrors`. Empty on success. */
 	readonly browserErrors: readonly string[];
 	/** True when the budget ran out; implies `recovered`. */
 	readonly timedOut: boolean;
@@ -136,19 +133,19 @@ export interface DomExtractionResult {
 	readonly network: NetworkStabilityResult | null;
 	readonly durationMs: number;
 	/**
-	 * ERRATUM(E-36): per-captured-session frame identity, carried so the serializer can mint the
+	 * Per-captured-session frame identity, carried so the serializer can mint the
 	 * `state_token` identity half without a second capture. One entry per CDP session — the root page
 	 * plus every OOPIF — not per same-process iframe: a same-process frame shares its host's session
 	 * and its navigation moves the content half anyway.
 	 */
 	readonly frames: readonly { readonly frameId: string; readonly url: string }[];
-	/** ERRATUM(E-40): every frame the merge walked, root first, with its composition marker. */
+	/** Every frame the merge walked, root first, with its composition marker. */
 	readonly frameTree: readonly FrameRecord[];
-	/** ERRATUM(E-40): true when the capture stopped at `MAX_CAPTURE_SESSIONS`. */
+	/** True when the capture stopped at `MAX_CAPTURE_SESSIONS`. */
 	readonly captureTruncated: boolean;
 }
 
-/** The empty tree returned when the build could not complete (ARCHITECTURE §6.7). */
+/** The empty tree returned when the build could not complete. */
 export function recoveryState(
 	browserErrors: readonly string[],
 	options: {
@@ -175,12 +172,12 @@ export function recoveryState(
 }
 
 /**
- * Build the merged DOM tree for a page, under the §6.7 budget.
+ * Build the merged DOM tree for a page, under the DOM build budget.
  *
  * Sequence: pending-network probe (≤{@linkcode NETWORK_PROBE_MAX_MS}, needing
  * {@linkcode NETWORK_STABILITY_MS} of quiet) → concurrent CDP capture of every session → pure merge.
  * Everything runs under one composite `AbortSignal` so a timeout at this level aborts the CDP sends
- * beneath it (ARCHITECTURE §8: "a timeout at level N MUST abort the pending work at level N+1").
+ * beneath it: a timeout at one level must abort the pending work at the level below.
  */
 export async function extractDomTree(options: ExtractDomTreeOptions): Promise<DomExtractionResult> {
 	const startedAt = performance.now();
@@ -230,7 +227,7 @@ export async function extractDomTree(options: ExtractDomTreeOptions): Promise<Do
 	} catch (error) {
 		const timedOut = budget.signal.aborted;
 		const reason = timedOut
-			? `DOM build exceeded its ${budgetMs} ms budget (ARCHITECTURE §6.7)`
+			? `DOM build exceeded its ${budgetMs} ms budget`
 			: `DOM build failed: ${describeError(error)}`;
 		return recoveryState([reason], {
 			timedOut,
@@ -245,8 +242,8 @@ export async function extractDomTree(options: ExtractDomTreeOptions): Promise<Do
 /**
  * Merge a capture that was recorded earlier — the fixture path.
  *
- * A recorded CDP payload is data, not a mock (D-TEST1): this is the same code the browser path runs,
- * fed from `packages/core/fixtures/dom/`.
+ * A recorded CDP payload is data, not a mock: this is the same code the browser path runs,
+ * fed from `packages/browser/fixtures/dom/`.
  */
 export function extractFromCapture(capture: DomCapture): DomExtractionResult {
 	const startedAt = performance.now();

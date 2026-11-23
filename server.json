@@ -14,21 +14,21 @@
 			"environmentVariables": [
 				{
 					"name": "TTK_HOST",
-					"description": "Bind address. A non-loopback bind needs API keys, OAuth or a user account.",
+					"description": "Bind address. A non-loopback bind needs API keys or a user account.",
 					"isRequired": false,
 					"isSecret": false,
 					"default": "0.0.0.0"
 				},
 				{
 					"name": "TTK_PORT",
-					"description": "Bind port. The image's net grant names 8787; changing it means changing the CMD grant too.",
+					"description": "Bind port. The image's net grant is unscoped, so another port needs no CMD change; publish the same port.",
 					"isRequired": false,
 					"isSecret": false,
 					"default": "8787"
 				},
 				{
 					"name": "TTK_PUBLIC_URL",
-					"description": "The URL clients use; seeds the Host and Origin allowlists, the OAuth audience and every link this server builds.",
+					"description": "The URL clients use; seeds the Host and Origin allowlists and every link this server builds.",
 					"isRequired": false,
 					"isSecret": false
 				},
@@ -71,24 +71,6 @@
 				{
 					"name": "TTK_ANON_SCOPES",
 					"description": "Scopes for credential-less principals (loopback development and stdio); default the default grant.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_OAUTH_ISSUER",
-					"description": "OAuth 2.1 issuer URL; enables resource-server mode.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_OAUTH_AUDIENCE",
-					"description": "Expected aud claim; default TTK_PUBLIC_URL.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_OAUTH_JWKS_URL",
-					"description": "JWKS location; default discovered from the issuer's metadata.",
 					"isRequired": false,
 					"isSecret": false
 				},
@@ -171,6 +153,12 @@
 					"isRequired": false,
 					"isSecret": false,
 					"default": "/usr/bin/ffmpeg"
+				},
+				{
+					"name": "TTK_DISK_BUDGET_MB",
+					"description": "MiB the file share and recordings may hold together, 64 to 1048576 (default 2048).",
+					"isRequired": false,
+					"isSecret": false
 				},
 				{
 					"name": "TTK_BROWSER_PATH",
@@ -260,7 +248,7 @@
 				},
 				{
 					"name": "TTK_SIGNED_LINK_KEY_FILE",
-					"description": "File holding the link-signing key (at least 32 characters); required in a cluster.",
+					"description": "File holding the link-signing key (at least 32 characters).",
 					"isRequired": false,
 					"isSecret": true
 				},
@@ -302,19 +290,13 @@
 				},
 				{
 					"name": "TTK_MCP_STATEFUL",
-					"description": "Also serve 2025-era clients on a stateful mount with Mcp-Session-Id; not with TTK_CLUSTER_KV.",
+					"description": "Also serve 2025-era clients on a stateful mount with Mcp-Session-Id; default true.",
 					"isRequired": false,
 					"isSecret": false
 				},
 				{
 					"name": "TTK_MCP_TOOL_GROUPS",
 					"description": "stdio and stateful sessions list one use_<group> tool per group until the model opens it; default true.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_OTEL_ENDPOINTS",
-					"description": "OTLP collector origins (comma list, max 16). While OTEL_DENO=true it must name every endpoint's origin, so empty or off-list refuses start. A malformed entry refuses start in any mode.",
 					"isRequired": false,
 					"isSecret": false
 				},
@@ -338,30 +320,6 @@
 					"default": "json"
 				},
 				{
-					"name": "TTK_CLUSTER_KV",
-					"description": "A Deno KV path or URL shared by every node; enables clustering.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_ROLE",
-					"description": "all (default), browser or edge; any role but all needs TTK_CLUSTER_KV.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_NODE_ID",
-					"description": "This node's id in a cluster (default node-<8 hex>).",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_NODE_URL",
-					"description": "The URL other nodes use to reach this one; required for all and browser nodes in a cluster.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
 					"name": "TTK_SANDBOX_URL",
 					"description": "Origin of the coding sandbox service; enables the sandbox_* tools.",
 					"isRequired": false,
@@ -372,36 +330,6 @@
 					"description": "File holding the sandbox service's shared bearer token (at least 32 characters).",
 					"isRequired": false,
 					"isSecret": true
-				},
-				{
-					"name": "TTK_AGENT_BRIDGE_URL",
-					"description": "URL of the private ACP agent runner; enables agent_prompt.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_AGENT_BRIDGE_TOKEN_FILE",
-					"description": "File holding the agent runner's bearer token (at least 32 characters).",
-					"isRequired": false,
-					"isSecret": true
-				},
-				{
-					"name": "TTK_AGENT_DEFAULT",
-					"description": "The runner's agent id to use (default default).",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_AGENT_AUTH_METHOD",
-					"description": "ACP authentication method to select when the agent advertises it.",
-					"isRequired": false,
-					"isSecret": false
-				},
-				{
-					"name": "TTK_AGENT_MCP_URL",
-					"description": "The MCP URL handed to the agent with its delegated token (default <TTK_PUBLIC_URL>/mcp).",
-					"isRequired": false,
-					"isSecret": false
 				},
 				{
 					"name": "TTK_AGENT_PEERS_FILE",

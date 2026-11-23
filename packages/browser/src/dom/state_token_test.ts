@@ -1,12 +1,12 @@
 /**
- * `state_token` unit tier — U-1, closed at the unit tier with no browser.
+ * `state_token` unit tier, with no browser.
  *
- * The token is the whole of invariant I-1's testable half: if it is not deterministic, every
+ * If the token is not deterministic, every
  * `element-not-found` / `stale-token` refusal built on it is noise, and a client told "the page
  * moved" when it did not will re-read state forever. So the corpus is replayed rather than sampled —
  * every recorded capture under `packages/browser/fixtures/dom/`, twice, plus a mutation control.
  *
- * A recorded CDP payload is data, not a mock (D-TEST1): this is the same merge and the same
+ * A recorded CDP payload is data, not a mock: this is the same merge and the same
  * serializer the browser path runs.
  */
 
@@ -42,7 +42,7 @@ function tokenOf(capture: DomCapture, topUrl = 'http://127.0.0.1:38111/page.html
 	return serialized.stateToken;
 }
 
-Deno.test('state_token: deterministic across two replays of every recorded capture (U-1)', async () => {
+Deno.test('state_token: deterministic across two replays of every recorded capture', async () => {
 	const names = await captureNames();
 	assert(names.length >= 36, `expected the full recorded corpus, found ${names.length}`);
 	let withTable = 0;
@@ -67,11 +67,11 @@ Deno.test('state_token: one mutated attribute moves the content half and leaves 
 
 	// Mutate a rendered attribute in a *copy* of the recorded bytes — the same capture otherwise, so
 	// the only thing that can move the token is the mutation. The corpus's `f-tel` placeholder is
-	// chosen because `placeholder` is in the §6.5 whitelist, so it reaches the rendered attribute
+	// chosen because `placeholder` is in the attribute whitelist, so it reaches the rendered attribute
 	// string and therefore the content half, while touching neither the index assignment nor any
 	// `backendNodeId` and so leaving the identity half alone.
 	const raw = await Deno.readTextFile(`${FIXTURE_DIR}/${name}.capture.json`);
-	assert(raw.includes(PLACEHOLDER_UNDER_TEST), 'the corpus no longer carries the mutated placeholder');
+	assert(raw.includes(PLACEHOLDER_UNDER_TEST), 'the corpus does not carry the mutated placeholder');
 	const mutated = JSON.parse(raw.replaceAll(PLACEHOLDER_UNDER_TEST, '999-999-9999')) as DomCapture;
 	const after = splitToken(tokenOf(mutated));
 
@@ -95,7 +95,7 @@ Deno.test('state_token: root scroll is not part of the preimage', () => {
 	assertEquals(Object.keys(a).sort(), ['content', 'identity', 'token']);
 });
 
-Deno.test('state_token: a password field contributes `masked`, never its value (DD-7)', () => {
+Deno.test('state_token: a password field contributes `masked`, never its value', () => {
 	const node = passwordNode('hunter2');
 	const withSecret = mintStateToken({ topUrl: 'https://example.test/', frames: [], selectorMap: new Map([[1, node]]) });
 	const withOther = mintStateToken({
@@ -121,7 +121,7 @@ Deno.test('state_token: frame order does not change the token', () => {
 	assertEquals(b.token, a.token);
 });
 
-Deno.test('state_token: a page cannot shift a field boundary with a `|` or a newline (E-38)', () => {
+Deno.test('state_token: a page cannot shift a field boundary with a `|` or a newline', () => {
 	// The separator-injection control. Without length-prefixed fields, a page that put a `|` in its URL
 	// (Chrome preserves an unencoded one in a query string) or in an accessible name could make two
 	// materially different states digest identically, and the whole stale-token distinction with it.
@@ -134,7 +134,7 @@ Deno.test('state_token: a page cannot shift a field boundary with a `|` or a new
 	const withoutPipe = mintStateToken({ ...base, topUrl: 'https://x.test/' });
 	assertNotEquals(withPipe.token, withoutPipe.token);
 
-	// I-9's cousin: a newline in a page-controlled field must not forge a preimage line either.
+	// Likewise, a newline in a page-controlled field must not forge a preimage line either.
 	const forged = 'https://x.test/' + String.fromCharCode(10) + 'F|F1|https://evil.test/';
 	const withNewline = mintStateToken({ ...base, topUrl: forged });
 

@@ -1,24 +1,10 @@
 /**
- * One bubblewrap cage per command. `cageArgs` builds the command line (pure, so the tests can read
- * it); `runCage` starts it, feeds and drains it, and kills the whole cage on a time limit, a
- * cancelled request, or whatever else the caller watches for.
- *
- * What a cage is:
- *
- * - New user, pid, ipc, uts, mount, network and cgroup namespaces (`--unshare-all`), no
- *   capabilities, its own session, and it dies with the service (`--die-with-parent`).
- * - A root filesystem made of the image's `/usr` (read-only), the few files under `/etc` that
- *   programs need to run and to trust certificates, a fresh `/proc`, a minimal `/dev`, and the
- *   mounts the caller names. The root itself is then made read-only. Nothing else of the container
- *   is there: not `/work` beyond the run's own folders, not `/run`, not the service's files.
- * - An environment that starts empty (`--clearenv`) and gets a fixed set of variables.
- * - Only a loopback interface. The one way out is the registry proxy's socket, when it is asked for.
- * - A seccomp filter against new user namespaces (see filter.ts), and a limit on processes.
- * - The command runs as the cage's second process under bubblewrap's own init; when it exits, the
- *   namespace goes and takes anything it left running with it.
- *
- * bubblewrap itself is started with an empty environment: its init process inside the cage keeps
- * the environment it was started with, and a command can read that from /proc/1/environ.
+ * One bubblewrap cage per command: `cageArgs` builds the command line (pure), `runCage` runs it and kills the whole
+ * cage on a time limit, a cancel or a watchdog. A cage has every namespace new (`--unshare-all`), no capabilities,
+ * its own session, dies with the service, a read-only root of `/usr`, a few `/etc` files, a fresh `/proc`, a minimal
+ * `/dev` and only the mounts named; an empty environment plus a fixed set; loopback only (the proxy socket when asked
+ * for); a seccomp filter against new user namespaces; a process limit. bwrap itself starts with an empty
+ * environment too: its init keeps it, readable from /proc/1/environ.
  */
 import { OutputCapture } from './output.ts';
 
@@ -29,10 +15,8 @@ export const PROXY_PORT = 3128;
 /** Where a command's standard input waits for it, inside the run's /tmp. */
 export const STDIN_FILE = '/tmp/.harbour-stdin';
 /**
- * D-076: the file a live session's shell reads its input from, inside the session's own /tmp. The service
- * appends to it; `tail -f` inside the cage feeds the shell. A plain file rather than a FIFO so the service
- * needs no extra executable grant and the cage no device: what the shell has consumed stays on the volume
- * until the session's tmp is removed with it.
+ * A live session's input, in its own /tmp: the service appends, `tail -f` feeds the shell. A plain file, not a
+ * FIFO, so neither the service nor the cage needs anything more.
  */
 export const SESSION_INPUT = '/tmp/.harbour-session-input';
 /** What the prelude says on stderr once the cage exists; its absence means bubblewrap failed. */
@@ -87,11 +71,7 @@ export function proxyEnv(): Record<string, string> {
 	};
 }
 
-/**
- * Files from the image a cage sees, read-only, when they exist: certificates, the library cache,
- * the alternatives links behind commands such as `awk`, and the tables that name services and
- * protocols. Everything else of the image's /etc stays out.
- */
+/** The only image files under /etc a cage sees, read-only, when they exist. */
 const SYSTEM_FILES = [
 	'/etc/ssl',
 	'/etc/ca-certificates',
@@ -126,25 +106,18 @@ export interface CageSpec {
 	proxy: boolean;
 	/** The command reads STDIN_FILE, which the caller has written into the run's /tmp. */
 	stdin: boolean;
-	/**
-	 * D-076: a live session. The shell reads SESSION_INPUT (a file in the session's /tmp the service appends to)
-	 * through `tail -f`, and stays until the cage is stopped rather than running one command line.
-	 */
+	/** A live session: the shell reads SESSION_INPUT and stays until the cage is stopped. */
 	interactive?: boolean;
 	/** Install the user namespace filter, which bubblewrap then reads from its standard input. */
 	filter: boolean;
 	/** The most processes and threads the cage may hold. */
 	processes: number;
 	/**
-	 * Capabilities the cage keeps, inside its own user namespace only: SB-1 gives the measuring cage
-	 * CAP_DAC_READ_SEARCH, so a directory a command locked (chmod 000) is still counted. It applies
-	 * to files the service's own user owns; the image's root-owned files stay as unreadable as ever.
+	 * Capabilities kept inside the cage's own user namespace: the measuring cage's CAP_DAC_READ_SEARCH, so a locked
+	 * directory is still counted (root-owned image files stay unreadable).
 	 */
 	caps?: string[];
-	/**
-	 * SB-7: no process in the cage may write file data (`ulimit -f 0`, which it cannot raise): a run
-	 * over its budget may still remove, move and truncate files, and nothing else.
-	 */
+	/** Over budget: `ulimit -f 0`, so the run may only remove, move and truncate files. */
 	noGrowth?: boolean;
 }
 
@@ -156,17 +129,9 @@ export interface System {
 }
 
 /**
- * What Docker hides in a container's /proc (moby's default masked and read-only paths), hidden
- * again in every cage.
- *
- * The sandbox container runs without Docker's masks (systempaths=unconfined in the compose file):
- * the kernel lets bubblewrap mount a fresh /proc for a cage only where the container's own /proc is
- * fully visible, and with the masks in place every cage failed with "Can't mount proc". So each cage
- * puts them back over its own /proc: files under /dev/null (which a cage cannot even open, since
- * bubblewrap mounts it without device access, where Docker's read as empty), directories under an
- * empty read-only tmpfs, and the kernel's tunables read-only. Only the paths this kernel has, found
- * at start-up, since bubblewrap cannot mount over a path that is not there (/proc/sched_debug left
- * for debugfs in Linux 5.13, /proc/timer_stats is long gone).
+ * Moby's default masked and read-only /proc paths, hidden again in every cage. The container runs with
+ * systempaths=unconfined (bwrap cannot mount a fresh /proc under Docker's masks), so each cage puts them back: files
+ * under /dev/null, directories under an empty read-only tmpfs, tunables read-only — only the paths this kernel has.
  */
 export const PROC_HIDDEN = {
 	files: [
@@ -192,9 +157,8 @@ export function presentProcPaths(exists: (path: string) => boolean): System['pro
 }
 
 /**
- * Which PROC_HIDDEN paths this kernel has, asked of bubblewrap: Deno will not so much as stat a
- * path under /proc without --allow-all. The probe gets a fresh /proc the way a cage does, and runs
- * nothing but the shell's `test -e` in it. Throws when bubblewrap fails, with what it said.
+ * Which PROC_HIDDEN paths this kernel has, asked of bubblewrap (Deno will not stat under /proc without
+ * --allow-all). Throws with what bubblewrap said when it fails.
  */
 export async function probeProcPaths(bwrap: string): Promise<System['proc']> {
 	const all = [...PROC_HIDDEN.files, ...PROC_HIDDEN.dirs, ...PROC_HIDDEN.readOnly];
@@ -243,10 +207,8 @@ export async function probeProcPaths(bwrap: string): Promise<System['proc']> {
 }
 
 /**
- * The shell that runs first in every cage: it announces the cage, puts stderr with stdout so the
- * reply keeps their order, makes the cage the out-of-memory killer's first choice (so a runaway
- * test is what dies, not the service), limits processes, starts the proxy forwarder when there is
- * one, and then becomes the command.
+ * The shell that runs first in every cage: announces it, merges stderr into stdout, makes the cage the OOM
+ * killer's first choice (not the service), limits processes, starts the proxy forwarder, then becomes the command.
  */
 export function prelude(
 	opts: { proxy: boolean; stdin: boolean; processes: number; noGrowth?: boolean; interactive?: boolean },
@@ -272,12 +234,10 @@ export function prelude(
 		);
 	}
 	if (opts.noGrowth) {
-		// SB-7: XFSZ ignored (and so for everything the command starts), a write past the limit fails
+		// XFSZ ignored (and so for everything the command starts), a write past the limit fails
 		// with "File too large" rather than killing the shell; no core file is written either.
 		lines.push(`trap '' XFSZ`, 'ulimit -c 0', 'ulimit -f 0');
 	}
-	// A session's shell reads what the service appends to the input file, line by line, for as long as the cage
-	// lives; without a terminal it prints no prompt of its own, which suits a reader that marks its own turns.
 	lines.push(
 		opts.interactive ? `tail -n +1 -f -s 0.05 ${SESSION_INPUT} | /bin/sh -s` : `exec /bin/sh -c "$1"`,
 	);

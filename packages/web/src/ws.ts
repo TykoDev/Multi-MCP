@@ -79,13 +79,13 @@ export class LiveViewSocket {
 		} catch {
 			return;
 		}
-		// The server's keep-alive must be answered, not merely tolerated (F1).
+		// The server's keep-alive must be answered, not merely tolerated.
 		//
 		// It is an application-level JSON frame rather than a WebSocket control
-		// frame, so the browser does not reply for us. Dropping it — which this
-		// line used to do — left a viewer that only *watches* sending nothing at
-		// all, and the server closed it as unresponsive on a fixed timer. The
-		// answer is what keeps a watching view open indefinitely.
+		// frame, so the browser does not reply for us. Dropped, it would leave a
+		// viewer that only *watches* sending nothing at all, and the server would
+		// close it as unresponsive on a fixed timer. The answer is what keeps a
+		// watching view open indefinitely.
 		if ((parsed as { type?: string }).type === 'ping') {
 			this.send({ type: 'pong' });
 			return;

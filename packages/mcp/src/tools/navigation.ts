@@ -1,10 +1,4 @@
-/**
- * Navigation handlers: moving the focused tab between documents.
- *
- * Each bridges one catalog entry onto the vendored browser layer by dispatching a core event and
- * awaiting its result. Handlers throw {@linkcode ToolError} for anything the calling model should
- * see; the dispatch seam turns those into result-level errors. They never throw protocol errors.
- */
+/** Navigation handlers: moving the focused tab between documents. */
 import { GoBackEvent, NavigateToUrlEvent, waitForNetworkStability } from '@tykotech/browser';
 import { delay } from '@std/async/delay';
 import type { EventKind, EventRecord } from '@tykotech/wire';
@@ -18,16 +12,9 @@ import { dispatch, heldToken, identify, target } from './shared.ts';
 
 /**
  * Dispatches a navigation this tool issues and answers `navigation-blocked` when the browser refused one of its
- * document requests before sending it (R3, E0, D-115) — the initial request or any redirect hop.
- *
- * Checked on the failure path **and** the success path, before the generic error mapping: a refused redirect hop
- * fails the navigation with `net::ERR_ABORTED`, which would otherwise surface as `browser-unavailable` carrying the
- * requested URL. The answer names the origin only, and the tab keeps the document it had (M12). Only a main-frame
- * block on the tab navigated counts (F25): a frame's or a pop-up's refusal is not this tool's navigation. Review R2-2:
- * nor is a block after the tab committed a document, or one whose chain began on another host than `requested` — the
- * landed page's own script leaving the allowlist is on the ring and in the network log, and the tool succeeded.
+ * document requests before sending it — the initial request or any redirect hop.
  */
-async function navigateWatchingE0(
+async function navigateWatchingBlocks(
 	record: SessionRecord,
 	ctx: ToolContext,
 	event: object,
@@ -59,12 +46,12 @@ export async function browserNavigate(
 		throw new ToolError('invalid-arguments', 'profile only applies when new_session is true');
 	}
 	const record = args.new_session === true
-		// R8 (D-128): the new session belongs to the caller in `owner` mode.
+		// The new session belongs to the caller in `owner` mode.
 		? await ctx.registry.createNew(undefined, args.profile, ctx.access)
 		: await target(ctx, args, true);
 	if (args.new_session === true) ctx.registry.assertUnlocked(record);
 
-	await navigateWatchingE0(record, ctx, new NavigateToUrlEvent({ url: url.href }), url.href);
+	await navigateWatchingBlocks(record, ctx, new NavigateToUrlEvent({ url: url.href }), url.href);
 	ctx.registry.touch(record.id);
 	const page = await identify(record, url.href);
 	return json({
@@ -80,13 +67,11 @@ export async function browserGoBack(
 	ctx: ToolContext,
 ): Promise<ToolResult> {
 	const record = await target(ctx, args, true);
-	// R3: a history navigation that has to fetch its document is judged like any other (a back/forward-cache
-	// restore sends no request and is out of reach, design §1 item 13). Review R2-2: its URL is not known here, so its
-	// own chain is told from a page's by the commit alone.
-	await navigateWatchingE0(record, ctx, new GoBackEvent(), null);
+	// A history navigation that has to fetch its document is judged like any other (a back/forward-cache restore
+	// sends no request and is out of reach).
+	await navigateWatchingBlocks(record, ctx, new GoBackEvent(), null);
 	ctx.registry.touch(record.id);
-	// Where "back" landed is the only interesting part of the answer, and the
-	// caller cannot know it in advance.
+	// Where "back" landed is the only interesting part of the answer, and the caller cannot know it in advance.
 	const page = await identify(record, record.session.cachedBrowserState?.url ?? '');
 	return json({ session_id: record.id, url: page.url, title: page.title });
 }
@@ -96,23 +81,10 @@ export async function browserGoBack(
 /** `browser_wait_for`'s budget when the caller names none. */
 export const WAIT_FOR_DEFAULT_TIMEOUT_MS = 10_000;
 
-/**
- * Minimum interval between the two predicates the ring cannot answer.
- *
- * A **floor**, not a maximum sleep. `ring.next()` resolves on the next append as
- * well as on its timeout, so without a floor an unrelated event storm — which a
- * page can generate — wakes the search every time and turns a 250 ms poll into
- * one `DOM.performSearch` per page event.
- */
+/** Minimum interval between the two predicates the ring cannot answer. */
 const WAIT_SEARCH_POLL_MS = 250;
 
-/**
- * Tick for `state_token_changes`.
- *
- * A token comparison costs a **full DOM build**, so it is evaluated at most once
- * a second and documented as the last resort. Bounding the total cost is
- * `timeout_ms`'s job, and the 60 000 ms ceiling is why that ceiling exists.
- */
+/** Tick for `state_token_changes`. */
 const WAIT_TOKEN_POLL_MS = 1000;
 
 /** What a caller may wait for. Exactly one key, enforced by the schema and re-checked here. */
@@ -136,22 +108,7 @@ function ringKindsFor(until: WaitUntil): ReadonlySet<EventKind> | null {
 	return null;
 }
 
-/**
- * `browser_wait_for` (§2.2): block until one condition holds, or say it did not.
- *
- * **A timeout is `met: false`, not an error.** A wait that expires is a truthful
- * answer about the page; `isError` would abort the model's turn over a fact.
- *
- * This is the **third view of the event ring**, and the only one that works on
- * the stdio mount, which hosts neither the SSE route nor the live-view socket.
- * `navigation`, `dialog` and `download` are reads of the ring and cost nothing.
- * `selector` and `text` cost one `DOM.performSearch` per tick.
- * `state_token_changes` costs a full DOM build per evaluation.
- * `network_idle` is answered by the quiescence probe rather than by the ring,
- * because the ring's `network.idle` records carry the collector's own fixed
- * quiet window and the caller named a different one — matching them would
- * answer a question the caller did not ask.
- */
+/** `browser_wait_for`: block until one condition holds, or say it did not. */
 export async function browserWaitFor(
 	args: { until: WaitUntil; timeout_ms?: number; session_id?: string },
 	ctx: ToolContext,
@@ -165,7 +122,7 @@ export async function browserWaitFor(
 	const record = await target(ctx, args, false);
 	ctx.registry.touch(record.id);
 	const timeoutMs = args.timeout_ms ?? WAIT_FOR_DEFAULT_TIMEOUT_MS;
-	// A9: elapsed against the timeout; the heartbeat counts the seconds, the handler names the bound and the wait.
+	// Progress is elapsed against the timeout; the heartbeat counts the seconds, the handler names the bound and the wait.
 	ctx.progress?.({ total: timeoutMs / 1000, message: `waiting for ${named[0]?.[0] ?? 'a condition'}` });
 	const startedAt = Date.now();
 	const deadline = startedAt + timeoutMs;
@@ -204,12 +161,7 @@ export async function browserWaitFor(
 			const mark = ring.highWaterMark;
 			const page = ring.read(cursor, kinds);
 			cursor = { kind: 'cursor', epoch: ring.epoch, seq: mark };
-			// The gap is checked **before** the hit. `read` deliberately returns a
-			// gap through any `kinds` filter, and filtering it out here would undo
-			// the one control that makes loss visible: the awaited event may have
-			// happened and been evicted, and answering `met: false` would tell the
-			// model it did not occur. `met` stays false — the wait was not met —
-			// but the record says the answer is unknown rather than negative.
+			// The gap is checked **before** the hit.
 			const lost = page.find((entry) => entry.kind === 'gap');
 			if (lost !== undefined) return answer(false, lost);
 			const hit = page.find((entry) => kinds.has(entry.kind as EventKind));
@@ -232,16 +184,13 @@ export async function browserWaitFor(
 		}
 		const remaining = deadline - Date.now();
 		if (remaining <= 0) return answer(false, null);
-		// A ring-backed predicate can sleep the whole remaining budget because an
-		// append is exactly what wakes it. A polled predicate sleeps to its own
-		// next due time, so an unrelated wake costs nothing.
+		// A ring-backed predicate can sleep the whole remaining budget because an append is exactly what wakes it. A
+		// polled predicate sleeps to its own next due time, so an unrelated wake costs nothing.
 		const tick = kinds !== null ? remaining : Math.min(remaining, pollFor(until));
 		const wokeAt = Date.now();
 		await ring.next(tick, ctx.signal);
-		// `ring.next` resolves on *any* append, and a page can append at its own
-		// rate, so a polled predicate would otherwise re-enter the loop hundreds
-		// of times a second for the whole budget. The floor is on the sleep, not
-		// only on the search it guards.
+		// `ring.next` resolves on *any* append, and a page can append at its own rate, so a polled predicate would
+		// otherwise re-enter the loop hundreds of times a second for the whole budget.
 		if (kinds === null) {
 			const slept = Date.now() - wokeAt;
 			if (slept < tick) await delay(Math.min(tick - slept, remaining), { signal: ctx.signal });

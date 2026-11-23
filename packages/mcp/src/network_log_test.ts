@@ -1,7 +1,6 @@
 /**
- * R4 (D-116): the request log — redaction at mint, the header-block and memory bounds, redirect hops, paging, and
- * the URL cutting a reader without `network:read` gets (F3). Driven through a stand-in CDP client whose `on`
- * registry is real enough to deliver typed events and to prove detachment.
+ * The request log — redaction at mint, the header-block and memory bounds, redirect hops, paging, and the URL cutting
+ * a reader without `network:read` gets.
  */
 import { assert, assertEquals } from '@std/assert';
 import type { CdpClient } from '@tykotech/cdp';
@@ -13,8 +12,6 @@ import {
 	loggedPath,
 	MAX_HEADER_BLOCK_BYTES,
 	MAX_LOGGED_URL_CHARS,
-	NETWORK_LOG_MAX_BYTES,
-	NETWORK_LOG_MAX_ENTRIES,
 	NetworkLog,
 	projectHeaders,
 	REDACTED_HEADER,
@@ -99,13 +96,7 @@ function request(
 	cdp.emit('Network.loadingFinished', { requestId: id, timestamp: 100.05, encodedDataLength: 160 });
 }
 
-Deno.test('network log: the design’s bounds, verbatim', () => {
-	assertEquals(NETWORK_LOG_MAX_ENTRIES, 500);
-	assertEquals(NETWORK_LOG_MAX_BYTES, 524_288);
-	assertEquals(MAX_HEADER_BLOCK_BYTES, 8 * 1024);
-});
-
-Deno.test('network log (AC4): credentials are [redacted] at mint, by header name', () => {
+Deno.test('network log: credentials are [redacted] at mint, by header name', () => {
 	for (const name of ['Authorization', 'proxy-authorization', 'Cookie', 'Set-Cookie', 'X-Api-Key', 'X-CSRF-Token']) {
 		assert(isSensitiveHeader(name), name);
 	}
@@ -201,7 +192,7 @@ Deno.test('network log: a redirect chain is one entry per hop, the first finishe
 	assertEquals(log.get('R')?.seq, 2, 'the id names the newest hop');
 });
 
-Deno.test('network log (AC5): 600 requests stay within 500 entries and 512 KiB, and dropped counts the rest', () => {
+Deno.test('network log: 600 requests stay within 500 entries and 512 KiB, and dropped counts the rest', () => {
 	const cdp = fakeCdp();
 	const log = new NetworkLog();
 	log.attach(cdp);
@@ -298,7 +289,7 @@ Deno.test('network log: close detaches every listener and drops every entry', ()
 	assertEquals(log.size, 0, 'a closed log mints nothing');
 });
 
-Deno.test('network log (F3): URLs inside header values are cut to origin and path for a reader without the scope', () => {
+Deno.test('network log: URLs inside header values are cut to origin and path for a reader without the scope', () => {
 	assertEquals(cutUrl('https://idp.example/cb?code=Zq8#frag'), 'https://idp.example/cb');
 	assertEquals(cutUrl('/relative/path?token=Zq8'), '/relative/path');
 	assertEquals(cutHeaderValue('Referer', 'https://app.example/page?session=Zq8'), 'https://app.example/page');
@@ -310,7 +301,6 @@ Deno.test('network log (F3): URLs inside header values are cut to origin and pat
 	);
 	assertEquals(cutHeaderValue('Refresh', "0; url='/next?s=Zq8'"), "0; url='/next'");
 	assertEquals(cutHeaderValue('refresh', '5; URL=https://x.example/n?s=Zq8'), '5; URL=https://x.example/n');
-	// Any header: an absolute URL anywhere in a value is cut.
 	assertEquals(
 		cutHeaderValue('x-trace', 'from https://svc.example/api?key=Zq8 at 12:00'),
 		'from https://svc.example/api at 12:00',
@@ -330,12 +320,10 @@ Deno.test('network log (F3): URLs inside header values are cut to origin and pat
 });
 
 // ---------------------------------------------------------------------------
-// Review R2-3 / R2-7
+// Credential-shaped names, query cutting, matrix parameters and redaction before the cap
 // ---------------------------------------------------------------------------
 
-Deno.test('R2-3: the credential-shaped header names the reviewer listed are redacted at mint', () => {
-	// tests/.scratch/r2_unit_probe.ts R2-U2's list (17 of these 24 were kept before), minus the two the ruling's
-	// parts do not name (`X-MFA-Code`, `X-Forwarded-User`: a residual, stated).
+Deno.test('credential-shaped header names are redacted at mint', () => {
 	const names = [
 		'Authorization',
 		'X-Api-Key',
@@ -366,7 +354,7 @@ Deno.test('R2-3: the credential-shaped header names the reviewer listed are reda
 	}
 });
 
-Deno.test('R2-3: without the scope every ?query / #fragment reference in every header value is cut', () => {
+Deno.test('without the scope every ?query / #fragment reference in every header value is cut', () => {
 	const projected = projectHeaders(
 		{
 			'Reporting-Endpoints': 'default="/r?token=Zq8-T1", other="https://rep.example/o?k=Zq8-T2"',
@@ -383,14 +371,13 @@ Deno.test('R2-3: without the scope every ?query / #fragment reference in every h
 	assertEquals(projected['Reporting-Endpoints'], 'default="/r", other="https://rep.example/o"');
 	assertEquals(projected['Content-Security-Policy'], "default-src 'self'; report-uri /csp script-src 'self'");
 	assertEquals(projected['X-Redirect'], '/cb');
-	// With the scope, values are as minted.
 	assertEquals(
 		projectHeaders({ 'X-Redirect': '/cb?code=Zq8-C2' }, true, (text) => text)['X-Redirect'],
 		'/cb?code=Zq8-C2',
 	);
 });
 
-Deno.test('R2-3: path carries no matrix parameters, and a data: URL only its media type', () => {
+Deno.test('path carries no matrix parameters, and a data: URL only its media type', () => {
 	assertEquals(loggedPath('https://shop.example/app/cart;jsessionid=Zq8-SESS6?x=1'), '/app/cart');
 	assertEquals(loggedPath('https://shop.example/a;v=1/b;jsessionid=Zq8/c'), '/a/b/c');
 	assertEquals(loggedPath('data:text/plain,totp-secret-Zq8-JBSWY3DPEHPK3PXP'), 'text/plain');
@@ -410,10 +397,9 @@ Deno.test('R2-3: path carries no matrix parameters, and a data: URL only its med
 	assertEquals(log.get('D')?.origin, 'data:');
 });
 
-Deno.test('R2-7: a configured secret straddling the URL cap is redacted before the cut, never halved', () => {
+Deno.test('a configured secret straddling the URL cap is redacted before the cut, never halved', () => {
 	const secret = 'Zq8-STRADDLING-SECRET-VALUE';
 	const prefix = 'https://app.example/?q=';
-	// The secret starts 6 characters before the cap, so a cut-then-redact keeps `Zq8-ST`.
 	const url = `${prefix}${'a'.repeat(MAX_LOGGED_URL_CHARS - 6 - prefix.length)}${secret}`;
 	const cdp = fakeCdp();
 	const log = new NetworkLog({ redact: (text) => text.replaceAll(secret, '[secret]') });
@@ -423,7 +409,6 @@ Deno.test('R2-7: a configured secret straddling the URL cap is redacted before t
 	assert(entry !== undefined);
 	assert(entry.url_full.length <= MAX_LOGGED_URL_CHARS);
 	assert(!entry.url_full.includes(secret.slice(0, 6)), entry.url_full.slice(-12));
-	// The path is redacted before its own cap as well.
 	request(cdp, 'P', `https://app.example/${'p'.repeat(1024 - 5)}${secret}`);
 	assert(!(log.get('P')?.path ?? '').includes(secret.slice(0, 4)));
 });

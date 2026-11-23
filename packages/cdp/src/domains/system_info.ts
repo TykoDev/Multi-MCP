@@ -1,8 +1,7 @@
 /**
  * CDP `SystemInfo` domain — GPU/driver and process introspection.
  *
- * Used by `bua doctor` (SPECS/SETUP-WIZARD.md) and the diagnostics playbook
- * (SPECS/OBSERVABILITY-TESTING-CICD.md §8.4) to report what the browser actually is.
+ * Used for diagnostics, to report what the browser actually is.
  */
 
 import type { NoParams } from './common.ts';

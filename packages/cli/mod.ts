@@ -1,28 +1,6 @@
-/**
- * `@tykotech/cli` — the composition root.
- *
- * Subcommands: `serve` (HTTP gateway), `stdio` (MCP over stdio), `acp` (Agent
- * Client Protocol over stdio, through the agent bridge), `setup` (create the
- * deployment's secrets and `.env`), `seed` (copy the providers file and browser
- * secrets into the database, D-154), `doctor` (diagnostics, key and account
- * generation), `healthcheck` (probe a running server on loopback), `version`.
- * `USAGE` below is the full reference.
- *
- * The gateway and MCP layers are imported dynamically so an unused surface
- * stays out of the module graph — `stdio` never loads Hono, and `serve` never
- * loads the stdio transport.
- *
- * D-137 (design §2.3, F5): the only static imports are `@std/cli/parse-args` and the import-free `./otel_gate.ts`,
- * and the OpenTelemetry egress gate runs at module top level, before `main()`, for every subcommand — so nothing that
- * could be exported (a span, a log, a console line) happens before a refusal. `tests/unit/serve_tasks_test.ts` holds
- * the static graph to those two.
- */
+/** `@tykotech/cli` — the composition root. */
 import { parseArgs } from '@std/cli/parse-args';
-import { checkOtelEgress, enforceOtelEgress, otelDoctorLines, processOtelInputs } from './otel_gate.ts';
 import type { AppArmorHost } from './apparmor.ts';
-
-/** The six `OTEL_*` names the gate reads and every launcher grants (D-137); rule T5's copy is pinned equal to it. */
-export { OTEL_GATE_ENV_NAMES } from './otel_gate.ts';
 
 export const VERSION = '0.2.0';
 
@@ -34,11 +12,9 @@ export const SETUP_UNITS = [
 	'db-key',
 	'admin',
 	'api-key',
-	'peer',
 	'browser-secrets',
 	'git-remotes',
-	'agent-token',
-	'agent-commands',
+	'sandbox-token',
 	'env',
 	'apparmor',
 ] as const;
@@ -48,6 +24,18 @@ export type SetupUnit = (typeof SETUP_UNITS)[number];
 
 const SETUP_UNITS_TEXT = SETUP_UNITS.join(', ');
 
+/** A comma-separated option as a list, blanks dropped. */
+const csv = (text: string): string[] => text.split(',').map((item) => item.trim()).filter((item) => item !== '');
+
+/** Reports the members of `named` outside `vocabulary`; `true` when there are none. */
+function knownScopes(named: readonly string[], vocabulary: readonly string[]): boolean {
+	const unknown = named.filter((scope) => !vocabulary.includes(scope));
+	if (unknown.length > 0) {
+		console.error(`unknown scopes: ${unknown.join(', ')}\nvalid scopes: ${vocabulary.join(', ')}`);
+	}
+	return unknown.length === 0;
+}
+
 const USAGE = `tykotech-mcp ${VERSION}
 
 USAGE:
@@ -56,7 +44,6 @@ USAGE:
 COMMANDS:
   serve            Run the HTTP gateway (MCP over Streamable HTTP + live view)
   stdio            Run MCP over stdio for a local client
-  acp              Run Agent Client Protocol over stdio through the configured agent bridge
   setup            Create every missing file in secrets/ the compose files mount, and .env; --force replaces
   seed             Copy the providers file and browser secrets into the database; --force replaces
   doctor           Diagnose the environment; generate an API key
@@ -66,6 +53,11 @@ COMMANDS:
 SERVE OPTIONS:
   --host <addr>    Bind address        (default 127.0.0.1, env TTK_HOST)
   --port <n>       Bind port           (default 8787, env TTK_PORT)
+
+CHECKOUT OPTIONS (serve, stdio, doctor, seed; the deno tasks pass it):
+  --local-defaults Use what setup wrote for each variable left unset: TTK_DATA_DIR=data, TTK_DB_KEY_FILE,
+                   TTK_API_KEYS_FILE (not stdio, seed), TTK_SECRETS_FILE, and TTK_SANDBOX_TOKEN_FILE beside
+                   TTK_SANDBOX_URL — each only when its file in secrets/ exists
 
 SETUP OPTIONS:
   --only <list>        Only these files: ${SETUP_UNITS_TEXT}
@@ -88,14 +80,13 @@ DOCTOR OPTIONS:
   --new-admin <user>   Generate a new admin user record with password and save to secrets/ (--force to replace)
   --password <pass>    Optional explicit password for --new-admin
   --new-db-key         Write a new database key to secrets/ttk_db_key (--force to replace: stored secrets are lost)
-  --grant <user>       Set an account's scopes to --scopes, offline: in <TTK_DATA_DIR>/users.json, or in the
-                       cluster store when TTK_CLUSTER_KV is set (run with --unstable-kv)
+  --grant <user>       Set an account's scopes to --scopes, offline, in <TTK_DATA_DIR>/users.json
   --data-dir <path>    The data directory for --grant (default: TTK_DATA_DIR)
 
 Configuration is read from TTK_* environment variables; see docs/reference/environment-variables.md.
 `;
 
-/** The command line, parsed; `-Force` (the PowerShell spelling the owner asked for, D-154) is `--force`. */
+/** The command line, parsed; `-Force` (the PowerShell spelling) is `--force`. */
 function parseCli(argv: readonly string[]) {
 	// parseArgs would read `-Force` as `-F -o -r -c -e`.
 	const normalized = argv.map((arg) => /^-force$/i.test(arg) ? '--force' : arg);
@@ -114,7 +105,7 @@ function parseCli(argv: readonly string[]) {
 			'admin',
 			'key-id',
 		],
-		boolean: ['help', 'force', 'new-db-key', 'save'],
+		boolean: ['help', 'force', 'new-db-key', 'save', 'local-defaults'],
 		alias: { h: 'help' },
 	});
 }
@@ -122,14 +113,11 @@ function parseCli(argv: readonly string[]) {
 type CliArgs = ReturnType<typeof parseCli>;
 
 /**
- * Where a generated credential is shown: the standard streams themselves, never `console`. `console` is the process's
- * log — a host's log collector reads it, and with `OTEL_DENO` the runtime exports every line of it (D-142) — and a
- * credential that is shown once must not be in a log. The unit tests pass their own pair.
+ * Where a generated credential is shown: the standard streams themselves, never `console`, which is the process's log
+ * (a host's log collector reads it). `err` carries `--new-key-set`'s raw keys, whose stdout is the record file.
  */
 export interface CredentialStreams {
-	/** Standard output. */
 	readonly out: (text: string) => void;
-	/** Standard error: the raw keys of `--new-key-set`, whose standard output is the record file. */
 	readonly err: (text: string) => void;
 }
 
@@ -145,8 +133,8 @@ const CREDENTIAL_STREAMS: CredentialStreams = {
 };
 
 /**
- * A URL for a diagnostic line: without the username and password a URL may carry (`https://user:pass@host/`), which
- * no configuration check refuses and the doctor's output — pasted into issues — must not repeat.
+ * A URL for a diagnostic line: without the username and password a URL may carry (`https://user:pass@host/`), which no
+ * configuration check refuses and the doctor's output — pasted into issues — must not repeat.
  */
 export function redactedUrl(url: URL): string {
 	if (url.username === '' && url.password === '') return url.href;
@@ -178,7 +166,7 @@ export async function main(argv: string[], show: CredentialStreams = CREDENTIAL_
 	}
 }
 
-/** Errors whose message is written for the operator (D-154 adds the database, vault and seed refusals). */
+/** Errors whose message is written for the operator: configuration, secret, seed, vault and database refusals. */
 const OPERATOR_ERRORS = new Set(['ConfigError', 'SecretError', 'SeedError', 'VaultError', 'DatabaseError']);
 
 async function dispatch(command: string, args: CliArgs, show: CredentialStreams): Promise<number> {
@@ -189,9 +177,7 @@ async function dispatch(command: string, args: CliArgs, show: CredentialStreams)
 		case 'serve':
 			return await runServe(args);
 		case 'stdio':
-			return await runStdio();
-		case 'acp':
-			return await runAcp();
+			return await runStdio(args);
 		case 'setup':
 			return await runSetup(args, '.', undefined, show);
 		case 'seed':
@@ -207,25 +193,34 @@ async function dispatch(command: string, args: CliArgs, show: CredentialStreams)
 	}
 }
 
-async function runServe(args: { host?: string; port?: string }): Promise<number> {
-	const { ENV_NAMES, createLogger, loadConfig, processEnv, startGateway } = await import('@tykotech/gateway');
-	const { loadModelProviders, resolveSecrets, secretReader } = await import('@tykotech/gateway');
+/** The environment a command runs with: the process's `TTK_*` names, plus `--local-defaults` when it was passed. */
+async function commandEnv(
+	args: { 'local-defaults'?: boolean },
+	apiKeys: boolean,
+): Promise<{ env: Record<string, string | undefined>; defaults: LocalDefaults | null }> {
+	const { ENV_NAMES, processEnv } = await import('@tykotech/gateway');
+	const defaults = args['local-defaults'] === true ? await localDefaults(processEnv(ENV_NAMES), { apiKeys }) : null;
+	return { env: { ...(defaults?.env ?? processEnv(ENV_NAMES)) }, defaults };
+}
 
-	const env: Record<string, string | undefined> = { ...processEnv(ENV_NAMES) };
+async function runServe(args: { host?: string; port?: string; 'local-defaults'?: boolean }): Promise<number> {
+	const { createLogger, loadConfig, loadModelProviders, resolveSecrets, secretReader, startGateway } = await import(
+		'@tykotech/gateway'
+	);
+	const { env, defaults } = await commandEnv(args, true);
 	// Flags outrank the environment.
 	if (args.host !== undefined) env.TTK_HOST = args.host;
 	if (args.port !== undefined) env.TTK_PORT = args.port;
 
-	// Secrets are resolved first and threaded by argument; they are never
-	// written back into the environment Chromium will inherit. The providers
-	// file (D-143) goes through the same reader and the same argument path; a
-	// refused file throws here, before anything listens, naming the field.
+	// Secrets are resolved first and threaded by argument; they are never written back into the environment Chromium
+	// will inherit.
 	const read = secretReader();
 	const secrets = await resolveSecrets({ env, readFile: read });
 	const providerWarnings: string[] = [];
 	const modelProviders = await loadModelProviders(env, { readFile: read, warn: (line) => providerWarnings.push(line) });
 	const config = loadConfig(env, { secrets, modelProviders });
 	const logger = createLogger({ level: config.logLevel, format: config.logFormat });
+	logLocalDefaults(defaults, logger);
 	for (const line of providerWarnings) logger.warn(line);
 
 	const gateway = await startGateway({ config, version: VERSION, logger });
@@ -247,11 +242,10 @@ async function runServe(args: { host?: string; port?: string }): Promise<number>
 	return 0;
 }
 
-async function runStdio(): Promise<number> {
+async function runStdio(args: { 'local-defaults'?: boolean }): Promise<number> {
 	const { serveStdio } = await import('@modelcontextprotocol/server/stdio');
 	const {
 		createBuildServer,
-		LibraryStore,
 		probeEgressGrant,
 		refreshToolAvailability,
 		SecretStore,
@@ -262,20 +256,18 @@ async function runStdio(): Promise<number> {
 	const {
 		createLogger,
 		createExpansionServices,
-		createTelemetry,
-		ENV_NAMES,
 		loadConfig,
 		loadModelProviders,
 		MemoryStore,
 		ModelProvidersAdmin,
 		openDataStore,
-		processEnv,
 		resolveSecrets,
 		secretReader,
+		ServiceHealth,
 	} = await import('@tykotech/gateway');
 	const { SandboxClient } = await import('@tykotech/sandbox');
 
-	const env = processEnv(ENV_NAMES);
+	const { env, defaults } = await commandEnv(args, false);
 	const read = secretReader();
 	const providerWarnings: string[] = [];
 	const config = loadConfig(env, {
@@ -284,16 +276,16 @@ async function runStdio(): Promise<number> {
 	});
 	// On stdio the protocol owns stdout, so every log line goes to stderr.
 	const logger = createLogger({ level: config.logLevel, format: 'json', sink: 'stderr' });
+	logLocalDefaults(defaults, logger);
 	for (const line of providerWarnings) logger.warn(line);
 
-	// D-154: a local agent on stdio reads the same database `serve` writes — providers added in the web app, keys and
-	// browser secrets opened from the vault — so it needs the same TTK_DATA_DIR and TTK_DB_KEY_FILE. SQLite's WAL lets
-	// both processes hold it at once. Without a data directory the files are used as they are.
+	// A local agent on stdio reads the same database `serve` writes — providers added in the web app, keys and browser
+	// secrets opened from the vault — so it needs the same TTK_DATA_DIR and TTK_DB_KEY_FILE.
 	const data = await openDataStore(config, { logger });
 	const providers = await ModelProvidersAdmin.load({ operator: config.modelProviders, store: data.store, logger });
 
-	// NF-3 (design §2.8, F16, AC26): one `SecretStore` for the registry's redaction and the tools' `secrets`.
-	const stdioSecrets = oneSecretStore(() => new SecretStore(data.secrets));
+	// One `SecretStore` for the registry's redaction and the tools' `secrets`, so the two can never diverge.
+	const secrets = new SecretStore(data.secrets);
 	const registry = new SessionRegistry({
 		maxSessions: config.limits.maxSessions,
 		sessionTtlMs: config.limits.sessionTtlMs,
@@ -301,79 +293,70 @@ async function runStdio(): Promise<number> {
 		dataDir: config.dataDir,
 		browserArgs: config.browser.args,
 		headless: config.browser.headless,
-		// D-094: `TTK_CHROMIUM_NO_SANDBOX`, as on the HTTP mount.
+		// `TTK_CHROMIUM_NO_SANDBOX`, as on the HTTP mount.
 		chromiumSandbox: config.browser.chromiumSandbox,
-		// The ledger gate reads the same list the tools gate on (owner item 6), and so does the browser (D-095).
+		// The ledger gate reads the same list the tools gate on, and so does the browser.
 		allowedDomains: config.allowedDomains,
-		// D-138 (design §2.0 item 7): `TTK_ALLOWED_DOMAINS_SCOPE`; the registry acts on it from WS-B.
+		// `TTK_ALLOWED_DOMAINS_SCOPE`: which requests the registry holds to the list.
 		allowedDomainsScope: config.allowedDomainsScope,
-		// D-128: `TTK_SESSION_OWNERSHIP`. On stdio every call is the one anonymous-loopback owner, so `owner` changes
-		// only the `default` session's id.
+		// `TTK_SESSION_OWNERSHIP`. On stdio every call is the one anonymous-loopback owner, so `owner` changes only the
+		// `default` session's id.
 		ownership: config.sessionOwnership,
-		// Review R2-7: the configured secrets are redacted before the request log and the console ring cap their text —
-		// NF-3: by the very store the tools read (`core.secrets` below), built once.
-		redact: stdioSecrets.redact,
+		// The configured secrets are redacted before the request log and the console ring cap their text — by the very
+		// store the tools read (`core.secrets` below), built once.
+		redact: (text) => secrets.redact(text),
 		logger,
 	});
-	// D-127: tool-call spans on stdio too, while the runtime exports; the warning goes to stderr like every line.
-	const telemetry = createTelemetry(logger);
-
-	// D-075: the library is served on stdio too, on the same data directory and the same scopes.
-	const library = config.dataDir === null ? undefined : new LibraryStore({ dataDir: config.dataDir });
-	await library?.initialize();
+	// The library is served on stdio too, on the same data directory and the same scopes.
+	const library = await stdioLibrary(config);
 	const core = {
 		registry,
 		version: VERSION,
 		...(library === undefined ? {} : { library }),
 		allowedDomains: config.allowedDomains,
-		// SEC-01: stdio has no credential to carry a grant either.
+		// stdio has no credential to carry a grant, so the anonymous scopes are all it holds.
 		anonScopes: config.anonScopes,
-		secrets: stdioSecrets.secrets,
+		secrets,
 		persistence: config.dataDir !== null,
-		// SR-HEAD-REDIRECT: proven through the permissions API, never declared.
+		// `browser_head`'s egress is proven through the permissions API, never declared.
 		egress: await probeEgressGrant(config.allowedDomains),
 		logger,
-		// R5 (D-125): `TTK_CONFIRM_DESTRUCTIVE`, as on HTTP. No `viewUrl`: stdio has no public URL, so
-		// `TTK_HUMAN_HANDOFF` is ignored here and `browser_request_human` is never offered (R2, D-124).
+		// `TTK_CONFIRM_DESTRUCTIVE`, as on HTTP. No `viewUrl`: stdio has no public URL, so `TTK_HUMAN_HANDOFF` is
+		// ignored here and `browser_request_human` is never offered.
 		confirmations: config.confirmDestructive,
-		...(telemetry.active ? { traceTool: telemetry.traceTool } : {}),
 	};
 	const sandbox = config.expansion.sandbox === null ? undefined : new SandboxClient(config.expansion.sandbox);
-	// D-082: watched for the connection's life, as on HTTP; the pinned instance re-reads its tools on each change.
-	const { bridgeProbe, ServiceHealth } = await import('@tykotech/gateway');
-	const bridge = config.expansion.bridge;
+	// The services' health is watched for the connection's life, as on HTTP; the pinned instance re-reads its tools on
+	// each change.
 	const health = new ServiceHealth({
 		...(sandbox === undefined ? {} : { sandbox: () => sandbox.ready() }),
-		...(bridge === null ? {} : { agents: bridgeProbe(bridge.url) }),
 	}, { logger });
 	await health.start();
 	const services = health.watching ? { services: () => health.states() } : {};
-	// R12 (design §2.19): `sandbox_clone` only while the sandbox's `/healthz` says it clones, as on HTTP.
+	// `sandbox_clone` only while the sandbox's `/healthz` says it clones, as on HTTP.
 	const clone = sandbox === undefined ? {} : { sandboxClone: () => sandbox.clone === true };
-	// D-143: stdio composes the built-in model agent exactly as serve does (backend design §1 "Flow"); the providers in
-	// force (D-154: the database's) reach the runtime by argument, and the anonymous principal needs `model:invoke` in
-	// TTK_ANON_SCOPES. Read once: a provider changed in the web app reaches stdio at its next start.
+	// stdio composes the built-in model agent exactly as serve does; the providers in force (the database's) reach the
+	// runtime by argument, and the anonymous principal needs `model:invoke` in TTK_ANON_SCOPES.
 	const expansion = createExpansionServices(
 		config.expansion,
 		{ ...core, ...services, ...clone },
 		sandbox,
 		undefined,
-		undefined,
 		{
 			modelProviders: providers.effective(),
 			logger,
-			// D-154: a local agent's memory is the same store `serve` uses (same owner on the credential-less mounts).
+			// A local agent's memory is the same store `serve` uses (same owner on the credential-less mounts).
 			...(data.store === null ? {} : {
 				memory: new MemoryStore(data.store.db, { providers: () => providers.effective()?.providers ?? [] }),
 			}),
 		},
 	);
-	// D-080: the one instance pinned to this connection pushes the registry's changes, per the era it serves.
+	// The one instance pinned to this connection pushes the registry's changes, per the protocol era it serves.
 	const build = createBuildServer({
 		...core,
 		...services,
 		extraTools: expansion.tools,
-		// D-108: `capabilities.tykotech.sandbox` on stdio too.
+		// `capabilities.tykotech.sandbox` on stdio too.
 		...(sandbox === undefined ? {} : { sandboxBackend: () => sandbox.backend }),
 		...clone,
 		// Tool groups (`TTK_MCP_TOOL_GROUPS`): the one server pinned to this connection remembers the groups it opens.
@@ -406,53 +389,36 @@ async function runStdio(): Promise<number> {
 	Deno.addSignalListener('SIGINT', () => void shutdown());
 	if (Deno.build.os !== 'windows') Deno.addSignalListener('SIGTERM', () => void shutdown());
 
-	// Block forever. `serveStdio` owns the transport, and its pending stdin read
-	// is what holds the runtime open; when the client closes stdin that op
-	// completes, the event loop drains and the process exits on its own. This
-	// promise registers no op of its own — it exists only to stop `main` from
-	// returning, which would exit the process before the first message was read.
+	// Block forever. `serveStdio` owns the transport, and its pending stdin read is what holds the runtime open; when
+	// the client closes stdin that op completes, the event loop drains and the process exits on its own.
 	await new Promise<never>(() => {});
 	return 0;
 }
 
-async function runAcp(): Promise<number> {
-	const { ENV_NAMES, loadConfig, loadModelProviders, processEnv, resolveSecrets, secretReader } = await import(
-		'@tykotech/gateway'
+/**
+ * stdio's file share, on the data directory (none without one), held to the disk budget `TTK_DISK_BUDGET_MB` the
+ * gateway's app gives its own — the share and the recordings together — so `file_write` and `browser_save_to_share`
+ * over stdio cannot fill the volume the budget guards. stdio records nothing, but recordings a gateway left on the same
+ * data directory fill the same volume, so they count.
+ */
+export async function stdioLibrary(
+	config: { readonly dataDir: string | null; readonly limits: { readonly diskBudgetBytes: number } },
+): Promise<import('@tykotech/mcp').LibraryStore | undefined> {
+	if (config.dataDir === null) return undefined;
+	const { LibraryStore } = await import('@tykotech/mcp');
+	const { DiskBudget } = await import('@tykotech/gateway');
+	const library = new LibraryStore({ dataDir: config.dataDir });
+	await library.initialize();
+	library.setWriteBudget(
+		new DiskBudget({
+			limitBytes: config.limits.diskBudgetBytes,
+			roots: [library.share, `${config.dataDir}/recordings`],
+		}),
 	);
-	const { runAcpProxy } = await import('@tykotech/agents');
-	const env = processEnv(ENV_NAMES);
-	// The proxy never dials a provider, but it parses the same configuration the server would, so a refused file is
-	// refused here too rather than on the next `serve`.
-	const read = secretReader();
-	const config = loadConfig(env, {
-		secrets: await resolveSecrets({ env, readFile: read }),
-		modelProviders: await loadModelProviders(env, { readFile: read }),
-	});
-	if (config.expansion.bridge === null) {
-		console.error('acp requires TTK_AGENT_BRIDGE_URL and TTK_AGENT_BRIDGE_TOKEN_FILE');
-		return 1;
-	}
-	try {
-		await runAcpProxy(config.expansion.bridge);
-		return 0;
-	} catch {
-		console.error('ACP bridge failed; check the configured runner and agent');
-		return 1;
-	}
+	return library;
 }
 
-/**
- * Liveness probe, as a subcommand.
- *
- * The same check `scripts/healthcheck.ts` performs, reachable from the
- * compiled binary (R15) — the slim image (R11) has no Deno runtime to run a
- * script with, and a container without a health check is a container whose
- * restarts nobody notices.
- *
- * Always dials `127.0.0.1`, never `TTK_HOST`: a server bound to `0.0.0.0` is
- * reachable on loopback, but a probe that *connects* to `0.0.0.0` fails — the
- * classic bind-versus-connect mistake that presents as a restart loop.
- */
+/** Liveness probe, as a subcommand. */
 async function runHealthcheck(): Promise<number> {
 	let port = '8787';
 	try {
@@ -486,40 +452,28 @@ async function runDoctor(
 		force?: boolean;
 		'new-db-key'?: boolean;
 		save?: boolean;
+		'local-defaults'?: boolean;
 	},
 	show: CredentialStreams,
 ): Promise<number> {
-	const { DEFAULT_SCOPES, ENV_NAMES, generateAdminUser, generateApiKey, loadConfig, processEnv, SCOPES } = await import(
+	const { DEFAULT_SCOPES, generateAdminUser, generateApiKey, generateDbKey, loadConfig, SCOPES } = await import(
 		'@tykotech/gateway'
 	);
 	const { ADMIN_SCOPES } = await import('@tykotech/mcp');
 
-	/**
-	 * The scopes a minted credential carries: DEFAULT_SCOPES unless `--scopes` names others, each checked against
-	 * the vocabulary. Shared by `--new-key` (SEC-01, fourth grant site) and `--new-admin` (GW-2, sixth): both
-	 * materialise the array into the record they print, so neither reaches a verifier fallback, and neither may
-	 * hand out an EXPLICIT_SCOPES member nobody named (D-065). `null` means an unknown name was reported.
-	 */
+	/** The scopes a minted credential carries: DEFAULT_SCOPES unless `--scopes` names others from the vocabulary. */
 	const requestedScopes = (): typeof DEFAULT_SCOPES | null => {
 		const requested = args.scopes === undefined
 			? DEFAULT_SCOPES
 			: args.scopes.split(',').map((s) => s.trim()).filter((s) => s !== '');
-		const invalid = requested.filter((scope) => !(SCOPES as readonly string[]).includes(scope));
-		if (invalid.length > 0) {
-			console.error(`unknown scopes: ${invalid.join(', ')}`);
-			console.error(`valid scopes: ${SCOPES.join(', ')}`);
-			return null;
-		}
-		return requested as typeof DEFAULT_SCOPES;
+		return knownScopes(requested, SCOPES) ? requested as typeof DEFAULT_SCOPES : null;
 	};
 
 	const grantUser = args.grant;
 	if (grantUser !== undefined && grantUser !== '') return await runGrant(grantUser, args);
 
 	if (args['new-db-key'] === true) {
-		const written = await writeSecretFile(DB_KEY_FILE, `${(await import('@tykotech/gateway')).generateDbKey()}\n`, {
-			force: args.force === true,
-		});
+		const written = await writeSecretFile(DB_KEY_FILE, `${generateDbKey()}\n`, { force: args.force === true });
 		if (written === 'exists') {
 			console.error(`${DB_KEY_FILE} exists; --force replaces it, and every secret sealed with it becomes unreadable`);
 			return 1;
@@ -533,13 +487,13 @@ async function runDoctor(
 		// Validated before anything is generated or written: a typo must never replace a working admin record.
 		const named = args.scopes === undefined ? null : requestedScopes();
 		if (args.scopes !== undefined && named === null) return 1;
-		// D-154: an existing record is never replaced without --force.
+		// An existing record is never replaced without --force.
 		if (args.force !== true && await exists(ADMIN_USER_FILE)) {
 			console.error(`${ADMIN_USER_FILE} exists; pass --force to replace it`);
 			return 1;
 		}
-		// C7 / D-098: `admin` is no longer part of the default grant, so an administrator record names it — the
-		// default grant plus `admin` without --scopes, and `admin` added to whatever --scopes names.
+		// `admin` is not part of the default grant, so an administrator record names it — the default grant plus
+		// `admin` without --scopes, and `admin` added to whatever --scopes names.
 		const adminScopes = named === null ? [...ADMIN_SCOPES] : [...new Set([...named, 'admin' as const])];
 		const { record, password } = await generateAdminUser(adminUsername, args.password, adminScopes);
 		console.log('====================================================');
@@ -552,17 +506,12 @@ async function runDoctor(
 		else console.log('Password: the one given with --password (not repeated here)');
 		console.log('====================================================\n');
 
-		const secretFile = ADMIN_USER_FILE;
-		let wrote = false;
 		try {
-			await writeSecretFile(secretFile, JSON.stringify(record, null, 2) + '\n', { force: true });
-			wrote = true;
-			console.log(`Saved admin user record to ${secretFile}`);
+			await writeSecretFile(ADMIN_USER_FILE, JSON.stringify(record, null, 2) + '\n', { force: true });
+			console.log(`Saved admin user record to ${ADMIN_USER_FILE}`);
 		} catch (cause) {
-			console.log(`Could not write to ${secretFile}: ${cause instanceof Error ? cause.message : String(cause)}`);
-		}
-		if (!wrote) {
-			console.log('Add this record to secrets/ttk_admin_user.json:\n');
+			console.log(`Could not write to ${ADMIN_USER_FILE}: ${cause instanceof Error ? cause.message : String(cause)}`);
+			console.log(`Add this record to ${ADMIN_USER_FILE}:\n`);
 			console.log(JSON.stringify(record, null, 2));
 		}
 		return 0;
@@ -570,16 +519,7 @@ async function runDoctor(
 
 	const keySetPrefix = args['new-key-set'];
 	if (keySetPrefix !== undefined && keySetPrefix !== '') {
-		// One key per scope, each holding exactly that one scope. A role that
-		// should be able to invoke tools and nothing else gets the `mcp:invoke`
-		// key and never the `admin` one; the operator composes a deployment from
-		// the subset it wants rather than editing a scope array by hand. Every
-		// scope in the vocabulary is minted, `evaluate` included when it is
-		// declared there (EXPLICIT_SCOPES lives in SCOPES), because withholding
-		// it here would hide the one key an operator must deliberately choose to
-		// hand out. `generateApiKey` is used as-is: this adds no fifth default
-		// grant site (BF-2) — it never consults DEFAULT_SCOPES, it names one
-		// scope explicitly per key.
+		// One key per scope, each holding exactly that one scope.
 		const records: unknown[] = [];
 		console.error('New API keys (each shown once — store them now):\n');
 		for (const scope of SCOPES) {
@@ -589,19 +529,16 @@ async function runDoctor(
 			show.err(`    ${key}\n\n`);
 			records.push(record);
 		}
-		// The raw keys go to stderr, the hashed records to stdout as one array,
-		// so `doctor --new-key-set web > keys.json` yields a file ready for
-		// TTK_API_KEYS_FILE without the secrets leaking into it.
+		// The raw keys go to stderr, the hashed records to stdout as one array, so `doctor --new-key-set web >
+		// keys.json` yields a file ready for TTK_API_KEYS_FILE without the secrets leaking into it.
 		console.log(JSON.stringify(records, null, 2));
 		return 0;
 	}
 
 	const keyId = args['new-key'];
 	if (keyId !== undefined && keyId !== '') {
-		// SEC-01, fourth grant site. This one *materialises* the array into the
-		// printed record, so it sails past the `matched.scopes ?? DEFAULT_SCOPES`
-		// fallback in the verifier: a key minted here with no --scopes would hold
-		// whatever it was given, forever. It is given the defaults.
+		// The record names its scopes, so the verifier's `DEFAULT_SCOPES` fallback never applies: without --scopes it is
+		// given the default grant explicitly.
 		const requested = requestedScopes();
 		if (requested === null) return 1;
 		const { key, record } = await generateApiKey(keyId, requested);
@@ -641,13 +578,9 @@ async function runDoctor(
 	console.log(`platform        ${Deno.build.os}/${Deno.build.arch}`);
 
 	let ok = true;
-	// D-137 (N5): the same pure decision the edge made, re-run for its signal map — `otel off`, or where each signal
-	// goes. Run from `main()` without the edge (a unit test), a refusal is reported here and fails the doctor.
-	const otel = checkOtelEgress(processOtelInputs([]));
-	for (const line of otelDoctorLines(otel)) console.log(line);
-	if (!otel.ok) ok = false;
 	try {
 		const {
+			configuredAccounts,
 			configuredSecretRefs,
 			describeSecretRefs,
 			databaseDoctorLine,
@@ -656,12 +589,18 @@ async function runDoctor(
 			resolveSecrets,
 			secretReader,
 		} = await import('@tykotech/gateway');
-		const env = processEnv(ENV_NAMES);
-		// R15 (D-123): every `*_REF` and provider setting is checked, but no provider is contacted and no token read —
-		// this task holds no net grant, and a diagnostic must not be the thing that pulls a secret.
+		// With the task's `--local-defaults`, the configuration `dev` would run with.
+		const { env, defaults } = await commandEnv(args, true);
+		if (defaults !== null) {
+			const { info, warn } = localDefaultsLines(defaults);
+			for (const line of info) console.log(line);
+			for (const line of warn) console.log(`warning: ${line}`);
+		}
+		// Every `*_REF` and provider setting is checked, but no provider is contacted and no token read — this task
+		// holds no net grant, and a diagnostic must not be the thing that pulls a secret.
 		const read = secretReader();
-		// D-143: the providers file is parsed exactly as `serve` parses it (a key file is read, never printed), so a
-		// refused entry is reported here with its field rather than by a failed start.
+		// The providers file is parsed exactly as `serve` parses it (a key file is read, never printed), so a refused
+		// entry is reported here with its field rather than by a failed start.
 		const providerWarnings: string[] = [];
 		const config = loadConfig(env, {
 			secrets: await resolveSecrets({ env, readFile: read, contactProviders: false }),
@@ -681,15 +620,21 @@ async function runDoctor(
 		console.log(
 			`api keys        ${keysRef === undefined ? keyRecords : `from ${keysRef.provider} (not contacted)`}`,
 		);
-		console.log(`oauth           ${config.oauth === null ? 'disabled' : redactedUrl(config.oauth.issuer)}`);
 		console.log(
 			`allowed domains ${config.allowedDomains.length === 0 ? '(unrestricted)' : config.allowedDomains.join(', ')}`,
 		);
-		for (const line of doctorScopeLines(config.allowedDomainsScope, config.browser.args)) console.log(line);
-		// B1.10: an entry that carries a scheme or a port matches nothing, and
-		// `loadConfig` now refuses one — so an operator finds it here, before a
-		// restart finds it one 403 at a time. Printing the accepted list is what
-		// makes the valid case checkable too.
+		console.log(`scope           ${config.allowedDomainsScope}`);
+		// Under a proxy the browser bypasses the resolver layer, and no CDP control pauses a WebSocket handshake.
+		if (
+			config.allowedDomainsScope === 'all' &&
+			config.browser.args.some((arg) => /^--proxy-(?:server|pac-url|auto-detect)(?:=|$)/.test(arg))
+		) {
+			console.log(
+				'warning: under a proxy, WebSockets to off-list hosts are not refused (no CDP control); HTTP requests still are',
+			);
+		}
+		// An entry that carries a scheme or a port would match nothing, so `loadConfig` refuses one — an operator finds
+		// it here, before a restart finds it one 403 at a time.
 		console.log(`allowed origins ${config.allowedOrigins.join(', ')} (compared as bare hostnames)`);
 		const secretsRef = refs.find((ref) => ref.variable === 'TTK_SECRETS_REF');
 		console.log(
@@ -702,31 +647,34 @@ async function runDoctor(
 			}`,
 		);
 		for (const line of describeSecretRefs(env)) console.log(line);
-		console.log(`role            ${config.role}${config.cluster === null ? ' (single node)' : ''}`);
-		if (config.cluster !== null) {
-			console.log(`cluster kv      ${config.cluster.kvPath}`);
-			console.log(`node            ${config.cluster.nodeId} at ${config.cluster.nodeUrl || '(no url)'}`);
-		}
 		console.log(`data dir        ${config.dataDir ?? '(ephemeral sessions)'}`);
 		console.log(`ffmpeg          ${config.ffmpeg ?? '(recording disabled)'}`);
 		console.log(`coding sandbox  ${config.expansion.sandbox?.url ?? 'disabled'}`);
-		console.log(`ACP agent       ${config.expansion.bridge?.agent ?? 'disabled'}`);
 		console.log(`A2A peers       ${config.expansion.peers.map((peer) => peer.id).join(', ') || 'none'}`);
-		for (const line of modelProvidersDoctorLines(config.modelProviders, providerWarnings, providerNetHost)) {
-			console.log(line);
-		}
-		// D-154: the providers in force live in the database (the file above is its seed); counts only, no key opened.
+		// Each provider as `id (kind, host:port, N models, key: source)`, the default, and the parser's warnings.
+		const providers = config.modelProviders?.providers ?? [];
+		console.log(
+			providers.length === 0
+				? 'model providers none'
+				: `model providers ${
+					providers.map((p) =>
+						`${p.id} (${p.kind}, ${providerNetHost(p)}, ${p.models.length} models, key: ${p.keySource})`
+					)
+						.join(', ')
+				}; default: ${config.modelProviders?.default ?? 'none'}`,
+		);
+		if (providers.length > 0) { for (const line of providerWarnings) console.log(`warning: ${line}`); }
+		// The providers in force live in the database (the file above is its seed); counts only, no key opened.
 		const storeLine = databaseDoctorLine(config.dataDir, config.dbKey !== null);
 		if (storeLine !== null) console.log(storeLine);
 		console.log(`headless        ${config.browser.headless}`);
-		// F6 (IMPLEMENTATION-PLAN M3.4): the browser is resolved here the way the server will resolve it at launch,
-		// so a missing or unreadable Chromium is found by `doctor` rather than by the first tool call.
+		// The browser is resolved here the way the server will resolve it at launch, so a missing or unreadable
+		// Chromium is found by `doctor` rather than by the first tool call.
 		console.log(`browser         ${await describeBrowser(config.browser.path ?? undefined)}`);
-		// C9: the same count the bind policy makes — an account (the seed, or a readable users.json) is a credential.
-		const { configuredAccounts } = await import('@tykotech/gateway');
+		// The same count the bind policy makes — an account (the seed, or a readable users.json) is a credential.
 		const accounts = configuredAccounts(config.dataDir, config.adminUser);
 		console.log(`accounts        ${accounts}`);
-		if (config.apiKeys.length === 0 && keysRef === undefined && config.oauth === null && accounts === 0) {
+		if (config.apiKeys.length === 0 && keysRef === undefined && accounts === 0) {
 			console.log('\nwarning: no credentials configured — only loopback development mode will start.');
 		}
 	} catch (cause) {
@@ -737,91 +685,102 @@ async function runDoctor(
 	return ok ? 0 : 1;
 }
 
-/** D-154: where `setup` and `doctor` write the deployment's files, as the compose files mount them. */
+/** Where `setup` and `doctor` write the deployment's files, as the compose files mount them. */
 const SECRETS_DIR = 'secrets';
 const DB_KEY_FILE = `${SECRETS_DIR}/ttk_db_key`;
 const ADMIN_USER_FILE = `${SECRETS_DIR}/ttk_admin_user.json`;
 const API_KEYS_FILE = `${SECRETS_DIR}/ttk_api_keys.json`;
-const PEERS_FILE = `${SECRETS_DIR}/ttk_agent_peers.json`;
-const PEER_TOKEN_FILE = `${SECRETS_DIR}/ttk_peer_token`;
-const PEER_API_KEYS_FILE = `${SECRETS_DIR}/ttk_peer_api_keys.json`;
 const BROWSER_SECRETS_FILE = `${SECRETS_DIR}/ttk_secrets.json`;
 const GIT_REMOTES_FILE = `${SECRETS_DIR}/ttk_git_remotes`;
-const AGENT_TOKEN_FILE = `${SECRETS_DIR}/ttk_agent_bridge_token`;
-const AGENT_COMMANDS_FILE = `${SECRETS_DIR}/ttk_agent_commands.json`;
+const SANDBOX_TOKEN_FILE = `${SECRETS_DIR}/ttk_sandbox_token`;
 const ENV_FILE = '.env';
+/** The checkout's own data directory: the one `dev` and `stdio` are granted to write. */
+const LOCAL_DATA_DIR = 'data';
+
+/** What {@linkcode localDefaults} did. */
+export interface LocalDefaults {
+	/** A copy of the input environment with each default filled in; the input itself is not changed. */
+	readonly env: Record<string, string | undefined>;
+	/** `NAME=path` for each default applied: paths only, since no file is read here. */
+	readonly applied: readonly string[];
+	/** Whether a database key is in hand — `setup`'s, or a key file the operator named; without one, say to run setup. */
+	readonly setUp: boolean;
+}
 
 /**
- * The modes of `secrets/` and of every file `setup` and `doctor` write in it. A compose file secret is a bind mount
- * that keeps the host's owner and mode — Compose ignores `uid`, `gid` and `mode` for file secrets — and the containers
- * run as uid 1993 (slim: 1000; rootless Docker and Docker Desktop map ids again), so a `0600` file is unreadable in
- * them and the gateway restarts forever. The directory's `0700` is what keeps the files private on the host: no other
- * account can open anything inside it, whatever a file's own mode. Inside a container the mount is the file alone, and
- * `0644` lets the service's uid read it; every process there runs as that uid, which the old `chgrp 1993` + `0440`
- * granted all the same.
+ * `--local-defaults`, which the checkout's own tasks pass (`dev`, `stdio`, `doctor`, `seed`), so they find what `deno
+ * task setup` wrote without an export.
  */
+export async function localDefaults(
+	input: Readonly<Record<string, string | undefined>>,
+	options: { readonly apiKeys: boolean },
+	present: (path: string) => Promise<boolean> = exists,
+): Promise<LocalDefaults> {
+	const env: Record<string, string | undefined> = { ...input };
+	const applied: string[] = [];
+	const unset = (...names: string[]): boolean => names.every((name) => !env[name]?.trim());
+	const apply = (variable: string, path: string): void => {
+		env[variable] = path;
+		applied.push(`${variable}=${path}`);
+	};
+	const offer = async (variable: string, path: string, ...others: string[]): Promise<void> => {
+		if (unset(variable, ...others) && await present(path)) apply(variable, path);
+	};
+	const keyed = await present(DB_KEY_FILE);
+	const setUp = keyed || !unset('TTK_DB_KEY_FILE');
+	if (keyed && unset('TTK_DATA_DIR')) apply('TTK_DATA_DIR', LOCAL_DATA_DIR);
+	await offer('TTK_DB_KEY_FILE', DB_KEY_FILE);
+	if (options.apiKeys) await offer('TTK_API_KEYS_FILE', API_KEYS_FILE, 'TTK_API_KEYS', 'TTK_API_KEYS_REF');
+	await offer('TTK_SECRETS_FILE', BROWSER_SECRETS_FILE, 'TTK_SECRETS', 'TTK_SECRETS_REF');
+	if (!unset('TTK_SANDBOX_URL')) await offer('TTK_SANDBOX_TOKEN_FILE', SANDBOX_TOKEN_FILE, 'TTK_SANDBOX_TOKEN');
+	return { env, applied, setUp };
+}
+
+/** Logs {@linkcode localDefaultsLines} once the server has its logger; nothing when the task passed no flag. */
+function logLocalDefaults(
+	defaults: LocalDefaults | null,
+	logger: { info(message: string): void; warn(message: string): void },
+): void {
+	if (defaults === null) return;
+	const { info, warn } = localDefaultsLines(defaults);
+	for (const line of info) logger.info(line);
+	for (const line of warn) logger.warn(line);
+}
+
+/** The lines a server logs about {@linkcode localDefaults}: what it applied, and how to get the files without them. */
+export function localDefaultsLines(defaults: LocalDefaults): { info: string[]; warn: string[] } {
+	return {
+		info: defaults.applied.length === 0 ? [] : [`local defaults from deno task setup: ${defaults.applied.join(', ')}`],
+		warn: defaults.setUp ? [] : [
+			`${DB_KEY_FILE} not found, so this checkout's secrets are not used: run deno task setup to create the ` +
+			'database key, administrator and API key this task picks up',
+		],
+	};
+}
+
+/** The modes of `secrets/` and of every file `setup` and `doctor` write in it. */
 const SECRETS_DIR_MODE = 0o700;
 const SECRET_FILE_MODE = 0o644;
 
-/** The A2A peer the default stack runs (`a2a-peer` in docker-compose.yml): its URL is its own `TTK_PUBLIC_URL`. */
-const BUNDLED_PEER = { id: 'peer', url: 'http://a2a-peer:8787', token_file: '/run/secrets/ttk_peer_token' } as const;
-
 /**
- * The ACP runner's commands file `setup` starts `docker-compose.agents.yml` with: one agent at the path the runner
- * image reserves, offered the gateway's MCP endpoint (the delegated token is matched against `TTK_AGENT_MCP_URL`). The
- * runner refuses to start until that executable exists — install your agent in an image derived from
- * docker/Dockerfile.agent-runner. No credential belongs here: mount those as files and name them in `env` as `*_FILE`.
- */
-const AGENT_COMMANDS_TEMPLATE = [{
-	id: 'default',
-	executable: '/opt/agents/agent',
-	args: [],
-	cwd: '/agent-workspace',
-	env: {},
-	mcp_servers: [{ name: 'tykotech', url: 'http://tykotech-mcp:8787/mcp' }],
-}];
-
-/**
- * The `.env` `setup` writes: every value the compose files interpolate, at its default. `.env.example` is this text
- * byte for byte (`tests/unit/setup_test.ts` holds the two equal), so there is one template, not two.
+ * The `.env` `setup` writes: the few settings a typical deployment changes, in plain words. Every other value the
+ * compose files interpolate keeps its default there and is documented in docs/reference/environment-variables.md.
  */
 export const ENV_TEMPLATE =
-	`# Multi-MCP: Docker Compose settings. Compose reads this file for interpolation only; no container sees it.
-# \`deno task setup\` writes .env from this template (.env.example is the same text) and never replaces it without
-# --force. Change a value, then \`docker compose up -d\`.
+	`# Multi-MCP settings for Docker Compose. Change a value, save, then run the start script again
+# (or \`docker compose up -d\`). Every other setting: docs/reference/environment-variables.md.
 
-# Host interface Docker publishes port 8787 on. 0.0.0.0 = every interface (the stack has credentials, so it may).
+# Which network address the web app listens on. 127.0.0.1 = this computer only; 0.0.0.0 = your whole network too.
 TTK_BIND=127.0.0.1
 
-# The address clients use; opens the Host and Origin allowlists to it. LAN access: http://<host address>:8787
+# The address you type in the browser. For your network: http://<this computer's address>:8787
 TTK_PUBLIC_URL=http://127.0.0.1:8787
 
-# Allowlist overrides (comma-separated hostnames). Empty = derived from TTK_PUBLIC_URL. A value REPLACES the derived
-# list, so include the public host. Set both or neither.
-TTK_ALLOWED_HOSTS=
-TTK_ALLOWED_ORIGINS=
-
-# Navigation allowlist of the browsers (gateway and peer), followed by browser_head too. Empty = unrestricted.
-# Example: example.com,docs.example.com
+# Websites the browser may open, comma-separated (example.com,docs.example.com). Empty = any website.
 TTK_ALLOWED_DOMAINS=
 
-# Memory limit of the gateway container (the server and every browser session it runs), and the server's heap in MiB.
+# Memory for the web app and every browser it runs (for example 1536m or 4g).
 TTK_GATEWAY_MEMORY=1536m
-TTK_GATEWAY_HEAP_MB=1024
-# The same for the bundled A2A peer.
-TTK_PEER_MEMORY=1g
-TTK_PEER_HEAP_MB=512
-
-# docker-compose.agents.yml: the runner image holding your ACP agent, and the agent id the gateway uses.
-TTK_AGENT_RUNNER_IMAGE=tykotech-agent-runner:0.2.0
-TTK_AGENT_DEFAULT=default
-
-# docker-compose.sandbox-docker.yml: the group owning the Docker socket (\`stat -c %g /var/run/docker.sock\`; 0 on
-# Docker Desktop), the workspace image, and volume names (two deployments on one daemon need different names).
-TTK_SANDBOX_DOCKER_GID=0
-TTK_SANDBOX_WORKSPACE_IMAGE=tykotech-sandbox-workspace:0.2.0
-TTK_SANDBOX_DOCKER_VOLUME=ttk-code
-TTK_SANDBOX_DOCKER_SOCK_VOLUME=ttk-sandbox-sock
 `;
 
 /** Whether `path` exists (a stat needs only the directory's search right, so a file another uid owns still counts). */
@@ -851,10 +810,8 @@ async function ensureSecretsDir(dir = SECRETS_DIR): Promise<boolean> {
 }
 
 /**
- * D-154: writes a file in `secrets/` with {@linkcode SECRET_FILE_MODE}, never over an existing one unless `force` —
- * the owner's rule for every seed destination. A forced write removes the old file first, so one left `0400` (or owned
- * by the container's uid) is replaced rather than refused. The mode is set after the write because the one passed to
- * the create is masked by the umask.
+ * Writes a file in `secrets/` with {@linkcode SECRET_FILE_MODE}, never over an existing one unless `force` — the rule
+ * for every file `setup` and `doctor` create.
  */
 async function writeSecretFile(path: string, text: string, options: { force: boolean }): Promise<'written' | 'exists'> {
 	if (await exists(path)) {
@@ -869,9 +826,8 @@ async function writeSecretFile(path: string, text: string, options: { force: boo
 }
 
 /**
- * Gives a kept file in `secrets/` {@linkcode SECRET_FILE_MODE}: a checkout set up before this mode (`0600`, which the
- * containers cannot read) is repaired by running `setup` again. `'repaired'` when the mode changed, `'unchanged'` when
- * it was already right, `'foreign'` when this account may not change it (a file handed over with `chown 1993`).
+ * Gives a kept file in `secrets/` {@linkcode SECRET_FILE_MODE}: one saved private (`0600` — an editor or a copy under a
+ * `077` umask — which the containers cannot read) is repaired by running `setup` again.
  */
 async function repairSecretMode(path: string): Promise<'repaired' | 'unchanged' | 'foreign'> {
 	if (Deno.build.os === 'windows') return 'unchanged';
@@ -910,21 +866,15 @@ function serviceToken(): string {
 /** The `--only` list, validated; `null` (all units) when absent, `undefined` when it names an unknown one. */
 export function setupUnits(only: string | undefined): SetupUnit[] | null | undefined {
 	if (only === undefined) return null;
-	const named = only.split(',').map((unit) => unit.trim()).filter((unit) => unit !== '');
+	const named = csv(only);
 	if (named.length === 0 || named.some((unit) => !(SETUP_UNITS as readonly string[]).includes(unit))) return undefined;
 	return named as SetupUnit[];
 }
 
 /**
- * `setup` (D-154): creates every file a shipped compose file mounts — the database key, the administrator, the `client`
- * API key, the A2A peer's token pair and list, the browser-secrets and git-remotes placeholders, the agent runner's
- * token and the ACP commands template — and `.env`, skipping each file that exists. `--force` replaces the generated
- * ones; files you fill in yourself (browser secrets, git remotes, agent commands) are replaced only when `--only` names
- * them. Generated passwords and keys are shown once — on standard output itself, never through `console`
- * ({@linkcode CredentialStreams}) — and stored only as hashes; the service tokens are stored as they
- * are (each side must present one), in `secrets/` like every other file. Kept files get their modes repaired. On an
- * AppArmor host it then installs the sandbox's profile through sudo (`apparmor`), and when that fails it exits 1 with
- * the commands that do it by hand. `apparmor` stands in for the host in the unit tests, and `show` for the streams.
+ * `setup`: creates every file a shipped compose file mounts — the database key, the administrator, the `client` API
+ * key, the browser-secrets and git-remotes placeholders, the sandbox token the gateway and the sandbox share — and
+ * `.env`, skipping each file that exists.
  */
 export async function runSetup(
 	args: { force?: boolean; admin?: string; 'key-id'?: string; scopes?: string; only?: string },
@@ -933,21 +883,15 @@ export async function runSetup(
 	show: CredentialStreams = CREDENTIAL_STREAMS,
 ): Promise<number> {
 	const { generateAdminUser, generateApiKey, generateDbKey, SCOPES } = await import('@tykotech/gateway');
-	const { A2A_PEER_SCOPES, STACK_SCOPES } = await import('@tykotech/mcp');
+	const { STACK_SCOPES } = await import('@tykotech/mcp');
 	type Scopes = Parameters<typeof generateApiKey>[1];
 	const units = setupUnits(args.only);
 	if (units === undefined) {
 		console.error(`--only takes a comma-separated list of: ${SETUP_UNITS.join(', ')}`);
 		return 1;
 	}
-	const scopes = args.scopes === undefined
-		? [...STACK_SCOPES]
-		: args.scopes.split(',').map((scope) => scope.trim()).filter((scope) => scope !== '');
-	const unknown = scopes.filter((scope) => !(SCOPES as readonly string[]).includes(scope));
-	if (unknown.length > 0) {
-		console.error(`unknown scopes: ${unknown.join(', ')}\nvalid scopes: ${SCOPES.join(', ')}`);
-		return 1;
-	}
+	const scopes = args.scopes === undefined ? [...STACK_SCOPES] : csv(args.scopes);
+	if (!knownScopes(scopes, SCOPES)) return 1;
 	const selected = (unit: SetupUnit): boolean => units === null || units.includes(unit);
 	/** For a selected unit: `--force` replaces a generated file, and one you fill in yourself only when `--only` names it. */
 	const replace = (yours = false): boolean => args.force === true && (!yours || units !== null);
@@ -992,32 +936,11 @@ export async function runSetup(
 		once.push(`  api key     ${key}`, `              id ${id}; ${scopes.join(', ')}`);
 		return `${JSON.stringify([record], null, 2)}\n`;
 	});
-	if (selected('peer')) {
-		// The token and its hash are one unit: a half that is missing or replaced makes the other useless, so both are
-		// written together. The list names the token by its path in the gateway container.
-		const force = replace();
-		if (force || !await exists(at(PEER_TOKEN_FILE)) || !await exists(at(PEER_API_KEYS_FILE))) {
-			const { key, record } = await generateApiKey('gateway', A2A_PEER_SCOPES);
-			await mark(PEER_TOKEN_FILE, await writeSecretFile(at(PEER_TOKEN_FILE), `${key}\n`, { force: true }));
-			await mark(
-				PEER_API_KEYS_FILE,
-				await writeSecretFile(at(PEER_API_KEYS_FILE), `${JSON.stringify([record], null, 2)}\n`, { force: true }),
-			);
-		} else {
-			await mark(PEER_TOKEN_FILE, 'exists');
-			await mark(PEER_API_KEYS_FILE, 'exists');
-		}
-		await file('peer', PEERS_FILE, () => `${JSON.stringify([BUNDLED_PEER], null, 2)}\n`);
-	}
 	await file('browser-secrets', BROWSER_SECRETS_FILE, () => '{}\n', true);
 	await file('git-remotes', GIT_REMOTES_FILE, () => '[]\n', true);
-	await file('agent-token', AGENT_TOKEN_FILE, () => `${serviceToken()}\n`);
-	await file(
-		'agent-commands',
-		AGENT_COMMANDS_FILE,
-		() => `${JSON.stringify(AGENT_COMMANDS_TEMPLATE, null, 2)}\n`,
-		true,
-	);
+	// The sandbox's bearer, shared by the gateway and the sandbox: `docker-compose.yml` mounts it read-only into both
+	// at the image's default `/run/secrets/ttk_sandbox_token`.
+	await file('sandbox-token', SANDBOX_TOKEN_FILE, () => `${serviceToken()}\n`);
 	if (selected('env')) {
 		if (replace() || !await exists(at(ENV_FILE))) {
 			if (await exists(at(ENV_FILE))) await Deno.remove(at(ENV_FILE));
@@ -1052,7 +975,7 @@ export async function runSetup(
 				`\nerror: AppArmor: the coding sandbox's profile could not be installed: ${outcome.reason}.\n` +
 					"This host runs AppArmor, and Docker's default AppArmor profile denies the mounts the sandbox's bubblewrap\n" +
 					'cages need: until the profile is loaded, Docker refuses the sandbox ("unable to apply apparmor profile")\n' +
-					'and the gateway, which waits for it, never starts. Install it by hand, then docker compose up -d --build:\n\n' +
+					'and the gateway runs without the sandbox tools. Install it by hand, then docker compose up -d --build:\n\n' +
 					`  sudo ${shellLine(install)}\n  sudo ${shellLine(load)}\n\n` +
 					'Everything else setup does is done; running setup again retries only this step.',
 			);
@@ -1065,30 +988,20 @@ export async function runSetup(
 }
 
 /**
- * `seed` (D-154): copies the providers file (keys sealed) and `TTK_SECRETS(_FILE)` into the database — only into an
- * empty, never-seeded one, unless `--force`. A running server keeps what it loaded until it restarts.
+ * `seed`: copies the providers file (keys sealed) and `TTK_SECRETS(_FILE)` into the database — only into an empty,
+ * never-seeded one, unless `--force`. A running server keeps what it loaded until it restarts.
  */
-async function runSeed(args: { force?: boolean; only?: string }): Promise<number> {
-	const {
-		describeSeed,
-		ENV_NAMES,
-		loadConfig,
-		loadModelProviders,
-		openDataStore,
-		processEnv,
-		resolveSecrets,
-		SEED_TARGETS,
-		secretReader,
-	} = await import('@tykotech/gateway');
-	const only = args.only === undefined
-		? undefined
-		: args.only.split(',').map((target) => target.trim()).filter((target) => target !== '');
+async function runSeed(args: { force?: boolean; only?: string; 'local-defaults'?: boolean }): Promise<number> {
+	const { describeSeed, loadConfig, loadModelProviders, openDataStore, resolveSecrets, SEED_TARGETS, secretReader } =
+		await import('@tykotech/gateway');
+	const only = args.only === undefined ? undefined : csv(args.only);
 	const unknown = (only ?? []).filter((target) => !(SEED_TARGETS as readonly string[]).includes(target));
 	if (unknown.length > 0) {
 		console.error(`unknown seed targets: ${unknown.join(', ')} (valid: ${SEED_TARGETS.join(', ')})`);
 		return 1;
 	}
-	const env = processEnv(ENV_NAMES);
+	const { env, defaults } = await commandEnv(args, false);
+	for (const line of defaults === null ? [] : localDefaultsLines(defaults).info) console.log(line);
 	const read = secretReader();
 	// A secret manager reference is never seeded (it stays the source), so no provider is contacted for one.
 	const config = loadConfig(env, {
@@ -1115,61 +1028,19 @@ async function runSeed(args: { force?: boolean; only?: string }): Promise<number
 }
 
 /**
- * G15 / D-098: `doctor --grant <user> --scopes <list>` — the offline remedy for a store in which no enabled account
- * holds `admin` (the startup warning names it), so nobody can reach the Users screen to fix it.
- *
- * Without a cluster it rewrites `<TTK_DATA_DIR>/users.json` (or `--data-dir`), and must run with the gateway
- * stopped: a running gateway does not re-read the file, and its next account change would write its own copy over
- * this one. With `TTK_CLUSTER_KV` set the accounts live in the shared KV (N2), so the grant is written there through
- * the same optimistic commit the gateway uses and running nodes pick it up within one poll — which needs a runtime
- * with KV enabled; without it the command refuses and prints the exact flag to add rather than editing a file no
- * node reads.
- *
- * ERRATUM(E-80): design §2.2 had `--grant` refuse outright whenever the cluster KV is configured and print its path.
- * A refusal alone leaves a cluster with no enabled administrator no offline remedy at all — the KV is the authority
- * and every node adopts it — so the grant is written to the KV when the runtime can open it, and the refusal (with
- * the KV path and the command that can) stands only where it cannot.
+ * `doctor --grant <user> --scopes <list>` — the offline remedy for a store in which no enabled account holds `admin`
+ * (the startup warning names it), so nobody can reach the Users screen to fix it.
  */
 async function runGrant(username: string, args: { scopes?: string; 'data-dir'?: string }): Promise<number> {
-	const { grantScopesInCluster, grantScopesInFile, processEnv, SCOPES, UserStoreError } = await import(
-		'@tykotech/gateway'
-	);
+	const { grantScopesInFile, processEnv, SCOPES, UserStoreError } = await import('@tykotech/gateway');
 	if (args.scopes === undefined) {
 		console.error('--grant needs --scopes <list>, for example --scopes mcp:invoke,view:watch,view:control,admin');
 		return 1;
 	}
-	const scopes = args.scopes.split(',').map((scope) => scope.trim()).filter((scope) => scope !== '');
-	const invalid = scopes.filter((scope) => !(SCOPES as readonly string[]).includes(scope));
-	if (invalid.length > 0) {
-		console.error(`unknown scopes: ${invalid.join(', ')}`);
-		console.error(`valid scopes: ${SCOPES.join(', ')}`);
-		return 1;
-	}
-	const env = processEnv(['TTK_DATA_DIR', 'TTK_CLUSTER_KV']);
-	const kvPath = env.TTK_CLUSTER_KV?.trim() ?? '';
+	const scopes = csv(args.scopes);
+	if (!knownScopes(scopes, SCOPES)) return 1;
 	try {
-		if (kvPath !== '') {
-			if (typeof Deno.openKv !== 'function') {
-				console.error(`TTK_CLUSTER_KV is set: the accounts live in the cluster store at ${kvPath}, not in users.json.`);
-				console.error('Run this command with KV enabled, for example:');
-				console.error(
-					`  deno run --unstable-kv --allow-read --allow-write --allow-env=TTK_* packages/cli/mod.ts doctor --grant ${username} --scopes ${
-						scopes.join(',')
-					}`,
-				);
-				return 1;
-			}
-			const kv = await Deno.openKv(kvPath);
-			try {
-				const { user, migrated } = await grantScopesInCluster(kv, username, scopes);
-				console.log(`granted ${user.username}: ${user.scopes.join(', ')} (cluster store ${kvPath})`);
-				if (migrated > 0) console.log(`upgraded ${migrated} other account(s) to explicit scopes`);
-			} finally {
-				kv.close();
-			}
-			return 0;
-		}
-		const dataDir = args['data-dir']?.trim() || env.TTK_DATA_DIR?.trim() || '';
+		const dataDir = args['data-dir']?.trim() || processEnv(['TTK_DATA_DIR']).TTK_DATA_DIR?.trim() || '';
 		if (dataDir === '') {
 			console.error('--grant needs the data directory: set TTK_DATA_DIR or pass --data-dir <path>');
 			return 1;
@@ -1189,82 +1060,9 @@ async function runGrant(username: string, args: { scopes?: string; 'data-dir'?: 
 	}
 }
 
-/**
- * NF-3 (design §2.8, AC26): the stdio composition's secret wiring — the store is built by `make` exactly once, and
- * `redact` delegates to that same instance, so the registry's log redaction and the tools' `secrets` can never diverge.
- */
-export function oneSecretStore<S extends { redact(text: string): string }>(
-	make: () => S,
-): { readonly secrets: S; readonly redact: (text: string) => string } {
-	const secrets = make();
-	return { secrets, redact: (text: string) => secrets.redact(text) };
-}
+if (import.meta.main) Deno.exit(await main(Deno.args));
 
-/**
- * The doctor's `scope` line (D-138, design §2.3/§2.5), and the WebSocket caveat when `all` runs under a proxy: with
- * `--proxy-server`, `--proxy-pac-url` or `--proxy-auto-detect` in `TTK_BROWSER_ARGS` the browser bypasses the resolver
- * layer, and no CDP control pauses a WebSocket handshake (measured, C3/C9).
- */
-export function doctorScopeLines(scope: 'documents' | 'all', browserArgs: readonly string[]): string[] {
-	const proxied = browserArgs.some((arg) => /^--proxy-(?:server|pac-url|auto-detect)(?:=|$)/.test(arg));
-	return [
-		`scope           ${scope}`,
-		...(scope === 'all' && proxied
-			? [
-				'warning: under a proxy, WebSockets to off-list hosts are not refused (no CDP control); HTTP requests ' +
-				'still are',
-			]
-			: []),
-	];
-}
-
-/**
- * The doctor's `model providers` line (D-143, backend §2.5): each provider as `id (kind, host:port, N models, key:
- * file|inline|none)`, the default, and one `warning:` line per parser warning (an `allow_http` provider, a short key).
- * Never the key and never the URL path — the host is `netHost(p)`, the gateway's `providerNetHost`: the `host:port`
- * spelling the grant proof queries and the one to copy into `--allow-net` (DX-1 / CR2-11 / BUG-12), with the default
- * port the URL parser dropped put back. Passed in because this module imports the gateway dynamically (D-137 F5).
- */
-export function modelProvidersDoctorLines(
-	config: { readonly default: string | null; readonly providers: readonly ModelProviderDoctorRow[] } | null,
-	warnings: readonly string[],
-	netHost: (provider: ModelProviderDoctorRow) => string,
-): string[] {
-	if (config === null || config.providers.length === 0) return ['model providers none'];
-	const listed = config.providers
-		.map((p) => `${p.id} (${p.kind}, ${netHost(p)}, ${p.models.length} models, key: ${p.keySource})`)
-		.join(', ');
-	return [
-		`model providers ${listed}; default: ${config.default ?? 'none'}`,
-		...warnings.map((line) => `warning: ${line}`),
-	];
-}
-
-/** What the doctor line reads from a provider — a structural subset of the gateway's `ModelProviderSettings`. */
-interface ModelProviderDoctorRow {
-	readonly id: string;
-	readonly kind: string;
-	readonly host: string;
-	readonly baseUrl: string;
-	readonly models: readonly string[];
-	readonly keySource: 'file' | 'inline' | 'stored' | 'none';
-}
-
-// D-137 (design §2.3, F4): the gate runs before `main()` for every subcommand — `version`, `help` and an unknown command
-// included. A refused process has written one stderr line and set `Deno.exitCode = 1`; with nothing pending it ends
-// naturally, which exported nothing even past a missed metric tick, where `Deno.exit` hung (O26/O27). MB8: a tick that
-// falls while the runtime is still loading this graph — before any line here runs — is exported by the runtime itself
-// (resource attributes and `v8js.gc.*` only); that window is D-137's residual. `main()` itself stays ungated for its
-// unit tests, which run with OpenTelemetry off. N6: `Deno.exit(await main())` below, and the
-// existing exits inside `main` (a second interrupt, the stdio shutdown), can hang until the export timeout when a
-// metric tick was missed while exporting — recorded in D-137 as a shutdown residual.
-if (import.meta.main && enforceOtelEgress(Deno.args)) Deno.exit(await main(Deno.args));
-
-/**
- * F6: what `doctor` says about the browser. A configured path is checked for existence; otherwise the same
- * discovery the launcher uses runs, and a failure says whether nothing is installed or the search was not
- * permitted (E-24), so the fix is obvious.
- */
+/** What `doctor` says about the browser. */
 async function describeBrowser(configured: string | undefined): Promise<string> {
 	const { BrowserNotFoundError, classifyDiscoveryFailure, discoverBrowserExecutable } = await import('@tykotech/cdp');
 	if (configured !== undefined) {

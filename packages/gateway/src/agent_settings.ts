@@ -1,14 +1,4 @@
-/**
- * D-158 (owner-requested): the agents' settings on the control plane — `GET` and `PUT /api/v1/system/agents`.
- *
- * The settings themselves (`AgentSettings`: a default model, the A2A / ACP / A2UI switches and the memory switch per
- * agent) are defined and enforced by `@tykotech/agents`; this module keeps them in the database's `settings` table
- * (one JSON row, `agents.settings`) and judges a change against the providers in force: a default model must be one
- * a provider in force lists. Nothing here is a secret, so nothing is sealed.
- *
- * Without a data directory there is no database: the defaults apply and a `PUT` is `409 persistence-required`.
- * Node-local in a cluster, like the providers.
- */
+/** The agents' settings on the control plane — `GET` and `PUT /api/v1/system/agents`. */
 import {
 	AGENT_APPLIES,
 	AGENT_IDS,
@@ -19,6 +9,7 @@ import {
 	DEFAULT_AGENT_SETTINGS,
 	parseAgentSettings,
 	SLOPLORD,
+	withoutRetiredSettings,
 } from '@tykotech/agents';
 import type { Database } from './database.ts';
 import type { ModelProvidersConfig } from './model_providers.ts';
@@ -27,7 +18,7 @@ import { HttpProblem } from './problem.ts';
 /** The `settings` row that holds the document. */
 export const AGENT_SETTINGS_KEY = 'agents.settings';
 
-/** The `PUT` body cap: five fields for three agents fit in far less. */
+/** The `PUT` body cap: four fields for two agents fit in far less. */
 export const AGENT_SETTINGS_BODY_BYTES = 8192;
 
 /** One agent as the control plane lists it. */
@@ -35,8 +26,8 @@ export interface AgentView {
 	readonly id: string;
 	readonly name: string;
 	readonly description: string;
-	/** `builtin`: the built-in model agent; `profile`: a built-in profile; `acp`: the bridge; `peer`: an A2A peer. */
-	readonly kind: 'builtin' | 'profile' | 'acp' | 'peer';
+	/** `builtin`: the built-in model agent; `profile`: a built-in profile; `peer`: an A2A peer. */
+	readonly kind: 'builtin' | 'profile' | 'peer';
 	/** Whether this deployment can run it now; `reason` says what is missing. */
 	readonly available: boolean;
 	readonly reason?: string;
@@ -73,7 +64,6 @@ const NO_DATABASE = 'TTK_DATA_DIR is not set, so there is no database for agent 
 const NO_FIELDS: Readonly<Record<keyof AgentSetting, boolean>> = {
 	model: false,
 	a2a: false,
-	acp: false,
 	a2ui: false,
 	memory: false,
 };
@@ -84,15 +74,16 @@ export class AgentSettingsStore {
 	#current: AgentSettings = DEFAULT_AGENT_SETTINGS;
 
 	/**
-	 * Reads the stored document. A row that no longer parses (a hand edit, a field removed) is logged by phrase and
-	 * the defaults apply until a write replaces it — never fatal.
+	 * Reads the stored document. A row that no longer parses (a hand edit, a field removed) is logged by phrase and the
+	 * defaults apply until a write replaces it — never fatal.
 	 */
 	constructor(db: Database | null, logger?: { warn(message: string): void }) {
 		this.#db = db;
 		const raw = db?.setting(AGENT_SETTINGS_KEY) ?? null;
 		if (raw === null) return;
 		try {
-			this.#current = parseAgentSettings(JSON.parse(raw));
+			// A row saved while the ACP agent existed still names it; that part is dropped, the rest kept.
+			this.#current = parseAgentSettings(withoutRetiredSettings(JSON.parse(raw)));
 		} catch (cause) {
 			logger?.warn(
 				`the stored agent settings are not admitted (${
@@ -113,8 +104,7 @@ export class AgentSettingsStore {
 
 	/**
 	 * Applies `body` (`{ agents: { <id>: { …fields } } }`, each agent and field optional) onto the settings in force,
-	 * judges every default model against `providers`, writes the row and returns the new settings. Refusals are
-	 * {@linkcode HttpProblem}s naming the field, never a value.
+	 * judges every default model against `providers`, writes the row and returns the new settings.
 	 */
 	replace(body: unknown, providers: ModelProvidersConfig | null): AgentSettings {
 		if (this.#db === null) throw new HttpProblem('persistence-required', NO_DATABASE);
@@ -199,14 +189,6 @@ export class AgentSettingsStore {
 					'profile',
 					runtime.profileReady(SLOPLORD.id),
 					SLOPLORD.unavailable,
-				),
-				view(
-					'acp',
-					'Coding agent (ACP)',
-					'The operator’s external coding agent, reached over the ACP bridge.',
-					'acp',
-					runtime.hasBridge,
-					'No bridge: TTK_AGENT_BRIDGE_URL is not set',
 				),
 				...runtime.peerIds.map((id): AgentView => ({
 					id: `peer:${id}`,

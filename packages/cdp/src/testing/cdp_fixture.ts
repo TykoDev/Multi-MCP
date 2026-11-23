@@ -1,12 +1,12 @@
 /**
  * A real, local, CDP-shaped WebSocket server for testing `CdpClient` without a browser.
  *
- * This is a **fixture, not a mock** (D-TEST1, SPECS/OBSERVABILITY-TESTING-CICD.md §4.1.2): a real
+ * This is a **fixture, not a mock**: a real
  * `Deno.serve` listener on `127.0.0.1:0` speaking real CDP JSON over a real WebSocket. The scripted
  * LLM is the only sanctioned mock in this codebase; the CDP transport is never mocked.
  *
  * It is bound to `127.0.0.1` explicitly — `Deno.serve`'s default hostname is `0.0.0.0`, which the
- * test permission matrix (`--allow-net=127.0.0.1,localhost`, SPECS/SECURITY-AUTH.md §3.6) denies.
+ * test permission matrix (`--allow-net=127.0.0.1,localhost`) denies.
  *
  * Every instance MUST be closed; `await using` is the shortest way to keep the resource sanitizer
  * green.

@@ -1,7 +1,4 @@
-/**
- * Admin authentication: PBKDF2-SHA256 password hashing, verification,
- * and admin record management.
- */
+/** Admin authentication: PBKDF2-SHA256 password hashing, verification, and admin record management. */
 import * as z from 'zod';
 import { decodeHex, encodeHex } from '@std/encoding/hex';
 import { timingSafeEqual } from '@std/crypto/timing-safe-equal';
@@ -11,8 +8,8 @@ import { ADMIN_SCOPES, type Scope, SCOPES } from '@tykotech/mcp';
 const ScopeSchema = z.enum(SCOPES);
 
 /**
- * GW-4: the username becomes the principal id `admin:<username>`, which is part of an owner, a label every
- * viewer sees, and the private bridge's `x-ttk-principal` header — so it carries no control character.
+ * The username becomes the principal id `admin:<username>`, which is part of an owner, a label every viewer sees, and
+ * log lines — so it carries no control character.
  */
 function printable(value: string): boolean {
 	for (const character of value) {
@@ -87,16 +84,7 @@ export function generateRandomPassword(length = 20): string {
 	return result;
 }
 
-/**
- * Generates a new admin user record and returns the plain password.
- *
- * GW-2 / D-065: the record materialises its scopes rather than leaving them to a fallback. It used to write the
- * whole vocabulary, so every generated administrator held `sandbox:execute`, `agent:invoke`, `a2ui:publish`,
- * `evaluate` and `task` — the EXPLICIT_SCOPES that are "never granted by a default, on any path".
- *
- * C7 / D-098: `admin` left the default grant, so an administrator record names it: `ADMIN_SCOPES` (the default
- * grant plus `admin`) unless the caller names scopes. A record written here never relies on a default for `admin`.
- */
+/** Generates a new admin user record and returns the plain password. */
 export async function generateAdminUser(
 	username = 'admin',
 	password?: string,
@@ -114,22 +102,7 @@ export async function generateAdminUser(
 	return { record, password: plain };
 }
 
-/** Parses raw JSON into an AdminUserRecord or returns null. */
-export function parseAdminUser(raw: string): AdminUserRecord | null {
-	try {
-		return readAdminUser(raw);
-	} catch {
-		return null;
-	}
-}
-
-/**
- * C6 / D-099: parses the `TTK_ADMIN_USER` record or throws, naming the fault and never the value.
- *
- * `parseAdminUser` answered `null` for anything it could not read, and the gateway took `null` to mean "no seed":
- * a record with a typo started a server that nobody could sign in to and said nothing about why. The caller wraps
- * the message in a `ConfigError` naming the variable, so a malformed record refuses startup instead.
- */
+/** Parses the `TTK_ADMIN_USER` record or throws, naming the fault and never the value. */
 export function readAdminUser(raw: string): AdminUserRecord {
 	let parsed: unknown;
 	try {

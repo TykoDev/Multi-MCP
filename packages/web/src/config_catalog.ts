@@ -1,22 +1,20 @@
 /**
- * The settings catalogue (run model-providers-ui, frontend §2(a)): one entry per variable the server, the sandbox
+ * The settings catalogue: one entry per variable the server, the sandbox
  * service or Compose reads, as `docs/reference/environment-variables.md` documents them — that page is the source of
  * truth, and `config_catalog_test.ts` reads it to hold this table to it. Pure data and pure readers, no DOM: the
- * System screen's Configuration panel draws its rows from here, and the configuration composer builds its form and
- * its outputs from here.
+ * System screen's Configuration panel draws its rows from here.
  *
- * Three things an entry says that the composer and the panel lean on:
- * - `secret` marks a variable whose *inline value* is a secret (`TTK_API_KEYS`, `TTK_SECRETS`, `TTK_ADMIN_USER`): it
- *   has no form field, and no generator ever emits it. A `secret-file` entry holds a *path* to a file; the path is
- *   shown and emitted, the file's content never is (the row carries the text tag "file-backed").
+ * Three things an entry says that the panel leans on:
+ * - `secret` marks a variable whose *inline value* is a secret (`TTK_API_KEYS`, `TTK_SECRETS`, `TTK_ADMIN_USER`): its
+ *   value is never shown. A `secret-file` entry holds a *path* to a file; the path is shown, the file's content never
+ *   is (the row carries the text tag "file-backed").
  * - `reach` names the rule under which a value widens what the deployment can reach or who can reach it; the panel
- *   and the diff tag such values "widens reach".
+ *   tags such values "widens reach".
  * - `diagnosticsKey` maps the entry to a fact the diagnostics document reports; a `read` turns that fact into words
- *   for the panel and, when the fact is the variable's own value, into the value the composer seeds from. An entry
- *   whose fact the gateway does not report reads "not reported" — never a guess (`system_facts.ts`).
+ *   for the panel. An entry whose fact the gateway does not report reads "not reported" — never a guess
+ *   (`system_facts.ts`).
  */
-import type { JsonSchema } from './mcp.ts';
-import { diagnosticsKey, FACT_NOT_REPORTED, featureState, shortWord } from './system_facts.ts';
+import { diagnosticsKey, featureState, shortWord } from './system_facts.ts';
 
 export type SettingKind = 'enum' | 'boolean' | 'integer' | 'list' | 'text' | 'path' | 'secret-file';
 
@@ -32,11 +30,9 @@ export type SettingSection =
 	| 'mcp-apps'
 	| 'limits'
 	| 'logging'
-	| 'cluster'
 	| 'sandbox'
 	| 'sandbox-service'
 	| 'agents'
-	| 'otel'
 	| 'compose';
 
 /** A section's heading word(s). */
@@ -51,11 +47,9 @@ export const SECTION_WORDS: Readonly<Record<SettingSection, string>> = {
 	'mcp-apps': 'MCP Apps',
 	limits: 'Limits and transport',
 	logging: 'Logging',
-	cluster: 'Cluster',
 	sandbox: 'Coding sandbox',
 	'sandbox-service': 'Sandbox service',
 	agents: 'Agents',
-	otel: 'OpenTelemetry',
 	compose: 'Compose',
 };
 
@@ -82,14 +76,10 @@ export interface Setting {
 	readonly kind: SettingKind;
 	/** The default, in words, as the reference page states it. */
 	readonly default: string;
-	/** The allowed words of an `enum`. */
-	readonly values?: readonly string[];
-	/** The allowed range of an `integer`. */
-	readonly range?: readonly [number, number];
 	/** One sentence. */
 	readonly explain: string;
 	readonly reach?: ReachRule;
-	/** The inline value is a secret: never a form field, never emitted. */
+	/** The inline value is a secret: never shown. */
 	readonly secret?: true;
 	/** The default is computed from other settings, so an unset variable reads "derived", not "default". */
 	readonly derived?: true;
@@ -167,7 +157,7 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'network',
 		kind: 'text',
 		default: '127.0.0.1',
-		explain: 'Bind address; a non-loopback bind needs API keys, OAuth or a user account.',
+		explain: 'Bind address; a non-loopback bind needs API keys or a user account.',
 		reach: 'non-loopback',
 		diagnosticsKey: 'host',
 	}),
@@ -176,7 +166,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'network',
 		kind: 'integer',
 		default: '8787',
-		range: [0, 65535],
 		explain: 'Bind port; 0 picks a free port.',
 		diagnosticsKey: 'port',
 	}),
@@ -185,7 +174,7 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'network',
 		kind: 'text',
 		default: 'http://127.0.0.1:<port> on loopback, else http://<host>:<port>',
-		explain: 'The URL clients use; it seeds the Host and Origin allowlists and the OAuth audience.',
+		explain: 'The URL clients use; it seeds the Host and Origin allowlists.',
 		reach: 'non-loopback',
 		derived: true,
 		diagnosticsKey: 'publicUrl',
@@ -256,7 +245,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'auth',
 		kind: 'integer',
 		default: '604800',
-		range: [60, 31_536_000],
 		explain: 'Lifetime of sign-in sessions, in seconds.',
 	}),
 	S({
@@ -265,31 +253,6 @@ export const SETTINGS: readonly Setting[] = [
 		kind: 'list',
 		default: 'the default grant',
 		explain: 'Scopes for credential-less principals (loopback development, stdio); set but empty means none.',
-	}),
-	S({
-		name: 'TTK_OAUTH_ISSUER',
-		section: 'auth',
-		kind: 'text',
-		default: 'none (OAuth off)',
-		explain: 'Issuer URL; enables OAuth 2.1 resource-server mode.',
-		diagnosticsKey: 'oauthEnabled',
-		read: presence('enabled', 'off'),
-	}),
-	S({
-		name: 'TTK_OAUTH_AUDIENCE',
-		section: 'auth',
-		kind: 'text',
-		default: 'TTK_PUBLIC_URL',
-		explain: 'Expected aud claim.',
-		derived: true,
-	}),
-	S({
-		name: 'TTK_OAUTH_JWKS_URL',
-		section: 'auth',
-		kind: 'text',
-		default: 'discovered',
-		explain: 'JWKS location.',
-		derived: true,
 	}),
 	S({
 		name: 'TTK_API_KEYS_REF',
@@ -368,7 +331,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'browser',
 		kind: 'enum',
 		default: 'documents',
-		values: ['documents', 'all'],
 		explain: 'What Chromium judges against the allowlist: document requests only, or every request.',
 		diagnosticsKey: 'allowedDomainsScope',
 		read: word,
@@ -377,11 +339,8 @@ export const SETTINGS: readonly Setting[] = [
 		name: 'TTK_SESSION_OWNERSHIP',
 		section: 'browser',
 		kind: 'enum',
-		// D-150: `owner` on a single node, `shared` in a cluster (whose routing is owner-blind).
-		default: 'owner (shared in a cluster)',
-		values: ['shared', 'owner'],
+		default: 'owner',
 		explain: 'Whether sessions are shared among mcp:invoke holders or bound to their creator.',
-		derived: true,
 		diagnosticsKey: 'sessionOwnership',
 		read: word,
 	}),
@@ -422,7 +381,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'browser',
 		kind: 'integer',
 		default: '8',
-		range: [1, 128],
 		explain: 'Concurrent browser sessions.',
 	}),
 	S({
@@ -430,7 +388,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'browser',
 		kind: 'integer',
 		default: '1800',
-		range: [10, 86_400],
 		explain: 'Idle seconds before a session is closed; a session with a viewer is never closed for idleness.',
 	}),
 	S({
@@ -465,7 +422,7 @@ export const SETTINGS: readonly Setting[] = [
 		diagnosticsKey: 'persistenceEnabled',
 		read: presence('configured', 'none (ephemeral)'),
 	}),
-	// D-154: the key that seals every secret in the database; file-only, never on the data volume.
+	// The key that seals every secret in the database; file-only, never on the data volume.
 	S({
 		name: 'TTK_DB_KEY_FILE',
 		section: 'storage',
@@ -482,13 +439,23 @@ export const SETTINGS: readonly Setting[] = [
 		diagnosticsKey: 'recordingEnabled',
 		read: presence('configured', 'none (recording off)'),
 	}),
+	// One total for the share and the recordings, so neither can fill the data volume.
+	S({
+		name: 'TTK_DISK_BUDGET_MB',
+		section: 'storage',
+		kind: 'integer',
+		default: '2048',
+		explain: 'MiB the file share and recordings may hold together; a write past it is refused, a recording stops.',
+		diagnosticsKey: 'diskBudgetMb',
+		read: (raw) => typeof raw === 'number' ? { text: `${raw} MiB`, value: String(raw) } : undefined,
+	}),
 	// Signed links
 	S({
 		name: 'TTK_SIGNED_LINKS',
 		section: 'signed-links',
 		kind: 'boolean',
-		// D-150: on wherever a signing key can be had, off elsewhere.
-		default: 'true with TTK_SIGNED_LINK_KEY_FILE, or TTK_DATA_DIR plus TTK_DB_KEY_FILE on a single node; else false',
+		// On wherever a signing key can be had, off elsewhere.
+		default: 'true with TTK_SIGNED_LINK_KEY_FILE, or with TTK_DATA_DIR plus TTK_DB_KEY_FILE; else false',
 		explain: 'Enables browser_file_link and the public links route.',
 		reach: 'on',
 		derived: true,
@@ -500,7 +467,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'signed-links',
 		kind: 'integer',
 		default: '3600',
-		range: [10, 3600],
 		explain: 'Default link life, in seconds.',
 	}),
 	S({
@@ -508,7 +474,7 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'signed-links',
 		kind: 'secret-file',
 		default: 'none (generated and sealed in ttk.db)',
-		explain: 'File holding the link-signing key; every node of a cluster needs it.',
+		explain: 'File holding the link-signing key.',
 	}),
 	// Live view
 	S({
@@ -516,7 +482,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'live-view',
 		kind: 'integer',
 		default: '4',
-		range: [1, 64],
 		explain: 'Live-view viewers per session.',
 	}),
 	S({
@@ -524,7 +489,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'live-view',
 		kind: 'integer',
 		default: '60',
-		range: [1, 100],
 		explain: 'Screencast JPEG quality.',
 	}),
 	// MCP Apps
@@ -532,9 +496,8 @@ export const SETTINGS: readonly Setting[] = [
 		name: 'TTK_MCP_APPS',
 		section: 'mcp-apps',
 		kind: 'enum',
-		// D-150: `control` wherever it can run; off in a cluster or on a build without the embeds.
-		default: 'control (off in a cluster or without the embed build)',
-		values: ['off', 'watch', 'control'],
+		// `control` wherever it can run; off on a build without the embeds.
+		default: 'control (off without the embed build)',
 		explain: 'Serves the ui:// embeds; control lets an embed take control on a click.',
 		reach: 'not-off',
 		derived: true,
@@ -546,7 +509,7 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'mcp-apps',
 		kind: 'list',
 		default: 'none',
-		// D-150: empty is no longer a refusal; the ticket's own origin is admitted by TTK_ALLOWED_ORIGINS instead.
+		// Empty is not a refusal: the ticket's own origin is admitted by TTK_ALLOWED_ORIGINS.
 		explain: 'Host-sandbox origins a ticket may be bound to; empty admits any https one TTK_ALLOWED_ORIGINS admits.',
 	}),
 	S({
@@ -562,7 +525,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'limits',
 		kind: 'integer',
 		default: '120',
-		range: [1, 100_000],
 		explain: 'Requests per minute per principal; the burst is a third of this.',
 	}),
 	S({
@@ -570,7 +532,7 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'limits',
 		kind: 'boolean',
 		default: 'true',
-		explain: 'Serve 2025-era clients a stateful session (Mcp-Session-Id, change push); off in a cluster.',
+		explain: 'Serve 2025-era clients a stateful session (Mcp-Session-Id, change push).',
 	}),
 	S({
 		name: 'TTK_MCP_TOOL_GROUPS',
@@ -606,7 +568,7 @@ export const SETTINGS: readonly Setting[] = [
 		name: 'TTK_HUMAN_HANDOFF',
 		section: 'limits',
 		kind: 'boolean',
-		// D-150: on by default (HTTP only; stdio has no public URL to hand out).
+		// On by default (HTTP only; stdio has no public URL to hand out).
 		default: 'true',
 		explain: 'Offers browser_request_human, which hands out live-view links.',
 		reach: 'on',
@@ -619,7 +581,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'logging',
 		kind: 'enum',
 		default: 'info',
-		values: ['debug', 'info', 'warn', 'error'],
 		explain: 'Log level.',
 	}),
 	S({
@@ -627,41 +588,7 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'logging',
 		kind: 'enum',
 		default: 'json',
-		values: ['json', 'pretty'],
 		explain: 'pretty for human-readable lines; anything else is JSON.',
-	}),
-	// Cluster
-	S({
-		name: 'TTK_CLUSTER_KV',
-		section: 'cluster',
-		kind: 'text',
-		default: 'none (single node)',
-		explain: 'A Deno KV path or URL shared by every node.',
-	}),
-	S({
-		name: 'TTK_ROLE',
-		section: 'cluster',
-		kind: 'enum',
-		default: 'all',
-		values: ['all', 'browser', 'edge'],
-		explain: 'all hosts browsers and serves clients; browser hosts browsers; edge forwards.',
-		diagnosticsKey: 'clusterMode',
-		read: word,
-	}),
-	S({
-		name: 'TTK_NODE_ID',
-		section: 'cluster',
-		kind: 'text',
-		default: 'node-<8 hex>',
-		explain: 'This node id.',
-		derived: true,
-	}),
-	S({
-		name: 'TTK_NODE_URL',
-		section: 'cluster',
-		kind: 'text',
-		default: 'none',
-		explain: 'The URL other nodes use to reach this one.',
 	}),
 	// Coding sandbox
 	S({
@@ -686,7 +613,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'sandbox-service',
 		kind: 'enum',
 		default: 'bwrap',
-		values: ['bwrap', 'docker'],
 		explain: 'A bubblewrap cage per command, or one hardened container per workspace through the Engine API.',
 		reach: 'docker',
 		diagnosticsKey: 'sandboxBackend',
@@ -741,42 +667,6 @@ export const SETTINGS: readonly Setting[] = [
 	}),
 	// Agents
 	S({
-		name: 'TTK_AGENT_BRIDGE_URL',
-		section: 'agents',
-		kind: 'text',
-		default: 'none (off)',
-		explain: 'URL of the private ACP agent runner.',
-	}),
-	S({
-		name: 'TTK_AGENT_BRIDGE_TOKEN_FILE',
-		section: 'agents',
-		kind: 'secret-file',
-		default: 'none',
-		explain: 'File holding the bridge bearer token; required with the URL.',
-	}),
-	S({
-		name: 'TTK_AGENT_DEFAULT',
-		section: 'agents',
-		kind: 'text',
-		default: 'default',
-		explain: 'The runner agent id to use.',
-	}),
-	S({
-		name: 'TTK_AGENT_AUTH_METHOD',
-		section: 'agents',
-		kind: 'text',
-		default: 'none',
-		explain: 'ACP authentication method to select when the agent advertises it.',
-	}),
-	S({
-		name: 'TTK_AGENT_MCP_URL',
-		section: 'agents',
-		kind: 'text',
-		default: '<TTK_PUBLIC_URL>/mcp',
-		explain: 'The MCP URL handed to the agent with its delegated token; its path must be /mcp.',
-		derived: true,
-	}),
-	S({
 		name: 'TTK_AGENT_PEERS_FILE',
 		section: 'agents',
 		kind: 'path',
@@ -795,7 +685,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'agents',
 		kind: 'integer',
 		default: '600',
-		range: [10, 86_400],
 		explain: 'How long a text or delegation task may run, in seconds.',
 	}),
 	S({
@@ -803,7 +692,6 @@ export const SETTINGS: readonly Setting[] = [
 		section: 'agents',
 		kind: 'integer',
 		default: '86400',
-		range: [60, 2_592_000],
 		explain: 'How long finished agent tasks are kept, in seconds.',
 	}),
 	S({
@@ -814,7 +702,7 @@ export const SETTINGS: readonly Setting[] = [
 		explain: 'Hosts A2A push webhooks may target; private, loopback and link-local addresses are refused.',
 		reach: 'always',
 	}),
-	// D-143: the providers file. Not yet on the reference page (D5 adds it); the catalogue test allows the one name.
+	// The providers file; the catalogue test admits this one name even without its reference-page row.
 	S({
 		name: 'TTK_MODEL_PROVIDERS_FILE',
 		section: 'agents',
@@ -822,68 +710,9 @@ export const SETTINGS: readonly Setting[] = [
 		default: 'none (add providers in System › Agents)',
 		explain: 'Seed file of model providers, copied into the database once with its keys sealed; never written.',
 		reach: 'always',
-		diagnosticsKey: 'modelProviders',
-		read: (raw) =>
-			Array.isArray(raw)
-				? {
-					text: raw.length === 0 ? 'none' : raw.length === 1 ? '1 provider' : `${raw.length} providers`,
-					set: raw.length > 0,
-				}
-				: undefined,
-	}),
-	// OpenTelemetry
-	S({
-		name: 'TTK_OTEL_ENDPOINTS',
-		section: 'otel',
-		kind: 'list',
-		default: 'empty',
-		explain: 'Collector origins the runtime may export to; while exporting, an endpoint off the list refuses start.',
-		diagnosticsKey: 'otelEndpoints',
-	}),
-	S({
-		name: 'OTEL_DENO',
-		section: 'otel',
-		kind: 'boolean',
-		default: 'off',
-		explain: 'Turns OTLP export on; the runtime performs it outside the permission matrix (bundled image only).',
-		reach: 'on',
-		diagnosticsKey: 'telemetry',
-		read: feature,
-	}),
-	S({
-		name: 'OTEL_DENO_VSOCK',
-		section: 'otel',
-		kind: 'text',
-		default: 'unset',
-		explain: 'Refused while exporting: vsock export cannot be allowlisted.',
-	}),
-	S({
-		name: 'OTEL_EXPORTER_OTLP_ENDPOINT',
-		section: 'otel',
-		kind: 'text',
-		default: 'unset',
-		explain: 'Where to export; a credential-free http(s) URL on a listed origin.',
-	}),
-	S({
-		name: 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
-		section: 'otel',
-		kind: 'text',
-		default: 'the base endpoint',
-		explain: 'Where traces export, when it differs from the base.',
-	}),
-	S({
-		name: 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
-		section: 'otel',
-		kind: 'text',
-		default: 'the base endpoint',
-		explain: 'Where metrics export, when it differs from the base.',
-	}),
-	S({
-		name: 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
-		section: 'otel',
-		kind: 'text',
-		default: 'the base endpoint',
-		explain: 'Where logs export, when it differs from the base.',
+		// Whether the file is named — not the providers in force, which include those added in the web app.
+		diagnosticsKey: 'modelProvidersFile',
+		read: presence('configured', 'not set'),
 	}),
 	// Docker Compose interpolation (read by compose, not by the server)
 	S({
@@ -893,13 +722,6 @@ export const SETTINGS: readonly Setting[] = [
 		default: '127.0.0.1',
 		explain: 'Host address the container port is published on; 0.0.0.0 exposes it on the network.',
 		reach: 'non-loopback',
-	}),
-	S({
-		name: 'TTK_AGENT_RUNNER_IMAGE',
-		section: 'compose',
-		kind: 'text',
-		default: 'tykotech-agent-runner:0.2.0',
-		explain: 'The derived runner image that contains your ACP agent.',
 	}),
 	S({
 		name: 'TTK_SANDBOX_DOCKER_GID',
@@ -922,20 +744,6 @@ export const SETTINGS: readonly Setting[] = [
 		default: '1024',
 		explain: "The gateway's JavaScript heap limit in MiB (DENO_V8_FLAGS --max-old-space-size).",
 	}),
-	S({
-		name: 'TTK_PEER_MEMORY',
-		section: 'compose',
-		kind: 'text',
-		default: '1g',
-		explain: 'Memory limit of the bundled A2A peer container, its browser sessions included.',
-	}),
-	S({
-		name: 'TTK_PEER_HEAP_MB',
-		section: 'compose',
-		kind: 'integer',
-		default: '512',
-		explain: "The A2A peer's JavaScript heap limit in MiB.",
-	}),
 ];
 
 const BY_NAME: ReadonlyMap<string, Setting> = new Map(SETTINGS.map((setting) => [setting.name, setting]));
@@ -943,11 +751,6 @@ const BY_NAME: ReadonlyMap<string, Setting> = new Map(SETTINGS.map((setting) => 
 /** The catalogue entry for a variable name, if there is one. */
 export function settingOf(name: string): Setting | undefined {
 	return BY_NAME.get(name);
-}
-
-/** The entries of one section, in catalogue order. */
-export function settingsIn(section: SettingSection): readonly Setting[] {
-	return SETTINGS.filter((setting) => setting.section === section);
 }
 
 /** Whether `value` for this setting widens what the deployment reaches or who reaches it. */
@@ -972,14 +775,10 @@ export function widensReach(setting: Setting, value: string | undefined): boolea
 /**
  * The derived default of a setting whose default is computed, from the running facts; `undefined` otherwise.
  *
- * D-150's three deployment-shaped defaults read the cluster from `clusterMode`: a role other than `all` exists only
- * with `TTK_CLUSTER_KV`, so such a node is clustered. An `all` node in a cluster is not told apart by the diagnostics
- * and reads as a single node — its `shared` then tags "set", never a guess the other way. Signed links read the data
- * directory (`persistenceEnabled`); a key file is never reported, so links on without one tag "set".
+ * Signed links read the data directory (`persistenceEnabled`); a key file is never reported, so links on without one
+ * tag "set".
  */
 export function derivedDefault(setting: Setting, config: unknown): string | undefined {
-	const role = diagnosticsKey(config, undefined, 'clusterMode');
-	const clustered = typeof role === 'string' ? role !== 'all' : undefined;
 	switch (setting.name) {
 		case 'TTK_PUBLIC_URL': {
 			const host = diagnosticsKey(config, undefined, 'host');
@@ -987,14 +786,12 @@ export function derivedDefault(setting: Setting, config: unknown): string | unde
 			if (typeof host !== 'string' || typeof port !== 'number') return undefined;
 			return isLoopbackHost(host) ? `http://127.0.0.1:${port}` : `http://${host}:${port}`;
 		}
-		case 'TTK_SESSION_OWNERSHIP':
-			return clustered === undefined ? undefined : clustered ? 'shared' : 'owner';
 		case 'TTK_MCP_APPS':
-			return clustered === undefined ? undefined : clustered ? 'off' : 'control';
+			return 'control';
 		case 'TTK_SIGNED_LINKS': {
 			const persistence = diagnosticsKey(config, undefined, 'persistenceEnabled');
-			if (clustered === undefined || typeof persistence !== 'boolean') return undefined;
-			return persistence && !clustered ? 'true' : 'false';
+			if (typeof persistence !== 'boolean') return undefined;
+			return persistence ? 'true' : 'false';
 		}
 		default:
 			return undefined;
@@ -1044,85 +841,7 @@ export function readingSource(setting: Setting, reading: Reading, config?: unkno
 	return reading.set ? 'set' : setting.derived ? 'derived' : 'default';
 }
 
-/** The words a panel row shows for the running value. */
-export function runningText(setting: Setting, config: unknown, diag?: unknown): string {
-	const running = runningValue(setting, config, diag);
-	return running.kind === 'reading' ? running.reading.text : FACT_NOT_REPORTED;
-}
-
-/**
- * Every setting whose running value the diagnostics report faithfully, as `name → value`: the composer's seed for
- * "Start from running" and the running side of its diff.
- */
-export function runningValues(config: unknown, diag?: unknown): Record<string, string> {
-	const values: Record<string, string> = {};
-	for (const setting of SETTINGS) {
-		const running = runningValue(setting, config, diag);
-		if (running.kind === 'reading' && running.reading.value !== undefined) values[setting.name] = running.reading.value;
-	}
-	return values;
-}
-
 /** The settings the Configuration panel lists: those a reported fact maps to, in catalogue order. */
 export function reportedSettings(): readonly Setting[] {
 	return SETTINGS.filter((setting) => setting.diagnosticsKey !== undefined);
-}
-
-/**
- * A JSON Schema for one section's form, as `schemaForm` renders it — `enum` words, booleans, bounded integers, and
- * strings for lists (comma-separated, as the environment carries them), paths and file paths. Inline secrets have
- * no field. `values` seed each property's `default`.
- */
-export function settingsSchema(section: SettingSection, values: Readonly<Record<string, string>> = {}): JsonSchema {
-	const properties: Record<string, JsonSchema> = {};
-	for (const setting of settingsIn(section)) {
-		if (setting.secret) continue;
-		const seed = values[setting.name];
-		const explain = setting.kind === 'secret-file'
-			? `${setting.explain} File-backed: its content is never shown or sent.`
-			: setting.explain;
-		const description = `${explain} Default: ${setting.default}.`;
-		let property: JsonSchema;
-		switch (setting.kind) {
-			case 'enum':
-				property = { type: 'string', enum: [...setting.values ?? []], description };
-				if (seed !== undefined && setting.values?.includes(seed)) property.default = seed;
-				break;
-			case 'boolean': {
-				property = { type: 'boolean', description };
-				const bool = booleanOf(seed);
-				if (bool !== undefined) property.default = bool;
-				break;
-			}
-			case 'integer': {
-				property = { type: 'integer', description };
-				if (setting.range !== undefined) [property.minimum, property.maximum] = setting.range;
-				const number = Number(seed);
-				if (seed !== undefined && seed.trim() !== '' && Number.isInteger(number)) property.default = number;
-				break;
-			}
-			default:
-				property = { type: 'string', description };
-				if (seed !== undefined && seed !== '') property.default = seed;
-		}
-		properties[setting.name] = property;
-	}
-	return { type: 'object', properties };
-}
-
-/** A form's read-back as environment strings: booleans and numbers spelled as the environment carries them. */
-export function envValuesOf(read: Readonly<Record<string, unknown>>): Record<string, string> {
-	const values: Record<string, string> = {};
-	for (const [name, value] of Object.entries(read)) {
-		if (value === undefined || value === null) continue;
-		const text = typeof value === 'string'
-			? value
-			: typeof value === 'boolean' || typeof value === 'number'
-			? String(value)
-			: Array.isArray(value)
-			? value.map(String).join(',')
-			: JSON.stringify(value) ?? '';
-		if (text.trim() !== '') values[name] = text;
-	}
-	return values;
 }

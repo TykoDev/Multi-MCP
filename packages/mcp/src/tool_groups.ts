@@ -1,16 +1,4 @@
-/**
- * Grouped tool lists: one `use_<group>` entry tool stands in for a group's tools until the model asks for them.
- *
- * A client lists every tool it may call when it connects, and the list goes into its model's context — the 57 browser
- * catalog entries alone carry about 57 KB of descriptions and input schemas. On a connection whose server lives as
- * long as the connection (stdio, a stateful 2025 session) the list can start with one entry tool per group instead:
- * calling one switches its group's tools on for that connection and announces `tools/list_changed`, so the client
- * re-lists and the model gets the real tools with their own schemas, annotations and per-tool permission prompts. A
- * server built per request (the 2026-07-28 mount) has no connection to remember an opened group on, so it lists flat.
- *
- * Grouping changes what is *listed*, never what is *permitted*: `registerCatalog` still registers by scope and owner,
- * the dispatcher still checks every call, and a grouped tool stays callable by name whether or not its group is open.
- */
+/** Grouped tool lists: one `use_<group>` entry tool stands in for a group's tools until the model asks for them. */
 import * as z from 'zod';
 import type { ToolAvailability, ToolDefinition } from './catalog/shared.ts';
 import type { ToolResult } from './types.ts';
@@ -32,14 +20,7 @@ const GROUP_PREFIXES: ReadonlyArray<readonly [prefix: string, group: ToolGroup]>
 	['a2ui_', 'a2ui'],
 ];
 
-/**
- * The group a tool is listed under on a grouped connection, or `undefined` for a tool that is always listed.
- *
- * Two kinds are always listed. An app-only tool (`TOOL_UI` visibility without `model`: the three embed tickets) is
- * hidden from the model by its host anyway, and the MCP Apps embed that calls it may be restored before any group is
- * opened. A name no prefix claims fails safe — listed, rather than hidden behind an entry tool nobody would think to
- * call — and `tool_groups_test.ts` pins every shipped tool to its group, so no shipped tool relies on that fallback.
- */
+/** The group a tool is listed under on a grouped connection, or `undefined` for a tool that is always listed. */
 export function toolGroupOf(name: string): ToolGroup | undefined {
 	const ui = TOOL_UI.get(name);
 	if (ui !== undefined && !ui.visibility.includes('model')) return undefined;
@@ -47,7 +28,7 @@ export function toolGroupOf(name: string): ToolGroup | undefined {
 }
 
 /** The entry tool's name for `group`. */
-export function entryToolName(group: ToolGroup): string {
+function entryToolName(group: ToolGroup): string {
 	return `use_${group}`;
 }
 
@@ -72,8 +53,8 @@ const ENTRY_TEXT: Readonly<Record<ToolGroup, { readonly title: string; readonly 
 	},
 	agent: {
 		title: 'Agent tools',
-		description: 'Add the agent tools to your tool list: tasks for the configured ACP agent, background tool runs, ' +
-			'A2A peers and delegation, and your task list. Call this before using any agent_* tool.',
+		description: 'Add the agent tools to your tool list: background tool runs, A2A peers and delegation, and your ' +
+			'task list. Call this before using any agent_* tool.',
 	},
 	memory: {
 		title: 'Memory tools',
@@ -121,13 +102,7 @@ function offered(tool: ToolDefinition, state: ToolAvailability): boolean {
 	return tool.available === undefined || tool.available(state);
 }
 
-/**
- * The entry tool for `group` on one connection, over the members registered for that connection's caller.
- *
- * Calling it opens the group: every member the deployment offers right now is put in the list, and one
- * `tools/list_changed` is sent when that changed anything. A call to an open group changes nothing and announces
- * nothing. The result names exactly the members now listed, so it can never reveal a tool `tools/list` would not.
- */
+/** The entry tool for `group` on one connection, over the members registered for that connection's caller. */
 export function entryTool(group: ToolGroup, members: readonly GroupMember[], state: GroupState): ToolDefinition {
 	return {
 		name: entryToolName(group),

@@ -1,6 +1,6 @@
 /**
  * Element-classification contract — the predicates every cascade branches on before it touches CDP
- * (ARCHITECTURE.md §6.10 guard rails and "special-input direct value assignment").
+ * (the guard rails and special-input direct value assignment).
  *
  * Pure: no browser, no CDP. Getting `<input type=FILE>` wrong here is what turns a guard rail into an
  * OS file dialog nobody can close.
@@ -102,7 +102,7 @@ Deno.test('dom: node descriptions name the tag, the input type and the id', () =
 	assertEquals(describeNode(node('BUTTON')), '<button> [7]');
 });
 
-Deno.test('dom: a stale-id CDP error is recognised so R6.3 can mean "rebuild", not "crash"', () => {
+Deno.test('dom: a stale-id CDP error is recognised so it can mean "rebuild", not "crash"', () => {
 	assertEquals(isStaleNodeError(new Error('No node with given id found')), true);
 	assertEquals(isStaleNodeError(new Error('Could not find node with given id')), true);
 	assertEquals(isStaleNodeError(new Error('Session closed')), false);

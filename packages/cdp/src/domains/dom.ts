@@ -1,10 +1,9 @@
 /**
  * CDP `DOM` domain — document tree, geometry, search, file inputs, scroll-into-view.
  *
- * Source of the DOM third of `EnhancedDomTreeNode` (SPECS/DATA-MODEL.md §6.1). The action layer
+ * Source of the DOM third of `EnhancedDomTreeNode`. The action layer
  * uses `scrollIntoViewIfNeeded` + `getContentQuads`/`getBoxModel` for the click cascade,
- * `setFileInputFiles` for upload, and `performSearch` for scroll-to-text
- * (SPECS/ARCHITECTURE.md §6.10).
+ * `setFileInputFiles` for upload, and `performSearch` for scroll-to-text.
  */
 
 import type {
@@ -134,7 +133,7 @@ export interface DomResults {
 }
 
 export interface DomEvents {
-	/** "Rebuild state", not "crash" — stale-id CDP errors follow this (DATA-MODEL §6.3 R6.3). */
+	/** "Rebuild state", not "crash" — stale-id CDP errors follow this. */
 	'DOM.documentUpdated': Record<never, never>;
 	'DOM.childNodeCountUpdated': { nodeId: NodeId; childNodeCount: number };
 	'DOM.setChildNodes': { parentId: NodeId; nodes: DomNode[] };

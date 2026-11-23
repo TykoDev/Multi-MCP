@@ -1,10 +1,7 @@
 /**
- * D-143 (model-providers-ui W3/B3): the gateway composition of the built-in model agent — the grant proof
- * (`modelGrantProven`), one client per configured provider, the runtime's `model` option, the provider views the
- * route and the diagnostics show, and the `capabilities.tykotech.model` block. The provider is a loopback fake
- * (`tests/support/fake_provider.ts`); the net grant is an injected permissions API, so both answers of the proof are
- * exercised in one process. Every body a caller can read is checked for the provider key, which never leaves the
- * client (§3.3, §3.7, gate F9; condition 4 of `gatekeeper_judgment_r3.md`).
+ * The gateway composition of the built-in model agent — the grant proof (`modelGrantProven`), one client per configured
+ * provider, the runtime's `model` option, the provider views the route and the diagnostics show, and the
+ * `capabilities.tykotech.model` block.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { SessionRegistry } from '@tykotech/mcp';
@@ -17,7 +14,7 @@ import { createLogger } from './logger.ts';
 import type { ModelProvidersConfig, ModelProviderSettings } from './model_providers.ts';
 
 const ORIGIN = 'http://127.0.0.1:8787';
-/** Sixteen-plus characters, so the client's redactor applies to it as well (§3.12, gate F12). */
+/** Sixteen-plus characters, so the client's redactor applies to it as well. */
 const KEY = 'sk-test-0123456789abcdefghijklmnop';
 
 /** A permissions API answering `granted` for the listed hosts (`net` alone means an unscoped grant), `prompt` otherwise. */
@@ -31,7 +28,7 @@ function permissions(granted: readonly string[]): Pick<Deno.Permissions, 'queryS
 	};
 }
 
-/** One provider's resolved settings, as `loadModelProviders` would hand them to `loadConfig` (B1's shape). */
+/** One provider's resolved settings, as `loadModelProviders` would hand them to `loadConfig`. */
 function settings(overrides: Partial<ModelProviderSettings> & { baseUrl: string }): ModelProviderSettings {
 	const url = new URL(overrides.baseUrl);
 	return {
@@ -95,6 +92,7 @@ async function harness(
 			method: body === undefined ? 'GET' : 'POST',
 			headers: {
 				host: '127.0.0.1:8787',
+				'a2a-version': '1.0',
 				...(key === null ? {} : { authorization: `Bearer ${key}` }),
 				...(body === undefined ? {} : { 'content-type': 'application/json' }),
 			},
@@ -160,7 +158,7 @@ async function sleep(ms: number): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-Deno.test('W3: modelGrantProven — unscoped net reaches all; else each host at its port, 443/80 by scheme; a throw is false', () => {
+Deno.test('modelGrantProven — unscoped net reaches all; else each host at its port, 443/80 by scheme; a throw is false', () => {
 	const https = settings({ id: 'a', baseUrl: 'https://api.example' });
 	const http = settings({ id: 'b', baseUrl: 'http://10.0.0.5', allowHttp: true, apiKey: null, keySource: 'none' });
 	const ported = settings({ id: 'c', baseUrl: 'https://api.example:8443' });
@@ -186,14 +184,13 @@ Deno.test('W3: modelGrantProven — unscoped net reaches all; else each host at 
 	assertEquals(modelGrantProven([], permissions([])).size, 0);
 });
 
-Deno.test('W3 (a): the providers route lists a configured provider; host and reason only when invocable (gate F9)', async () => {
+Deno.test('the providers route lists a configured provider; host and reason only when invocable', async () => {
 	const fake = startFakeProvider();
 	try {
 		await using h = await harness({ default: 'fake', providers: [settings({ baseUrl: fake.url })] }, permissions([]));
 		const holder = await (await h.request('/api/v1/agent/providers', h.keys.carol)).json();
 		assertEquals(holder, {
 			invocable: true,
-			acp: false,
 			default: 'fake',
 			providers: [{
 				id: 'fake',
@@ -205,7 +202,7 @@ Deno.test('W3 (a): the providers route lists a configured provider; host and rea
 				reachable: false,
 				reason: 'no-net-grant',
 			}],
-			// D-156: SlopLord is listed, unavailable — no reachable provider and no sandbox here.
+			// SlopLord is listed, unavailable — no reachable provider and no sandbox here.
 			agents: [{
 				id: 'sloplord',
 				name: 'SlopLord',
@@ -218,7 +215,6 @@ Deno.test('W3 (a): the providers route lists a configured provider; host and rea
 		const plain = await (await h.request('/api/v1/agent/providers', h.keys.alice)).json();
 		assertEquals(plain, {
 			invocable: false,
-			acp: false,
 			default: 'fake',
 			providers: [{
 				id: 'fake',
@@ -236,7 +232,7 @@ Deno.test('W3 (a): the providers route lists a configured provider; host and rea
 	}
 });
 
-Deno.test('W3 (b): without a net grant the provider is listed unreachable, warned once, refused with -32004 and never dialled', async () => {
+Deno.test('without a net grant the provider is listed unreachable, warned once, refused with -32004 and never dialled', async () => {
 	const fake = startFakeProvider();
 	try {
 		await using h = await harness({ default: 'fake', providers: [settings({ baseUrl: fake.url })] }, permissions([]));
@@ -252,7 +248,7 @@ Deno.test('W3 (b): without a net grant the provider is listed unreachable, warne
 		assertEquals(diagnostics.builtinAgent, false);
 		// The capabilities block says the same to a `model:invoke` holder.
 		assertEquals((await h.capabilities(h.keys.carol)).model, { providers: 1, builtin_agent: false });
-		// A selected and a defaulted task both fall to §3.10's "not reachable" and no request reaches the provider.
+		// A selected and a defaulted task both fall to "not reachable" and no request reaches the provider.
 		for (const body of [{ message: 'hi', provider: 'fake' }, { message: 'hi' }]) {
 			const refused = await h.request('/api/v1/agent/tasks', h.keys.carol, body);
 			assertEquals(refused.status, 400);
@@ -268,7 +264,7 @@ Deno.test('W3 (b): without a net grant the provider is listed unreachable, warne
 	}
 });
 
-Deno.test('W3 (c): with the grant a submitted task runs the loop on the fake, calls one tool, completes; the key is nowhere', async () => {
+Deno.test('with the grant a submitted task runs the loop on the fake, calls one tool, completes; the key is nowhere', async () => {
 	const fake = startFakeProvider();
 	try {
 		const host = new URL(fake.url).host;
@@ -286,7 +282,7 @@ Deno.test('W3 (c): with the grant a submitted task runs the loop on the fake, ca
 		assertEquals(task.metadata.provider, 'fake');
 		assertEquals(task.metadata.model, 'test-model');
 		// Subscribed before the first provider turn can answer: the stream carries the tool call as `{ model: … }`.
-		const stream = await h.request(`/api/v1/agent/tasks/${id}/events`, h.keys.carol);
+		const stream = await h.request(`/a2a/v1/tasks/${id}:subscribe`, h.keys.carol);
 		assertEquals(stream.status, 200);
 		const events = await readEvents(stream.body!, '"kind":"tool_call"');
 		assert(events.includes('"kind":"tool_call"'), events);
@@ -329,7 +325,7 @@ Deno.test('W3 (c): with the grant a submitted task runs the loop on the fake, ca
 	}
 });
 
-Deno.test('W3 (d): an unknown provider is 400 invalid-request with the runtime -32602 text as detail (K2)', async () => {
+Deno.test('an unknown provider is 400 invalid-request with the runtime -32602 text as detail', async () => {
 	const fake = startFakeProvider();
 	try {
 		const host = new URL(fake.url).host;
@@ -349,7 +345,7 @@ Deno.test('W3 (d): an unknown provider is 400 invalid-request with the runtime -
 		});
 		assertEquals(badModel.status, 400);
 		assertEquals((await badModel.json()).detail, 'Unknown model for provider');
-		// CR-1 / BUG-6: a model alone never reaches the default provider — refused before submit, with a default present.
+		// A model alone never reaches the default provider — refused before submit, with a default present.
 		const modelOnly = await h.request('/api/v1/agent/tasks', h.keys.carol, { message: 'hi', model: 'other' });
 		assertEquals(modelOnly.status, 400);
 		assertEquals((await modelOnly.json()).detail, 'model requires provider');
@@ -359,7 +355,7 @@ Deno.test('W3 (d): an unknown provider is 400 invalid-request with the runtime -
 	}
 });
 
-Deno.test('W3 (e): the capabilities model block is told only to a model:invoke holder and counts providers and reachable', async () => {
+Deno.test('the capabilities model block is told only to a model:invoke holder and counts providers and reachable', async () => {
 	const fake = startFakeProvider();
 	try {
 		const host = new URL(fake.url).host;
@@ -383,13 +379,13 @@ Deno.test('W3 (e): the capabilities model block is told only to a model:invoke h
 		const warned = h.warnings.filter((line) => line.includes('model provider'));
 		assertEquals(warned.length, 1, h.warnings.join('\n'));
 		assertStringIncludes(warned[0]!, 'api.anthropic.com:443');
-		// Several providers without a default: route `default: null`, and a selection-less task is row 6 (§3.10).
+		// Several providers without a default: route `default: null`, and a selection-less task has no text backend.
 		assertEquals((await (await h.request('/api/v1/agent/providers', h.keys.carol)).json()).default, null);
 		const noDefault = await h.request('/api/v1/agent/tasks', h.keys.carol, { message: 'hi' });
 		assertEquals(noDefault.status, 400);
 		assertEquals(
 			(await noDefault.json()).detail,
-			'Text execution requires a configured ACP agent or a model provider',
+			'Text execution requires a model provider',
 		);
 	} finally {
 		await fake.close();

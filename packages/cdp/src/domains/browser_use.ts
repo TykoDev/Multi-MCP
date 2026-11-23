@@ -1,9 +1,9 @@
 /**
  * Vendor `BrowserUse` domain — OPTIONAL, cloud-proxy-browser only.
  *
- * D-CDP2 marks this domain optional: a stock Chromium never emits these, and subscribing is
- * harmless there. CaptchaWatchdog (SPECS/ARCHITECTURE.md §6.14) listens and re-broadcasts them as
- * `CaptchaSolverStartedEvent` / `CaptchaSolverFinishedEvent` (SPECS/DATA-MODEL.md §5.1.7).
+ * Optional: a stock Chromium never emits these, and subscribing is
+ * harmless there. CaptchaWatchdog listens and re-broadcasts them as
+ * `CaptchaSolverStartedEvent` / `CaptchaSolverFinishedEvent`.
  *
  * No commands are typed: the vendor command surface is not speced, and guessing at it would be
  * worse than the honest escape hatch, `CdpClient.sendRaw()`.

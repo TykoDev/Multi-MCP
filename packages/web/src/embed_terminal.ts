@@ -1,6 +1,6 @@
 /**
  * The terminal embed, `ui://tykotech/terminal`: one live sandbox shell session, framed by an MCP Apps host the way
- * the live view frames a browser session (R9, design §2.20).
+ * the live view frames a browser session.
  *
  * The session comes from the `sandbox_session_open` result the host relays (`ui/notifications/tool-result`,
  * `structuredContent.result.session_id`). Nothing connects until the user presses **Attach**: the press mints a
@@ -19,7 +19,7 @@ import { applyHostContext, EmbedBridge, embedIcon, type EmbedToolResult, toolErr
 import { EmbedStream, type StreamMessage } from './embed_stream.ts';
 
 /** The most output the embed keeps on screen; older text is dropped from the top. */
-export const TERMINAL_SCREEN_MAX_CHARS = 200_000;
+const TERMINAL_SCREEN_MAX_CHARS = 200_000;
 
 /** `bye` reasons that mean the shell is gone, so reconnecting would only fail. */
 const FINAL_REASONS = new Set(['session-ended', 'session-closed', 'server-shutdown', 'unauthorized']);
@@ -28,7 +28,7 @@ const FINAL_REASONS = new Set(['session-ended', 'session-closed', 'server-shutdo
  * Terminal output as plain text: CSI and OSC escape sequences and other control characters are removed (a tab, a
  * newline and a carriage return stay meaningful), so a coloured prompt reads as its words.
  */
-export function plainTerminalText(raw: string): string {
+function plainTerminalText(raw: string): string {
 	return raw
 		// deno-lint-ignore no-control-regex
 		.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, '')
@@ -42,7 +42,7 @@ export function plainTerminalText(raw: string): string {
 }
 
 /** The session id a `sandbox_session_open` result names, or `null`. */
-export function sessionIdOf(result: EmbedToolResult): string | null {
+function sessionIdOf(result: EmbedToolResult): string | null {
 	const inner = result.structuredContent?.result as Record<string, unknown> | undefined;
 	return typeof inner?.session_id === 'string' ? inner.session_id : null;
 }

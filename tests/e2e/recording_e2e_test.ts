@@ -1,5 +1,5 @@
 /**
- * R7: recording a session to a real video file.
+ * Recording a session to a real video file.
  *
  * The frames come from the same screencast the live view uses, so a passing run
  * proves the whole chain: Chromium paints, CDP delivers, the shared cast fans
@@ -44,7 +44,7 @@ interface Recording {
 }
 
 Deno.test({
-	name: 'e2e R7: a session records to a playable WebM',
+	name: 'e2e recording: a session records to a playable WebM',
 	ignore,
 	async fn(t) {
 		const dir = join('tests', '.scratch', `rec-${crypto.randomUUID().slice(0, 8)}`);
@@ -163,10 +163,10 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R7: without ffmpeg the tool is not offered at all',
+	name: 'e2e recording: without ffmpeg the tool is not offered at all',
 	ignore: skipUnlessBrowser('recording e2e (disabled path)'),
 	async fn() {
-		// No TTK_FFMPEG: R5 withdraws the tool rather than offering one that
+		// No TTK_FFMPEG: tool availability withdraws the tool rather than offering one that
 		// would fail on a PATH lookup the server never made.
 		await using h = await harness({ env: { TTK_DATA_DIR: 'tests/.scratch' } });
 		const names = (await h.client.listTools({})).tools.map((tool) => tool.name);

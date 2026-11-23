@@ -4,9 +4,9 @@
  * triggering that defeats React's value tracker, and direct value assignment for the inputs the
  * browser owns the editing UI of.
  *
- * Contract owner: SPECS/ARCHITECTURE.md §6.10 — "typing (per-char keyDown/char/keyUp with
- * framework-event triggering, clear strategies, special-input direct value assignment)". This is the
- * core of parity risk **R5** (SPECS/ROADMAP.md): a controlled React input that never sees `keypress`,
+ * Typing is per-character keyDown/char/keyUp with framework-event triggering, clear strategies and
+ * direct value assignment for special inputs. Fidelity is the whole point: a controlled React input
+ * that never sees `keypress`,
  * or whose `_valueTracker` still holds the new value when `input` fires, silently reverts to its old
  * value on the next render. No test catches that; every real site does.
  *
@@ -33,7 +33,7 @@ import {
 } from './default_action_keys.ts';
 import { callOnNode, ensureDomEnabled, needsDirectValueAssignment, type NodeHandle } from './default_action_dom.ts';
 
-/** Which clear strategy emptied the field (ARCHITECTURE.md §6.10 "clear strategies"). */
+/** Which clear strategy emptied the field. */
 export type ClearStrategy = 'selectAllDelete' | 'backspace' | 'directValue' | 'alreadyEmpty' | 'failed';
 
 /** How the text was entered. */
@@ -342,8 +342,7 @@ const FIRE_EVENTS_FUNCTION = `function () {
 /**
  * Fires the commit event on a node whose value key events already changed.
  *
- * ERRATUM(M1-watchdogs-action-13): §6.10 says "framework-event triggering" without naming the events.
- * After the per-character path it is `change` **only**: the browser produced a genuine `input` per
+ * After the per-character path the framework event is `change` **only**: the browser produced a genuine `input` per
  * character, and re-firing it would make every page that counts input events (debounces, analytics,
  * validation-on-Nth-keystroke) see the field typed twice. `change` is the one event Chrome withholds
  * — it waits for blur — so it is the one that has to be synthesized. The direct-assignment path in

@@ -1,11 +1,6 @@
 /**
- * Who may run now. Two rules, both answered at once rather than by a timeout on the caller's side:
- *
- * - A run does one thing at a time. A second request for a run that has one under way is refused
- *   (409), and so is anything for a run being removed.
- * - The sandbox runs LIMITS.running things at once. A request beyond that waits for a turn, in
- *   order, up to LIMITS.maxWaitMs, with at most LIMITS.waiting in the queue; past either it is
- *   refused as busy (429) and the caller may try again.
+ * Who may run now: one thing at a time per run (else 409, also while it is removed), and LIMITS.running at once
+ * overall, in order, with at most LIMITS.waiting queued for up to LIMITS.maxWaitMs (else 429 busy).
  */
 import { LIMITS } from './limits.ts';
 
@@ -41,7 +36,7 @@ export class Gate {
 
 	/** Resolves with a release function once there is room; the release must be called once. */
 	async enter(signal?: AbortSignal): Promise<() => void> {
-		// SB-10: an abort listener added to a signal already aborted never fires.
+		// An abort listener added to a signal already aborted never fires.
 		if (signal?.aborted) throw new GateError(499, 'cancelled', 'The request was cancelled.');
 		if (this.#running < this.max && this.#queue.length === 0) {
 			this.#running++;
@@ -69,7 +64,7 @@ export class Gate {
 				() => waiter.reject(new GateError(429, 'busy', 'The sandbox is busy; try again shortly.')),
 				this.maxWaitMs,
 			);
-			// SB-10: a caller that went away was cancelled, not refused as busy.
+			// A caller that went away was cancelled, not refused as busy.
 			const onAbort = () => waiter.reject(new GateError(499, 'cancelled', 'The request was cancelled.'));
 			signal?.addEventListener('abort', onAbort, { once: true });
 			this.#queue.push(waiter);
@@ -91,6 +86,62 @@ export class Gate {
 	}
 }
 
+/**
+ * One owner's share of a first-come {@linkcode Gate}, taken before it, so one principal cannot fill every slot and
+ * the queue: `max` slots with `maxWaiting` behind them, else 429 `busy`. Forgotten once nothing holds or waits on it.
+ */
+export class OwnerGates {
+	readonly #gates = new Map<string, Gate>();
+
+	constructor(
+		readonly max: number = LIMITS.ownerRunning,
+		readonly maxWaiting: number = LIMITS.ownerWaiting,
+		readonly maxWaitMs: number = LIMITS.maxWaitMs,
+	) {}
+
+	/** Owners with something held or waiting now (tests). */
+	get size(): number {
+		return this.#gates.size;
+	}
+
+	/** Resolves with a release function once `owner` has room in its share; the release must be called once. */
+	async enter(owner: string, signal?: AbortSignal): Promise<() => void> {
+		let gate = this.#gates.get(owner);
+		if (gate === undefined) {
+			gate = new Gate(this.max, this.maxWaiting, this.maxWaitMs);
+			this.#gates.set(owner, gate);
+		}
+		const held = gate;
+		let release: () => void;
+		try {
+			release = await held.enter(signal);
+		} catch (error) {
+			this.#forget(owner, held);
+			throw error;
+		}
+		let done = false;
+		return () => {
+			if (done) return;
+			done = true;
+			release();
+			this.#forget(owner, held);
+		};
+	}
+
+	#forget(owner: string, gate: Gate): void {
+		if (gate.running === 0 && gate.waiting === 0 && this.#gates.get(owner) === gate) this.#gates.delete(owner);
+	}
+}
+
+/** The refusal of an owner past its share of live sessions, in the session gate's own 429 `busy`. */
+export function ownerSessionsBusy(): GateError {
+	return new GateError(
+		429,
+		'busy',
+		`The sandbox is busy: one owner may keep at most ${LIMITS.ownerSessions} live sessions; close one first.`,
+	);
+}
+
 interface Active {
 	controller: AbortController;
 	done: Promise<void>;
@@ -101,10 +152,7 @@ export class Runs {
 	readonly #active = new Map<string, Active>();
 	readonly #removing = new Set<string>();
 
-	/**
-	 * Marks a run busy for as long as `work` takes. `work` gets a signal that aborts when the caller
-	 * goes away or the run is removed.
-	 */
+	/** Marks a run busy while `work` runs, with a signal that aborts when the caller goes or the run is removed. */
 	async hold<T>(
 		runId: string,
 		outer: AbortSignal | undefined,
@@ -133,10 +181,7 @@ export class Runs {
 		}
 	}
 
-	/**
-	 * Stops what the run has under way, waits for it to end, and keeps new work out while `work`
-	 * runs: used to remove a run's state.
-	 */
+	/** Stops what the run has under way and keeps new work out while `work` (a removal) runs. */
 	async removing<T>(runId: string, work: () => Promise<T>): Promise<T> {
 		if (this.#removing.has(runId)) {
 			throw new GateError(409, 'run_busy', 'This run is already being removed.');

@@ -1,19 +1,7 @@
-/**
- * R1-5, ERRATUM(E-89): only a request target in canonical form reaches authentication and routing.
- *
- * Three readers of one request disagreed about its path. Deno hands the request target through to `request.url`
- * as the client sent it, dot segments and all; `new URL(url).pathname` — what the auth middleware judged public-ness
- * on — resolves `..`, `.` and their `%2e` spellings away; and Hono routes the raw path, percent-decoded. So
- * `GET /a2a/v1/../../live/x/ws` looked like the public `/live/x/ws` to the credential check and was routed into the
- * authenticated `/a2a/v1/*` wildcard, which refused it only because its own handler happens to check the owner
- * again. A future wildcard without that second check would have been unauthenticated.
- *
- * The front therefore refuses, with `400 invalid-request` and before anything else looks at the request, every
- * target in which the three readers could disagree: a dot segment (raw or percent-encoded), an encoded slash or
- * backslash, a raw backslash (the URL parser reads it as a slash), and an empty segment (`//`). No client this
- * server serves sends any of them; the SPA, the MCP SDKs and the A2A binding all build canonical paths. The auth
- * middleware additionally judges public-ness on the router's own path, so the two can never drift apart again.
- */
+/** Only a request target in canonical form reaches authentication and routing. */
+
+/** `%XX` escapes that decode to an unreserved character or a control character. */
+const ENCODED_UNRESERVED_OR_CONTROL = /%(?:[46][1-9a-f]|[57][0-9a]|3[0-9]|2[de]|5f|7e|[01][0-9a-f]|7f)/i;
 
 /**
  * The path of `url` exactly as the client sent it: from the end of the authority to the first `?` or `#`, with no
@@ -39,6 +27,10 @@ export function pathRefusal(path: string): string | null {
 	for (const segment of path.split('/')) {
 		const decoded = segment.replace(/%2e/gi, '.');
 		if (decoded === '.' || decoded === '..') return 'the request path contains a dot segment';
+	}
+	// After the dot-segment pass, so `%2e%2e` keeps the more specific answer it has always had.
+	if (ENCODED_UNRESERVED_OR_CONTROL.test(path)) {
+		return 'the request path contains a percent-encoded unreserved or control character';
 	}
 	return null;
 }

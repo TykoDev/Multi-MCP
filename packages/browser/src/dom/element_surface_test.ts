@@ -1,8 +1,8 @@
 /**
- * The three B1.5 errata on the vendored DOM pipeline, each pinned against a recorded capture rather
- * than a hand-built node (D-TEST1): E-39 decodes the value columns the capture already carried,
- * E-40 publishes the frame tree with its composition marker, and E-41 splits "not rendered" from
- * "rendered but off-screen" so `include_hidden` can admit the second class only.
+ * The element surface of the DOM pipeline, each part pinned against a recorded capture rather than a
+ * hand-built node: the value columns the capture already carries are decoded, the frame tree is
+ * published with its composition marker, and "not rendered" is split from "rendered but off-screen"
+ * so `include_hidden` can admit the second class only.
  */
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
 import { fromFileUrl } from '@std/path';
@@ -22,9 +22,9 @@ function byId(root: EnhancedDomTreeNode, id: string): EnhancedDomTreeNode {
 	throw new Error(`no element with id ${id}`);
 }
 
-// --- E-39: the value columns ------------------------------------------------------------------------
+// --- the value columns ------------------------------------------------------------------------
 
-Deno.test('E-39: the live input value, checked state and option selection are decoded from the capture', async () => {
+Deno.test('dom-element-surface: the live input value, checked state and option selection are decoded from the capture', async () => {
 	// `live_value_vs_attribute.html` writes every value through the DOM *property*, never the
 	// attribute, so this is the one page where the decoded column and the markup provably differ.
 	const merged = mergeDomTrees(await loadCapture('live_value_vs_attribute'));
@@ -52,7 +52,7 @@ Deno.test('E-39: the live input value, checked state and option selection are de
 	assertEquals(byId(merged.root, 'lv-tail').snapshotNode?.inputValue, null);
 });
 
-Deno.test('E-39: a capture recorded without a column reads null for every node, not false', async () => {
+Deno.test('dom-element-surface: a capture recorded without a column reads null for every node, not false', async () => {
 	// `textValue` is present-but-empty on the live-value page; a page with no `<textarea>` writes at
 	// all still yields `null` per node, so a consumer can tell "no such state" from "empty".
 	const merged = mergeDomTrees(await loadCapture('baseline_button'));
@@ -63,9 +63,9 @@ Deno.test('E-39: a capture recorded without a column reads null for every node, 
 	}
 });
 
-// --- E-40: the frame tree ---------------------------------------------------------------------------
+// --- the frame tree ---------------------------------------------------------------------------
 
-Deno.test('E-40: an OOPIF and a pierced frame are both listed, with the composition marker true', async () => {
+Deno.test('dom-element-surface: an OOPIF and a pierced frame are both listed, with the composition marker true', async () => {
 	const oopif = mergeDomTrees(await loadCapture('iframe_crossorigin'));
 	assertEquals(oopif.frames.length, 2, 'the top document plus one cross-site frame');
 	const [top, child] = oopif.frames;
@@ -93,10 +93,10 @@ Deno.test('E-40: an OOPIF and a pierced frame are both listed, with the composit
 	assertEquals(nested.captureTruncated, false);
 });
 
-Deno.test('E-40: the marker is false when the host has no box, and the tree still builds', async () => {
-	// Strip the host iframe's layout row from a recorded capture: this is architecture §5.3 case 3,
-	// the silent degradation where a whole subtree stacks at the page origin. The point of the marker
-	// is that this state is now visible on the record rather than only in the wrong numbers.
+Deno.test('dom-element-surface: the marker is false when the host has no box, and the tree still builds', async () => {
+	// Strip the host iframe's layout row from a recorded capture: the silent degradation where a whole
+	// subtree stacks at the page origin. The point of the marker is that this state is visible on the
+	// record rather than only in the wrong numbers.
 	const capture = await loadCapture('iframe_crossorigin');
 	const merged = mergeDomTrees(capture);
 	assert(merged.root !== null);
@@ -139,15 +139,15 @@ Deno.test('E-40: the marker is false when the host has no box, and the tree stil
 	assertEquals(child.captured, true, 'the child session was still captured; only its placement is unknown');
 });
 
-Deno.test('E-40: capture truncation is a flag on the result, not only a warning string', async () => {
+Deno.test('dom-element-surface: capture truncation is a flag on the result, not only a warning string', async () => {
 	const capture = await loadCapture('iframe_crossorigin');
-	assertEquals(extractFromCapture(capture).captureTruncated, false, 'recorded captures predate the flag');
+	assertEquals(extractFromCapture(capture).captureTruncated, false, 'recorded captures do not carry the flag');
 	const truncated = extractFromCapture({ ...capture, truncated: true });
 	assertEquals(truncated.captureTruncated, true);
 	assertEquals(truncated.frameTree.length, 2, 'the flag does not change what was walked');
 });
 
-Deno.test('E-40: every recorded capture lists exactly the frames its nodes belong to, root first', async () => {
+Deno.test('dom-element-surface: every recorded capture lists exactly the frames its nodes belong to, root first', async () => {
 	for (const page of DOM_FIXTURE_PAGES) {
 		const merged = mergeDomTrees(await loadCapture(page.name));
 		assert(merged.root !== null, page.name);
@@ -160,9 +160,9 @@ Deno.test('E-40: every recorded capture lists exactly the frames its nodes belon
 	}
 });
 
-// --- E-41: the offscreen split ----------------------------------------------------------------------
+// --- the offscreen split ----------------------------------------------------------------------
 
-Deno.test('E-41: an element beyond the slack is admitted only when asked, and only if it is rendered', async () => {
+Deno.test('dom-element-surface: an element beyond the slack is admitted only when asked, and only if it is rendered', async () => {
 	// `scroll_page` puts controls one viewport apart down a long page at the pinned 1280x900 viewport;
 	// the last ones sit past the ±1000 px band and are absent from every golden.
 	const merged = mergeDomTrees(await loadCapture('scroll_page'));
@@ -183,7 +183,7 @@ Deno.test('E-41: an element beyond the slack is admitted only when asked, and on
 	for (const [index, node] of strict.state.selectorMap) assertEquals(admitted.state.selectorMap.get(index), node);
 });
 
-Deno.test('E-41: a display:none element is never admitted, whatever the option says', async () => {
+Deno.test('dom-element-surface: a display:none element is never admitted, whatever the option says', async () => {
 	// `visibility_edge_cases` carries controls that fail the CSS gate outright. They have no box and
 	// no styles, so `isOffscreenOnly` is false and the walk keeps hiding them.
 	const merged = mergeDomTrees(await loadCapture('visibility_edge_cases'));

@@ -100,7 +100,7 @@ async function readTokenIn(grants: string[], token: string, keep: string) {
 }
 
 Deno.test({
-	name: 'SB-5 token: read once, then the service cannot read the file again, and keeps its folders',
+	name: 'a token file: read once, then the service cannot read the file again, and keeps its folders',
 	async fn() {
 		const dir = await Deno.makeTempDir({ dir: Deno.env.get('TTK_SANDBOX_TEST_DIR') });
 		try {
@@ -125,60 +125,56 @@ Deno.test({
 });
 
 /**
- * D-151: the compose path, in a process granted as the image's CMD grants it — read and write on the work folder and
- * on the token volume's folder — creates the token, reads it once, and gives up both token grants.
+ * An operator's own token path, in a process granted as a `command:` override would grant it — the image's secret
+ * location still among the grants — reads the token once and gives up both read grants; the work folder stays.
  */
 Deno.test({
-	name: 'D-151 token: generated on the first start, read once, then neither readable nor writable; the folder stays',
+	name: 'another token path: read once, then neither it nor the image default is readable; the folder stays',
 	async fn() {
 		const dir = await Deno.makeTempDir({ dir: Deno.env.get('TTK_SANDBOX_TEST_DIR') });
 		try {
 			const work = `${dir}/work`;
-			const volume = `${dir}/volume`;
+			const token = `${dir}/token`;
 			const secret = `${dir}/secret`;
 			await Deno.mkdir(work);
-			await Deno.mkdir(volume, { mode: 0o700 });
+			await Deno.writeTextFile(token, `${'t'.repeat(64)}\n`);
+			await Deno.writeTextFile(secret, `${'s'.repeat(64)}\n`);
 			const probe = `${dir}/probe.ts`;
 			const module = new URL('../../packages/sandbox/src/token.ts', import.meta.url).href;
 			await Deno.writeTextFile(
 				probe,
-				`import { provisionServiceToken, readServiceToken, releaseTokenGrants } from '${module}';\n` +
-					'const [work, volume, secret] = Deno.args;\n' +
-					'const token = `${volume}/token`;\n' +
-					'const created = await provisionServiceToken(token);\n' +
+				`import { readServiceToken, releaseTokenGrant } from '${module}';\n` +
+					'const [work, token, secret] = Deno.args;\n' +
 					'const value = await readServiceToken(token, [work]);\n' +
-					'await releaseTokenGrants([work], { secretFile: secret, generatedDir: volume });\n' +
+					'await releaseTokenGrant(secret);\n' +
 					"let read = 'read';\n" +
 					"try { await Deno.readTextFile(token); } catch { read = 'refused'; }\n" +
-					"let write = 'written';\n" +
-					"try { await Deno.writeTextFile(token, 'x'); } catch { write = 'refused'; }\n" +
-					"const kept = (await Deno.permissions.query({ name: 'write', path: work })).state;\n" +
-					'console.log(JSON.stringify({ created, length: value.length, read, write, kept }));\n',
+					"let other = 'read';\n" +
+					"try { await Deno.readTextFile(secret); } catch { other = 'refused'; }\n" +
+					"const kept = (await Deno.permissions.query({ name: 'read', path: work })).state;\n" +
+					'console.log(JSON.stringify({ length: value.length, read, other, kept }));\n',
 			);
-			const runOnce = async () => {
-				const out = await new Deno.Command(Deno.execPath(), {
-					args: [
-						'run',
-						'--no-prompt',
-						'--no-config',
-						`--allow-read=${work},${secret},${volume}`,
-						`--allow-write=${work},${volume}`,
-						probe,
-						work,
-						volume,
-						secret,
-					],
-					clearEnv: true,
-					env: { DENO_DIR: `${dir}/deno`, DENO_NO_UPDATE_CHECK: '1' },
-				}).output();
-				assert(out.success, new TextDecoder().decode(out.stderr));
-				return JSON.parse(new TextDecoder().decode(out.stdout));
-			};
-			assertEquals(await runOnce(), { created: true, length: 64, read: 'refused', write: 'refused', kept: 'granted' });
-			const first = await Deno.readTextFile(`${volume}/token`);
-			// A restart keeps the token the gateway already holds.
-			assertEquals(await runOnce(), { created: false, length: 64, read: 'refused', write: 'refused', kept: 'granted' });
-			assertEquals(await Deno.readTextFile(`${volume}/token`), first);
+			const out = await new Deno.Command(Deno.execPath(), {
+				args: [
+					'run',
+					'--no-prompt',
+					'--no-config',
+					`--allow-read=${work},${secret},${token}`,
+					probe,
+					work,
+					token,
+					secret,
+				],
+				clearEnv: true,
+				env: { DENO_DIR: `${dir}/deno`, DENO_NO_UPDATE_CHECK: '1' },
+			}).output();
+			assert(out.success, new TextDecoder().decode(out.stderr));
+			assertEquals(JSON.parse(new TextDecoder().decode(out.stdout)), {
+				length: 64,
+				read: 'refused',
+				other: 'refused',
+				kept: 'granted',
+			});
 		} finally {
 			await Deno.remove(dir, { recursive: true });
 		}
@@ -186,7 +182,7 @@ Deno.test({
 });
 
 /**
- * R12 (D-132): loads the git remotes file in a process granted exactly `grants`, as the service's own CMD grants it,
+ * Loads the git remotes file in a process granted exactly `grants`, as the service's own CMD grants it,
  * then logs the credential through the service's logger, which must have been told to cut it out.
  */
 async function loadRemotesIn(grants: string[], file: string, keep: string, token: string) {
@@ -223,7 +219,8 @@ async function loadRemotesIn(grants: string[], file: string, keep: string, token
 }
 
 Deno.test({
-	name: 'R12 remotes: read once, then the service cannot read the file again, and no log line holds a credential',
+	name:
+		'the git remotes file: read once, then the service cannot read the file again, and no log line holds a credential',
 	async fn() {
 		const dir = await Deno.makeTempDir({ dir: Deno.env.get('TTK_SANDBOX_TEST_DIR') });
 		try {

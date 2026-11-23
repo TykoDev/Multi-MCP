@@ -2,12 +2,11 @@
  * @module
  * Browser process launch, per-OS executable discovery, and the `/json/version` handshake.
  *
- * Contract owners: SPECS/ARCHITECTURE.md §6.1 (LocalBrowserWatchdog dispatches to these primitives),
- * §7.4 (launch vs connect convergence), SPECS/DECISION-REGISTER.md D-BROWSER1 (launch via
- * `Deno.Command`, no bundled-browser download in v1), SPECS/SETUP-WIZARD.md §4.2 (resolution order +
- * per-OS candidate table), SPECS/SECURITY-AUTH.md §3.2 (`--allow-run` scoped to a resolved path).
+ * LocalBrowserWatchdog dispatches to these primitives. Launch uses `Deno.Command` against a
+ * discovered or configured executable (no bundled-browser download), and `--allow-run` is scoped to
+ * that resolved path.
  *
- * This file is leaf infrastructure: it imports `@std` only and nothing from any other `@bua/*`
+ * This file is leaf infrastructure: it imports `@std` only and nothing from any other `@tykotech/*`
  * package. It owns process spawning and readiness; it owns no session, focus, or bus concept.
  */
 
@@ -15,27 +14,24 @@ import { delay } from '@std/async';
 import { isAbsolute, resolve } from '@std/path';
 
 // ---------------------------------------------------------------------------
-// constants (SPECS/ARCHITECTURE.md §6.1, §7.4, §8)
+// constants
 // ---------------------------------------------------------------------------
 
 /**
  * Kept in step with `packages/cdp/deno.json` — asserted by `src/launch_test.ts` so the two cannot
- * drift. Used for the `User-Agent: bua/<version>` handshake header (ARCHITECTURE.md §7.4).
+ * drift. Used for the `User-Agent: bua/<version>` handshake header.
  */
-// ERRATUM(E-44). Moved with the nine-file 0.2.0 bump (G-9, B1.13). `launch_test.ts`
-// already required this to equal `packages/cdp/deno.json`, so it is a version
-// constant tracking its own manifest rather than a behaviour change.
 export const CDP_PACKAGE_VERSION = '0.2.0';
 
-/** `/json/version` readiness cadence during launch (ARCHITECTURE.md §6.1). */
+/** `/json/version` readiness cadence during launch. */
 export const READINESS_POLL_INTERVAL_MS = 100;
-/** Hard cap on the `/json/version` readiness wait (ARCHITECTURE.md §6.1, §7.4). */
+/** Hard cap on the `/json/version` readiness wait. */
 export const READINESS_TIMEOUT_MS = 30_000;
-/** Profile-lock retry budget: total attempts, each with a fresh temp profile (D-BROWSER1). */
+/** Profile-lock retry budget: total attempts, each with a fresh temp profile. */
 export const MAX_LAUNCH_ATTEMPTS = 3;
-/** SIGTERM grace before SIGKILL (ARCHITECTURE.md §6.1 `BrowserKillEvent`). */
+/** SIGTERM grace before SIGKILL (`BrowserKillEvent`). */
 export const GRACEFUL_KILL_MS = 5_000;
-/** Temp profile prefix; `bua doctor --kill-zombies` sweeps this glob (SETUP-WIZARD.md §4.4). */
+/** Temp profile prefix, so stale profiles are recognisable as this package's. */
 export const TEMP_PROFILE_PREFIX = 'bua-tmp-';
 
 const HANDSHAKE_ATTEMPT_TIMEOUT_MS = 2_000;
@@ -48,8 +44,7 @@ const MAX_HANDSHAKE_BODY_BYTES = 1024 * 1024;
 
 /**
  * Chromium-family release channels covered by the discovery tables.
- * DATA-MODEL.md §5.2 spells the profile field as "chromium/chrome/…/msedge-canary"; ARCHITECTURE.md
- * §6.1 additionally requires Brave, so the Brave channels are part of this union.
+ * The profile field accepts "chromium/chrome/…/msedge-canary" plus the Brave channels.
  */
 export type BrowserChannel =
 	| 'chromium'
@@ -68,7 +63,7 @@ export type BrowserChannel =
 /** Platform families the discovery tables are written for. */
 export type TargetOs = 'windows' | 'darwin' | 'linux';
 
-/** How a browser executable was resolved — `bua doctor` D2 grades WARN for `path`/non-Chrome hits. */
+/** How a browser executable was resolved. */
 export type DiscoverySource = 'explicit' | 'env' | 'table' | 'path';
 
 /** Result of a successful discovery pass. */
@@ -81,12 +76,11 @@ export type BrowserDiscovery = {
 /**
  * Outcome of probing one candidate path.
  *
- * ERRATUM(SEAM-1): this used to be a file-local type. `permission-denied` and `missing` are the E-24
+ * `permission-denied` and `missing` are the key
  * distinction — "I was not allowed to look" versus "I looked and it is not there" — and they have
- * opposite remediations. Keeping the union private meant every consumer had to recover it by
- * substring-matching {@linkcode describeProbe}'s prose out of {@linkcode BrowserNotFoundError.searched},
- * which two of them did (`packages/server/src/browser.ts`, `packages/cli/src/doctor/checks.ts`). That
- * wording is operator-facing and will be improved; control flow must not be pinned to it.
+ * opposite remediations. The union is exported so no consumer has to recover it by
+ * substring-matching {@linkcode describeProbe}'s prose out of {@linkcode BrowserNotFoundError.searched}:
+ * that wording is operator-facing and may change; control flow must not be pinned to it.
  */
 export type ProbeResult = 'executable' | 'missing' | 'not-a-file' | 'permission-denied';
 
@@ -96,7 +90,7 @@ export type ProbeResult = 'executable' | 'missing' | 'not-a-file' | 'permission-
  *
  * `result: 'skipped'` means the step could not run **at all** (e.g. `PATH` was unreadable, so no
  * candidate was ever built). A skipped step is not evidence of absence, which is precisely the
- * inference E-24 exists to prevent.
+ * inference the not-installed/not-permitted split exists to prevent.
  */
 export type DiscoveryProbe = {
 	/** The candidate probed. `null` for the aggregate `PATH` sweep, which covers many paths at once. */
@@ -108,7 +102,7 @@ export type DiscoveryProbe = {
 	readonly detail: string;
 };
 
-/** Why discovery came back empty. The whole point of E-24 is that these are not the same thing. */
+/** Why discovery came back empty. The whole point is that these are not the same thing. */
 export type DiscoveryFailureKind = 'not-installed' | 'not-permitted';
 
 /** {@linkcode classifyDiscoveryFailure}'s verdict plus the evidence it rests on. */
@@ -133,16 +127,16 @@ export type DiscoveryRoots = {
 /** Options for {@linkcode launchBrowser}. */
 export type LaunchOptions = {
 	/**
-	 * Profile directory. REQUIRED: ARCHITECTURE.md §6.1 makes "`--user-data-dir` is set" a normative
+	 * Profile directory. REQUIRED: "`--user-data-dir` is set" is a normative
 	 * assertion, so this primitive refuses to spawn without one rather than letting Chrome fall back
 	 * to the user's real profile (which it would then lock).
 	 */
 	readonly userDataDir: string;
-	/** Explicit executable; skips discovery entirely (SETUP-WIZARD.md §4.2 step 1). */
+	/** Explicit executable; skips discovery entirely. */
 	readonly executablePath?: string | undefined;
 	/** Channel hint for discovery when `executablePath` is absent. */
 	readonly channel?: BrowserChannel | undefined;
-	/** Caller-composed launch args (BrowserProfile owns composition at M1; DATA-MODEL.md §5.2). */
+	/** Caller-composed launch args (BrowserProfile owns composition). */
 	readonly args?: readonly string[] | undefined;
 	/** Default `true`. BrowserProfile owns the `null → headful iff a display exists` rule. */
 	readonly headless?: boolean | undefined;
@@ -152,39 +146,37 @@ export type LaunchOptions = {
 	readonly clearEnv?: boolean | undefined;
 	/** Positional start URL. `null` opens the browser's own start page. Default `about:blank`. */
 	readonly initialUrl?: string | null | undefined;
-	/** `true` drops every default arg; an array drops the named ones (DATA-MODEL.md §5.2). */
+	/** `true` drops every default arg; an array drops the named ones. */
 	readonly ignoreDefaultArgs?: boolean | readonly string[] | undefined;
 	/** Debug host; loopback only in practice. Default `127.0.0.1`. */
 	readonly host?: string | undefined;
-	/** Fixed debug port. Omit for a random free ephemeral port (D-BROWSER1). */
+	/** Fixed debug port. Omit for a random free ephemeral port. */
 	readonly debugPort?: number | undefined;
 	/** Readiness cap, default {@linkcode READINESS_TIMEOUT_MS}. */
 	readonly readinessTimeoutMs?: number | undefined;
 	/** Readiness cadence, default {@linkcode READINESS_POLL_INTERVAL_MS}. */
 	readonly readinessPollIntervalMs?: number | undefined;
-	/** Attempts including the first, default {@linkcode MAX_LAUNCH_ATTEMPTS} (D-BROWSER1). */
+	/** Attempts including the first, default {@linkcode MAX_LAUNCH_ATTEMPTS}. */
 	readonly maxAttempts?: number | undefined;
 	/** Supplies a fresh profile dir for a profile-lock retry. Default: a `bua-tmp-*` temp dir. */
 	readonly freshProfileDir?: (() => string | Promise<string>) | undefined;
 	/** Parent directory for auto-created temp profiles (lets callers stay inside `--allow-write`). */
 	readonly tempProfileRoot?: string | undefined;
-	/** Extra handshake headers, merged over `User-Agent: bua/<version>` (ARCHITECTURE.md §7.4). */
+	/** Extra handshake headers, merged over `User-Agent: bua/<version>`. */
 	readonly headers?: Record<string, string> | undefined;
 	/** Aborts the launch; a spawned child is torn down before the rejection propagates. */
 	readonly signal?: AbortSignal | undefined;
 };
 
 /**
- * A running browser plus the teardown primitive M1's `BrowserKillEvent` handler needs.
+ * A running browser plus the teardown primitive the browser layer's `BrowserKillEvent` handler needs.
  *
- * ARCHITECTURE.md §3 sketches the return as `{cdpUrl, child}`; the extra fields are additive.
- *
- * ERRATUM(M0-cdp-launch-ci-1): the teardown members exist because `packages/cdp/mod.ts` exports no
- * standalone kill helper and cross-package deep imports are forbidden (AGENTS.md §3), yet
- * ARCHITECTURE.md §6.1 requires `@tykotech/browser` to run SIGTERM → 5 s → SIGKILL + temp-dir cleanup.
+ * The teardown members exist because `packages/cdp/mod.ts` exports no standalone kill helper and
+ * cross-package deep imports are forbidden, yet `@tykotech/browser` must run SIGTERM → 5 s → SIGKILL
+ * + temp-dir cleanup.
  */
 export type LaunchedBrowser = {
-	/** HTTP CDP URL (`http://host:port`) — the input to `connect()` per ARCHITECTURE.md §7.4. */
+	/** HTTP CDP URL (`http://host:port`) — the input to `connect()`. */
 	readonly cdpUrl: string;
 	/** Browser-level WebSocket endpoint observed during the readiness handshake. */
 	readonly webSocketDebuggerUrl: string;
@@ -193,22 +185,22 @@ export type LaunchedBrowser = {
 	readonly userDataDir: string;
 	readonly port: number;
 	readonly args: readonly string[];
-	/** SIGTERM → `gracefulMs` → SIGKILL, then temp-profile cleanup (ARCHITECTURE.md §6.1). */
+	/** CDP `Browser.close` (≤ 2 s) → SIGTERM → `gracefulMs` → SIGKILL, then temp-profile cleanup. */
 	close(opts?: { readonly gracefulMs?: number }): Promise<void>;
 	[Symbol.asyncDispose](): Promise<void>;
 };
 
-/** Thrown when no usable executable was found. The message is what `bua doctor` D2 shows a user. */
+/** Thrown when no usable executable was found. The message is operator-facing and names the fixes. */
 export class BrowserNotFoundError extends Error {
 	readonly channel: BrowserChannel | null;
 	/** Operator-facing search trail. **Display only** — classify from {@linkcode probes} instead. */
 	readonly searched: readonly string[];
 	/**
-	 * ERRATUM(SEAM-1): the structured twin of {@linkcode searched}, in the same order. Consumers that
-	 * need the E-24 not-installed/not-permitted distinction read this and pass it to
+	 * The structured twin of {@linkcode searched}, in the same order. Consumers that
+	 * need the not-installed/not-permitted distinction read this and pass it to
 	 * {@linkcode classifyDiscoveryFailure}; nothing outside this module should parse `searched`.
 	 *
-	 * Empty only when the error was built through the legacy 3-argument constructor, which carries no
+	 * Empty only when the error was built through the 3-argument constructor, which carries no
 	 * structured trail. {@linkcode classifyDiscoveryFailure} treats "no probes" as *not-permitted*
 	 * rather than inventing an absence claim from a search it has no record of.
 	 */
@@ -267,14 +259,11 @@ export class BrowserLaunchError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// discovery tables (SETUP-WIZARD.md §4.2)
+// discovery tables
 // ---------------------------------------------------------------------------
 
 /**
- * Scan order when no channel is given: Chrome → Chromium → Edge → Brave (SETUP-WIZARD.md §4.2).
- *
- * ERRATUM(M0-cdp-launch-ci-7): ARCHITECTURE.md §6.1 lists Chrome/Chromium/**Brave/Edge**; SETUP-WIZARD
- * §4.2 is the section that states an order as a contract, so it wins.
+ * Scan order when no channel is given: Chrome → Chromium → Edge → Brave.
  */
 export const DEFAULT_CHANNEL_ORDER: readonly BrowserChannel[] = [
 	'chrome',
@@ -367,7 +356,7 @@ const LINUX_ABSOLUTE: Record<BrowserChannel, readonly string[]> = {
 	],
 };
 
-/** Bare command names probed against `PATH` (SETUP-WIZARD.md §4.2 step 4). */
+/** Bare command names probed against `PATH`. */
 const PATH_COMMANDS: Record<BrowserChannel, readonly string[]> = {
 	chrome: ['google-chrome', 'google-chrome-stable', 'chrome'],
 	'chrome-beta': ['google-chrome-beta'],
@@ -402,7 +391,7 @@ export function candidatePathsFor(
 ): string[] {
 	if (os === 'windows') {
 		const relative = WINDOWS_RELATIVE[channel];
-		// %ProgramFiles% → %ProgramFiles(x86)% → %LOCALAPPDATA% (SETUP-WIZARD.md §4.2). The
+		// %ProgramFiles% → %ProgramFiles(x86)% → %LOCALAPPDATA%. The
 		// user-local root is not optional: Chrome's per-user installer is the default on Windows.
 		return [roots.programFiles, roots.programFilesX86, roots.localAppData]
 			.filter((root): root is string => typeof root === 'string' && root.length > 0)
@@ -432,9 +421,8 @@ export function candidatePathsFor(
 /**
  * Reads an env var, treating a missing `--allow-env` grant as "unset".
  *
- * ERRATUM(M0-cdp-launch-ci-2): no `--allow-env` matrix in SECURITY-AUTH.md §3.3/§3.6 grants
- * `LOCALAPPDATA`/`PROGRAMFILES`/`PATH`, which SETUP-WIZARD.md §4.2's own Windows table needs, so
- * discovery MUST degrade rather than throw `NotCapable`.
+ * The test and runtime `--allow-env` grants do not cover `LOCALAPPDATA`/`PROGRAMFILES`/`PATH`, which
+ * the Windows discovery table needs, so discovery MUST degrade rather than throw `NotCapable`.
  */
 export function readEnv(name: string): string | undefined {
 	try {
@@ -445,7 +433,7 @@ export function readEnv(name: string): string | undefined {
 	}
 }
 
-/** Reads `BUA_<name>`, falling back to the `BROWSER_USE_<name>` compat alias (D-CFG1). */
+/** Reads `BUA_<name>`, falling back to the `BROWSER_USE_<name>` compat alias. */
 function readBuaEnv(suffix: string): string | undefined {
 	return readEnv(`BUA_${suffix}`) ?? readEnv(`BROWSER_USE_${suffix}`);
 }
@@ -477,12 +465,9 @@ async function probeExecutable(path: string): Promise<ProbeResult> {
 		return 'missing';
 	}
 	if (!info.isFile) return 'not-a-file';
-	// ERRATUM(E-24): the previous guard read `info.mode !== null && (info.mode & 0o111) === 0`, on the
-	// stated assumption that "`mode` is null on Windows". That assumption is FALSE on Deno 2.9.5:
-	// Windows reports a synthesized `mode` of 0o100666 — a real number with **no execute bits, ever**.
-	// The POSIX test therefore rejected every `.exe`, so table-driven discovery could never succeed on
-	// Windows and `bua doctor` reported "no browser installed" on machines with Chrome. Gate on the
-	// platform, not on `mode === null`. Windows carries no execute bit to test; the extension and the
+	// Gate on the platform, not on `mode === null`: Deno on Windows reports a synthesized `mode` of
+	// 0o100666 — a real number with **no execute bits, ever** — so a POSIX execute-bit test would
+	// reject every `.exe`. Windows carries no execute bit to test; the extension and the
 	// `--allow-run=<path>` grant are what gate the spawn there.
 	if (Deno.build.os !== 'windows' && info.mode !== null && (info.mode & 0o111) === 0) return 'not-a-file';
 	return 'executable';
@@ -514,7 +499,7 @@ function formatNotFoundMessage(
 		'  - pass an explicit executablePath (BrowserProfile.executablePath)',
 		'  - or attach to an already-running browser via cdpUrl — attach mode needs no --allow-run',
 		'  - if entries above say "permission denied", widen --allow-read/--allow-env for the',
-		'    discovery roots (SECURITY-AUTH.md §3.3)',
+		'    discovery roots',
 	];
 	return lines.join('\n');
 }
@@ -535,13 +520,9 @@ function describeProbe(path: string, result: ProbeResult): string {
 /**
  * Splits a failed discovery pass into "looked and found nothing" and "was not allowed to look".
  *
- * ERRATUM(SEAM-1): this classifier lives here because the package that owns the observation is the
- * only one that can classify it without guessing. It previously existed twice — in
- * `packages/server/src/browser.ts` and `packages/cli/src/doctor/checks.ts` — both reading
- * {@linkcode describeProbe}'s wording out of {@linkcode BrowserNotFoundError.searched}, and the two
- * copies had **already drifted apart** (ERRATUM(SEAM-2)): the CLI's lacked the third clause below, so
- * a discovery pass that probed nothing at all was reported to the user as "no browser is installed" —
- * E-24's exact collapse, in the check written to prevent it.
+ * This classifier lives here because the package that owns the observation is the only one that
+ * can classify it without guessing; consumers never read {@linkcode describeProbe}'s wording out of
+ * {@linkcode BrowserNotFoundError.searched}.
  *
  * Three ways to end up at `not-permitted`:
  *
@@ -567,8 +548,8 @@ export function classifyDiscoveryFailure(probes: readonly DiscoveryProbe[]): Dis
 }
 
 /**
- * Full discovery pass, reporting how the executable was found. `bua doctor` D2 grades a `path` or
- * non-Chrome hit as WARN, which is why the source and channel are carried out of here.
+ * Full discovery pass, reporting how the executable was found. A `path` or non-Chrome hit is worth
+ * a warning to a diagnostic caller, which is why the source and channel are carried out of here.
  */
 export async function discoverBrowserExecutable(opts: {
 	readonly executablePath?: string | undefined;
@@ -578,7 +559,7 @@ export async function discoverBrowserExecutable(opts: {
 } = {}): Promise<BrowserDiscovery> {
 	const os = opts.os ?? currentOs();
 	const roots = opts.roots ?? discoveryRoots(os);
-	// ERRATUM(SEAM-1): the trail is accumulated structured and rendered to strings at the throw, so
+	// The trail is accumulated structured and rendered to strings at the throw, so
 	// `searched` is derived from `probes` rather than the two being written independently.
 	const probes: DiscoveryProbe[] = [];
 
@@ -597,7 +578,7 @@ export async function discoverBrowserExecutable(opts: {
 		}], os);
 	}
 
-	// (2) BUA_BROWSER_PATH / BROWSER_USE_BROWSER_PATH (SETUP-WIZARD.md §4.2 step 2).
+	// (2) BUA_BROWSER_PATH / BROWSER_USE_BROWSER_PATH.
 	const fromEnv = readBuaEnv('BROWSER_PATH');
 	if (fromEnv !== undefined && fromEnv.length > 0) {
 		const result = await probeExecutable(fromEnv);
@@ -656,10 +637,10 @@ export async function discoverBrowserExecutable(opts: {
 
 /**
  * Resolves an absolute browser executable path, honoring an explicit path, then `BUA_BROWSER_PATH`,
- * then the per-OS tables, then `PATH` (SETUP-WIZARD.md §4.2).
+ * then the per-OS tables, then `PATH`.
  *
- * @throws {BrowserNotFoundError} listing every location searched — that message is `bua doctor` D2's
- * output, so it names the fixes too.
+ * @throws {BrowserNotFoundError} listing every location searched — that message is operator-facing,
+ * so it names the fixes too.
  */
 export async function findBrowserExecutable(channel?: BrowserChannel): Promise<string> {
 	const found = await discoverBrowserExecutable({ channel });
@@ -667,13 +648,13 @@ export async function findBrowserExecutable(channel?: BrowserChannel): Promise<s
 }
 
 // ---------------------------------------------------------------------------
-// `/json/version` handshake (ARCHITECTURE.md §7.4)
+// `/json/version` handshake
 // ---------------------------------------------------------------------------
 
 /**
- * ERRATUM(M0-cdp-launch-ci-5): loopback is spoken over a raw socket rather than `fetch`, because `HTTP_PROXY`/`ALL_PROXY`
- * in the environment would otherwise intercept the CDP handshake — ARCHITECTURE.md §7.4 requires
- * that proxy env MUST NOT intercept localhost, and `NO_PROXY` hygiene cannot be assumed on a user's
+ * Loopback is spoken over a raw socket rather than `fetch`, because `HTTP_PROXY`/`ALL_PROXY`
+ * in the environment would otherwise intercept the CDP handshake — proxy env
+ * MUST NOT intercept localhost, and `NO_PROXY` hygiene cannot be assumed on a user's
  * machine. Non-loopback CDP hosts keep `fetch` (a remote browser behind a proxy is legitimate).
  */
 export function selectHandshakeTransport(url: URL): 'direct-loopback' | 'fetch' {
@@ -754,7 +735,7 @@ function dechunk(raw: string): string | null {
 }
 
 function handshakeHeaders(extra?: Record<string, string>): Record<string, string> {
-	// ARCHITECTURE.md §7.4: custom profile headers plus `User-Agent: bua/<version>`.
+	// Custom profile headers plus `User-Agent: bua/<version>`.
 	return { 'user-agent': `bua/${CDP_PACKAGE_VERSION}`, accept: 'application/json', ...extra };
 }
 
@@ -854,7 +835,7 @@ async function getJsonVersion(
 			: await getViaFetch(url, headers, opts.timeoutMs);
 	} catch (error) {
 		// Transport failures (refused, reset, aborted) become typed errors: nothing in @tykotech/cdp's
-		// public surface may leak a bare runtime error (AGENTS.md §3 "Errors").
+		// public surface may leak a bare runtime error.
 		if (error instanceof BrowserLaunchError) throw error;
 		throw new BrowserLaunchError(
 			`CDP handshake to ${url} failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -880,7 +861,7 @@ async function getJsonVersion(
 }
 
 /**
- * GETs `/json/version` and returns `webSocketDebuggerUrl` (ARCHITECTURE.md §7.4).
+ * GETs `/json/version` and returns `webSocketDebuggerUrl`.
  *
  * Capped at 30 s. Sends `User-Agent: bua/<version>` plus any caller headers. Loopback hosts bypass
  * `fetch` so environment proxies cannot intercept the handshake.
@@ -898,9 +879,9 @@ export async function fetchWebSocketDebuggerUrl(
 // ---------------------------------------------------------------------------
 
 /**
- * Args added unless `ignoreDefaultArgs` drops them. Deliberately small: BrowserProfile (M1) owns
- * real arg composition (DATA-MODEL.md §5.2); these only suppress first-run UI and the background
- * network chatter that would otherwise violate the Q7 "no unsolicited network traffic" gate.
+ * Args added unless `ignoreDefaultArgs` drops them. Deliberately small: BrowserProfile owns
+ * real arg composition; these only suppress first-run UI and the background
+ * network chatter that would otherwise violate the "no unsolicited network traffic" privacy rule.
  */
 export const DEFAULT_LAUNCH_ARGS: readonly string[] = [
 	'--no-first-run',
@@ -939,14 +920,13 @@ export function composeLaunchArgs(opts: {
 					'pass LaunchOptions.debugPort instead',
 			);
 		}
-		// ERRATUM(TIER-2): compare the two **resolved** paths, not the two spellings. One directory
-		// reaches this guard by two routes — `LaunchOptions.userDataDir`, which `launchBrowser` has
-		// already put through `absolutize()`, and the caller-composed `--user-data-dir=` arg, which
-		// `@tykotech/browser`'s `resolveBrowserProfile` writes verbatim from `BrowserProfile.userDataDir` and
-		// nobody absolutizes. A raw `!==` therefore rejected a *relative* profile directory as being in
-		// conflict with itself, and a client can reach that through `CreateSessionRequest.profile`,
-		// where a relative path is exactly what a config file contains. Same directory in two spellings
-		// is not a conflict; a genuinely different directory still is.
+		// Compare the two **resolved** paths, not the two spellings. One directory reaches this guard by
+		// two routes — `LaunchOptions.userDataDir`, which `launchBrowser` has already put through
+		// `absolutize()`, and the caller-composed `--user-data-dir=` arg, which `@tykotech/browser`'s
+		// `resolveBrowserProfile` writes verbatim from `BrowserProfile.userDataDir`. A client can reach
+		// that through `CreateSessionRequest.profile`, where a relative path is exactly what a config
+		// file contains. Same directory in two spellings is not a conflict; a genuinely different
+		// directory still is.
 		if (argName(arg) === '--user-data-dir') {
 			const fromArgs = arg.slice('--user-data-dir='.length);
 			if (absolutize(fromArgs) !== absolutize(opts.userDataDir)) {
@@ -975,14 +955,14 @@ export function composeLaunchArgs(opts: {
 	composed.push(`--remote-debugging-port=${opts.port}`);
 	composed.push(`--user-data-dir=${opts.userDataDir}`);
 	// `about:blank` by default: it guarantees ≥1 page target without the new-tab page's network
-	// chatter (privacy gate Q7). `null` opts out and lets the browser open its own start page.
+	// chatter (no unsolicited network traffic). `null` opts out and lets the browser open its own start page.
 	const initialUrl = opts.initialUrl === undefined ? 'about:blank' : opts.initialUrl;
 	if (initialUrl !== null) composed.push(initialUrl);
 	return composed;
 }
 
 /**
- * Binds an ephemeral port, learns its number, and releases it (D-BROWSER1 "random free debug port").
+ * Binds an ephemeral port, learns its number, and releases it (a random free debug port).
  *
  * Inherently TOCTOU: another process may claim the port between release and Chrome's bind. That is
  * why {@linkcode launchBrowser} treats a devtools bind failure as a retryable launch attempt.
@@ -1006,9 +986,9 @@ type LaunchFailureKind = 'profile-lock' | 'port-conflict' | 'other';
 export const CHROME_EXIT_PROFILE_IN_USE = 21;
 
 /**
- * Classifies a failed attempt (D-BROWSER1 SingletonLock retry).
+ * Classifies a failed attempt (SingletonLock retry).
  *
- * ERRATUM(M0-cdp-launch-ci-4): Windows Chrome emits no SingletonLock text at all, so the exit code is
+ * Windows Chrome emits no SingletonLock text at all, so the exit code is
  * the only usable signal there.
  *
  * `exitCode` MUST be the code of a *self-inflicted* exit — i.e. the browser died on its own before
@@ -1073,13 +1053,46 @@ function tapStderr(stream: ReadableStream<Uint8Array>): StderrTap {
 	};
 }
 
+/** Ceiling on the CDP `Browser.close` step of {@linkcode LaunchedBrowser.close}. */
+const CDP_CLOSE_MS = 2_000;
+
+/**
+ * Asks the browser to shut down its whole process tree over CDP `Browser.close`, then waits for the child to exit.
+ * Added to the vendored launcher: on Windows the kill below reaches only the spawned process (Deno's SIGTERM is
+ * TerminateProcess), so its helpers, among them the one holding the debug port, outlived every close that skipped
+ * this step (hundreds of headless processes after one test run). Best effort: on any failure the kill still runs.
+ */
+async function closeOverCdp(webSocketDebuggerUrl: string, child: Deno.ChildProcess): Promise<void> {
+	let socket: WebSocket | undefined;
+	const controller = new AbortController();
+	const attempt = (async () => {
+		socket = new WebSocket(webSocketDebuggerUrl);
+		await new Promise<void>((resolve, reject) => {
+			socket!.onopen = () => resolve();
+			socket!.onerror = () => reject(new Error('CDP socket error'));
+		});
+		socket.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+		await child.status;
+	})().catch(() => {});
+	try {
+		await Promise.race([attempt, delay(CDP_CLOSE_MS, { signal: controller.signal }).catch(() => {})]);
+	} finally {
+		controller.abort();
+		try {
+			socket?.close();
+		} catch {
+			// already closed
+		}
+	}
+}
+
 async function killChild(child: Deno.ChildProcess, gracefulMs: number): Promise<void> {
 	const controller = new AbortController();
 	let exited = false;
 	try {
 		try {
-			// Windows note (ROADMAP.md R8): Deno maps SIGTERM to TerminateProcess, so the graceful
-			// window is a no-op there and no process *tree* is reaped. M1 should prefer CDP
+			// Windows note: Deno maps SIGTERM to TerminateProcess, so the graceful
+			// window is a no-op there and no process *tree* is reaped. Callers should prefer CDP
 			// `Browser.close()` and fall back to this.
 			child.kill('SIGTERM');
 		} catch {
@@ -1110,7 +1123,7 @@ async function removeProfileDir(dir: string): Promise<void> {
 			return;
 		} catch (error) {
 			if (error instanceof Deno.errors.NotFound) return;
-			if (attempt === 2) return; // doctor D8 sweeps stale bua-tmp-* dirs (SETUP-WIZARD.md §4.4)
+			if (attempt === 2) return; // best effort: a stale bua-tmp-* dir is left behind
 			await delay(200);
 		}
 	}
@@ -1177,7 +1190,7 @@ async function waitForReadiness(
 }
 
 /**
- * Spawns a browser via `Deno.Command` and resolves once `/json/version` answers (D-BROWSER1).
+ * Spawns a browser via `Deno.Command` and resolves once `/json/version` answers.
  *
  * Guarantees, in order:
  * 1. `--user-data-dir` is asserted before anything is spawned — a caller that omits it gets a
@@ -1188,7 +1201,7 @@ async function waitForReadiness(
  * 5. A profile-lock (or devtools bind) failure retries up to `maxAttempts` times, each retry on a
  *    fresh temp profile dir which is removed on `close()`.
  *
- * Permissions: `--allow-run=<resolved executable>` (never bare — SECURITY-AUTH.md §3.2),
+ * Permissions: `--allow-run=<resolved executable>` (never bare),
  * `--allow-net=127.0.0.1` for the port pick and handshake, `--allow-write` for the profile dir.
  */
 export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowser> {
@@ -1196,8 +1209,8 @@ export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowse
 	const requestedDir = opts.userDataDir;
 	if (typeof requestedDir !== 'string' || requestedDir.trim().length === 0) {
 		throw new BrowserLaunchError(
-			'launchBrowser requires userDataDir: --user-data-dir MUST always be set (ARCHITECTURE.md ' +
-				'§6.1, D-BROWSER1). Launching without one lets the browser lock the user profile.',
+			'launchBrowser requires userDataDir: --user-data-dir MUST always be set. ' +
+				'Launching without one lets the browser lock the user profile.',
 		);
 	}
 
@@ -1238,7 +1251,7 @@ export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowse
 			throw new BrowserLaunchError(
 				`Failed to spawn ${executablePath}: ${error instanceof Error ? error.message : String(error)}. ` +
 					'If this is a NotCapable error, the process needs --allow-run=<that exact path> ' +
-					'(SECURITY-AUTH.md §3.2 — never a bare --allow-run).',
+					'(never a bare --allow-run).',
 				{ executablePath, args, cause: error, attempts: attempt },
 			);
 		}
@@ -1271,6 +1284,7 @@ export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowse
 				port,
 				args,
 				close: async (closeOpts) => {
+					await closeOverCdp(document.webSocketDebuggerUrl, child);
 					await killChild(child, closeOpts?.gracefulMs ?? GRACEFUL_KILL_MS);
 					await tap.stop();
 					for (const dir of ownedProfileDirs) await removeProfileDir(dir);
@@ -1300,7 +1314,7 @@ export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowse
 				);
 			}
 			if (kind === 'profile-lock') {
-				// D-BROWSER1: retry on a fresh temp profile dir rather than fighting the SingletonLock.
+				// Retry on a fresh temp profile dir rather than fighting the SingletonLock.
 				const fresh = opts.freshProfileDir === undefined
 					? await makeTempProfileDir(opts.tempProfileRoot)
 					: await opts.freshProfileDir();

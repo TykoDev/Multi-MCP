@@ -1,8 +1,8 @@
 /**
  * CDP `Network` domain — enable/disable, headers, bodies, cookies, request lifecycle events.
  *
- * DownloadsWatchdog sniffs `responseReceived` for PDFs/attachments (SPECS/ARCHITECTURE.md §6.8);
- * HarRecordingWatchdog consumes the full request/response/timing set (§6.13).
+ * DownloadsWatchdog sniffs `responseReceived` for PDFs/attachments;
+ * HarRecordingWatchdog consumes the full request/response/timing set.
  */
 
 import type {
@@ -70,15 +70,12 @@ export interface NetworkResponse {
 	securityState?: string;
 }
 
-// ERRATUM(E-45). `Network.loadNetworkResource` — typed, registered and tested
-// here under E-43 for `browser_head` (B1.12) — is removed with the owner's
-// SR-HEAD-REDIRECT decision of 2026-09-09 (D-042). Measured on real Chromium it
-// followed redirects silently, reported no hop and no final URL, and transferred
-// the whole body for a metadata query (U-4: 32 MiB of 32 MiB). `browser_head` is
-// now a cookie-less server-side HEAD gated at every hop (`packages/mcp/src/head.ts`),
-// and nothing else in the tree issued the method, so leaving it typed would have
-// been a compile-time promise with no consumer and an untested egress primitive.
-// The typed `Network` domain is back to having no method that issues a request.
+// `Network.loadNetworkResource` is deliberately not typed. Measured on real Chromium
+// it follows redirects silently, reports no hop and no final URL, and transfers the
+// whole body for a metadata query. `browser_head` is a cookie-less server-side HEAD
+// gated at every hop (`packages/mcp/src/head.ts`), so typing the method would be an
+// egress primitive with no consumer. The typed `Network` domain has no method that
+// issues a request.
 
 export interface NetworkParams {
 	'Network.clearBrowserCache': NoParams;

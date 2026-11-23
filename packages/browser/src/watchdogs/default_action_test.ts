@@ -1,13 +1,12 @@
 /**
- * `DefaultActionWatchdog` contract (ARCHITECTURE.md §6.10; COMPLETIONS-CRITERIA.md §3.2 watchdog row
- * 10: "click cascade (scrollIntoView→geometry→occlusion→mouse), per-char typing, sendKeys, scroll
- * paths, upload, scroll-to-text, dropdowns, `{validationError}`-as-data, print-dialog→printToPDF").
+ * `DefaultActionWatchdog` contract: click cascade (scrollIntoView → geometry → occlusion → mouse),
+ * per-character typing, sendKeys, scroll paths, upload, scroll-to-text, dropdowns,
+ * `{validationError}`-as-data, print-dialog → printToPDF.
  *
  * Tier 1: real event bus, real `CdpClient`, real `SessionManager`, real CDP frames over
- * `ChromeFixture` — nothing mocked (D-TEST1). What this tier proves is *wire shape and control flow*:
+ * `ChromeFixture` — nothing mocked. What this tier proves is *wire shape and control flow*:
  * which CDP calls happen, in what order, with what parameters, and which branch of each cascade ran.
- * Whether a real page reacts to them is the browser tier's job
- * (`packages/core/tests/integration/watchdog_action_test.ts`).
+ * Whether a real page reacts to them is the browser tier's job.
  */
 
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
@@ -70,7 +69,7 @@ const THIS_FILE = fromFileUrl(import.meta.url);
 
 let nextBackendNodeId = 100;
 
-/** A minimal `EnhancedDomTreeNode` (DATA-MODEL.md §6.1) for the fields the action layer reads. */
+/** A minimal `EnhancedDomTreeNode` for the fields the action layer reads. */
 function makeNode(init: Partial<EnhancedDomTreeNode> & { nodeName: string }): EnhancedDomTreeNode {
 	return {
 		nodeId: 1,
@@ -233,8 +232,7 @@ function offlineHost(bus: EventBus, overrides: Partial<WatchdogHost> = {}): Watc
 // registration
 // ---------------------------------------------------------------------------
 
-// ERRATUM(E-49) moved the count and this test's title with it: `HoverEvent` is the fourteenth.
-Deno.test('default-action: attach subscribes all 14 command handlers of §5.1.1 (13 + E-49’s hover)', async () => {
+Deno.test('default-action: attach subscribes all 14 command handlers, hover included', async () => {
 	await using h = await harness();
 	const events = [
 		ClickElementEvent,
@@ -395,7 +393,7 @@ Deno.test('default-action: the cascade runs scrollIntoView → geometry → occl
 	const result = await h.bus.dispatch(new ClickElementEvent({ node }))
 		.eventResult({ raiseIfAny: true, raiseIfNone: true });
 
-	assertEquals(h.sent('DOM.scrollIntoViewIfNeeded').length, 1, 'step 1 of §6.10');
+	assertEquals(h.sent('DOM.scrollIntoViewIfNeeded').length, 1, 'step 1 of the cascade');
 	assertEquals(h.sent('DOM.getContentQuads').length, 1, 'step 2');
 	assertEquals(h.sent('Runtime.callFunctionOn').length, 1, 'step 3: one occlusion probe');
 	assertEquals(result?.clickX, 60);
@@ -410,10 +408,10 @@ Deno.test('default-action: the cascade runs scrollIntoView → geometry → occl
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-48) — the click-count ramp
+// the click-count ramp
 // ---------------------------------------------------------------------------
 
-Deno.test('E-48: a single click is unchanged — one pair, clickCount 1', async () => {
+Deno.test('click count: a single click is one pair at clickCount 1', async () => {
 	await using h = await harness();
 	scriptClickablePage(h);
 	const result = await h.bus.dispatch(new ClickElementEvent({ node: makeNode({ nodeName: 'BUTTON' }) }))
@@ -424,7 +422,7 @@ Deno.test('E-48: a single click is unchanged — one pair, clickCount 1', async 
 	assertEquals(result?.clickCount, 1);
 });
 
-Deno.test('E-48: a double click is TWO pairs, counted 1 then 2 — not one pair carrying 2', async () => {
+Deno.test('click count: a double click is TWO pairs, counted 1 then 2 — not one pair carrying 2', async () => {
 	await using h = await harness();
 	scriptClickablePage(h);
 	const result = await h.bus.dispatch(new ClickElementEvent({ node: makeNode({ nodeName: 'BUTTON' }), clickCount: 2 }))
@@ -446,7 +444,7 @@ Deno.test('E-48: a double click is TWO pairs, counted 1 then 2 — not one pair 
 	assertEquals(result?.clickCount, 2);
 });
 
-Deno.test('E-48: the right button reaches the wire on both the press and the release', async () => {
+Deno.test('click count: the right button reaches the wire on both the press and the release', async () => {
 	await using h = await harness();
 	scriptClickablePage(h);
 	await h.bus.dispatch(new ClickElementEvent({ node: makeNode({ nodeName: 'BUTTON' }), button: 'right' }))
@@ -456,7 +454,7 @@ Deno.test('E-48: the right button reaches the wire on both the press and the rel
 	assertEquals(frames[2]?.params.button, 'right');
 });
 
-Deno.test('E-48: the coordinate click ramps too', async () => {
+Deno.test('click count: the coordinate click ramps too', async () => {
 	await using h = await harness();
 	h.scriptCalls(pageRouter());
 	await h.bus.dispatch(new ClickCoordinateEvent({ coordinateX: 10, coordinateY: 20, clickCount: 2 }))
@@ -465,7 +463,7 @@ Deno.test('E-48: the coordinate click ramps too', async () => {
 	assertEquals(presses.map((frame) => frame.params.clickCount), [1, 2]);
 });
 
-Deno.test('E-48: the JavaScript occlusion fallback reports NO click count', async () => {
+Deno.test('click count: the JavaScript occlusion fallback reports NO click count', async () => {
 	await using h = await harness();
 	scriptClickablePage(h, true);
 	const result = await h.bus.dispatch(new ClickElementEvent({ node: makeNode({ nodeName: 'BUTTON' }), clickCount: 2 }))
@@ -475,10 +473,10 @@ Deno.test('E-48: the JavaScript occlusion fallback reports NO click count', asyn
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-49) — hover
+// hover
 // ---------------------------------------------------------------------------
 
-Deno.test('E-49: an element hover runs the click geometry and then moves ONLY', async () => {
+Deno.test('hover: an element hover runs the click geometry and then moves ONLY', async () => {
 	await using h = await harness();
 	scriptClickablePage(h);
 	const result = await h.bus.dispatch(new HoverEvent({ node: makeNode({ nodeName: 'BUTTON' }) }))
@@ -496,7 +494,7 @@ Deno.test('E-49: an element hover runs the click geometry and then moves ONLY', 
 	assertEquals(result?.occluded, false);
 });
 
-Deno.test('E-49: an occluded hover still moves and reports what is on top — no JS fallback', async () => {
+Deno.test('hover: an occluded hover still moves and reports what is on top — no JS fallback', async () => {
 	await using h = await harness();
 	scriptClickablePage(h, true);
 	const result = await h.bus.dispatch(new HoverEvent({ node: makeNode({ nodeName: 'BUTTON' }) }))
@@ -507,7 +505,7 @@ Deno.test('E-49: an occluded hover still moves and reports what is on top — no
 	assertEquals(h.sent('Runtime.callFunctionOn').length, 1, 'the occlusion probe only — never a JS click');
 });
 
-Deno.test('E-49: a coordinate hover clamps to the viewport and hit-tests the point', async () => {
+Deno.test('hover: a coordinate hover clamps to the viewport and hit-tests the point', async () => {
 	await using h = await harness();
 	h.scriptCalls(pageRouter());
 	const result = await h.bus.dispatch(new HoverEvent({ coordinateX: 5000, coordinateY: 20 }))
@@ -517,7 +515,7 @@ Deno.test('E-49: a coordinate hover clamps to the viewport and hit-tests the poi
 	assertEquals(h.sent('Input.dispatchMouseEvent').map((frame) => frame.params.type), ['mouseMoved']);
 });
 
-Deno.test('E-49: an element with no geometry cannot be hovered, and says so', async () => {
+Deno.test('hover: an element with no geometry cannot be hovered, and says so', async () => {
 	await using h = await harness();
 	for (const method of ['DOM.getContentQuads', 'DOM.getBoxModel', 'DOM.resolveNode']) {
 		h.fixture.script(method, (request, self) => {
@@ -533,10 +531,10 @@ Deno.test('E-49: an element with no geometry cannot be hovered, and says so', as
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-50) — a chord aimed at a named element
+// a chord aimed at a named element
 // ---------------------------------------------------------------------------
 
-Deno.test('E-50: sendKeys with a node focuses it with DOM.focus and never clicks it', async () => {
+Deno.test('sendKeys: a named node is focused with DOM.focus and never clicked', async () => {
 	await using h = await harness();
 	h.scriptCalls(pageRouter());
 	h.fixture.script('DOM.focus', (request, self) => self.reply(request.id, {}));
@@ -544,15 +542,15 @@ Deno.test('E-50: sendKeys with a node focuses it with DOM.focus and never clicks
 	await h.bus.dispatch(new SendKeysEvent({ keys: 'ctrl+a', node: makeNode({ nodeName: 'INPUT' }) }))
 		.eventResult({ raiseIfAny: true });
 
-	// Twice: once to take focus, once immediately before the first dispatch. Security review
-	// B2-SR4-8 — nothing re-checked between the two, so a `focus`/`focusin` handler could move focus
-	// away while the result still claimed the chord landed on this element.
+	// Twice: once to take focus, once immediately before the first dispatch. Without the second
+	// check a `focus`/`focusin` handler could move focus away while the result still claimed the
+	// chord landed on this element.
 	assertEquals(h.sent('DOM.focus').length, 2, 'focus is moved by DOM.focus, not by a click, and re-asserted');
 	assertEquals(h.sent('Input.dispatchMouseEvent').length, 0, 'a key press must not press the mouse');
 	assertEquals(h.sent('Input.dispatchKeyEvent').length, 2);
 });
 
-Deno.test('B2-SR4-8: focus lost between the take and the dispatch is an error, not a chord sent elsewhere', async () => {
+Deno.test('sendKeys: focus lost between the take and the dispatch is an error, not a chord sent elsewhere', async () => {
 	await using h = await harness();
 	let focusChecks = 0;
 	// The element takes focus, then loses it — the shape a page's own `focusin` handler produces.
@@ -569,7 +567,7 @@ Deno.test('B2-SR4-8: focus lost between the take and the dispatch is an error, n
 	assertEquals(h.sent('Input.dispatchKeyEvent').length, 0, 'nothing may be pressed after the check fails');
 });
 
-Deno.test('B2-SR4-8: a malformed chord is refused before focus is moved at all', async () => {
+Deno.test('sendKeys: a malformed chord is refused before focus is moved at all', async () => {
 	await using h = await harness();
 	h.scriptCalls(pageRouter());
 	h.fixture.script('DOM.focus', (request, self) => self.reply(request.id, {}));
@@ -582,14 +580,14 @@ Deno.test('B2-SR4-8: a malformed chord is refused before focus is moved at all',
 	assertEquals(h.sent('Input.dispatchKeyEvent').length, 0);
 });
 
-Deno.test('E-50: sendKeys without a node is byte-for-byte the pre-erratum path', async () => {
+Deno.test('sendKeys: without a node, the chord goes to the page with no focus move', async () => {
 	await using h = await harness();
 	await h.bus.dispatch(new SendKeysEvent({ keys: 'ctrl+a' })).eventResult({ raiseIfAny: true });
 	assertEquals(h.sent('DOM.focus').length, 0, 'no node means no focus move at all');
 	assertEquals(h.sent('Input.dispatchKeyEvent').length, 2);
 });
 
-Deno.test('E-50: an element that refuses focus is an error, not a chord sent somewhere else', async () => {
+Deno.test('sendKeys: an element that refuses focus is an error, not a chord sent somewhere else', async () => {
 	await using h = await harness();
 	h.scriptCalls(pageRouter({ extra: (declaration) => declaration.includes('activeElement') ? false : undefined }));
 	h.fixture.script('DOM.focus', (request, self) => {
@@ -610,7 +608,7 @@ Deno.test('default-action: an occluded element falls back to a JS click and says
 	const result = await h.bus.dispatch(new ClickElementEvent({ node: makeNode({ nodeName: 'BUTTON' }) }))
 		.eventResult({ raiseIfAny: true, raiseIfNone: true });
 
-	assertEquals(result?.method, 'javascript', 'ERRATUM(M1-watchdogs-action-1)');
+	assertEquals(result?.method, 'javascript', 'every candidate point is occluded, so the JS click runs');
 	assertEquals(result?.occluded, true);
 	assertEquals(result?.hitTag, 'div');
 	assertEquals(h.sent('Input.dispatchMouseEvent').length, 0);
@@ -669,17 +667,17 @@ Deno.test('default-action: a coordinate click clamps into the viewport and hit-t
 });
 
 // ---------------------------------------------------------------------------
-// download detection through the §6.8 seam
+// download detection through the DownloadsWatchdog seam
 // ---------------------------------------------------------------------------
 
 Deno.test('default-action: DownloadsWatchdog satisfies the click seam, and the timings agree', () => {
-	// Compile-time proof that §6.8's watchdog is a `ClickDownloadSource` without either file
+	// Compile-time proof that DownloadsWatchdog is a `ClickDownloadSource` without either file
 	// importing the other's interface. A shape change on either side fails `deno check`.
 	const seam: (watchdog: DownloadsWatchdog) => ClickDownloadSource = (watchdog) => watchdog;
 	assert(typeof seam === 'function');
 
-	assertEquals(DOWNLOAD_START_GRACE_MS, 500, 'ARCHITECTURE.md §6.10/§8');
-	assertEquals(DOWNLOAD_COMPLETION_TIMEOUT_MS, 30_000, 'ARCHITECTURE.md §6.10/§8');
+	assertEquals(DOWNLOAD_START_GRACE_MS, 500);
+	assertEquals(DOWNLOAD_COMPLETION_TIMEOUT_MS, 30_000);
 	assertEquals(DOWNLOAD_START_GRACE_MS, PIPELINE_GRACE_MS, 'the click and the pipeline must not drift');
 	assertEquals(DOWNLOAD_COMPLETION_TIMEOUT_MS, PIPELINE_COMPLETION_MS);
 });
@@ -699,7 +697,7 @@ Deno.test('default-action: a click that starts a download reports it through the
 		await h.bus.dispatch(new BrowserConnectedEvent({ cdpUrl: h.fixture.wsUrl })).eventResult({ raiseIfAny: true });
 		scriptClickablePage(h);
 		// The download begins while the press is still in flight — the case the synchronous channel
-		// exists for (ARCHITECTURE.md §6.8).
+		// exists for.
 		h.fixture.script('Input.dispatchMouseEvent', (request, self) => {
 			self.reply(request.id);
 			if (request.params.type !== 'mousePressed') return;
@@ -750,7 +748,7 @@ Deno.test('default-action: with no channel wired, a click still clicks', async (
 // typing + keys
 // ---------------------------------------------------------------------------
 
-Deno.test('default-action: typing is keyDown/char/keyUp per character, with VK codes (R5)', async () => {
+Deno.test('default-action: typing is keyDown/char/keyUp per character, with VK codes', async () => {
 	await using h = await harness();
 	h.fixture.script('DOM.getContentQuads', (request, self) => {
 		self.reply(request.id, { quads: [[0, 0, 100, 0, 100, 20, 0, 20]] });
@@ -793,7 +791,7 @@ Deno.test('default-action: a value that did not stick is reported, and redacted 
 	const secret = await h.bus
 		.dispatch(new TypeTextEvent({ node, text: 'hunter2', clear: false, isSensitive: true }))
 		.eventResult({ raiseIfAny: true, raiseIfNone: true });
-	assertEquals(secret?.actualValue, undefined, 'D-SEC2: a secret never travels back in a result');
+	assertEquals(secret?.actualValue, undefined, 'a secret never travels back in a result');
 	assertEquals(secret?.actualValueMatched, false);
 });
 
@@ -913,7 +911,7 @@ Deno.test('default-action: scroll-to-text that finds nothing throws with a usabl
 
 Deno.test('default-action: go back/forward walk the navigation history by entry id', async () => {
 	await using h = await harness();
-	// The readiness wait ends on a lifecycle event, exactly as §7.5's poller does.
+	// The readiness wait ends on a lifecycle event, exactly as the navigation poller does.
 	h.fixture.script('Page.navigateToHistoryEntry', (request, self) => {
 		self.reply(request.id);
 		self.emitLifecycle(h.targetId, 'load');
@@ -956,8 +954,8 @@ Deno.test('default-action: refresh reloads and the readiness wait is bounded and
 	});
 	await h.bus.dispatch(new RefreshEvent()).eventResult({ raiseIfAny: true });
 	assertEquals(h.sent('Page.reload').length, 1);
-	assertEquals(HISTORY_READINESS_TIMEOUT_MS, 3_000, 'the §7.5 same-domain heuristic, reused');
-	assertEquals(HISTORY_READINESS_POLL_MS, 50, 'the §7.5 lifecycle poll cadence');
+	assertEquals(HISTORY_READINESS_TIMEOUT_MS, 3_000, 'the same-domain navigation heuristic, reused');
+	assertEquals(HISTORY_READINESS_POLL_MS, 50, 'the navigation lifecycle poll cadence');
 });
 
 Deno.test('default-action: wait clamps seconds against maxSeconds', async () => {
@@ -1040,11 +1038,11 @@ Deno.test('default-action: a missed dropdown option returns the options as data,
 
 	assertStringIncludes(result.shortTermMemory ?? '', 'Norway');
 	assertStringIncludes(result.validationError ?? '', 'no option matches');
-	assertEquals(DROPDOWN_RESULT_TIMEOUT_MS, 3_000, 'AGENT-RUNTIME.md §3.1 inner op');
+	assertEquals(DROPDOWN_RESULT_TIMEOUT_MS, 3_000, 'the inner-op cap');
 });
 
 // ---------------------------------------------------------------------------
-// upload containment (SECURITY-AUTH.md §8.2)
+// upload containment
 // ---------------------------------------------------------------------------
 
 async function uploadRejects(
@@ -1093,7 +1091,7 @@ Deno.test('default-action: upload sets the file on the input through DOM.setFile
 	assertEquals((frames[0]?.params.files as string[])[0], await Deno.realPath(THIS_FILE));
 });
 
-Deno.test("default-action: a remote browser's upload path is passed through unchecked, by spec", async () => {
+Deno.test("default-action: a remote browser's upload path is passed through unchecked", async () => {
 	await using h = await harness();
 	const remoteHost: WatchdogHost = { ...h.host, isLocal: false };
 	const watchdog = new DefaultActionWatchdog(remoteHost);
@@ -1102,8 +1100,8 @@ Deno.test("default-action: a remote browser's upload path is passed through unch
 	scoped.attach();
 	try {
 		const node = makeNode({ nodeName: 'INPUT', attributes: { type: 'file' } });
-		// SECURITY-AUTH.md §8.2: "Remote (attached-browser) sessions may pass remote-absolute paths,
-		// which are outside local enforcement and documented as such."
+		// Remote (attached-browser) sessions may pass remote-absolute paths, which are outside local
+		// enforcement and documented as such.
 		await remoteBus.dispatch(new UploadFileEvent({ node, filePath: '/srv/remote/only/there.csv' }))
 			.eventResult({ raiseIfAny: true });
 		const frames = h.sent('DOM.setFileInputFiles');
@@ -1116,10 +1114,10 @@ Deno.test("default-action: a remote browser's upload path is passed through unch
 });
 
 // ---------------------------------------------------------------------------
-// timing constants (COMPLETIONS-CRITERIA.md §3.2: "encoded verbatim and asserted in tests")
+// timing constants (encoded exactly and asserted)
 // ---------------------------------------------------------------------------
 
-Deno.test("default-action: the inner-op caps are AGENT-RUNTIME §3.1's, verbatim", () => {
+Deno.test('default-action: the inner-op caps are 30 s for printToPDF and 3 s for a dropdown result', () => {
 	assertEquals(PRINT_TO_PDF_TIMEOUT_MS, 30_000);
 	assertEquals(DROPDOWN_RESULT_TIMEOUT_MS, 3_000);
 });

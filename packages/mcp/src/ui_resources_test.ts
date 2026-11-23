@@ -1,16 +1,17 @@
 /**
- * R9 (W7, D-134): MCP Apps on the MCP surface — off by default (AC35), and when on, `_meta.ui` on `tools/list` and
- * on `resources/list` / `resources/read` on **both** protocol eras through the real HTTP entry (AC38, measurement M9),
+ * MCP Apps on the MCP surface — off by default, and when on, `_meta.ui` on `tools/list` and
+ * on `resources/list` / `resources/read` on **both** protocol eras through the real HTTP entry,
  * plus the two handlers driven through the dispatcher, whose output check parses with the catalog's own schemas.
  */
+import { readRpc } from '../fixtures/capture_session.ts';
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import {
+	type AuthInfo,
 	CLIENT_CAPABILITIES_META_KEY,
 	createMcpHandler,
 	PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
-import type { AuthInfo } from '@modelcontextprotocol/server';
-import { APPS_OUTPUT } from './catalog/apps.ts';
+import { APPS_OUTPUT } from './catalog/session.ts';
 import { extensionTools } from './extension_tools.ts';
 import { SessionRegistry } from './registry.ts';
 import { type Scope, SCOPES } from './scopes.ts';
@@ -27,8 +28,8 @@ import {
 } from './ui_resources.ts';
 
 const MODERN = '2026-07-28';
-const LEGACY = '2025-06-18';
-const ERAS = [LEGACY, MODERN] as const;
+const ERA_2025 = '2025-06-18';
+const ERAS = [ERA_2025, MODERN] as const;
 
 const LIVE_HTML = '<!doctype html><title>live</title><p>live embed</p>';
 const A2UI_HTML = '<!doctype html><title>a2ui</title><p>a2ui embed</p>';
@@ -69,15 +70,6 @@ function registry(): SessionRegistry {
 
 function auth(scopes: readonly Scope[]): AuthInfo {
 	return { token: 't', clientId: 'key-1', scopes: [...scopes], extra: { owner: 'api-key:key-1' } };
-}
-
-async function readRpc(response: Response): Promise<Record<string, unknown>> {
-	const text = await response.text();
-	if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {
-		for (const line of text.split('\n')) if (line.startsWith('data:')) return JSON.parse(line.slice(5).trim());
-		throw new Error(`no data frame in SSE body: ${text}`);
-	}
-	return JSON.parse(text);
 }
 
 /** One request on the named era; the 2026 era carries the `_meta` envelope and the SEP-2243 headers. */
@@ -142,7 +134,7 @@ function depsWith(sessions: SessionRegistry, mcpApps?: McpAppsDeps): McpDeps {
 const EVERY_SCOPE = auth([...SCOPES]);
 
 for (const era of ERAS) {
-	Deno.test(`AC35 (${era}): MCP Apps off — no ui:// resource, no _meta.ui, live tools absent`, async () => {
+	Deno.test(`MCP Apps off — no ui:// resource, no _meta.ui, live tools absent (${era})`, async () => {
 		const sessions = registry();
 		const handler = createMcpHandler(createBuildServer(depsWith(sessions)), { legacy: 'stateless' });
 		try {
@@ -157,7 +149,6 @@ for (const era of ERAS) {
 			};
 			assertEquals(resources.filter((resource) => resource.uri.startsWith('ui://')), []);
 
-			// A call names the switch and carries no `feature` extra (design §2.4).
 			const result = await rpc(
 				handler,
 				era,
@@ -180,7 +171,7 @@ for (const era of ERAS) {
 		}
 	});
 
-	Deno.test(`AC38 / M9 (${era}): tools/list and resources/read carry _meta.ui when MCP Apps is on`, async () => {
+	Deno.test(`tools/list and resources/read carry _meta.ui when MCP Apps is on (${era})`, async () => {
 		const sessions = registry();
 		const deployment = apps();
 		const handler = createMcpHandler(createBuildServer(depsWith(sessions, deployment)), { legacy: 'stateless' });
@@ -192,12 +183,11 @@ for (const era of ERAS) {
 				assert(tool !== undefined, `${name} is listed`);
 				assertEquals(tool._meta, toolUiMeta(name), `${name}'s _meta on ${era}`);
 				assertEquals(tool._meta?.ui, { resourceUri: ui.resourceUri, visibility: [...ui.visibility] });
-				assertEquals(tool._meta?.['ui/resourceUri'], ui.resourceUri, 'the legacy key rides along');
+				assertEquals(tool._meta?.['ui/resourceUri'], ui.resourceUri, 'the flat draft key rides along');
 			}
 			for (const ticket of ['browser_live_ticket', 'a2ui_surface_ticket', 'sandbox_session_ticket']) {
 				assertEquals((byName.get(ticket)?._meta?.ui as { visibility: string[] }).visibility, ['app'], ticket);
 			}
-			// No other tool is linked to an embed.
 			for (const tool of tools) if (!TOOL_UI.has(tool.name)) assertEquals(tool._meta, undefined, tool.name);
 
 			const { resources } = await rpc(handler, era, 'resources/list', {}, EVERY_SCOPE) as {
@@ -246,11 +236,11 @@ for (const era of ERAS) {
 	});
 }
 
-Deno.test('R9: the ui:// documents are offered only to mcp:invoke, like the session resources', async () => {
+Deno.test('the ui:// documents are offered only to mcp:invoke, like the session resources', async () => {
 	const sessions = registry();
 	const handler = createMcpHandler(createBuildServer(depsWith(sessions, apps())), { legacy: 'stateless' });
 	try {
-		const { resources } = await rpc(handler, LEGACY, 'resources/list', {}, auth(['view:watch'])) as {
+		const { resources } = await rpc(handler, ERA_2025, 'resources/list', {}, auth(['view:watch'])) as {
 			resources: ListedResource[];
 		};
 		assertEquals(resources.filter((resource) => resource.uri.startsWith('ui://')), []);
@@ -260,7 +250,7 @@ Deno.test('R9: the ui:// documents are offered only to mcp:invoke, like the sess
 	}
 });
 
-Deno.test('R9: a domain left unset is absent from _meta.ui, not an empty string', () => {
+Deno.test('a domain left unset is absent from _meta.ui, not an empty string', () => {
 	const { domain: _domain, ...rest } = apps();
 	assertEquals((resourceUiMeta(rest).ui as Record<string, unknown>).domain, undefined);
 	assertEquals('domain' in (resourceUiMeta(rest).ui as Record<string, unknown>), false);
@@ -274,10 +264,10 @@ function oneSession(lock: unknown = null) {
 		lock,
 		session: {
 			tabs: [
-				{ tabId: 'aaaa', targetId: 'T-OTHER', url: 'https://other.example/x', title: 'Other' },
-				{ tabId: 'bbbb', targetId: 'T-FOCUS', url: 'https://shop.example/cart?token=abc#f', title: 'Cart' },
+				{ tabId: 'aaaa', targetId: 'target-other', url: 'https://other.example/x', title: 'Other' },
+				{ tabId: 'bbbb', targetId: 'target-focus', url: 'https://shop.example/cart?token=abc#f', title: 'Cart' },
 			],
-			agentFocusTargetId: 'T-FOCUS',
+			agentFocusTargetId: 'target-focus',
 			sessionManager: null,
 		},
 	};
@@ -289,7 +279,7 @@ function oneSession(lock: unknown = null) {
 	return { registry, touched };
 }
 
-Deno.test('R9: browser_live_view reports origin, title, viewers and control — no path, no query, no ticket', async () => {
+Deno.test('browser_live_view reports origin, title, viewers and control — no path, no query, no ticket', async () => {
 	const { registry, touched } = oneSession();
 	const watchOnly = createToolExecutor({ registry, version: 't', mcpApps: apps() }, 'api-key:key-1', new Set(SCOPES));
 	const result = await watchOnly('browser_live_view', { session_id: 'work' }) as {
@@ -304,14 +294,12 @@ Deno.test('R9: browser_live_view reports origin, title, viewers and control — 
 		title: 'Cart',
 		viewers: 2,
 		human_has_control: false,
-		// The deployment is `watch`, so control is not offered whatever the credential holds.
 		control_available: false,
 	});
 	assertEquals(APPS_OUTPUT.browser_live_view.parse(result.structuredContent), result.structuredContent);
 	assert(!result.content[0]!.text.includes('cart') && !result.content[0]!.text.includes('token'));
 	assertEquals(touched, ['work']);
 
-	// `control` deployment + `view:control`: offered; without the scope it is not.
 	const control = apps({ mode: 'control' });
 	const withScope = createToolExecutor({ registry, version: 't', mcpApps: control }, 'o', new Set(SCOPES));
 	assertEquals(
@@ -334,13 +322,12 @@ Deno.test('R9: browser_live_view reports origin, title, viewers and control — 
 		false,
 	);
 
-	// A session that does not exist is not created: the tool is read-only.
 	const missing = await watchOnly('browser_live_view', {}) as { isError?: boolean; content: Array<{ text: string }> };
 	assertEquals(missing.isError, true);
 	assertStringIncludes(missing.content[0]!.text, 'Error: unknown-session:');
 });
 
-Deno.test('R9: browser_live_ticket mints through the deployment with the caller, and the text never carries the ticket', async () => {
+Deno.test('browser_live_ticket mints through the deployment with the caller, and the text never carries the ticket', async () => {
 	const sessions = registry();
 	const seen: EmbedTicketInput[] = [];
 	const handler = createMcpHandler(createBuildServer(depsWith(sessions, apps({}, seen))), { legacy: 'stateless' });
@@ -348,7 +335,7 @@ Deno.test('R9: browser_live_ticket mints through the deployment with the caller,
 	const call = async (args: Record<string, unknown>): Promise<Called> =>
 		await rpc(
 			handler,
-			LEGACY,
+			ERA_2025,
 			'tools/call',
 			{ name: 'browser_live_ticket', arguments: args },
 			auth(['mcp:invoke', 'view:watch']),
@@ -372,8 +359,6 @@ Deno.test('R9: browser_live_ticket mints through the deployment with the caller,
 		}
 		assertEquals(seen.length, 1);
 		const input = seen[0]!;
-		// Review R1-3: issued to the principal id the overlay and the connection ceiling key on; the session is looked
-		// up by the realm-qualified owner. Two values, never one string doing both jobs.
 		assertEquals([input.principal, input.sessionId, input.mode, input.origin], [
 			'key-1',
 			'work',
@@ -382,15 +367,12 @@ Deno.test('R9: browser_live_ticket mints through the deployment with the caller,
 		]);
 		assertEquals(input.access, { owner: 'api-key:key-1', admin: false });
 		assertEquals([...input.scopes].sort(), ['mcp:invoke', 'view:watch']);
-		assertEquals(input.holderName, null, 'F21: the gateway resolves the label');
+		assertEquals(input.holderName, null, 'the gateway resolves the label');
 
-		// The origin is required: no binding, no ticket.
 		const noOrigin = await call({ session_id: 'work' });
 		assertStringIncludes(noOrigin.content[0]!.text, 'Error: invalid-arguments:');
 		assertEquals(seen.length, 1);
 
-		// Review R1-3: a tool executor (an agent task) knows the owner alone, so it has no principal id to issue a
-		// ticket to — refused, and nothing is minted.
 		const executor = createToolExecutor(
 			{ registry: sessions, version: 't', mcpApps: apps({}, seen) },
 			'api-key:key-1',

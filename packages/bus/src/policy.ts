@@ -1,9 +1,9 @@
 /**
- * Handler resilience wrappers: the disconnect circuit breaker (ARCHITECTURE.md §4.6) and the
- * one-shot session repair hook (§4.7).
+ * Handler resilience wrappers: the disconnect circuit breaker and the
+ * one-shot session repair hook.
  *
  * `@tykotech/bus` knows nothing about CDP. Both behaviours are expressed against injected policies;
- * `@tykotech/browser` supplies the CDP-flavoured `ConnectionPolicy` and the focused-session `repair()` in M1.
+ * `@tykotech/browser` supplies the CDP-flavoured `ConnectionPolicy` and the focused-session `repair()`.
  */
 
 import { withDeadline } from './deadline.ts';
@@ -14,7 +14,7 @@ import type { BusLogger, ConnectionPolicy, EventHandler, HandlerWrapper } from '
 
 /**
  * Longest a blocked handler waits for a reconnect: 3 attempts × 15 s cap + 1/2/4 s backoff
- * (ARCHITECTURE.md §7.4). Timing constants are load-bearing — DECISION-REGISTER §2.5.
+ * (the CDP client's reconnect schedule). Timing constants are load-bearing.
  */
 export const RECONNECT_WAIT_TIMEOUT_MS = 54_000;
 

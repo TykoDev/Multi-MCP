@@ -1,13 +1,10 @@
 /**
- * B1.12 on a real browser: `browser_download`, and `browser_head`'s fail-closed answer.
+ * On a real browser: `browser_download`, and `browser_head`'s fail-closed answer.
  *
- * **U-4 moved.** Until SR-HEAD-REDIRECT (D-042) this file measured what a
- * `browser_head` cost the origin through `Network.loadNetworkResource` —
- * 33 554 432 of 33 554 432 bytes. The tool is now a cookie-less HEAD issued by
- * the server process, and the measurement lives where the request does:
+ * `browser_head` is a cookie-less HEAD issued by the server process, not a
+ * browser fetch, so its byte-cost measurement lives where the request does:
  * `packages/mcp/src/head_test.ts`, whose raw loopback upstream counts the
- * bytes it writes (418 for a 4 MiB resource over four hops). What the browser
- * tier proves here is the other half of the owner decision: on a deployment
+ * bytes it writes. What the browser tier proves here is the other half: on a deployment
  * whose allowlist names only loopback — the shape of every shipped matrix —
  * the tool is **not offered**, and a call answers `feature-unavailable
  * {feature: 'egress'}` rather than reaching anything.
@@ -95,7 +92,7 @@ Deno.test({
 			assert(result.file.file_id.length > 0);
 
 			// And the id is the one the listing tool uses, which is the whole point:
-			// a caller no longer has to diff `browser_list_files` to find its own file.
+			// a caller does not have to diff `browser_list_files` to find its own file.
 			const listed = await h.callJson<{ files: Array<{ file_id: string }> }>('browser_list_files', {});
 			assert(
 				listed.files.some((file) => file.file_id === result.file?.file_id),
@@ -147,7 +144,7 @@ Deno.test({
 				assertEquals(refused.includes('SECRET'), false, 'no query reaches the caller');
 			});
 
-			// R3 (D-115, E-94) moved this pin: the redirect hop is refused before its request is sent (E0), so the
+			// The redirect hop is refused before its request is sent, by the pre-request document veto, so the
 			// answer is the same text, and there is no ledger row — nothing reached the network to be cancelled.
 			await t.step('browser_download {url}: a redirect off the allowlist is refused before any byte', async () => {
 				const to = `${altOrigin}/opendownload?name=via.txt&body=via`;
@@ -187,9 +184,8 @@ Deno.test({
 				assertEquals(result.file?.name, 'rel.txt');
 			});
 
-			// R3 moved this one as well, for the same reason (a deviation from design §2.5's list, which named only the
-			// redirect leg): the script's `location.href` to the off-allowlist host is a document request, refused
-			// before it is sent; `browser_download` answers from the E0 block with the ledger's own words.
+			// For the same reason, the script's `location.href` to the off-allowlist host is a document request,
+			// refused before it is sent; `browser_download` answers from the veto's block with the ledger's own words.
 			await t.step(
 				'browser_download {index}: a script-driven download with no href is refused before any byte',
 				async () => {

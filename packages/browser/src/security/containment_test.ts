@@ -1,7 +1,6 @@
 /**
- * Tier-1 containment suite (OBSERVABILITY-TESTING-CICD.md §4.2 `fs-containment`; SECURITY-AUTH.md
- * §8). Pure and hermetic: no filesystem access, no `--allow-write`, both path flavours exercised on
- * whichever OS the runner happens to be.
+ * Unit-tier containment suite. Pure and hermetic: no filesystem access, no `--allow-write`, both
+ * path flavours exercised on whichever OS the runner happens to be.
  */
 
 import { assert, assertEquals, assertFalse } from '@std/assert';
@@ -20,7 +19,7 @@ import {
 } from './containment.ts';
 
 // ---------------------------------------------------------------------------
-// filename sanitisation (§8.3)
+// filename sanitisation
 // ---------------------------------------------------------------------------
 
 type NameCase = { readonly name: string; readonly input: string; readonly expected: string | null };
@@ -104,7 +103,7 @@ Deno.test('sanitize: the reserved-name table is the 22 Windows device names', ()
 });
 
 // ---------------------------------------------------------------------------
-// ` (n)` disambiguation (§8.3)
+// ` (n)` disambiguation
 // ---------------------------------------------------------------------------
 
 Deno.test('unique: a free name is returned unchanged', () => {
@@ -127,7 +126,7 @@ Deno.test('unique: an exhausted budget refuses rather than overwriting', () => {
 });
 
 // ---------------------------------------------------------------------------
-// directory containment (§8.2/§8.3, and profile-dir containment per §3.3)
+// directory containment (downloads and profile dirs)
 // ---------------------------------------------------------------------------
 
 type ContainCase = {

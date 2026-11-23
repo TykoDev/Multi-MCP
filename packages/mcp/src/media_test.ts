@@ -1,8 +1,7 @@
 /**
- * The browser-output handlers (R10, R11; design §2.7–§2.8): `browser_pdf`, `browser_file_link`,
- * `browser_accessibility_snapshot` and `browser_performance`, against a capture-backed session (D-TEST1) whose CDP
- * round trips are scripted and recorded — the content of these tests is what was sent where, and what came back
- * out of the tool. The browser tier (`tests/e2e/media_e2e_test.ts`) drives the same handlers on Chrome 154.
+ * The browser-output handlers: `browser_pdf`, `browser_file_link`,
+ * `browser_accessibility_snapshot` and `browser_performance`, against a capture-backed session whose CDP round trips
+ * are scripted and recorded — the content of these tests is what was sent where, and what came back out of the tool.
  */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { encodeBase64 } from '@std/encoding/base64';
@@ -29,6 +28,7 @@ import {
 } from './tools/media.ts';
 import type { SignedLinkMinter, ToolContext, ToolResult } from './types.ts';
 import { browserDownload } from './tools/files.ts';
+import { deviceMetrics } from './page_viewport.ts';
 
 const SCRATCH_ROOT = fromFileUrl(new URL('../../../tests/.scratch', import.meta.url));
 
@@ -41,12 +41,10 @@ interface Call {
 
 interface Script {
 	pdf?: (params: Record<string, unknown>) => Promise<{ data: string; stream?: string }>;
-	/** Review R2-7: `IO.read` / `IO.close` on a streamed print. */
+	/** `IO.read` / `IO.close` on a streamed print. */
 	io?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
 	evaluate?: (params: Record<string, unknown>) => Promise<unknown>;
 	metrics?: () => Promise<unknown>;
-	axFull?: (params: Record<string, unknown>) => Promise<{ nodes: unknown[] }>;
-	axPartial?: (params: Record<string, unknown>) => Promise<{ nodes: unknown[] }>;
 }
 
 /** A capture-backed session with a download directory, wired to a scripted CDP client. */
@@ -109,15 +107,14 @@ async function harness(page = 'live_value_vs_attribute', script: Script = {}) {
 			Accessibility: {
 				getFullAXTree(params: Record<string, unknown>, sessionId: string) {
 					push('Accessibility.getFullAXTree', params, sessionId);
-					return script.axFull?.(params) ?? Promise.resolve({ nodes: root.axNodes as unknown[] });
+					return Promise.resolve({ nodes: root.axNodes as unknown[] });
 				},
 				getPartialAXTree(params: Record<string, unknown>, sessionId: string) {
 					push('Accessibility.getPartialAXTree', params, sessionId);
 					const backend = params.backendNodeId;
-					return script.axPartial?.(params) ??
-						Promise.resolve({
-							nodes: root.axNodes.filter((node) => node.backendDOMNodeId === backend),
-						});
+					return Promise.resolve({
+						nodes: root.axNodes.filter((node) => node.backendDOMNodeId === backend),
+					});
 				},
 			},
 		},
@@ -188,9 +185,8 @@ function hold(record: SessionRecord): void {
 
 // --- browser_pdf ------------------------------------------------------------------------------------------------
 
-Deno.test('R10: browser_pdf prints with no header or footer, A4 and backgrounds by default, under the 30 s cap', async () => {
+Deno.test('browser_pdf prints with no header or footer, A4 and backgrounds by default, under the 30 s cap', async () => {
 	await using h = await harness();
-	// A read: it works while a human holds the session.
 	hold(h.record);
 	const result = await browserPdf({}, h.ctx);
 	const payload = structured('browser_pdf', result);
@@ -213,11 +209,10 @@ Deno.test('R10: browser_pdf prints with no header or footer, A4 and backgrounds 
 	});
 	assertEquals(sent.opts, { requestTimeoutMs: PDF_TIMEOUT_MS });
 	assertEquals(PDF_TIMEOUT_MS, 30_000);
-	// Never a template: they are HTML rendered with the page's privileges.
 	assert(!('headerTemplate' in sent.params) && !('footerTemplate' in sent.params));
 });
 
-Deno.test('R10: browser_pdf passes the caller’s layout through, and a bad range is the caller’s argument', async () => {
+Deno.test('browser_pdf passes the caller’s layout through, and a bad range is the caller’s argument', async () => {
 	await using h = await harness('live_value_vs_attribute', {
 		pdf: (params) =>
 			params.pageRanges === '9-9'
@@ -244,7 +239,7 @@ Deno.test('R10: browser_pdf passes the caller’s layout through, and a bad rang
 	assertStringIncludes(error.message, 'Page range exceeds page count');
 });
 
-Deno.test('R10: an inline PDF over 1 MiB is refused naming delivery "file", which keeps it as an art- file', async () => {
+Deno.test('an inline PDF over 1 MiB is refused naming delivery "file", which keeps it as an art- file', async () => {
 	const big = new Uint8Array(INLINE_FILE_LIMIT_BYTES + 1).fill(0x41);
 	await using h = await harness('live_value_vs_attribute', { pdf: () => Promise.resolve({ data: encodeBase64(big) }) });
 	const refused = await assertRejects(() => browserPdf({}, h.ctx), ToolError);
@@ -266,14 +261,12 @@ Deno.test('R10: an inline PDF over 1 MiB is refused naming delivery "file", whic
 	const link = (result as { content: Array<{ type: string; uri?: string }> }).content[1];
 	assertEquals(link?.type, 'resource_link');
 	assertEquals(link?.uri, `ttk://session/default/files/${file.file_id}`);
-	// Readable through the file tools' own path, byte for byte.
 	const opened = await h.record.files.open(file.file_id);
 	assertEquals((await new Response(opened.stream).bytes()).length, big.length);
 });
 
-Deno.test('R10: a PDF over 64 MiB is refused whatever the delivery, never truncated', async () => {
+Deno.test('a PDF over 64 MiB is refused whatever the delivery, never truncated', async () => {
 	assertEquals(PDF_MAX_BYTES, 64 * 1024 * 1024);
-	// Base64 of PDF_MAX_BYTES + 3 bytes: measured from the length, never decoded.
 	const data = 'A'.repeat(((PDF_MAX_BYTES + 3) / 3) * 4);
 	await using h = await harness('live_value_vs_attribute', { pdf: () => Promise.resolve({ data }) });
 	for (const delivery of ['inline', 'file'] as const) {
@@ -284,7 +277,7 @@ Deno.test('R10: a PDF over 64 MiB is refused whatever the delivery, never trunca
 	assertEquals(h.record.files.list(), []);
 });
 
-Deno.test('R10: a browser that cannot print is browser-unavailable, a slow one timeout', async () => {
+Deno.test('a browser that cannot print is browser-unavailable, a slow one timeout', async () => {
 	let answer = 'Printing is not available';
 	await using h = await harness('live_value_vs_attribute', { pdf: () => Promise.reject(new Error(answer)) });
 	assertEquals((await assertRejects(() => browserPdf({}, h.ctx), ToolError)).code, 'browser-unavailable');
@@ -294,7 +287,7 @@ Deno.test('R10: a browser that cannot print is browser-unavailable, a slow one t
 
 // --- browser_file_link ------------------------------------------------------------------------------------------
 
-Deno.test('R10: browser_file_link mints for the caller’s owner, only for a file that can be served now', async () => {
+Deno.test('browser_file_link mints for the caller’s owner, only for a file that can be served now', async () => {
 	await using h = await harness();
 	const art = await h.record.files.addArtifact({
 		name: 'a.pdf',
@@ -323,8 +316,6 @@ Deno.test('R10: browser_file_link mints for the caller’s owner, only for a fil
 		expires_at: '2026-10-04T00:01:00.000Z',
 		ttl_seconds: 45,
 	});
-	// D-140: the session's incarnation rides along, so the link dies with this session; an API-key call carries no
-	// credential expiry, so there is no notAfter.
 	assertEquals(asked, [{
 		sessionId: 'default',
 		fileId: art.file_id,
@@ -332,18 +323,7 @@ Deno.test('R10: browser_file_link mints for the caller’s owner, only for a fil
 		incarnation: h.record.incarnation,
 		ttlSeconds: 45,
 	}]);
-	// F1: an OAuth call's own expiry (`credentialNotAfter`, set by the mount from `oauth:<ms>`) is handed to the minter
-	// as notAfter, which caps the link.
-	await browserFileLink({ file_id: art.file_id }, { ...ctx, credentialNotAfter: 1_900_000_000 });
-	assertEquals(asked[1], {
-		sessionId: 'default',
-		fileId: art.file_id,
-		owner: 'api-key:test',
-		incarnation: h.record.incarnation,
-		notAfter: 1_900_000_000,
-	});
 
-	// An unknown file and an unknown session are refused before anything is signed.
 	assertEquals(
 		(await assertRejects(() => browserFileLink({ file_id: 'art-nope' }, ctx), ToolError)).code,
 		'unknown-file',
@@ -352,10 +332,10 @@ Deno.test('R10: browser_file_link mints for the caller’s owner, only for a fil
 		(await assertRejects(() => browserFileLink({ file_id: art.file_id, session_id: 'other' }, ctx), ToolError)).code,
 		'unknown-session',
 	);
-	assertEquals(asked.length, 2);
+	assertEquals(asked.length, 1);
 });
 
-Deno.test('AC18 / D-140: browser_file_link takes ttl_seconds 10 to 3600 and says a link never outlives its OAuth token', () => {
+Deno.test('browser_file_link takes ttl_seconds 10 to 3600 and says a link never outlives its credential', () => {
 	const entry = CATALOG_BY_NAME.get('browser_file_link');
 	assert(entry !== undefined);
 	const parse = (ttl_seconds: unknown) => entry.inputSchema.safeParse({ file_id: 'art-1', ttl_seconds }).success;
@@ -366,13 +346,13 @@ Deno.test('AC18 / D-140: browser_file_link takes ttl_seconds 10 to 3600 and says
 	assertEquals(
 		ttl.description,
 		'10 to 3600 seconds. Default: the deployment’s, 3600 unless the operator changed it. A link never outlives the ' +
-			'OAuth access token it was minted under.',
+			'credential it was minted under.',
 	);
 });
 
 // --- browser_accessibility_snapshot ----------------------------------------------------------------------------
 
-Deno.test('R11: the snapshot reads a fresh tree from the page session, with indices and no value', async () => {
+Deno.test('the snapshot reads a fresh tree from the page session, with indices and no value', async () => {
 	await using h = await harness();
 	hold(h.record);
 	const result = await browserAccessibilitySnapshot({}, h.ctx);
@@ -386,7 +366,6 @@ Deno.test('R11: the snapshot reads a fresh tree from the page session, with indi
 	const everything = JSON.stringify(result);
 	assert(!everything.includes('live-typed-value'), 'the typed value never leaves, in either half of the result');
 	assert(!everything.includes('"value"'));
-	// The held table's indices are joined by backend node id.
 	const selector = h.record.session.cachedBrowserState!.domState.selectorMap;
 	const tail = [...selector].find(([, node]) => node.axNode?.name === 'Tail control');
 	assert(tail !== undefined);
@@ -396,7 +375,7 @@ Deno.test('R11: the snapshot reads a fresh tree from the page session, with indi
 	assertStringIncludes(text, '- button "Tail control"');
 });
 
-Deno.test('R11: max_nodes bounds the tree and a configured secret is redacted wherever it appears', async () => {
+Deno.test('max_nodes bounds the tree and a configured secret is redacted wherever it appears', async () => {
 	await using h = await harness();
 	const ctx: ToolContext = {
 		...h.ctx,
@@ -411,7 +390,7 @@ Deno.test('R11: max_nodes bounds the tree and a configured secret is redacted wh
 	assert((cut.nodes_total as number) > 3);
 });
 
-Deno.test('R11: index reads one element through its own session with getPartialAXTree; frame_id and index exclude', async () => {
+Deno.test('index reads one element through its own session with getPartialAXTree; frame_id and index exclude', async () => {
 	await using h = await harness();
 	const selector = h.record.session.cachedBrowserState!.domState.selectorMap;
 	const [index, node] = [...selector].find(([, n]) => n.axNode?.name === 'Tail control')!;
@@ -436,7 +415,7 @@ Deno.test('R11: index reads one element through its own session with getPartialA
 
 // --- browser_performance --------------------------------------------------------------------------------------
 
-Deno.test('R11: vitals come from one fixed evaluation in a fresh isolated world, runtime through sendRaw', async () => {
+Deno.test('vitals come from one fixed evaluation in a fresh isolated world, runtime through sendRaw', async () => {
 	await using h = await harness();
 	hold(h.record);
 	const payload = structured('browser_performance', await browserPerformance({}, h.ctx));
@@ -463,8 +442,6 @@ Deno.test('R11: vitals come from one fixed evaluation in a fresh isolated world,
 		h.methods().filter((method) => method.startsWith('Performance.')),
 		['Performance.enable', 'Performance.getMetrics'],
 	);
-	// E-97: the domain stays on, because Chromium counts layouts and script time only while it is — a second call
-	// reads the counters accumulated since the first, and enables nothing.
 	await browserPerformance({ metrics: ['runtime'] }, h.ctx);
 	assertEquals(
 		h.methods().filter((method) => method.startsWith('Performance.')),
@@ -473,7 +450,7 @@ Deno.test('R11: vitals come from one fixed evaluation in a fresh isolated world,
 	assert(!h.methods().includes('Performance.disable'));
 });
 
-Deno.test('R11: metrics picks the groups, and a page session that failed a read is enabled again', async () => {
+Deno.test('metrics picks the groups, and a page session that failed a read is enabled again', async () => {
 	await using h = await harness('live_value_vs_attribute', {
 		metrics: () => Promise.reject(new Error('target closed')),
 	});
@@ -494,7 +471,7 @@ Deno.test('R11: metrics picks the groups, and a page session that failed a read 
 	);
 });
 
-Deno.test('R11: whatever the page answers, a vital is a non-negative finite number or null', () => {
+Deno.test('whatever the page answers, a vital is a non-negative finite number or null', () => {
 	assertEquals(
 		vitalsOf({
 			ttfb_ms: -1,
@@ -520,9 +497,9 @@ Deno.test('R11: whatever the page answers, a vital is a non-negative finite numb
 	assertEquals(runtimeOf([{ name: 'Nodes', value: 'many' }, { name: 'LayoutCount', value: 2 }]).layout_count, 2);
 });
 
-// --- review R2-7: the print is streamed and its read bounded -------------------------------------------------------
+// --- the print is streamed and its read bounded --------------------------------------------------------------------
 
-Deno.test('R2-7: a streamed print is read in chunks and its handle closed', async () => {
+Deno.test('a streamed print is read in chunks and its handle closed', async () => {
 	const first = new TextEncoder().encode('%PDF-1.7 ');
 	const second = new TextEncoder().encode('streamed');
 	const reads = [first, second];
@@ -550,12 +527,11 @@ Deno.test('R2-7: a streamed print is read in chunks and its handle closed', asyn
 	assertEquals(io.every((call) => call.sessionId === h.pageSession), true);
 });
 
-Deno.test('R2-7: a streamed print over 64 MiB stops reading at the cap, closes the handle and keeps nothing', async () => {
+Deno.test('a streamed print over 64 MiB stops reading at the cap, closes the handle and keeps nothing', async () => {
 	const chunk = encodeBase64(new Uint8Array(PDF_READ_CHUNK_BYTES));
 	let reads = 0;
 	await using h = await harness('live_value_vs_attribute', {
 		pdf: () => Promise.resolve({ data: '', stream: 'H-big' }),
-		// An endless print: the reader, not the stream, has to end it.
 		io: (method) => {
 			if (method === 'IO.close') return Promise.resolve({});
 			reads += 1;
@@ -570,9 +546,9 @@ Deno.test('R2-7: a streamed print over 64 MiB stops reading at the cap, closes t
 	assertEquals(h.record.files.list(), []);
 });
 
-// --- K-1 / K-3: server-made files and the download ledger ----------------------------------------------------------
+// --- server-made files and the download ledger ---------------------------------------------------------------------
 
-Deno.test('K-3: a server-made file announces files-changed, as a finished download does', async () => {
+Deno.test('a server-made file announces files-changed, as a finished download does', async () => {
 	await using h = await harness();
 	const changes: string[] = [];
 	const unwatch = h.registry.watch((change) => {
@@ -586,9 +562,8 @@ Deno.test('K-3: a server-made file announces files-changed, as a finished downlo
 	assertEquals(changes, ['default']);
 });
 
-Deno.test('K-1: a server-made file appearing while browser_download waits is never taken for the download', async () => {
+Deno.test('a server-made file appearing while browser_download waits is never taken for the download', async () => {
 	await using h = await harness();
-	// A concurrent `browser_pdf {delivery:'file'}` lands while the navigation this call issued is in flight.
 	h.record.session.eventBus.on(NavigateToUrlEvent, async () => {
 		await h.record.files.addArtifact({ name: 'page.pdf', mimeType: 'application/pdf', bytes: new Uint8Array(8) });
 	});
@@ -601,4 +576,29 @@ Deno.test('K-1: a server-made file appearing while browser_download waits is nev
 		1,
 		'the artifact is kept',
 	);
+});
+
+// --- The no-page-scale invariant and the viewport override. ---
+
+Deno.test('the dispatched setDeviceMetricsOverride object has NO scale key', () => {
+	const params = deviceMetrics({ width: 1280, height: 720, device_scale: 2 });
+	assert(!('scale' in params), `page scale must never be dispatched: ${JSON.stringify(params)}`);
+	assertEquals(Object.keys(params).sort(), ['deviceScaleFactor', 'height', 'mobile', 'width']);
+	assertEquals(params.deviceScaleFactor, 2);
+	assertEquals(params.width, 1280);
+	assertEquals(params.height, 720);
+	assertEquals(params.mobile, false);
+});
+
+Deno.test('no input can introduce a scale key, including one that looks like one', () => {
+	for (const device_scale of [1, 1.5, 4]) {
+		const params = deviceMetrics({ width: 800, height: 600, device_scale });
+		assert(!('scale' in params), `device_scale ${device_scale} produced a scale key`);
+	}
+	const smuggled = { width: 800, height: 600, device_scale: 1, scale: 2 } as unknown as {
+		width: number;
+		height: number;
+		device_scale: number;
+	};
+	assert(!('scale' in deviceMetrics(smuggled)));
 });

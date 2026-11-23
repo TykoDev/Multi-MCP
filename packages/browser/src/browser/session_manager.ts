@@ -1,63 +1,58 @@
 /**
  * @module
- * `SessionManager` — the single source of truth for CDP targets and sessions (ARCHITECTURE.md §7.3).
+ * `SessionManager` — the single source of truth for CDP targets and sessions.
  *
- * Contract owners: SPECS/ARCHITECTURE.md §7.3 (state maps, push-based discovery, attach/detach/focus
- * rules), §7.2 / D-CDP2 (the "one global handler routed by sessionId" design is kept even though
- * `@tykotech/cdp`'s registry is multi-listener — that design is what keeps per-target state coherent),
- * §7.5 (the lifecycle ring buffer the navigation readiness poller reads),
- * SPECS/DATA-MODEL.md §5.1.3 (`TabCreatedEvent` / `TabClosedEvent` / `AgentFocusChangedEvent`), §5.4
- * (the 4-char `tabId`).
+ * It owns the state maps, push-based discovery and the attach/detach/focus rules. One global handler
+ * per CDP event, routed by `sessionId`, is kept even though `@tykotech/cdp`'s registry is
+ * multi-listener — that design is what keeps per-target state coherent. It also owns the lifecycle
+ * ring buffer the navigation readiness poller reads, the `TabCreatedEvent` / `TabClosedEvent` /
+ * `AgentFocusChangedEvent` announcements, and the 4-char `tabId`.
  *
  * Everything about a target that anyone else needs — is it attached, what is its url, what lifecycle
  * events has it seen, is it the agent's current tab — lives here and nowhere else.
  * {@linkcode SessionManager.getOrCreateCdpSession} is the ONLY sanctioned way to obtain a session id;
  * reaching into `sessions` and calling CDP with a raw id bypasses focus validation and the attach
- * race, which is exactly the class of bug §7.3 exists to prevent.
+ * race, which is exactly the class of bug this class exists to prevent.
  *
- * ERRATUM(M1-session-2): CDP's `Page.lifecycleEvent.timestamp` is a monotonic value from an arbitrary
- * epoch and is therefore not comparable with the wall clock a navigation start is measured on, which
- * the §7.5 staleness rule ("loaderId-less events count only if timestamped after nav start") assumes
- * it is. Every buffered record additionally carries `receivedAt` (`Date.now()` at reception), and the
- * rule is evaluated against that field.
+ * CDP's `Page.lifecycleEvent.timestamp` is a monotonic value from an arbitrary epoch and is therefore
+ * not comparable with the wall clock a navigation start is measured on. The readiness staleness rule
+ * ("loaderId-less events count only if received after nav start") needs a wall-clock time, so every
+ * buffered record also carries `receivedAt` (`Date.now()` at reception), and the rule is evaluated
+ * against that field.
  *
- * ERRATUM(M1-hardening-1): §7.3 describes the attach cascade (`Page.enable`,
- * `Page.setLifecycleEventsEnabled`, `Network.enable`, …) but not what a caller of
- * {@linkcode SessionManager.getOrCreateCdpSession} is entitled to assume about it. Read literally,
- * the accessor was allowed to hand out a session id the moment `Target.attachedToTarget` landed —
- * which is *before* `Network.enable` has been issued, because the cascade is started from a
- * synchronous CDP listener and runs in the background. A navigation issued on that id therefore
- * raced the enable and could commit its first document with `Network.*` switched off: no
- * `requestWillBeSent` for the main resource, so `HarRecordingWatchdog` silently loses the first
- * document (an empty, green HAR for a one-page run) and `DOMWatchdog`'s pending-network probe cannot
- * see the requests it is supposed to wait for. The accessor now awaits the session's own
+ * The attach cascade (`Page.enable`, `Page.setLifecycleEventsEnabled`, `Network.enable`, …) is
+ * started from a synchronous CDP listener and runs in the background, so `Target.attachedToTarget`
+ * lands *before* `Network.enable` has been issued. A navigation issued on a session id handed out at
+ * that moment would race the enable and could commit its first document with `Network.*` switched
+ * off: no `requestWillBeSent` for the main resource, so `HarRecordingWatchdog` would lose the first
+ * document (an empty, green HAR for a one-page run) and `DOMWatchdog`'s pending-network probe could
+ * not see the requests it is supposed to wait for. The accessor therefore awaits the session's own
  * configuration before returning, and the cascade runs *before* a debugger-paused renderer is
  * resumed, so "you have a session id" means "this session is instrumented".
  *
- * ERRATUM(E-94): the pre-request document veto (enforcement point E0, D-115). With a document filter
+ * **The pre-request document veto (enforcement point E0).** With a document filter
  * (a deployment allowlist, handed down by `BrowserSession`), every page and iframe session arms
  * `Fetch` for `Document` requests and one fail-closed `Fetch.requestPaused` handler refuses an
  * off-list document **before** its request is sent — a clicked link, `location =`, a meta refresh, a
- * form POST, each redirect hop, a pop-up's first document and an iframe's. The donor contained those
- * after the fact (SecurityWatchdog E2/E3), once the off-list host had already been reached, and a
- * navigation a loaded page made by itself was not checked at all. Without a filter nothing here
- * changes: attach parameters, the cascade order and the `Fetch.enable` calls are the donor's.
+ * form POST, each redirect hop, a pop-up's first document and an iframe's. The SecurityWatchdog's
+ * E2/E3 only contain those after the fact, once the off-list host has already been reached. Without
+ * a filter none of this is armed: new targets are not held, and no `Fetch.enable` is sent for it.
  *
- * ERRATUM(E-94), amended by review R2-1: **a page-driven main-frame commit is checked after the fact.** Measured on
- * Chrome 154 (`tests/.scratch/fxb_probe_base.log`): a speculation-rules `prefetch` — and a cross-site `prerender`,
- * which Chrome runs as a prefetch first — is issued by the browser's prefetch service, outside every `Fetch`
- * interception point, so it reached an off-list host; the navigation that followed (a click, a `location =`) was then
- * served from the prefetch cache, sent no request, paused nothing, and committed the off-list document with no record
+ * **A page-driven main-frame commit is checked after the fact.** Measured on Chrome 154: a
+ * speculation-rules `prefetch` — and a cross-site `prerender`, which Chrome runs as a prefetch first —
+ * is issued by the browser's prefetch service, outside every `Fetch` interception point, so it reaches
+ * an off-list host; the navigation that follows (a click, a `location =`) is then served from the
+ * prefetch cache, sends no request, pauses nothing, and commits the off-list document with no record
  * at all. Pausing `Prefetch` like `Document` is impossible on that build (see {@linkcode JUDGED_RESOURCE_TYPES}); the
- * request-side control is the launcher's preloading preference (ERRATUM(E-110)). Behind it, every page target's
+ * request-side control is the launcher's preloading preference. Behind it, every page target's
  * main-frame commit of an http(s) document is re-checked here: an off-list one is parked on `about:blank` and
- * reported as an E2 block with `trigger: 'commit'` — the after-the-fact containment E2 used to give only navigations
- * this process issued. Each E0 report also carries `chainStart`, the URL the request's redirect chain began at, and
- * `resourceType`, so the host can tell a tool's own navigation from one the page made (review R2-2).
+ * reported as an E2 block with `trigger: 'commit'`, so E2's after-the-fact containment covers navigations the page
+ * made as well as those this process issued. Each E0 report also carries `chainStart`, the URL the request's redirect
+ * chain began at, and `resourceType`, so the host can tell a tool's own navigation from one the page made.
  *
- * ERRATUM(E-114): **the request scope** (D-138). Under a filter, `BrowserProfile.requestScope` (handed down by
- * `BrowserSession`) says which requests the one answerer judges. `documents` — the default — is the E-94 veto above
- * plus E-115's hints. `all` arms `Fetch` `*` on every attached target that can take it — page, iframe, the prerender
+ * **The request scope.** Under a filter, `BrowserProfile.requestScope` (handed down by
+ * `BrowserSession`) says which requests the one answerer judges. `documents` — the default — is the document veto
+ * above plus the hints below. `all` arms `Fetch` `*` on every attached target that can take it — page, iframe, the prerender
  * host (`other`), service and shared workers, `browser_ui`, `background_page` and any type a later Chrome adds (fail
  * closed: armed unless it is a dedicated `worker`, whose requests pause on the owning page's session, measured) — and
  * refuses every off-list http(s)/ws(s) subresource with `BlockedByClient` before it is sent. A non-page target is
@@ -65,15 +60,22 @@
  * subresource is reported once per origin per target per document (at most {@linkcode REQUEST_BLOCK_ORIGIN_LIMIT}, then
  * one overflow report) as an E0 `BrowserErrorEvent` carrying `requestKind`, and only for page and iframe targets: a
  * refusal on any other target type is a `debug` line and a count ({@linkcode SessionManager.requestRefusals}), because
- * those targets never commit a document that would reset the aggregation (review N4). WebSocket handshakes never
+ * those targets never commit a document that would reset the aggregation. WebSocket handshakes never
  * reach `Fetch` (measured); the resolver layer the host composes into the launch arguments covers them.
  *
- * ERRATUM(E-115): **hints are refused in both scopes** (D-139). A request whose `Sec-Purpose` (or legacy `Purpose`)
+ * **Hints are refused in both scopes.** A request whose `Sec-Purpose` (or legacy `Purpose`)
  * starts with `prefetch` — `<link rel=prefetch>` (a `Fetch`), the NoState prefetch `<link rel=prerender>` runs on an
  * `other` target (a `Document`) — is judged like a document even in `documents` scope. That scope's page/iframe pattern
  * therefore adds `Fetch` to `Document` (which also pauses fetch/XHR/EventSource, continued unjudged: measured +~0.5 ms
  * per request), and an `other` target is armed for `Document`. `<link rel=preload|modulepreload>` carry no
  * `Sec-Purpose` on Chrome 154 and arrive as `Script`/`Other`: subresources, continued in `documents`.
+ *
+ * **`all` also locks WebRTC away.** ICE traffic never reaches `Fetch`,
+ * so under `all` every attached target that can hold a window — every type but the worker types of
+ * {@linkcode WINDOWLESS_TARGET_TYPES}, unknown types included (fail closed) — gets {@linkcode WEBRTC_LOCKDOWN_SOURCE}
+ * through `Page.addScriptToEvaluateOnNewDocument` (`runImmediately`), sent before the target's debugger resume like the
+ * other renderer-bound setup calls. The preference and resolver layers that stand behind it, and why, are in
+ * `webrtc_lockdown.ts`. `documents` is unchanged.
  */
 
 import type { EventBus } from '@tykotech/bus';
@@ -85,34 +87,35 @@ import { BrowserError, CdpDisconnectedError } from '../errors.ts';
 import type { ProxySettings, RequestScope } from '../types.ts';
 import { NAVIGATION_BLOCKED_ERROR } from '../watchdogs/security.ts';
 import { cdpBoundTo } from './cdp_signal.ts';
+import { WEBRTC_LOCKDOWN_SOURCE } from './webrtc_lockdown.ts';
 
 /** `Target.TargetInfo`, taken from the typed event surface so no deep import is needed. */
 export type CdpTargetInfo = CdpEventParams['Target.targetCreated']['targetInfo'];
 
-/** Payload of the one global `Page.lifecycleEvent` router (ARCHITECTURE.md §7.2). */
+/** Payload of the one global `Page.lifecycleEvent` router. */
 export type CdpLifecycleParams = CdpEventParams['Page.lifecycleEvent'];
 
 // ---------------------------------------------------------------------------
-// timing + capacity constants (ARCHITECTURE.md §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// timing + capacity constants (load-bearing: the tests pin each value)
 // ---------------------------------------------------------------------------
 
-/** Per-target lifecycle ring buffer capacity (ARCHITECTURE.md §7.3). */
+/** Per-target lifecycle ring buffer capacity. */
 export const LIFECYCLE_RING_CAPACITY = 50;
 
-/** How long `getOrCreateCdpSession` waits for Chrome's attach event (ARCHITECTURE.md §7.3, §8). */
+/** How long `getOrCreateCdpSession` waits for Chrome's attach event. */
 export const ATTACH_WAIT_TIMEOUT_MS = 2_000;
 
-/** Cadence of that wait. Internal: §8 fixes the 2 s cap, not the polling interval. */
+/** Cadence of that wait. Internal: only the 2 s cap is part of the contract, not the polling interval. */
 export const ATTACH_POLL_INTERVAL_MS = 20;
 
-/** Discovery filter: pages and iframes only (ARCHITECTURE.md §7.3). */
+/** Discovery filter: pages and iframes only. */
 export const DISCOVERY_FILTER: readonly { type: string }[] = [{ type: 'page' }, { type: 'iframe' }];
 
-/** The only target type allowed to hold the agent's focus (ARCHITECTURE.md §7.3). */
+/** The only target type allowed to hold the agent's focus. */
 export const PAGE_TARGET_TYPE = 'page';
 
 /**
- * `Fetch.failRequest` reason for a document request the filter refuses — ERRATUM(E-94), measurement M12.
+ * `Fetch.failRequest` reason for a document request the filter refuses.
  *
  * Measured on Chrome 154: `Aborted` cancels the navigation and the frame keeps the document it had (the
  * tool reports `net::ERR_ABORTED`); `BlockedByClient` commits Chrome's error page
@@ -121,104 +124,117 @@ export const PAGE_TARGET_TYPE = 'page';
 export const DOCUMENT_BLOCK_ERROR_REASON = 'Aborted';
 
 /**
- * The `Fetch` pattern that pauses document requests only — ERRATUM(E-94). Every other resource type
+ * The `Fetch` pattern that pauses document requests only. Every other resource type
  * passes untouched, so a filter costs one round trip per document, never one per subresource.
  */
 export const DOCUMENT_REQUEST_PATTERN = { urlPattern: '*', resourceType: 'Document', requestStage: 'Request' } as const;
 
 /**
- * ERRATUM(E-94), amended by review R2-1: the resource types the document filter judges when a paused request reaches
+ * The resource types the document filter judges when a paused request reaches
  * the handler. `Prefetch` — the response a later navigation would be served from without a request of its own — is
  * judged like a document, fail closed. It is **not** in the `Fetch.enable` pattern, because it cannot be: measured on
- * Chrome 154 (`tests/.scratch/fxb_probe_AB.log`), `Fetch.enable` refuses the whole call with `-32602 Unknown resource
+ * Chrome 154, `Fetch.enable` refuses the whole call with `-32602 Unknown resource
  * type in fetch filter: 'Prefetch'`, which would leave the target with no veto at all; and with an unfiltered pattern
- * (page session or browser root alike, `fxb_probe_allpattern.log`, `fxb_probe_rootfetch.log`) a speculation-rules
+ * (page session or browser root alike) a speculation-rules
  * prefetch is never paused. A `Prefetch` therefore only arrives here under the proxy-credential `*` pattern, if a later
  * Chrome routes one through `Fetch`. What stops speculation on Chrome 154 is the launcher's preloading preference
- * (ERRATUM(E-110), `LocalBrowserWatchdog`), and what contains a speculative document that commits anyway is the
+ * (`LocalBrowserWatchdog`), and what contains a speculative document that commits anyway is the
  * commit check below.
  */
 export const JUDGED_RESOURCE_TYPES: readonly string[] = ['Document', 'Prefetch'];
 
 /**
- * ERRATUM(E-94), review R2-2: how many paused requests' chain starts are remembered (one per redirect hop still in
+ * How many paused requests' chain starts are remembered (one per redirect hop still in
  * flight); the oldest is forgotten first. A chain longer than this only loses its start, which then reads as the hop.
  */
 export const CHAIN_MEMORY_LIMIT = 64;
 
 /**
  * Cap on the commit check's park on `about:blank` — the same bound, and the same reason, as the SecurityWatchdog's
- * `SECURITY_CONTAINMENT_TIMEOUT_MS` (ERRATUM(M1-watchdogs-rest-2)); restated because the watchdog imports this module.
+ * `SECURITY_CONTAINMENT_TIMEOUT_MS`; restated because the watchdog imports this module.
  */
 export const COMMIT_CONTAINMENT_TIMEOUT_MS = 5_000;
 
 /**
- * ERRATUM(E-94), review R2-1: how long a commit-check park suppresses the SecurityWatchdog's own E2 for the same tab
+ * How long a commit-check park suppresses the SecurityWatchdog's own E2 for the same tab
  * (one block, one record) — the watchdog's `E0_MEMORY_MS`, restated for the same import-direction reason.
  */
 export const COMMIT_PARK_MEMORY_MS = 5_000;
 
-/** ERRATUM(E-94), review R2-1: the most commit-check parks remembered at once. */
+/** The most commit-check parks remembered at once. */
 export const E0_COMMIT_PARK_LIMIT = 64;
 
 /**
- * ERRATUM(E-114): `Fetch.failRequest` reason for a refused subresource or hint (D-138, D-139). A failed subresource
+ * `Fetch.failRequest` reason for a refused subresource or hint. A failed subresource
  * reaches the page as an ordinary network error, and `Network.loadingFailed` names it `net::ERR_BLOCKED_BY_CLIENT`, so
  * the request log shows what was refused. A hint that arrives as a `Document` (the prerender host's NoState prefetch)
- * is failed with {@linkcode DOCUMENT_BLOCK_ERROR_REASON} instead, as every document is (M12).
+ * is failed with {@linkcode DOCUMENT_BLOCK_ERROR_REASON} instead, as every document is.
  */
 export const SUBRESOURCE_BLOCK_ERROR_REASON = 'BlockedByClient';
 
 /**
- * ERRATUM(E-115): the second `documents`-scope pattern on page and iframe sessions. Measured on Chrome 154 (design
- * C4/C5): `<link rel=prefetch>` arrives as `Fetch` with `Sec-Purpose: prefetch`, and this pattern also pauses every
+ * The second `documents`-scope pattern on page and iframe sessions. Measured on Chrome 154:
+ * `<link rel=prefetch>` arrives as `Fetch` with `Sec-Purpose: prefetch`, and this pattern also pauses every
  * fetch/XHR/EventSource — which the answerer continues unjudged in that scope.
  */
 export const FETCH_REQUEST_PATTERN = { urlPattern: '*', resourceType: 'Fetch', requestStage: 'Request' } as const;
 
-/** ERRATUM(E-114): the `all`-scope pattern — every request of the target, at the request stage. */
+/** The `all`-scope pattern — every request of the target, at the request stage. */
 export const ALL_REQUESTS_PATTERN = { urlPattern: '*', requestStage: 'Request' } as const;
 
-/** ERRATUM(E-115): the target type Chrome 154 runs a `<link rel=prerender>` NoState prefetch in (measured, C4). */
+/** The target type Chrome 154 runs a `<link rel=prerender>` NoState prefetch in (measured). */
 export const PRERENDER_HOST_TARGET_TYPE = 'other';
 
 /**
- * ERRATUM(E-114): the one target type never armed — `Fetch.enable` answers `-32601` on a dedicated worker, whose
- * requests pause on the owning page's session instead (measured, C2).
+ * The one target type never armed — `Fetch.enable` answers `-32601` on a dedicated worker, whose
+ * requests pause on the owning page's session instead (measured).
  */
 export const UNARMED_TARGET_TYPE = 'worker';
 
 /**
- * ERRATUM(E-114): target types whose `Fetch.enable` is known to answer `-32601` (method not found), logged at `debug`
- * rather than `warn`. Measured (MB3): every type Chrome 154 attaches but `worker` accepts it, so the set is empty; a
+ * Target types whose `Fetch.enable` is known to answer `-32601` (method not found), logged at `debug`
+ * rather than `warn`. Measured: every type Chrome 154 attaches but `worker` accepts it, so the set is empty; a
  * later Chrome that refuses one is warned about until it is measured and added here.
  */
 export const FETCH_UNSUPPORTED: ReadonlySet<string> = new Set<string>();
 
 /**
- * ERRATUM(E-114), review N4: how long the attach path waits for one target's `Fetch.enable` before resuming it
+ * The target types that never hold a window, so never take the WebRTC lockdown.
+ * `RTCPeerConnection` is exposed to windows only; a type not named here — a later Chrome's, `other`, `browser_ui` —
+ * is sent the script anyway (fail closed), and a refusal there is a `debug` line.
+ */
+export const WINDOWLESS_TARGET_TYPES: ReadonlySet<string> = new Set<string>([
+	'worker',
+	'service_worker',
+	'shared_worker',
+	'shared_storage_worklet',
+	'auction_worklet',
+]);
+
+/**
+ * How long the attach path waits for one target's `Fetch.enable` before resuming it
  * anyway. `Fetch` is browser-side and answers at once (measured); the bound exists so that a target type which never
  * answers can never be left paused for the debugger. An expired wait is reported at `warn`, like a failure.
  */
 export const FETCH_ARM_TIMEOUT_MS = 2_000;
 
-/** ERRATUM(E-114): the URL schemes the request scope judges; `ws:`/`wss:` are judged as `http:`/`https:`. */
+/** The URL schemes the request scope judges; `ws:`/`wss:` are judged as `http:`/`https:`. */
 export const JUDGED_REQUEST_SCHEMES: readonly string[] = ['http:', 'https:', 'ws:', 'wss:'];
 
 /**
- * ERRATUM(E-114): distinct refused origins reported per target per document; the next one is reported once more with
+ * Distinct refused origins reported per target per document; the next one is reported once more with
  * `overflow: true`, and nothing further until that target commits its next document.
  */
 export const REQUEST_BLOCK_ORIGIN_LIMIT = 32;
 
-/** ERRATUM(E-114): targets whose refused origins are remembered at once; the oldest is forgotten first. */
+/** Targets whose refused origins are remembered at once; the oldest is forgotten first. */
 export const REQUEST_BLOCK_TARGET_LIMIT = 64;
 
-/** ERRATUM(E-114/E-115): what one paused request is, for the answerer — see {@linkcode requestKindOf}. */
+/** What one paused request is, for the answerer — see {@linkcode requestKindOf}. */
 export type RequestKind = 'document' | 'hint' | 'subresource';
 
 /**
- * ERRATUM(E-114/E-115): classifies one paused request. A `hint` names itself in `Sec-Purpose` (or the legacy
+ * Classifies one paused request. A `hint` names itself in `Sec-Purpose` (or the legacy
  * `Purpose`) with a value starting `prefetch`, case-insensitive; otherwise a {@linkcode JUDGED_RESOURCE_TYPES} type is
  * a `document`; everything else is a `subresource`. Never throws: a malformed header map reads as no header.
  */
@@ -265,12 +281,12 @@ export interface TargetRecord {
 /** One buffered `Page.lifecycleEvent`, keyed back to its target by the global router. */
 export interface LifecycleRecord {
 	readonly name: string;
-	/** `null` only if Chrome omitted it; the §7.5 staleness rule treats the two cases differently. */
+	/** `null` only if Chrome omitted it; the readiness staleness rule treats the two cases differently. */
 	readonly loaderId: string | null;
 	readonly frameId: string;
 	/** CDP monotonic timestamp (seconds since an arbitrary epoch). Not wall-clock comparable. */
 	readonly timestamp: number;
-	/** `Date.now()` at reception — the field §7.5's "after nav start" rule is evaluated against. */
+	/** `Date.now()` at reception — the field the "after nav start" staleness rule is evaluated against. */
 	readonly receivedAt: number;
 }
 
@@ -278,26 +294,26 @@ export interface LifecycleRecord {
 export interface SessionManagerOptions {
 	readonly bus: EventBus;
 	readonly logger?: BusLogger | undefined;
-	/** Credentials are answered over CDP `Fetch` auth when `username` is set (DATA-MODEL.md §5.2). */
+	/** Credentials are answered over CDP `Fetch` auth when `username` is set. */
 	readonly proxy?: ProxySettings | null | undefined;
 	/** Override for {@linkcode ATTACH_WAIT_TIMEOUT_MS}; tests pin the default. */
 	readonly attachWaitMs?: number | undefined;
 	/** Injected clock, so the ring buffer's `receivedAt` is drivable by `FakeTime`. */
 	readonly now?: (() => number) | undefined;
 	/**
-	 * ERRATUM(E-94): the document veto. `null`/absent means no policy and today's attach path exactly; a
+	 * The document veto. `null`/absent means no policy and no `Fetch` arming; a
 	 * function answers whether a document URL may be requested, and a `false` — or a throw — refuses it
 	 * before the request is sent (E0). `BrowserSession` hands down the E1 matcher over its compiled policy.
 	 */
 	readonly documentFilter?: ((url: string) => boolean) | null | undefined;
 	/**
-	 * ERRATUM(E-114): which requests the filter judges — `documents` (the default) or `all` (D-138). Inert without a
-	 * `documentFilter`, so the no-filter attach path stays the donor's.
+	 * Which requests the filter judges — `documents` (the default) or `all`. Inert without a
+	 * `documentFilter`, so the no-filter attach path arms nothing.
 	 */
 	readonly requestScope?: RequestScope | undefined;
-	/** ERRATUM(E-114): override for {@linkcode FETCH_ARM_TIMEOUT_MS}; tests pin the default. */
+	/** Override for {@linkcode FETCH_ARM_TIMEOUT_MS}; tests pin the default. */
 	readonly fetchArmTimeoutMs?: number | undefined;
-	/** ERRATUM(E-114): override for {@linkcode FETCH_UNSUPPORTED}; tests exercise the `debug` path with it. */
+	/** Override for {@linkcode FETCH_UNSUPPORTED}; tests exercise the `debug` path with it. */
 	readonly fetchUnsupported?: ReadonlySet<string> | undefined;
 }
 
@@ -337,7 +353,7 @@ export class RingBuffer<T> {
 }
 
 /**
- * Cancellation for the two methods a bus handler drives — ERRATUM(E-62).
+ * Cancellation for the two methods a bus handler drives.
  *
  * ## Why an options bag rather than a bound facade
  *
@@ -355,8 +371,8 @@ export class RingBuffer<T> {
  * > method throws `signal.reason` before touching anything. Once entered, the sequence runs to
  * > completion, because a half-recorded attach is worse than a late one.
  *
- * That is the same asymmetry ERRATUM(CANCEL-2) chose for `storage_state`'s `#writeAtomic` and
- * ERRATUM(CANCEL-4) chose for reaping a superseded launch, arrived at from a third direction.
+ * That is the same asymmetry `storage_state`'s `#writeAtomic` and the reaping of a superseded
+ * launch follow.
  */
 export interface CancelOptions {
 	/** Cancellation from the calling handler's {@linkcode HandlerContext}, if it has one. */
@@ -374,9 +390,9 @@ export class SessionManager {
 	readonly #proxy: ProxySettings | null;
 	readonly #attachWaitMs: number;
 	readonly #now: () => number;
-	/** ERRATUM(E-94): the document veto, or `null` for no policy. */
+	/** The document veto, or `null` for no policy. */
 	readonly #documentFilter: ((url: string) => boolean) | null;
-	/** ERRATUM(E-114): the request scope the filter judges. */
+	/** The request scope the filter judges. */
 	readonly #requestScope: RequestScope;
 	readonly #fetchArmTimeoutMs: number;
 	readonly #fetchUnsupported: ReadonlySet<string>;
@@ -389,7 +405,7 @@ export class SessionManager {
 	/**
 	 * The per-session attach cascade, in flight. Registered synchronously by the
 	 * `Target.attachedToTarget` handler and awaited by {@linkcode getOrCreateCdpSession} — see
-	 * ERRATUM(M1-hardening-1) in the module note.
+	 * the attach-cascade paragraph in the module note.
 	 */
 	readonly #configuring = new Map<SessionId, Promise<void>>();
 	/** Targets whose `TabCreatedEvent` has already been dispatched (or deliberately suppressed). */
@@ -403,22 +419,22 @@ export class SessionManager {
 	#started = false;
 	#stopped = false;
 	#proxyArmed = false;
-	/** ERRATUM(E-94): the one `Fetch.requestPaused` listener is installed. */
+	/** The one `Fetch.requestPaused` listener is installed. */
 	#fetchArmed = false;
 	/**
-	 * ERRATUM(E-94), review R2-2: the URL each judged request's redirect chain began at, keyed by its `Fetch`
+	 * The URL each judged request's redirect chain began at, keyed by its `Fetch`
 	 * interception id (each hop names the one before it in `redirectedRequestId`, measured on Chrome 154). In-process
 	 * only; bounded by {@linkcode CHAIN_MEMORY_LIMIT}.
 	 */
 	readonly #chainStarts = new Map<string, string>();
-	/** ERRATUM(E-94), review R2-1: recent commit-check parks, oldest first. */
+	/** Recent commit-check parks, oldest first. */
 	readonly #parked: { readonly targetId: TargetId; readonly at: number }[] = [];
 	/**
-	 * ERRATUM(E-114): the origins refused per target since its last document commit, oldest target first — bounded by
+	 * The origins refused per target since its last document commit, oldest target first — bounded by
 	 * {@linkcode REQUEST_BLOCK_TARGET_LIMIT} targets and {@linkcode REQUEST_BLOCK_ORIGIN_LIMIT} origins each.
 	 */
 	readonly #requestBlocks = new Map<TargetId, { readonly origins: Map<string, RequestKind>; overflowed: boolean }>();
-	/** ERRATUM(E-114), review N4: subresource and hint refusals per target type — the only record of most types. */
+	/** Subresource and hint refusals per target type — the only record of most types. */
 	readonly #refusals = new Map<string, number>();
 
 	constructor(client: CdpClient, options: SessionManagerOptions) {
@@ -434,18 +450,18 @@ export class SessionManager {
 		this.#fetchUnsupported = options.fetchUnsupported ?? FETCH_UNSUPPORTED;
 	}
 
-	/** ERRATUM(E-94): whether a document filter is armed — the attach path pauses new targets only then. */
+	/** Whether a document filter is armed — the attach path pauses new targets only then. */
 	get filtersDocuments(): boolean {
 		return this.#documentFilter !== null;
 	}
 
-	/** ERRATUM(E-114): the request scope in force — `documents` whenever there is no filter. */
+	/** The request scope in force — `documents` whenever there is no filter. */
 	get requestScope(): RequestScope {
 		return this.#documentFilter === null ? 'documents' : this.#requestScope;
 	}
 
 	/**
-	 * ERRATUM(E-114), review N4: subresource and hint refusals so far, per target type. A refusal on a target that is
+	 * Subresource and hint refusals so far, per target type. A refusal on a target that is
 	 * not a page or an iframe — a service or shared worker, the prerender host, Chrome's own `browser_ui` and
 	 * `background_page` — is counted here and logged at `debug`, and never reported as an event.
 	 */
@@ -453,7 +469,7 @@ export class SessionManager {
 		return this.#refusals;
 	}
 
-	// -- read-only state surface (ARCHITECTURE.md §7.3) --------------------------------------------
+	// -- read-only state surface --------------------------------------------
 
 	get client(): CdpClient {
 		return this.#client;
@@ -485,7 +501,7 @@ export class SessionManager {
 		return this.#started && !this.#stopped;
 	}
 
-	/** Buffered `Page.lifecycleEvent`s for one target, oldest first (ARCHITECTURE.md §7.5 step 4). */
+	/** Buffered `Page.lifecycleEvent`s for one target, oldest first. */
 	lifecycleEventsFor(targetId: TargetId): LifecycleRecord[] {
 		return this.#lifecycle.get(targetId)?.toArray() ?? [];
 	}
@@ -521,13 +537,13 @@ export class SessionManager {
 	/**
 	 * Registers the root handlers, seeds the target map from `Target.getTargets`, and switches on
 	 * push-based discovery. Seeded targets are marked as already-announced: the post-connect sequence
-	 * of §7.4 replays `TabCreatedEvent` for pre-existing tabs itself, in its own defined order.
+	 * replays `TabCreatedEvent` for pre-existing tabs itself, in its own defined order.
 	 */
 	async start(): Promise<void> {
 		if (this.#started) return;
 		this.#started = true;
 		this.#registerRootHandlers();
-		// ERRATUM(E-94): installed before discovery and before any session can issue `Fetch.enable`, so a
+		// Installed before discovery and before any session can issue `Fetch.enable`, so a
 		// request paused by the first attach cascade always has an answerer.
 		this.#armFetch();
 
@@ -543,13 +559,12 @@ export class SessionManager {
 	/**
 	 * Re-reads every target from Chrome and updates the map.
 	 *
-	 * ERRATUM(E-17). The map is fed by `Target.targetInfoChanged`, and Chrome does not send that
-	 * event promptly for a *title* change: measured against Chrome 141, a page whose `<title>` had
-	 * long since parsed (a full DOM state build had already completed against it) still had
-	 * `record.title` set to the host-and-path fallback Chrome uses before a title exists, while
-	 * `Target.getTargets` in the same tick reported the real title. Every tab listing a model or a
-	 * live viewer sees is built from that map, so tab titles were routinely wrong — the one field a
-	 * human uses to tell two tabs apart.
+	 * The map is fed by `Target.targetInfoChanged`, and Chrome does not send that event promptly for
+	 * a *title* change: measured against Chrome 141, a page whose `<title>` has long since parsed (a
+	 * full DOM state build has already completed against it) can still have `record.title` set to the
+	 * host-and-path fallback Chrome uses before a title exists, while `Target.getTargets` in the same
+	 * tick reports the real title. Every tab listing a model or a live viewer sees is built from that
+	 * map, and the title is the one field a human uses to tell two tabs apart.
 	 *
 	 * One round trip, and it is the caller's choice when to pay for it: listings do, hot paths need
 	 * not. It never announces, so it cannot double-fire `TabCreatedEvent` for a tab that arrived
@@ -592,7 +607,7 @@ export class SessionManager {
 	}
 
 	/**
-	 * Pre-existing tabs, in discovery order, for the §7.4 `TabCreatedEvent` replay. Returns page
+	 * Pre-existing tabs, in discovery order, for the post-connect `TabCreatedEvent` replay. Returns page
 	 * targets only — the replay exists so watchdogs see the tabs that were open before we attached.
 	 */
 	seededPageTargets(): TargetRecord[] {
@@ -601,7 +616,7 @@ export class SessionManager {
 			.sort((a, b) => a.sequence - b.sequence);
 	}
 
-	// -- the sole sanctioned accessor (ARCHITECTURE.md §7.3) ---------------------------------------
+	// -- the sole sanctioned accessor ---------------------------------------
 
 	/**
 	 * Returns (attaching if necessary) the CDP session for a target.
@@ -614,8 +629,7 @@ export class SessionManager {
 	 *    state maps are populated before the caller issues a command on the session;
 	 * 4. resumes a debugger-paused target;
 	 * 5. awaits that session's attach cascade, so the id it returns names an *instrumented* session —
-	 *    `Network.enable` has been issued and a navigation on it cannot outrun it
-	 *    (ERRATUM(M1-hardening-1)).
+	 *    `Network.enable` has been issued and a navigation on it cannot outrun it.
 	 */
 	async getOrCreateCdpSession(
 		targetId?: TargetId | null,
@@ -623,7 +637,7 @@ export class SessionManager {
 		options: CancelOptions = {},
 	): Promise<CdpSessionRecord> {
 		this.#assertUsable();
-		// ERRATUM(E-62), the entry gate. A handler the bus has already abandoned must not go on
+		// The entry gate. A handler the bus has already abandoned must not go on
 		// attaching targets and moving the agent's focus — but everything below this line is a
 		// transaction over five maps plus Chrome's own session table, so it is not interruptible once
 		// begun. See {@linkcode CancelOptions} for why that split, and not a bound facade.
@@ -635,7 +649,7 @@ export class SessionManager {
 			if (record !== undefined && record.type !== PAGE_TARGET_TYPE) {
 				throw new BrowserError(
 					`target ${resolved} is a '${record.type}' target and cannot hold the agent's focus ` +
-						'(ARCHITECTURE.md §7.3: only page targets may)',
+						'(only page targets may)',
 				);
 			}
 			this.#focusTargetId = resolved;
@@ -648,8 +662,7 @@ export class SessionManager {
 		const seen = await this.#waitForAttachEvent(attached.sessionId);
 		if (seen !== null) return await this.#whenConfigured(seen);
 
-		// ERRATUM(M1-session-4): §7.3 states the ≤2 s poll for Chrome's attach event but not what happens
-		// when it expires. Chrome answered the *command*, so the returned session id is authoritative:
+		// The ≤2 s poll for Chrome's attach event expired. Chrome answered the *command*, so the returned session id is authoritative:
 		// registering it (with a warning) beats failing an otherwise usable session on a slow event.
 		this.#logger?.warn('attach event did not arrive within the attach budget; registering from the command result', {
 			targetId: resolved,
@@ -658,7 +671,7 @@ export class SessionManager {
 		});
 		const type = record?.type ?? PAGE_TARGET_TYPE;
 		const registered = this.#recordSession(attached.sessionId, resolved, type);
-		// ERRATUM(M1-hardening-1): the event this session was *not* built from is also what would have
+		// The event this session was *not* built from is also what would have
 		// run the attach cascade. Run it here, so the fallback path returns an instrumented session too
 		// rather than one with `Network`/`Page` silently off.
 		if (!this.#configuring.has(attached.sessionId)) {
@@ -669,7 +682,7 @@ export class SessionManager {
 
 	/**
 	 * Points the agent's focus at a page target, optionally activating it in the browser and
-	 * announcing the change. Rejects non-page targets (ARCHITECTURE.md §7.3).
+	 * announcing the change. Rejects non-page targets.
 	 */
 	async setAgentFocus(
 		targetId: TargetId,
@@ -703,7 +716,7 @@ export class SessionManager {
 	/**
 	 * Arms proxy authentication: `Fetch.enable({handleAuthRequests: true})` is issued per attached
 	 * session (see `#configureSession`); this installs the browser-wide answering handlers
-	 * (ARCHITECTURE.md §7.3 "proxy credentials arm Fetch.enable", §7.4 step "proxy auth armed").
+	 * (step 6 of the post-connect sequence).
 	 * A no-op when the profile carries no proxy credentials.
 	 */
 	armProxyAuth(): void {
@@ -713,27 +726,31 @@ export class SessionManager {
 		const credentials = { username: proxy.username, password: proxy.password ?? '' };
 
 		this.#unsubscribes.push(this.#client.on('Fetch.authRequired', (params, sessionId) => {
+			// Only the proxy's own challenge gets the proxy's credentials: `Fetch.authRequired` also fires for
+			// a *site's* 401, and answering every challenge would hand the proxy username and password to any page
+			// that asked for Basic auth. A server challenge gets `Default`, the
+			// browser's own behaviour (headless: no prompt, the 401 stands).
+			const isProxy = params.authChallenge?.source === 'Proxy';
 			this.#track(
 				this.#client.send.Fetch.continueWithAuth({
 					requestId: params.requestId,
-					authChallengeResponse: { response: 'ProvideCredentials', ...credentials },
+					authChallengeResponse: isProxy ? { response: 'ProvideCredentials', ...credentials } : { response: 'Default' },
 				}, sessionId).catch((error: unknown) => {
 					this.#logger?.warn('proxy auth response failed', { error });
 				}),
 			);
 		}));
 
-		// ERRATUM(E-94): the continue-all `Fetch.requestPaused` listener that stood here is now `#armFetch`'s one
-		// listener, shared with the document veto. Two independent listeners would race to answer the same
-		// paused request, and the loser's call fails on an interception id that no longer exists.
+		// Paused requests are answered by `#armFetch`'s one listener, shared with the document veto. Two
+		// independent listeners would race to answer the same paused request, and the loser's call would fail
+		// on an interception id that no longer exists.
 		this.#armFetch();
 	}
 
 	/**
-	 * ERRATUM(E-94): the **one** `Fetch.requestPaused` answerer, installed whenever a document filter or proxy
+	 * The **one** `Fetch.requestPaused` answerer, installed whenever a document filter or proxy
 	 * credentials exist (`Fetch.enable` pauses requests in either case, and a paused request nobody answers
-	 * hangs the page). It replaces the donor's continue-all listener; with no filter its answer is the
-	 * donor's — continue every request.
+	 * hangs the page). With no filter its answer is to continue every request.
 	 */
 	#armFetch(): void {
 		if (this.#fetchArmed) return;
@@ -745,7 +762,7 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94): judges one paused request and answers it **exactly once**.
+	 * Judges one paused request and answers it **exactly once**.
 	 *
 	 * A document the filter refuses — or a filter that throws: the veto fails closed — is failed with
 	 * {@linkcode DOCUMENT_BLOCK_ERROR_REASON} and reported as an E0 `BrowserErrorEvent`; everything else is
@@ -754,7 +771,7 @@ export class SessionManager {
 	 * navigation that carried the request reports its failure to whoever issued it. A rejected answer is
 	 * ignored: the request is already gone (its target closed, or the browser cancelled it).
 	 *
-	 * ERRATUM(E-114/E-115): the request is classified first ({@linkcode requestKindOf}). A hint — in either scope — and,
+	 * The request is classified first ({@linkcode requestKindOf}). A hint — in either scope — and,
 	 * in `all`, a subresource are judged too and, when refused, failed with {@linkcode SUBRESOURCE_BLOCK_ERROR_REASON}
 	 * and reported through the aggregation of `#reportRequestBlock`. Still one answerer, still exactly one answer.
 	 */
@@ -762,7 +779,7 @@ export class SessionManager {
 		const requestId = params.requestId;
 		let answered = false;
 		try {
-			// ERRATUM(E-114/E-115): what the request is decides whether — and how — the scope judges it.
+			// What the request is decides whether — and how — the scope judges it.
 			const kind = requestKindOf(params);
 			const refused = this.#refusesRequest(kind, params);
 			if (refused) {
@@ -777,7 +794,7 @@ export class SessionManager {
 					.catch(() => {});
 				return;
 			}
-			// Review R2-2: a judged document that goes through starts (or extends) a chain a later hop may be refused in.
+			// A judged document that goes through starts (or extends) a chain a later hop may be refused in.
 			if (this.#documentFilter !== null && kind === 'document') {
 				try {
 					this.#chainStartOf(params);
@@ -800,11 +817,11 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94): the E0 decision. Fails closed on a throwing filter. Amended by review R2-1: a `Prefetch` is judged
+	 * The E0 decision. Fails closed on a throwing filter. A `Prefetch` is judged
 	 * like a `Document` — it is the response a later navigation would be served from without a request of its own.
-	 * ERRATUM(E-114/E-115): a hint is judged in both scopes and a subresource in `all` only; for those two kinds only
+	 * A hint is judged in both scopes and a subresource in `all` only; for those two kinds only
 	 * http(s) and ws(s) URLs are judged (a `ws:` URL as `http:`), so `data:`, `blob:`, `chrome:` and an extension's own
-	 * resources pass. A document is judged on its URL as it always was.
+	 * resources pass. A document is judged on its own URL.
 	 */
 	#refusesRequest(kind: RequestKind, params: CdpEventParams['Fetch.requestPaused']): boolean {
 		const filter = this.#documentFilter;
@@ -830,9 +847,9 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-114/E-115): a refused subresource or hint, reported without flooding. Every refusal is counted by
+	 * A refused subresource or hint, reported without flooding. Every refusal is counted by
 	 * target type. The **first** refusal of an origin on a target since its last document commit is logged at `debug`
-	 * (origin only, the E-78 rule) and — on a page or iframe target only (review N4) — dispatched as one E0
+	 * (origin only, never the path or query) and — on a page or iframe target only — dispatched as one E0
 	 * `BrowserErrorEvent` carrying `requestKind`; past {@linkcode REQUEST_BLOCK_ORIGIN_LIMIT} origins one more report says
 	 * `overflow: true` and the rest are only counted until the next commit. The URL stays in-process, as E0's does.
 	 */
@@ -884,7 +901,7 @@ export class SessionManager {
 		}));
 	}
 
-	/** ERRATUM(E-114): one target's refused origins, created on first use; the oldest target is forgotten first. */
+	/** One target's refused origins, created on first use; the oldest target is forgotten first. */
 	#requestBlocksFor(targetId: TargetId): { readonly origins: Map<string, RequestKind>; overflowed: boolean } {
 		const existing = this.#requestBlocks.get(targetId);
 		if (existing !== undefined) return existing;
@@ -899,7 +916,7 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94), review R2-2: the URL this request's redirect chain began at — its own URL for a first request, the
+	 * The URL this request's redirect chain began at — its own URL for a first request, the
 	 * remembered start of the hop it continues otherwise — recorded under its own interception id for the next hop.
 	 */
 	#chainStartOf(params: CdpEventParams['Fetch.requestPaused']): string {
@@ -920,8 +937,8 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94): the E0 report, in the vocabulary the SecurityWatchdog's E1–E3 use. The log line names the
-	 * origin only, at `debug` (the E-78 rule): the refused URL is where a one-time code would be. The event keeps
+	 * The E0 report, in the vocabulary the SecurityWatchdog's E1–E3 use. The log line names the
+	 * origin only, at `debug`: the refused URL is where a one-time code would be. The event keeps
 	 * the URL in-process for the host, which logs and records it redacted.
 	 */
 	#reportDocumentBlock(
@@ -936,7 +953,7 @@ export class SessionManager {
 			origin: _originOf(url),
 			targetId,
 		});
-		// ERRATUM(E-114/E-115), review N4: a target armed only by the request scope — the prerender host, a worker, Chrome's
+		// A target armed only by the request scope — the prerender host, a worker, Chrome's
 		// own UI — commits no tab document a record could describe; its refused document is counted, never an event.
 		const targetType = sessionId === undefined ? undefined : this.#sessions.get(sessionId)?.type;
 		if (targetType !== undefined && targetType !== PAGE_TARGET_TYPE && targetType !== 'iframe') {
@@ -953,9 +970,9 @@ export class SessionManager {
 					targetId,
 					frameId: params.frameId,
 					containment: 'request-blocked',
-					// Review R2-1: `Prefetch` for a refused speculative request, which is no one's navigation (yet).
+					// `Prefetch` for a refused speculative request, which is no one's navigation (yet).
 					resourceType: params.resourceType,
-					// Review R2-2: where the refused hop's chain began, so a host can attribute the block. In-process only,
+					// Where the refused hop's chain began, so a host can attribute the block. In-process only,
 					// like `url`.
 					chainStart,
 				},
@@ -971,10 +988,10 @@ export class SessionManager {
 		return this.#proxy !== null && this.#proxy.username !== undefined;
 	}
 
-	// -- root CDP handlers (one global handler per method, routed by sessionId — D-CDP2) -----------
+	// -- root CDP handlers (one global handler per method, routed by sessionId) ------------------
 
 	/**
-	 * The CDP client with a caller's cancellation bound — ERRATUM(E-62).
+	 * The CDP client with a caller's cancellation bound.
 	 *
 	 * `undefined` yields the bare client, for the reason `handlerBudget(undefined)` is infinite: this
 	 * manager is also driven from `connect()`, from CDP listeners and from tests, none of which run
@@ -1003,18 +1020,18 @@ export class SessionManager {
 			this.#client.on('Target.detachedFromTarget', (params) => {
 				this.#track(this.#onDetached(params.sessionId, params.targetId ?? null));
 			}),
-			// The single global lifecycle router of ARCHITECTURE.md §7.2: one handler, keyed by
+			// The single global lifecycle router: one handler, keyed by
 			// sessionId, feeding per-target ring buffers. Kept even though the client registry is
 			// multi-listener, because per-target state coherence depends on exactly one writer.
 			this.#client.on('Page.lifecycleEvent', (params, sessionId) => {
 				this.#recordLifecycle(params, sessionId);
 			}),
 		);
-		// ERRATUM(E-94), review R2-1: the page-driven commit check, under a filter only — without one the handler set
-		// is the donor's (AC3).
+		// The page-driven commit check, under a filter only — without one no `Page.frameNavigated`
+		// handler is registered here.
 		if (this.#documentFilter !== null) {
 			this.#unsubscribes.push(this.#client.on('Page.frameNavigated', (params, sessionId) => {
-				// ERRATUM(E-114): a target's new document starts its refused-origin aggregation afresh.
+				// A target's new document starts its refused-origin aggregation afresh.
 				this.#resetRequestBlocks(params, sessionId);
 				this.#track(this.#checkCommit(params, sessionId));
 			}));
@@ -1022,7 +1039,7 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-114): forgets a target's refused origins when its own top frame commits — a page's main frame, or an
+	 * Forgets a target's refused origins when its own top frame commits — a page's main frame, or an
 	 * out-of-process iframe's root (whose frame id is its target id) — so each document reports its own first refusals.
 	 */
 	#resetRequestBlocks(params: CdpEventParams['Page.frameNavigated'], sessionId: SessionId | undefined): void {
@@ -1033,7 +1050,7 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94), review R2-1: whether this manager parked `targetId` on `about:blank` for an off-list commit in the
+	 * Whether this manager parked `targetId` on `about:blank` for an off-list commit in the
 	 * last {@linkcode COMMIT_PARK_MEMORY_MS}. The SecurityWatchdog reads it so its own E2 does not contain — and record —
 	 * the same navigation a second time.
 	 */
@@ -1044,13 +1061,13 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94), review R2-1 — defence in depth behind E0: a page target's main frame that **committed** an
+	 * Defence in depth behind E0: a page target's main frame that **committed** an
 	 * off-list http(s) document is parked on `about:blank` and reported as an E2 block (`trigger: 'commit'`).
 	 *
 	 * E0 refuses requests; a document that needs no request of its own — measured on Chrome 154, a navigation served
-	 * from a speculation-rules prefetch — is never paused, and E2 only re-checked navigations this process issued. The
+	 * from a speculation-rules prefetch — is never paused, and the SecurityWatchdog's E2 re-checks only navigations this process issued. The
 	 * commit is the one event every path to a new main-frame document produces. Only http(s) URLs are judged: a
-	 * `chrome-error:` page, `about:blank`, `data:` and `blob:` are not network documents (§4.2 allows the latter, and the
+	 * `chrome-error:` page, `about:blank`, `data:` and `blob:` are not network documents (the URL matcher allows the latter, and the
 	 * error page is what a failed on-list navigation commits). The off-list document has run by the time it is parked —
 	 * this is containment after the fact, the reason it is the second layer and not the first. The park is
 	 * uncancellable and capped, like E2's; it is remembered **before** the first await, so the watchdog's E2 for the
@@ -1126,9 +1143,9 @@ export class SessionManager {
 		this.#recordTarget(info);
 		this.#recordSession(params.sessionId, info.targetId, info.type);
 
-		// ERRATUM(M1-hardening-1): registered *synchronously*, before the first await, so a caller that
-		// finds this session already in the maps still has something to wait on. Registering it after
-		// the first await would leave exactly the window this fix exists to close.
+		// Registered *synchronously*, before the first await, so a caller that finds this session already
+		// in the maps still has something to wait on. Registering it after the first await would reopen
+		// the window in which an uninstrumented session id can be handed out.
 		const configured = this.#configureAttached(params.sessionId, info.type, params.waitingForDebugger);
 		this.#configuring.set(params.sessionId, configured);
 		await configured;
@@ -1140,7 +1157,7 @@ export class SessionManager {
 	 *
 	 * The cascade runs **before** a debugger-paused renderer is resumed: a target Chrome is holding
 	 * for us is the one moment where instrumenting it is free of races, and resuming first would hand
-	 * the first document back the head start ERRATUM(M1-hardening-1) is about.
+	 * the first document a head start on `Network.enable`.
 	 */
 	async #configureAttached(sessionId: SessionId, type: string, waitingForDebugger: boolean): Promise<void> {
 		if (this.#documentFilter !== null) {
@@ -1169,21 +1186,19 @@ export class SessionManager {
 		set?.delete(sessionId);
 		if (set !== undefined && set.size > 0) return;
 
-		// Last session gone ⇒ the target is dead as far as we are concerned (ARCHITECTURE.md §7.3).
+		// Last session gone ⇒ the target is dead as far as we are concerned.
 		await this.#removeTarget(targetId);
 	}
 
 	/**
-	 * Full removal of a target: the only path that fires `TabClosedEvent` (ARCHITECTURE.md §7.3).
+	 * Full removal of a target: the only path that fires `TabClosedEvent`.
 	 *
-	 * ERRATUM(M1-hardening-2): §7.3 orders removal as "TabClosedEvent, then focus recovery" and says
-	 * nothing about the focus pointer in between. Clearing it *after* the dispatch left the pointer
-	 * naming a target this method had already deleted for the whole duration of the
-	 * `TabClosedEvent` fan-out — a 3 s budget with real handlers in it. Anything reaching
-	 * {@linkcode getOrCreateCdpSession} in that window resolved `null` to the dead id and got
-	 * `attachToTarget: No target with given id found`. The pointer is now dropped in the same
-	 * synchronous step as the target record, so no observer can see a focus that is not a live tab;
-	 * recovery still runs after the dispatch, exactly as §7.3 orders it.
+	 * Removal is "TabClosedEvent, then focus recovery", but the focus pointer is dropped in the same
+	 * synchronous step as the target record. Clearing it *after* the dispatch would leave the pointer
+	 * naming a deleted target for the whole `TabClosedEvent` fan-out — a 3 s budget with real handlers
+	 * in it — and anything reaching {@linkcode getOrCreateCdpSession} in that window would resolve
+	 * `null` to the dead id and get `attachToTarget: No target with given id found`. So no observer can
+	 * see a focus that is not a live tab; recovery still runs after the dispatch.
 	 */
 	async #removeTarget(targetId: TargetId): Promise<void> {
 		const record = this.#targets.get(targetId);
@@ -1209,11 +1224,10 @@ export class SessionManager {
 	}
 
 	/**
-	 * Focus recovery (ARCHITECTURE.md §7.3): most-recent page → else create `about:blank` → activate →
+	 * Focus recovery: most-recent page → else create `about:blank` → activate →
 	 * `AgentFocusChangedEvent` → emergency-fallback tab on failure.
 	 *
-	 * This is the load-bearing mechanism CrashWatchdog is allowed to be skipped in favour of
-	 * (COMPLETIONS-CRITERIA.md §3.2 row 11), so it never throws: a failure becomes a
+	 * This is the load-bearing mechanism that lets CrashWatchdog be skipped, so it never throws: a failure becomes a
 	 * `BrowserErrorEvent` and leaves focus null rather than poisoning an unrelated handler.
 	 */
 	async #recoverFocus(): Promise<void> {
@@ -1258,7 +1272,7 @@ export class SessionManager {
 		}
 	}
 
-	// -- per-session configuration (ARCHITECTURE.md §7.3 "Attach") ---------------------------------
+	// -- per-session configuration ------------------------------------------------------------------
 
 	async #configureSession(sessionId: SessionId, type: string): Promise<void> {
 		// Cascade: OOPIFs and workers below this target attach through this session, not the root.
@@ -1287,17 +1301,17 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-94): the attach cascade under a document filter.
+	 * The attach cascade under a document filter.
 	 *
 	 * New targets are attached **paused** (`waitForDebuggerOnStart: true`, here and on the root auto-attach),
 	 * so a pop-up's or an out-of-process iframe's first document request cannot leave before this session's
-	 * `Fetch.enable` is in place (M5). The order is not the donor's, and the difference is load-bearing:
-	 * measured on Chrome 154, a `noopener` pop-up held for the debugger has no renderer yet, and every
-	 * renderer-bound command — `Page.enable`, `Network.enable` — waits for one, so the donor's
-	 * "configure everything, then resume" deadlocked: the pop-up never loaded at all, on-list or off. `Fetch`
+	 * `Fetch.enable` is in place. The order differs from the unfiltered cascade, and the difference is
+	 * load-bearing: measured on Chrome 154, a `noopener` pop-up held for the debugger has no renderer yet,
+	 * and every renderer-bound command — `Page.enable`, `Network.enable` — waits for one, so "configure
+	 * everything, then resume" deadlocks: the pop-up never loads at all, on-list or off. `Fetch`
 	 * and `Target` are browser-side and answer immediately, so they are awaited first; the renderer-bound
 	 * commands are **sent** before the resume (so an existing renderer applies them before the first
-	 * document, which keeps ERRATUM(M1-hardening-1)'s guarantee) and **awaited** after it. The session is
+	 * document, which keeps the "a session id means an instrumented session" guarantee) and **awaited** after it. The session is
 	 * still reported configured only once all of them have answered.
 	 */
 	async #configureFiltered(sessionId: SessionId, type: string, waitingForDebugger: boolean): Promise<void> {
@@ -1311,12 +1325,15 @@ export class SessionManager {
 		);
 		const fetchParams = this.#fetchEnableParams(type);
 		if (type !== PAGE_TARGET_TYPE && type !== 'iframe') {
-			// ERRATUM(E-114/E-115), review N4: a non-page target this scope arms is armed before it is resumed — so its
+			// A non-page target this scope arms is armed before it is resumed — so its
 			// first request (a worker script's import, a service worker's install fetch, the prerender host's prefetch)
 			// cannot leave unjudged — under a bounded wait, and resumed whatever the arming did.
 			try {
 				if (fetchParams !== null) await this.#armRequestFilter(sessionId, type, fetchParams);
 			} finally {
+				// The WebRTC lockdown is sent before the resume, never awaited here — a window-less or
+				// renderer-less target must not hold the resume (or this cascade) on a command it may never answer.
+				if (this.#locksWebRtc(type)) this.#track(this.#lockWebRtc(sessionId, type));
 				if (waitingForDebugger) await this.#resumeIfPaused(sessionId);
 			}
 			return;
@@ -1329,21 +1346,24 @@ export class SessionManager {
 				() => this.#client.send.Page.setLifecycleEventsEnabled({ enabled: true }, sessionId),
 			),
 			this.#safe('Network.enable', () => this.#client.send.Network.enable(undefined, sessionId)),
+			// The WebRTC lockdown is queued before the resume, so the first document's script cannot run
+			// before it; `runImmediately` covers a document that is already there (a seeded tab).
+			...(this.#locksWebRtc(type) ? [this.#lockWebRtc(sessionId, type)] : []),
 		];
 		if (waitingForDebugger) await this.#resumeIfPaused(sessionId);
 		await Promise.all(rendererBound);
 	}
 
 	/**
-	 * ERRATUM(E-94): one `Fetch.enable` per armed session, its patterns merged — calling it again would replace the
+	 * One `Fetch.enable` per armed session, its patterns merged — calling it again would replace the
 	 * earlier configuration. Never `Prefetch`, which Chrome 154 refuses in a filter (see {@linkcode JUDGED_RESOURCE_TYPES});
-	 * the patterns themselves are `#fetchEnableParams`' (ERRATUM(E-114/E-115)). A failure is
+	 * the patterns themselves are `#fetchEnableParams`'. A failure is
 	 * **logged at `warn`**, by target type only, rather than swallowed at `debug` like the other setup calls: an unarmed
-	 * filter is a containment that silently fell back to after-the-fact (E2/E3 and the commit check), or — on a
+	 * filter is a containment that silently falls back to after-the-fact (E2/E3 and the commit check), or — on a
 	 * non-page target in `all` — to the resolver layer alone, and an operator must be able to see that.
 	 */
 	async #armRequestFilter(sessionId: SessionId, type: string, params: CdpParams['Fetch.enable']): Promise<void> {
-		// ERRATUM(E-114), review N4: bounded, and never rejecting — the caller resumes the target right after.
+		// Bounded, and never rejecting — the caller resumes the target right after.
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const capped = new Promise<'timeout'>((resolve) => {
 			timer = setTimeout(() => resolve('timeout'), this.#fetchArmTimeoutMs);
@@ -1363,7 +1383,7 @@ export class SessionManager {
 		if (outcome === 'ok') return;
 		const pageLike = type === PAGE_TARGET_TYPE || type === 'iframe';
 		const error = outcome === 'timeout' ? `no answer within ${this.#fetchArmTimeoutMs} ms` : _describe(outcome.error);
-		// ERRATUM(E-114): a type measured to refuse `Fetch` outright is expected, not news.
+		// A type measured to refuse `Fetch` outright is expected, not news.
 		if (outcome !== 'timeout' && _cdpCode(outcome.error) === -32601 && this.#fetchUnsupported.has(type)) {
 			this.#logger?.debug('Fetch is unavailable on this target type; its requests are not judged', {
 				targetType: type,
@@ -1379,11 +1399,11 @@ export class SessionManager {
 	}
 
 	/**
-	 * ERRATUM(E-114/E-115): the `Fetch.enable` parameters a target of `type` is armed with under a filter, or `null` for
-	 * a target this scope leaves alone (design §2.4 table). One call per session — a second would replace the first.
+	 * The `Fetch.enable` parameters a target of `type` is armed with under a filter, or `null` for
+	 * a target this scope leaves alone. One call per session — a second would replace the first.
 	 *
 	 * - `worker`: never (`-32601`; its requests pause on the owning page).
-	 * - Proxy credentials: every request, plus `handleAuthRequests`, on any target armed at all — one answerer, as before.
+	 * - Proxy credentials: every request, plus `handleAuthRequests`, on any target armed at all — still one answerer.
 	 * - `all`: every request (`*`), on every other type — unknown types included, fail closed.
 	 * - `documents`: `Document` + `Fetch` (hints) on pages and iframes; `Document` on the prerender host (`other`);
 	 *   nothing on any other type.
@@ -1400,8 +1420,34 @@ export class SessionManager {
 			: { patterns: [{ ...DOCUMENT_REQUEST_PATTERN }] };
 	}
 
+	/** Whether a target of `type` takes the WebRTC lockdown — `all`, with a window. */
+	#locksWebRtc(type: string): boolean {
+		return this.requestScope === 'all' && !WINDOWLESS_TARGET_TYPES.has(type);
+	}
+
+	/**
+	 * Registers {@linkcode WEBRTC_LOCKDOWN_SOURCE} on one session. Never rejects. A
+	 * failure on a page or iframe is a `warn` by target type — WebRTC there then rests on the preference and resolver
+	 * layers alone, and an operator must be able to see that; on any other type it is a `debug` line, and the wait is
+	 * bounded by the arming budget, because nothing awaits it but `whenIdle()` (and so `stop()`).
+	 */
+	async #lockWebRtc(sessionId: SessionId, type: string): Promise<void> {
+		const pageLike = type === PAGE_TARGET_TYPE || type === 'iframe';
+		try {
+			await this.#client.send.Page.addScriptToEvaluateOnNewDocument(
+				{ source: WEBRTC_LOCKDOWN_SOURCE, runImmediately: true },
+				sessionId,
+				pageLike ? undefined : { requestTimeoutMs: this.#fetchArmTimeoutMs },
+			);
+		} catch (error) {
+			const fields = { targetType: type, error: _describe(error) };
+			if (pageLike) this.#logger?.warn('the WebRTC lockdown could not be registered on a target', fields);
+			else this.#logger?.debug('the WebRTC lockdown was not taken by this target type', fields);
+		}
+	}
+
 	async #resumeIfPaused(sessionId: SessionId): Promise<void> {
-		// Not part of the typed D-CDP2 surface; `sendRaw` is the sanctioned escape hatch.
+		// Not part of the typed CDP surface; `sendRaw` is the sanctioned escape hatch.
 		await this.#safe(
 			'Runtime.runIfWaitingForDebugger',
 			() => this.#client.sendRaw('Runtime.runIfWaitingForDebugger', undefined, sessionId),
@@ -1525,7 +1571,7 @@ function _cdpCode(error: unknown): number | null {
 }
 
 /**
- * ERRATUM(E-114/E-115): the URL the filter judges a subresource or hint on — `ws:`/`wss:` read as `http:`/`https:` (the
+ * The URL the filter judges a subresource or hint on — `ws:`/`wss:` read as `http:`/`https:` (the
  * matcher's navigation schemes) — or `null` when its scheme is not a network one the scope judges. An unparseable URL
  * is handed to the filter as it is, which refuses it (fail closed).
  */
@@ -1539,8 +1585,8 @@ function _judgedRequestUrl(url: string): string | null {
 }
 
 /**
- * ERRATUM(E-114/E-115): how a refused request is failed. A document — and a hint that is one, the prerender host's
- * NoState prefetch — with `Aborted` (M12: the frame keeps the document it had); everything else with
+ * How a refused request is failed. A document — and a hint that is one, the prerender host's
+ * NoState prefetch — with `Aborted` (measured: the frame keeps the document it had); everything else with
  * `BlockedByClient`, which the request log reports as `net::ERR_BLOCKED_BY_CLIENT`.
  */
 function _failReasonFor(kind: RequestKind, params: { readonly resourceType: string }): string {
@@ -1548,7 +1594,7 @@ function _failReasonFor(kind: RequestKind, params: { readonly resourceType: stri
 	return SUBRESOURCE_BLOCK_ERROR_REASON;
 }
 
-/** ERRATUM(E-94), the E-78 rule: a URL's origin for a log line, never its path or query; `''` when unparseable. */
+/** A URL's origin for a log line, never its path or query; `''` when unparseable. */
 function _originOf(url: string): string {
 	const parsed = URL.parse(url);
 	if (parsed === null) return '';

@@ -994,7 +994,7 @@
 												"nodeType": 3,
 												"nodeName": "#text",
 												"localName": "",
-												"nodeValue": "\n// Every write below sets the DOM *property* and never touches the markup attribute, so\n// `EnhancedDomTreeNode.attributes` keeps the authored value while the accessibility tree reports the\n// live one. That disagreement is the whole point of DATA-MODEL §6.5's \"AX value overrides DOM value\"\n// rule, and no page of the recorded corpus produces it. Deterministic: no timers, no randomness.\ndocument.getElementById('lv-number').value = '42';\ndocument.getElementById('lv-range').value = '9';\ndocument.getElementById('lv-text').value = 'live-typed-value';\ndocument.getElementById('lv-check-on').checked = true;\ndocument.getElementById('lv-check-off').checked = false;\ndocument.getElementById('lv-select').selectedIndex = 2;\n"
+												"nodeValue": "\n// Every write below sets the DOM *property* and never touches the markup attribute, so\n// `EnhancedDomTreeNode.attributes` keeps the authored value while the accessibility tree reports the\n// live one. That disagreement is the whole point of the \"AX value overrides DOM value\"\n// rule, and no page of the recorded corpus produces it. Deterministic: no timers, no randomness.\ndocument.getElementById('lv-number').value = '42';\ndocument.getElementById('lv-range').value = '9';\ndocument.getElementById('lv-text').value = 'live-typed-value';\ndocument.getElementById('lv-check-on').checked = true;\ndocument.getElementById('lv-check-off').checked = false;\ndocument.getElementById('lv-select').selectedIndex = 2;\n"
 											}
 										],
 										"attributes": []
@@ -2981,7 +2981,7 @@
 					"rgb(240, 240, 240)",
 					"Tail control",
 					"SCRIPT",
-					"\n// Every write below sets the DOM *property* and never touches the markup attribute, so\n// `EnhancedDomTreeNode.attributes` keeps the authored value while the accessibility tree reports the\n// live one. That disagreement is the whole point of DATA-MODEL §6.5's \"AX value overrides DOM value\"\n// rule, and no page of the recorded corpus produces it. Deterministic: no timers, no randomness.\ndocument.getElementById('lv-number').value = '42';\ndocument.getElementById('lv-range').value = '9';\ndocument.getElementById('lv-text').value = 'live-typed-value';\ndocument.getElementById('lv-check-on').checked = true;\ndocument.getElementById('lv-check-off').checked = false;\ndocument.getElementById('lv-select').selectedIndex = 2;\n",
+					"\n// Every write below sets the DOM *property* and never touches the markup attribute, so\n// `EnhancedDomTreeNode.attributes` keeps the authored value while the accessibility tree reports the\n// live one. That disagreement is the whole point of the \"AX value overrides DOM value\"\n// rule, and no page of the recorded corpus produces it. Deterministic: no timers, no randomness.\ndocument.getElementById('lv-number').value = '42';\ndocument.getElementById('lv-range').value = '9';\ndocument.getElementById('lv-text').value = 'live-typed-value';\ndocument.getElementById('lv-check-on').checked = true;\ndocument.getElementById('lv-check-off').checked = false;\ndocument.getElementById('lv-select').selectedIndex = 2;\n",
 					"\n\n\n"
 				]
 			},

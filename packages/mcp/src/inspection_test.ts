@@ -1,19 +1,14 @@
 /**
- * R4 (D-116): the three inspection handlers against a real registry, a real event ring and a real request log,
- * fed by a stand-in CDP client. Every success is parsed with the tool's own output schema, so a field the handler
- * emits that the schema strips fails here rather than at the SDK seam.
- *
- * AC4 (redaction, scope gating), AC5 (bounds at the handler, the console claim's arm/idle/close, HAR 1.2 and its
- * 1 MiB cap) and AC6's unit half (a configured secret, as written, never leaves through any of the three).
+ * The three inspection handlers against a real registry, a real event ring and a real request log, fed by a stand-in
+ * CDP client.
  */
+import { blankSession } from '../fixtures/capture_session.ts';
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { FakeTime } from '@std/testing/time';
 import { encodeBase64 } from '@std/encoding/base64';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import { INSPECTION_OUTPUT } from './catalog/inspection.ts';
 import { isToolError } from './errors.ts';
-import { HAR_MAX_BYTES } from './har.ts';
+import { HAR_MAX_BYTES } from './network_log.ts';
 import { CONSOLE_CLAIM_IDLE_MS, DEFAULT_SESSION_ID, type SessionRecord, SessionRegistry } from './registry.ts';
 import type { Scope } from './scopes.ts';
 import { SecretStore } from './secrets.ts';
@@ -82,16 +77,7 @@ interface Fixture extends AsyncDisposable {
 
 async function fixture(now?: () => number): Promise<Fixture> {
 	const client = fakeClient();
-	const session = {
-		cdpClient: client,
-		sessionManager: null,
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: 'T-top',
-		eventBus: new EventBus({ name: 'inspection' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
+	const session = blankSession({ cdpClient: client, agentFocusTargetId: 'T-top' });
 	const registry = new SessionRegistry({
 		reapIntervalMs: 0,
 		...(now === undefined ? {} : { now }),
@@ -155,7 +141,7 @@ async function refusal(run: () => Promise<unknown>): Promise<{ code: string; mes
 
 // --- browser_network_log -------------------------------------------------------------------------------
 
-Deno.test('inspection (AC4): full URLs and bodies need network:read, and the refusal names no scope', async () => {
+Deno.test('inspection: full URLs and bodies need network:read, and the refusal names no scope', async () => {
 	await using f = await fixture();
 	f.request('R1', 'https://app.example/a?token=Zq8');
 	for (const args of [{ include_full_urls: true }, { body_for: 'R1' }]) {
@@ -175,14 +161,13 @@ Deno.test('inspection (AC4): full URLs and bodies need network:read, and the ref
 		structured<{ entries: Array<{ url?: string }> }>(full).entries[0]?.url,
 		'https://app.example/a?token=Zq8',
 	);
-	// The scope alone does not put the url on the wire: the caller must ask.
 	const asked = structured<{ entries: Array<{ url?: string }> }>(
 		await browserNetworkLog({}, f.ctx(['mcp:invoke', 'network:read'])),
 	);
 	assertEquals(asked.entries[0]?.url, undefined);
 });
 
-Deno.test('inspection (AC4/F3): headers are redacted by name, and URL values are cut without the scope', async () => {
+Deno.test('inspection: headers are redacted by name, and URL values are cut without the scope', async () => {
 	await using f = await fixture();
 	f.request('R1', 'https://app.example/next', {
 		requestHeaders: {
@@ -220,18 +205,16 @@ Deno.test('inspection (AC4/F3): headers are redacted by name, and URL values are
 	const text = JSON.stringify(result);
 	assert(!/Zq8-[A-Z]/.test(text), `a credential or query reached the caller: ${text}`);
 
-	// With the scope the URL values are whole; credentials stay redacted regardless.
 	const privileged = structured<{ entries: Array<Record<string, Record<string, string>>> }>(
 		await browserNetworkLog({ include_headers: true }, f.ctx(['mcp:invoke', 'network:read'])),
 	);
 	assertEquals(privileged.entries[0]?.request_headers?.Referer, 'https://app.example/prev?session=Zq8-REF');
 	assertEquals(privileged.entries[0]?.request_headers?.Authorization, '[redacted]');
-	// Headers appear only when asked for.
 	const bare = structured<{ entries: Array<Record<string, unknown>> }>(await browserNetworkLog({}, f.ctx()));
 	assertEquals(bare.entries[0]?.request_headers, undefined);
 });
 
-Deno.test('inspection (AC6): a configured secret, as written, never leaves through the network log', async () => {
+Deno.test('inspection: a configured secret, as written, never leaves through the network log', async () => {
 	await using f = await fixture();
 	f.request('R1', `https://app.example/u/${SECRET}?p=${SECRET}`, {
 		requestHeaders: { 'x-echo': `value ${SECRET}` },
@@ -281,11 +264,10 @@ Deno.test('inspection: body_for returns text or base64, bounded at 256 KiB, from
 	assertEquals((await refusal(() => browserNetworkLog({ body_for: 'GONE' }, privileged))).code, 'file-unavailable');
 });
 
-Deno.test('R2-7: a text body is redacted whole, then cut — a secret straddling the 256 KiB cap leaves no prefix', async () => {
+Deno.test('inspection: a text body is redacted whole, then cut — a secret straddling the 256 KiB cap leaves no prefix', async () => {
 	await using f = await fixture();
 	const privileged = f.ctx(['mcp:invoke', 'network:read']);
 	f.request('EDGE', 'https://app.example/edge');
-	// The secret starts four bytes before the cap: cut-then-redact would hand back its first four characters.
 	f.client.bodies.set('EDGE', {
 		body: `${'x'.repeat(NETWORK_BODY_LIMIT_BYTES - 4)}${SECRET}${'y'.repeat(16)}`,
 		base64Encoded: false,
@@ -312,7 +294,7 @@ Deno.test('inspection: the log is read through peek — no session, no browser',
 	}
 });
 
-Deno.test('inspection (AC5): the log is armed on launch, paged with since, and its bounds hold at the handler', async () => {
+Deno.test('inspection: the log is armed on launch, paged with since, and its bounds hold at the handler', async () => {
 	await using f = await fixture();
 	for (let index = 0; index < 600; index++) f.request(`R${index}`, `https://app.example/${index}`);
 	const first = structured<{ entries: Array<{ seq: number }>; next_since: number; dropped: number }>(
@@ -330,7 +312,7 @@ Deno.test('inspection (AC5): the log is armed on launch, paged with since, and i
 
 // --- browser_console_log -------------------------------------------------------------------------------
 
-Deno.test('inspection (AC5): the console claim arms capture, reports armed_since, and pages with since', async () => {
+Deno.test('inspection: the console claim arms capture, reports armed_since, and pages with since', async () => {
 	let now = 1_767_225_600_000;
 	await using f = await fixture(() => now);
 	const first = structured<{ armed_since: string; entries: unknown[]; next_cursor: string; gap: unknown }>(
@@ -349,7 +331,7 @@ Deno.test('inspection (AC5): the console claim arms capture, reports armed_since
 		await browserConsoleLog({}, f.ctx()),
 	);
 	assertEquals(all.entries.map((entry) => entry.level), ['log', 'warn', 'error'], 'omitted since: from the claim');
-	assert(!JSON.stringify(all).includes(SECRET), 'AC6: the secret never leaves through the console');
+	assert(!JSON.stringify(all).includes(SECRET), 'the secret never leaves through the console');
 	assertEquals(all.entries[1]?.text, 'two [secret]');
 	assertEquals(f.record.events.consoleSubscribers, 1, 'a second call refreshes the claim, it does not stack');
 
@@ -365,7 +347,7 @@ Deno.test('inspection (AC5): the console claim arms capture, reports armed_since
 	assertEquals(after.entries, []);
 });
 
-Deno.test('inspection (AC5): the console claim disarms after 10 minutes without a call, and at close', async () => {
+Deno.test('inspection: the console claim disarms after 10 minutes without a call, and at close', async () => {
 	await using f = await fixture();
 	using time = new FakeTime();
 	await browserConsoleLog({}, f.ctx());
@@ -462,7 +444,7 @@ function assertHar12(har: Har): void {
 	}
 }
 
-Deno.test('inspection (AC4/AC5): the HAR is 1.2, cookie-free, and origin+path only without full-URL permission', async () => {
+Deno.test('inspection: the HAR is 1.2, cookie-free, and origin+path only without full-URL permission', async () => {
 	await using f = await fixture();
 	f.client.emit('Network.requestWillBeSent', {
 		requestId: 'H',
@@ -505,9 +487,8 @@ Deno.test('inspection (AC4/AC5): the HAR is 1.2, cookie-free, and origin+path on
 	}
 	const text = JSON.stringify(result);
 	assert(!/Zq8-[A-Z]/.test(text), text);
-	assert(!text.includes(SECRET), 'AC6: the secret never leaves through the HAR');
+	assert(!text.includes(SECRET), 'the secret never leaves through the HAR');
 
-	// Full-URL permission: the scope and the ask, together.
 	assertEquals((await refusal(() => browserHarExport({ include_full_urls: true }, f.ctx()))).code, 'scope-required');
 	const full = harOf(await browserHarExport({ include_full_urls: true }, f.ctx(['mcp:invoke', 'network:read'])));
 	assertEquals(full.log.entries[0]?.request.url, 'https://app.example/start?x=1');
@@ -517,7 +498,7 @@ Deno.test('inspection (AC4/AC5): the HAR is 1.2, cookie-free, and origin+path on
 	assert(!JSON.stringify(full).includes(SECRET), 'redaction holds with full URLs too');
 });
 
-Deno.test('inspection (AC5): HAR max_entries keeps the newest, truncated says so, and over 1 MiB is refused', async () => {
+Deno.test('inspection: HAR max_entries keeps the newest, truncated says so, and over 1 MiB is refused', async () => {
 	await using f = await fixture();
 	for (let index = 0; index < 5; index++) f.request(`R${index}`, `https://app.example/${index}`);
 	const two = await browserHarExport({ max_entries: 2 }, f.ctx());
@@ -532,8 +513,6 @@ Deno.test('inspection (AC5): HAR max_entries keeps the newest, truncated says so
 		'https://app.example/4',
 	]);
 
-	// The log's own 512 KiB bound keeps most HARs far under 1 MiB; many tiny headers are where HAR's per-header
-	// `{"name":…,"value":…}` overhead triples the size, which is the case the cap exists for.
 	const fat: Record<string, string> = {};
 	for (let index = 0; index < 600; index++) fat[`h${index}`] = 'v';
 	for (let index = 0; index < 200; index++) {

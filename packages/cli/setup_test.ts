@@ -1,14 +1,21 @@
 /**
- * `setup` writes every file the shipped compose files mount (design: docs/design/stack-tooling-and-secrets.md), with
+ * `setup` writes every file the shipped compose files mount (design: docs/security.md, Secrets), with
  * modes the containers can read, the stack's scopes on the credentials it prints, and `.env` from the one template.
- * Run against a scratch checkout under `tests/.scratch`, the only place the unit tier may write. The host's AppArmor is
- * stood in for (`apparmor_test.ts` covers the unit itself): off, unless a test says otherwise.
  */
-import { assert, assertEquals, assertNotEquals, assertRejects } from '@std/assert';
-import { fromFileUrl } from '@std/path';
-import { A2A_PEER_SCOPES as PEER_SCOPES, STACK_SCOPES } from '@tykotech/mcp';
+import { assert, assertEquals, assertNotEquals } from '@std/assert';
+import { fromFileUrl, resolve } from '@std/path';
+import { STACK_SCOPES } from '@tykotech/mcp';
 import { type AppArmorHost, profileCommands, shellLine } from './apparmor.ts';
-import { type CredentialStreams, ENV_TEMPLATE, redactedUrl, runSetup, SETUP_UNITS, setupUnits } from './mod.ts';
+import {
+	type CredentialStreams,
+	ENV_TEMPLATE,
+	localDefaults,
+	localDefaultsLines,
+	redactedUrl,
+	runSetup,
+	SETUP_UNITS,
+	setupUnits,
+} from './mod.ts';
 
 const ROOT = new URL('../../', import.meta.url);
 const posix = Deno.build.os !== 'windows';
@@ -40,11 +47,7 @@ function appArmorHost(answer: string | null, calls: string[][], out: string[]): 
 /** What marks an entry of `checkout`'s `out` that was written to a credential stream rather than through `console`. */
 const SHOWN = '[shown] ';
 
-/**
- * A scratch folder standing in for a checkout; removed after `body`. Everything setup puts on screen is kept from the
- * terminal and handed to `body` in the order it was written: console output one entry per call, and what went to the
- * credential streams (`show`, which every `runSetup` here is given) one entry per line, each marked {@linkcode SHOWN}.
- */
+/** A scratch folder standing in for a checkout; removed after `body`. */
 async function checkout(
 	body: (root: string, out: string[], show: CredentialStreams) => Promise<void>,
 ): Promise<void> {
@@ -70,10 +73,15 @@ const read = (root: string, path: string): Promise<string> => Deno.readTextFile(
 const json = async (root: string, path: string): Promise<unknown> => JSON.parse(await read(root, path));
 const mode = async (root: string, path: string): Promise<number> => (await Deno.stat(`${root}/${path}`)).mode! & 0o777;
 
-async function sha256(text: string): Promise<string> {
-	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
+/** Every file `setup` writes in `secrets/`, by name. */
+const SETUP_SECRET_FILES = [
+	'ttk_admin_user.json',
+	'ttk_api_keys.json',
+	'ttk_db_key',
+	'ttk_git_remotes',
+	'ttk_sandbox_token',
+	'ttk_secrets.json',
+];
 
 /** Every `file: ./secrets/<name>` the shipped compose files declare. */
 async function composeSecretFiles(): Promise<Set<string>> {
@@ -94,12 +102,11 @@ Deno.test('setup: .env.example is the template setup writes, byte for byte', asy
 	assertEquals(await Deno.readTextFile(new URL('.env.example', ROOT)), ENV_TEMPLATE);
 });
 
-Deno.test('setup: the stack and peer scopes are scopes, and never the explicit grants nobody gets unasked', async () => {
+Deno.test('setup: the stack scopes are scopes, and never the explicit grants nobody gets unasked', async () => {
 	const { SCOPES } = await import('@tykotech/gateway');
-	for (const scope of [...STACK_SCOPES, ...PEER_SCOPES]) assert((SCOPES as readonly string[]).includes(scope), scope);
+	for (const scope of STACK_SCOPES) assert((SCOPES as readonly string[]).includes(scope), scope);
 	for (const scope of ['task', 'evaluate', 'admin', 'metrics:read', 'network:read']) {
 		assert(!(STACK_SCOPES as readonly string[]).includes(scope), `${scope} is not a stack scope`);
-		assert(!(PEER_SCOPES as readonly string[]).includes(scope), `${scope} is not a peer scope`);
 	}
 	// The features the default stack runs are reachable with the key setup prints.
 	for (const scope of ['sandbox:execute', 'agent:invoke', 'a2ui:publish', 'model:invoke', 'files:write']) {
@@ -118,8 +125,12 @@ Deno.test('doctor: a URL on a diagnostic line never carries its username or pass
 
 Deno.test('setup: --only names units, and nothing else', () => {
 	assertEquals(setupUnits(undefined), null);
-	assertEquals(setupUnits('peer, env'), ['peer', 'env']);
-	assertEquals(setupUnits('peer,nope'), undefined);
+	assertEquals(setupUnits('sandbox-token, env'), ['sandbox-token', 'env']);
+	assertEquals(setupUnits('env,nope'), undefined);
+	// The retired units of the bundled A2A peer and the ACP runner overlay are unknown now.
+	for (const retired of ['peer', 'agent-token', 'agent-commands']) {
+		assertEquals(setupUnits(retired), undefined, retired);
+	}
 	assertEquals(setupUnits(','), undefined);
 	assertEquals(setupUnits(SETUP_UNITS.join(',')), [...SETUP_UNITS]);
 });
@@ -136,11 +147,13 @@ Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts
 		for (const credential of credentials) assert(!logged.includes(credential), 'a credential went through console');
 		assert(logged.includes('Shown once, stored only as hashes'), 'the heading is an ordinary line');
 
-		// Every secret file compose declares exists, except the one only you can write (the providers overlay's).
+		// Exactly these files, and among them every secret file a compose file declares.
+		const written = (await Array.fromAsync(Deno.readDir(`${root}/secrets`))).map((entry) => entry.name).sort();
+		assertEquals(written, SETUP_SECRET_FILES);
 		const declared = await composeSecretFiles();
-		assert(declared.size >= 11, `the compose files declare ${declared.size} secret files`);
-		for (const name of declared) {
-			if (name === 'ttk_model_providers.json') continue;
+		assert(declared.size >= 5, `the compose files declare ${declared.size} secret files`);
+		for (const name of declared) assert(SETUP_SECRET_FILES.includes(name), `setup writes secrets/${name}`);
+		for (const name of SETUP_SECRET_FILES) {
 			assert((await Deno.stat(`${root}/secrets/${name}`)).isFile, `secrets/${name}`);
 			if (posix) assertEquals(await mode(root, `secrets/${name}`), 0o644, `secrets/${name} mode`);
 		}
@@ -154,22 +167,14 @@ Deno.test('setup: a fresh checkout gets every file a shipped compose file mounts
 		assertEquals([admin.username, admin.scopes], ['admin', [...STACK_SCOPES, 'admin']]);
 		assertEquals((await read(root, 'secrets/ttk_db_key')).trim().length, 43);
 
-		// The peer pair: the gateway presents the token; the peer's key file holds its hash, A2A scopes only.
-		const token = (await read(root, 'secrets/ttk_peer_token')).trim();
-		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<Record<string, unknown>>;
-		assertEquals(peerKeys, [{ id: 'gateway', sha256: await sha256(token), scopes: [...PEER_SCOPES] }]);
-		assertEquals(await json(root, 'secrets/ttk_agent_peers.json'), [
-			{ id: 'peer', url: 'http://a2a-peer:8787', token_file: '/run/secrets/ttk_peer_token' },
-		]);
-
-		// Placeholders that configure nothing until filled in, and the agent runner's token.
+		// Placeholders that configure nothing until filled in.
 		assertEquals(await json(root, 'secrets/ttk_secrets.json'), {});
 		assertEquals(await json(root, 'secrets/ttk_git_remotes'), []);
-		assert(/^[0-9a-f]{64}$/.test((await read(root, 'secrets/ttk_agent_bridge_token')).trim()));
-		// The sandbox makes its own token, on its volume.
-		await assertRejects(() => Deno.stat(`${root}/secrets/ttk_sandbox_token`), Deno.errors.NotFound);
-		const commands = await json(root, 'secrets/ttk_agent_commands.json') as Array<Record<string, unknown>>;
-		assertEquals(commands.map((command) => [command.id, command.executable]), [['default', '/opt/agents/agent']]);
+		// The sandbox's bearer, which Compose mounts into both the gateway and the sandbox.
+		const sandboxToken = await Deno.lstat(`${root}/secrets/ttk_sandbox_token`);
+		assert(sandboxToken.isFile && !sandboxToken.isSymlink && sandboxToken.size <= 4096, 'a plain small file');
+		assert(/^[0-9a-f]{64}\n$/.test(await read(root, 'secrets/ttk_sandbox_token')), '64 hex characters and one newline');
+		if (posix) assertEquals(await mode(root, 'secrets/ttk_sandbox_token'), 0o644, 'the sandbox uid reads it');
 	});
 });
 
@@ -190,19 +195,18 @@ Deno.test('setup: --force replaces generated files, and yours only when --only n
 		const yours = '{ "github_pw": { "value": "x", "domains": ["github.com"] } }\n';
 		await Deno.writeTextFile(`${root}/secrets/ttk_secrets.json`, yours);
 		const key = await read(root, 'secrets/ttk_db_key');
-		const token = await read(root, 'secrets/ttk_peer_token');
+		const sandboxToken = await read(root, 'secrets/ttk_sandbox_token');
 
 		assertEquals(await runSetup({ force: true }, root, OFF, show), 0);
 		assertNotEquals(await read(root, 'secrets/ttk_db_key'), key, 'a generated file is replaced');
+		assertNotEquals(await read(root, 'secrets/ttk_sandbox_token'), sandboxToken, 'the sandbox token too');
 		assertEquals(await read(root, 'secrets/ttk_secrets.json'), yours, 'a file you filled in is not');
 
-		// --only peer --force: the pair is replaced together, and nothing else.
+		// --only sandbox-token --force: that file is replaced, and nothing else.
 		const db = await read(root, 'secrets/ttk_db_key');
-		assertEquals(await runSetup({ force: true, only: 'peer' }, root, OFF, show), 0);
-		const replaced = (await read(root, 'secrets/ttk_peer_token')).trim();
-		assertNotEquals(replaced, token.trim());
-		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<{ sha256: string }>;
-		assertEquals(peerKeys[0]?.sha256, await sha256(replaced));
+		const before = await read(root, 'secrets/ttk_sandbox_token');
+		assertEquals(await runSetup({ force: true, only: 'sandbox-token' }, root, OFF, show), 0);
+		assertNotEquals(await read(root, 'secrets/ttk_sandbox_token'), before);
 		assertEquals(await read(root, 'secrets/ttk_db_key'), db);
 
 		// Named, a file of yours is replaced too.
@@ -211,18 +215,12 @@ Deno.test('setup: --force replaces generated files, and yours only when --only n
 	});
 });
 
-Deno.test('setup: a half-written peer pair is rewritten whole, and a bad --only or scope writes nothing', async () => {
+Deno.test('setup: a bad --only or scope writes nothing', async () => {
 	await checkout(async (root, _out, show) => {
 		assertEquals(await runSetup({ only: 'nope' }, root, OFF, show), 1);
+		assertEquals(await runSetup({ only: 'peer' }, root, OFF, show), 1);
 		assertEquals(await runSetup({ scopes: 'mcp:invoke,bogus' }, root, OFF, show), 1);
 		assertEquals(await Array.fromAsync(Deno.readDir(root)), [], 'nothing was written');
-
-		assertEquals(await runSetup({ only: 'peer' }, root, OFF, show), 0);
-		await Deno.remove(`${root}/secrets/ttk_peer_api_keys.json`);
-		assertEquals(await runSetup({ only: 'peer' }, root, OFF, show), 0);
-		const token = (await read(root, 'secrets/ttk_peer_token')).trim();
-		const peerKeys = await json(root, 'secrets/ttk_peer_api_keys.json') as Array<{ sha256: string }>;
-		assertEquals(peerKeys[0]?.sha256, await sha256(token));
 	});
 });
 
@@ -230,7 +228,8 @@ Deno.test('setup: a half-written peer pair is rewritten whole, and a bad --only 
 async function profileSource(root: string): Promise<string> {
 	await Deno.mkdir(`${root}/docker`, { recursive: true });
 	await Deno.writeTextFile(`${root}/docker/apparmor-sandbox`, 'profile tykotech-sandbox {}\n');
-	return `${root}/docker/apparmor-sandbox`;
+	// Resolved the way setup resolves it, so the path matches on Windows too.
+	return resolve(root, 'docker', 'apparmor-sandbox');
 }
 
 Deno.test('setup: on an AppArmor host the profile is installed through sudo, after the credentials are on screen', async () => {
@@ -273,5 +272,84 @@ Deno.test('setup: --only apparmor installs the profile and writes no file', asyn
 			'docker',
 			'secrets',
 		]);
+	});
+});
+
+/** A checkout whose `present` answers from `files` alone. */
+const checkoutWith = (...files: string[]) => (path: string): Promise<boolean> => Promise.resolve(files.includes(path));
+const SET_UP = [
+	'secrets/ttk_db_key',
+	'secrets/ttk_api_keys.json',
+	'secrets/ttk_secrets.json',
+	'secrets/ttk_sandbox_token',
+];
+
+Deno.test('local defaults: --local-defaults names what setup wrote, by path, for each variable left unset', async () => {
+	const input = { TTK_LOG_LEVEL: 'debug' };
+	const defaults = await localDefaults(input, { apiKeys: true }, checkoutWith(...SET_UP));
+	assertEquals(defaults.env, {
+		TTK_LOG_LEVEL: 'debug',
+		TTK_DATA_DIR: 'data',
+		TTK_DB_KEY_FILE: 'secrets/ttk_db_key',
+		TTK_API_KEYS_FILE: 'secrets/ttk_api_keys.json',
+		TTK_SECRETS_FILE: 'secrets/ttk_secrets.json',
+	});
+	assertEquals(input, { TTK_LOG_LEVEL: 'debug' }, 'the input is not changed');
+	assert(defaults.setUp);
+	assertEquals(localDefaultsLines(defaults), {
+		info: [
+			'local defaults from deno task setup: TTK_DATA_DIR=data, TTK_DB_KEY_FILE=secrets/ttk_db_key, ' +
+			'TTK_API_KEYS_FILE=secrets/ttk_api_keys.json, TTK_SECRETS_FILE=secrets/ttk_secrets.json',
+		],
+		warn: [],
+	});
+	// stdio and seed authenticate nobody; the sandbox token goes only beside a sandbox URL.
+	const stdio = await localDefaults(
+		{ TTK_SANDBOX_URL: 'http://127.0.0.1:8080' },
+		{ apiKeys: false },
+		checkoutWith(...SET_UP),
+	);
+	assertEquals(stdio.env.TTK_API_KEYS_FILE, undefined);
+	assertEquals(stdio.env.TTK_SANDBOX_TOKEN_FILE, 'secrets/ttk_sandbox_token');
+});
+
+Deno.test('local defaults: an explicit variable, or another form of it, wins; a missing file is not named', async () => {
+	const defaults = await localDefaults(
+		{
+			TTK_DATA_DIR: '/srv/ttk',
+			TTK_API_KEYS: '[]',
+			TTK_SECRETS_REF: 'vault:kv/ttk#secrets',
+			TTK_SANDBOX_URL: 'http://127.0.0.1:8080',
+			TTK_SANDBOX_TOKEN_FILE: '/run/secrets/token',
+		},
+		{ apiKeys: true },
+		checkoutWith('secrets/ttk_db_key', 'secrets/ttk_api_keys.json', 'secrets/ttk_secrets.json'),
+	);
+	assertEquals(defaults.applied, ['TTK_DB_KEY_FILE=secrets/ttk_db_key']);
+	assertEquals(defaults.env.TTK_DATA_DIR, '/srv/ttk');
+	assertEquals(defaults.env.TTK_SANDBOX_TOKEN_FILE, '/run/secrets/token');
+	for (const name of ['TTK_API_KEYS_FILE', 'TTK_SECRETS_FILE']) assertEquals(defaults.env[name], undefined, name);
+});
+
+Deno.test('local defaults: a checkout without setup starts without them, and is told how to get the files', async () => {
+	const defaults = await localDefaults({}, { apiKeys: true }, checkoutWith('secrets/ttk_secrets.json'));
+	// No key: no data directory either, so the server stays stateless; a file setup would write is still offered.
+	assertEquals(defaults.env, { TTK_SECRETS_FILE: 'secrets/ttk_secrets.json' });
+	assertEquals(defaults.setUp, false);
+	const { warn } = localDefaultsLines(defaults);
+	assertEquals(warn.length, 1);
+	assert(warn[0]!.includes('run deno task setup'), warn[0]);
+	// A key file of the operator's own needs no advice, and brings no data directory with it.
+	const own = await localDefaults({ TTK_DB_KEY_FILE: '/keys/ttk_db_key' }, { apiKeys: true }, checkoutWith());
+	assertEquals([own.applied, localDefaultsLines(own).warn], [[], []]);
+});
+
+Deno.test('local defaults: they hold on a real checkout setup wrote', async () => {
+	await checkout(async (root, _out, show) => {
+		assertEquals(await runSetup({}, root, OFF, show), 0);
+		const present = async (path: string) => (await Deno.lstat(`${root}/${path}`).catch(() => null)) !== null;
+		const defaults = await localDefaults({}, { apiKeys: true }, present);
+		assert(defaults.setUp);
+		assertEquals(defaults.applied.length, 4, defaults.applied.join(', '));
 	});
 });

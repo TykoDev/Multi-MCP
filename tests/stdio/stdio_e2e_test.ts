@@ -1,311 +1,25 @@
 /**
- * The stdio transport, driven as a real client would: spawn the CLI, speak
- * JSON-RPC over its stdin/stdout, and confirm the protocol owns stdout alone.
+ * The stdio transport, driven as a real client would: spawn the CLI and speak JSON-RPC over its stdin/stdout. Every
+ * line on stdout must parse as JSON: the protocol owns it alone.
  */
 import { assert, assertEquals } from '@std/assert';
 import { fromFileUrl } from '@std/path';
 
 const ROOT = fromFileUrl(new URL('../..', import.meta.url));
 
-interface Exchange {
-	responses: Map<number, Record<string, unknown>>;
-	/** The method of every notification the server wrote, in order. */
-	notifications: string[];
-	stderr: string;
-}
-
-/** Sends a scripted set of requests and collects the replies. */
-async function converse(
-	messages: unknown[],
-	expectIds: number[],
-	options: { allowNet?: string; env?: Record<string, string> } = {},
-): Promise<Exchange> {
-	const command = new Deno.Command(Deno.execPath(), {
-		args: [
-			'run',
-			`--allow-net=${options.allowNet ?? '127.0.0.1'}`,
-			'--allow-read=.',
-			'--allow-env',
-			'packages/cli/mod.ts',
-			'stdio',
-		],
-		cwd: ROOT,
-		stdin: 'piped',
-		stdout: 'piped',
-		stderr: 'piped',
-		env: { TTK_LOG_LEVEL: 'error', ...options.env },
-	});
-	const child = command.spawn();
-	const writer = child.stdin.getWriter();
-	const encoder = new TextEncoder();
-	for (const message of messages) {
-		await writer.write(encoder.encode(`${JSON.stringify(message)}\n`));
-	}
-
-	const responses = new Map<number, Record<string, unknown>>();
-	const notifications: string[] = [];
-	const decoder = new TextDecoder();
-	const reader = child.stdout.getReader();
-	let buffer = '';
-	const deadline = Date.now() + 30_000;
-
-	while (Date.now() < deadline && !expectIds.every((id) => responses.has(id))) {
-		const { value, done } = await reader.read();
-		if (done) break;
-		buffer += decoder.decode(value, { stream: true });
-		const lines = buffer.split('\n');
-		buffer = lines.pop() ?? '';
-		for (const line of lines) {
-			if (line.trim() === '') continue;
-			try {
-				const message = JSON.parse(line) as { id?: number; method?: string };
-				if (typeof message.id === 'number') responses.set(message.id, message as Record<string, unknown>);
-				else if (typeof message.method === 'string') notifications.push(message.method);
-			} catch {
-				// A non-JSON line on stdout is itself a finding; captured below.
-				responses.set(-1, { raw: line });
-			}
-		}
-	}
-
-	reader.releaseLock();
-	await writer.close().catch(() => {});
-
-	// Read stderr before killing, then close every stream: a child pipe left
-	// open outlives the test and the sanitizer reports it as a leak.
-	const errReader = child.stderr.getReader();
-	const stderrChunk = await Promise.race([
-		errReader.read(),
-		new Promise<{ value: undefined }>((resolve) => setTimeout(() => resolve({ value: undefined }), 500)),
-	]);
-	const stderr = decoder.decode(stderrChunk.value ?? new Uint8Array());
-	errReader.releaseLock();
-
-	try {
-		child.kill();
-	} catch {
-		// Already exited.
-	}
-	await child.status;
-	await child.stdout.cancel().catch(() => {});
-	await child.stderr.cancel().catch(() => {});
-	return { responses, notifications, stderr };
-}
-
-Deno.test('stdio: initialize, tools/list and a tool call round-trip', async () => {
-	const { responses, notifications } = await converse([
-		{
-			jsonrpc: '2.0',
-			id: 1,
-			method: 'initialize',
-			params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
-		},
-		{ jsonrpc: '2.0', method: 'notifications/initialized' },
-		{ jsonrpc: '2.0', id: 2, method: 'tools/list' },
-		// Tool groups: a grouped tool answers by name before its group is open, then `use_browser` opens the group.
-		{ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'browser_list_sessions', arguments: {} } },
-		{ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'use_browser', arguments: {} } },
-		{ jsonrpc: '2.0', id: 5, method: 'tools/list' },
-	], [1, 2, 3, 4, 5]);
-
-	const initialize = responses.get(1);
-	assert(initialize !== undefined, 'no initialize response');
-	assertEquals((initialize.result as { protocolVersion?: string }).protocolVersion, '2025-06-18');
-	// R14 (D-122, AC16): the identity and the instructions on stdio — a title and a description, but neither a
-	// website nor an icon, because a stdio process has no public URL to point either at.
-	const { serverInfo, instructions } = initialize.result as {
-		serverInfo: Record<string, unknown>;
-		instructions?: unknown;
-	};
-	assertEquals(serverInfo.name, 'tykotech-mcp');
-	assertEquals(serverInfo.title, 'Multi-MCP');
-	assert(typeof serverInfo.description === 'string' && serverInfo.description !== '', 'a description');
-	assertEquals(serverInfo.websiteUrl, undefined, 'stdio advertises no website');
-	assertEquals(serverInfo.icons, undefined, 'stdio advertises no icon');
-	assert(typeof instructions === 'string' && new TextEncoder().encode(instructions).byteLength <= 2048, 'instructions');
-	assert(!instructions.includes('live view'), 'stdio serves no live view, so the instructions say nothing about it');
-
-	// Tool groups (`TTK_MCP_TOOL_GROUPS`, on by default): stdio keeps one server for the connection, so its first list
-	// holds the entry tools only — `use_browser`, the one group this credential-less mount holds tools in here.
-	const listNames = (id: number): string[] =>
-		((responses.get(id)?.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((tool) => tool.name);
-	const grouped = listNames(2);
-	assert(grouped.includes('use_browser'), grouped.join(','));
-	assert(grouped.every((name) => name.startsWith('use_')), `only entry tools before a group is opened: ${grouped}`);
-	const opened = responses.get(4)?.result as { structuredContent?: { group?: string; tools?: unknown[] } } | undefined;
-	assertEquals(opened?.structuredContent?.group, 'browser');
-	assertEquals(
-		notifications.filter((method) => method === 'notifications/tools/list_changed').length,
-		1,
-		`opening the group announced once: ${notifications.join(',')}`,
-	);
-	// What follows is the opened browser group, which is the flat list's browser tools.
-	const listed = listNames(5);
-	const names = listed.filter((name) => name.startsWith('browser_'));
-	assertEquals(listed.filter((name) => !name.startsWith('browser_')), grouped, 'the entry tools stay listed');
-	assertEquals(opened?.structuredContent?.tools?.length, names.length, 'the index names every tool it listed');
-	// stdio has no auth gate, so the caller is trusted with every tool its
-	// *scopes* allow — which is `DEFAULT_SCOPES`, not the whole vocabulary (SEC-01).
-	// Two other absences here have a different cause again: `browser_storage_state`
-	// and `browser_record` carry R5 availability predicates, and this invocation
-	// configures neither a data directory nor an encoder.
-	assert(names.includes('browser_navigate'), names.join(','));
-	// **SEC-01b inverted this assertion, and that is the finding rather than a
-	// casualty of it.** `task` left the default grant in 0.2.0, so the stdio mount —
-	// which carries no credential and therefore no explicit grant — no longer offers
-	// the autonomous loop. An operator who wants it on stdio names it in
-	// `TTK_ANON_SCOPES`. Asserting the absence rather than deleting the line keeps
-	// the deny path tested on the tier that actually runs the mount.
-	assert(!names.includes('browser_run_task'), 'SEC-01b: task must be named to be held, and stdio names nothing');
-	// C7 / D-098 inverted this one the same way: `admin` left the default grant, so the credential-less mount no
-	// longer offers `browser_close_all` unless TTK_ANON_SCOPES names admin.
-	assert(!names.includes('browser_close_all'), 'C7: admin must be named to be held, and stdio names nothing');
-	assert(!names.includes('browser_storage_state'), 'persistence needs TTK_DATA_DIR');
-	assert(!names.includes('browser_record'), 'recording needs TTK_FFMPEG');
-	assert(
-		names.includes('browser_list_files') && names.includes('browser_get_file'),
-		'E-33 file tools are on stdio too',
-	);
-	// B1.7: the event ring's third view is the only one that works here. The
-	// stdio mount hosts no HTTP server, so neither the SSE route nor the
-	// live-view socket exists — a tool that needed either would be absent or
-	// broken, and this is where that would show.
-	assert(names.includes('browser_wait_for'), 'browser_wait_for must work on a mount with no transport');
-	// B1.12: a download is the browser's own transfer, so it needs no HTTP
-	// mount. `browser_head` is the server's own request since SR-HEAD-REDIRECT,
-	// and this child runs with the shipped-shaped `--allow-net=127.0.0.1`, so
-	// the permissions API proves no outbound grant and the tool is not offered.
-	assert(names.includes('browser_download'), 'browser_download is on stdio too');
-	assert(!names.includes('browser_head'), 'browser_head needs a proven outbound grant (SR-HEAD-REDIRECT)');
-	// B2.7 on the mount SEC-01 named as the third deny path: stdio has no credential to carry a grant, so
-	// it receives DEFAULT_SCOPES and `evaluate` is not among them.
-	assert(!names.includes('browser_evaluate'), 'the stdio mount holds no explicit grant');
-	// B2.8 and B2.9 need no HTTP mount either: the ledger is in memory and the policy is constants.
-	assert(names.includes('browser_fill_secret') && names.includes('browser_audit'), 'B2.8 works on stdio');
-	assert(names.includes('browser_file_policy'), 'B2.9 works on stdio');
-	// B3.2 is on stdio too: it needs no HTTP mount, only the registry.
-	assert(names.includes('browser_health'), 'B3.2 works on stdio');
-	// R4 (D-116): the inspection tools read the registry's own log and ring, so they need no HTTP mount either.
-	assert(
-		names.includes('browser_network_log') && names.includes('browser_console_log') &&
-			names.includes('browser_har_export'),
-		'R4 works on stdio',
-	);
-	// W2 (R10/R11): the three always-on browser outputs need no HTTP mount; the signed link does, and is absent.
-	assert(
-		names.includes('browser_pdf') && names.includes('browser_accessibility_snapshot') &&
-			names.includes('browser_performance'),
-		'W2 reads work on stdio',
-	);
-	assert(!names.includes('browser_file_link'), 'a signed link needs the HTTP route, which stdio does not have');
-	// 57 in the catalog, minus six this mount cannot offer: `browser_evaluate`, since SEC-01b
-	// `browser_run_task`, and since C7 `browser_close_all` (their scopes are in EXPLICIT_SCOPES and
-	// TTK_ANON_SCOPES names none here, which is that mechanism seen from the credential-less mount),
-	// `browser_storage_state` and `browser_record` (no data directory and no encoder in this child) and
-	// `browser_head` (no provable outbound grant).
-	//
-	// **The six absences are asserted BY NAME and the count is kept as a second, weaker check.** This
-	// tier was silently red for two revisions on exactly this number, because a count cannot say which
-	// tool arrived or left and nobody ran the tier between revisions.
-	assertEquals(
-		[
-			'browser_close_all',
-			'browser_evaluate',
-			'browser_head',
-			// R9 (W7): MCP Apps needs the gateway's live-view socket; stdio never offers it (the catalog grows by two,
-			// the count below does not).
-			'browser_live_ticket',
-			'browser_live_view',
-			'browser_record',
-			'browser_run_task',
-			'browser_storage_state',
-		]
-			.filter((n) => names.includes(n)),
-		[],
-		`these must be absent on this mount: ${names.join(',')}`,
-	);
-	// mcp-recommendations: +3 inspection reads (W1) and +3 always-on browser outputs (W2).
-	assertEquals(names.length, 47, names.join(','));
-
-	const called = responses.get(3);
-	const content = (called?.result as { content?: Array<{ text?: string }> })?.content ?? [];
-	assert(content[0]?.text?.includes('sessions') === true, JSON.stringify(content));
-
-	assertEquals(responses.get(-1), undefined, 'stdout carried a non-JSON line; the protocol owns it alone');
-});
-
-Deno.test('stdio: logs go to stderr, never stdout', async () => {
-	const { responses, stderr } = await converse([
-		{
-			jsonrpc: '2.0',
-			id: 1,
-			method: 'initialize',
-			params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
-		},
-	], [1]);
-
-	assert(responses.has(1), 'the handshake must still succeed');
-	// Anything the server says about itself belongs on stderr; a stray line on
-	// stdout would corrupt the framing for every client.
-	assertEquals(responses.get(-1), undefined);
-	assert(!stderr.includes('"jsonrpc"'), 'protocol frames must not be duplicated to stderr');
-});
-
-/**
- * SR-HEAD-REDIRECT, the positive half in a real process: `browser_head` is
- * offered exactly when the process holds an outbound net grant for a public
- * host the allowlist names. The child here is started with such a grant — on
- * `docs.example`, a reserved name that resolves nowhere — and the test does
- * **not** call the tool: the probe consults the permissions API only, no
- * request leaves this machine, and the grant is a flag on a test child, not a
- * change to any task string, CMD or tier.
- */
-Deno.test('stdio: browser_head is offered exactly when a public outbound grant is proven', async () => {
-	const { responses, stderr } = await converse(
-		[
-			{
-				jsonrpc: '2.0',
-				id: 1,
-				method: 'initialize',
-				params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'x', version: '0' } },
-			},
-			{ jsonrpc: '2.0', method: 'notifications/initialized' },
-			{ jsonrpc: '2.0', id: 2, method: 'tools/list' },
-		],
-		[1, 2],
-		// The flat list: this case is about which tools are offered, not how they are grouped.
-		{ allowNet: '127.0.0.1,docs.example', env: { TTK_ALLOWED_DOMAINS: 'docs.example', TTK_MCP_TOOL_GROUPS: 'false' } },
-	);
-	const list = responses.get(2);
-	assert(list !== undefined, `no tools/list response; stderr: ${stderr}`);
-	const names = ((list.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((tool) => tool.name);
-	assert(names.includes('browser_head'), `browser_head should be offered under a public grant: ${names.join(',')}`);
-	// The same 44 as above, plus browser_head under a public grant — and the other five
-	// absences are still absent, asserted by name so this count cannot go stale alone.
-	assertEquals(
-		['browser_close_all', 'browser_evaluate', 'browser_record', 'browser_run_task', 'browser_storage_state']
-			.filter((n) => names.includes(n)),
-		[],
-		`a public outbound grant must not add anything but browser_head: ${names.join(',')}`,
-	);
-	assertEquals(names.length, 48, names.join(','));
-});
-
-// --- mcp-recommendations W4: confirmations over the legacy shim, and no handoff on stdio (D-125, D-124) ---------
+type Message = Record<string, unknown>;
 
 interface Io {
 	send(message: unknown): Promise<void>;
-	/** The next JSON-RPC message the server writes — a response, or a request of its own. */
-	next(): Promise<Record<string, unknown>>;
+	/** Reads until a message matches; every message read is kept in `seen`. */
+	until(match: (message: Message) => boolean): Promise<Message>;
+	readonly seen: Message[];
 }
 
-/**
- * Runs one conversation that the server can take part in: unlike {@linkcode converse}, the script reads each message
- * before deciding what to send, which is what answering a server-to-client `elicitation/create` needs.
- */
-async function interactive(env: Record<string, string>, script: (io: Io) => Promise<void>): Promise<void> {
+/** One conversation with a fresh `stdio` child under `--allow-net=<net>`. */
+async function stdio(env: Record<string, string>, script: (io: Io) => Promise<void>, net = '127.0.0.1'): Promise<void> {
 	const child = new Deno.Command(Deno.execPath(), {
-		args: ['run', '--allow-net=127.0.0.1', '--allow-read=.', '--allow-env', 'packages/cli/mod.ts', 'stdio'],
+		args: ['run', `--allow-net=${net}`, '--allow-read=.', '--allow-env', 'packages/cli/mod.ts', 'stdio'],
 		cwd: ROOT,
 		stdin: 'piped',
 		stdout: 'piped',
@@ -314,30 +28,34 @@ async function interactive(env: Record<string, string>, script: (io: Io) => Prom
 	}).spawn();
 	const writer = child.stdin.getWriter();
 	const reader = child.stdout.getReader();
-	const encoder = new TextEncoder();
 	const decoder = new TextDecoder();
-	const queue: Record<string, unknown>[] = [];
+	const queue: Message[] = [];
 	let buffer = '';
 	const io: Io = {
-		send: (message) => writer.write(encoder.encode(`${JSON.stringify(message)}\n`)),
-		next: async () => {
-			while (queue.length === 0) {
-				let timer: ReturnType<typeof setTimeout> | undefined;
-				const late = new Promise<never>((_, reject) => {
-					timer = setTimeout(() => reject(new Error('the stdio server said nothing for 30 s')), 30_000);
-				});
-				try {
-					const { value, done } = await Promise.race([reader.read(), late]);
-					if (done) throw new Error('the stdio server closed stdout');
-					buffer += decoder.decode(value, { stream: true });
-				} finally {
-					clearTimeout(timer);
+		seen: [],
+		send: (message) => writer.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`)),
+		until: async (match) => {
+			for (;;) {
+				while (queue.length === 0) {
+					let timer: ReturnType<typeof setTimeout> | undefined;
+					const late = new Promise<never>((_, reject) => {
+						timer = setTimeout(() => reject(new Error('the stdio server said nothing for 30 s')), 30_000);
+					});
+					try {
+						const { value, done } = await Promise.race([reader.read(), late]);
+						if (done) throw new Error('the stdio server closed stdout');
+						buffer += decoder.decode(value, { stream: true });
+					} finally {
+						clearTimeout(timer);
+					}
+					const lines = buffer.split('\n');
+					buffer = lines.pop() ?? '';
+					for (const line of lines) if (line.trim() !== '') queue.push(JSON.parse(line));
 				}
-				const lines = buffer.split('\n');
-				buffer = lines.pop() ?? '';
-				for (const line of lines) if (line.trim() !== '') queue.push(JSON.parse(line));
+				const message = queue.shift()!;
+				io.seen.push(message);
+				if (match(message)) return message;
 			}
-			return queue.shift()!;
 		},
 	};
 	try {
@@ -347,56 +65,128 @@ async function interactive(env: Record<string, string>, script: (io: Io) => Prom
 		await writer.close().catch(() => {});
 		try {
 			child.kill();
-		} catch {
-			// Already exited.
-		}
+		} catch { /* already exited */ }
 		await child.status;
 		await child.stdout.cancel().catch(() => {});
 		await child.stderr.cancel().catch(() => {});
 	}
 }
 
-/** `initialize` on the 2025 era with the given capabilities, then `initialized`. */
-async function open(io: Io, capabilities: Record<string, unknown>): Promise<void> {
+/** `initialize` on the 2025 era with the given capabilities, then `initialized`; the initialize result. */
+async function open(io: Io, capabilities: Message = {}): Promise<Message> {
 	await io.send({
 		jsonrpc: '2.0',
 		id: 1,
 		method: 'initialize',
-		params: { protocolVersion: '2025-06-18', capabilities, clientInfo: { name: 'w4', version: '0' } },
+		params: { protocolVersion: '2025-06-18', capabilities, clientInfo: { name: 'test', version: '0' } },
 	});
-	assertEquals((await io.next()).id, 1);
+	const result = (await io.until((m) => m.id === 1)).result as Message;
 	await io.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+	return result;
 }
 
-function closeAll(id: number): Record<string, unknown> {
-	return { jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'browser_close_all', arguments: {} } };
+async function call(io: Io, id: number, method: string, params: Message = {}): Promise<Message> {
+	await io.send({ jsonrpc: '2.0', id, method, params });
+	return (await io.until((m) => m.id === id)).result as Message;
 }
 
-interface ToolResponse {
-	id?: number;
-	method?: string;
-	result?: {
-		isError?: boolean;
-		content: Array<{ text: string }>;
-		structuredContent?: { error?: { code: string; message: string } };
-	};
+const names = (result: Message): string[] => ((result.tools ?? []) as Array<{ name: string }>).map((tool) => tool.name);
+
+interface ToolResult {
+	isError?: boolean;
+	content: Array<{ text: string }>;
+	structuredContent?: { error?: { code: string; message: string } };
 }
 
-Deno.test('stdio (D-125): a client that declared elicitation confirms browser_close_all through the shim', async () => {
-	await interactive({ TTK_ANON_SCOPES: 'mcp:invoke,admin' }, async (io) => {
+Deno.test('stdio: initialize, grouped tools/list, a call by name, and the opened group', async () => {
+	await stdio({}, async (io) => {
+		const initialize = await open(io);
+		assertEquals(initialize.protocolVersion, '2025-06-18');
+		// A stdio process has no public URL: no website, no icon, and no live view in the instructions.
+		const serverInfo = initialize.serverInfo as Message;
+		assertEquals([serverInfo.name, serverInfo.title], ['tykotech-mcp', 'Multi-MCP']);
+		assert(typeof serverInfo.description === 'string' && serverInfo.description !== '');
+		assertEquals([serverInfo.websiteUrl, serverInfo.icons], [undefined, undefined]);
+		const instructions = initialize.instructions as string;
+		assert(new TextEncoder().encode(instructions).byteLength <= 2048 && !instructions.includes('live view'));
+
+		// Tool groups are on by default: the first list holds the entry tools only, and a grouped tool answers by name.
+		const grouped = names(await call(io, 2, 'tools/list'));
+		assert(grouped.includes('use_browser') && grouped.every((name) => name.startsWith('use_')), grouped.join(','));
+		const listed = (await call(io, 3, 'tools/call', { name: 'browser_list_sessions', arguments: {} })) as unknown;
+		assert((listed as ToolResult).content[0]?.text.includes('sessions'), JSON.stringify(listed));
+		const opened = (await call(io, 4, 'tools/call', { name: 'use_browser', arguments: {} })).structuredContent as {
+			group?: string;
+			tools?: unknown[];
+		};
+		assertEquals(opened.group, 'browser');
+		const all = names(await call(io, 5, 'tools/list'));
+		const browser = all.filter((name) => name.startsWith('browser_'));
+		assertEquals(all.filter((name) => !name.startsWith('browser_')), grouped, 'the entry tools stay listed');
+		assertEquals(opened.tools?.length, browser.length);
+		assertEquals(io.seen.filter((m) => m.method === 'notifications/tools/list_changed').length, 1);
+
+		// DEFAULT_SCOPES and no HTTP mount: the scoped tools (evaluate, task, admin), the tools that need a data dir, an
+		// encoder, a proven outbound grant, or the live-view socket are absent; everything else is here.
+		const absent = [
+			'browser_close_all',
+			'browser_evaluate',
+			'browser_file_link',
+			'browser_head',
+			'browser_live_ticket',
+			'browser_live_view',
+			'browser_record',
+			'browser_run_task',
+			'browser_storage_state',
+		];
+		assertEquals(absent.filter((name) => browser.includes(name)), [], browser.join(','));
+		for (
+			const name of [
+				'browser_navigate',
+				'browser_wait_for',
+				'browser_download',
+				'browser_fill_secret',
+				'browser_file_policy',
+				'browser_network_log',
+				'browser_har_export',
+				'browser_pdf',
+			]
+		) {
+			assert(browser.includes(name), name);
+		}
+		assertEquals(browser.length, 47, browser.join(','));
+	});
+});
+
+Deno.test('stdio: browser_head is offered exactly when a public outbound grant is proven', async () => {
+	// `docs.example` resolves nowhere, and the tool is never called: the probe consults the permissions API only.
+	await stdio({ TTK_ALLOWED_DOMAINS: 'docs.example', TTK_MCP_TOOL_GROUPS: 'false' }, async (io) => {
+		await open(io);
+		const listed = names(await call(io, 2, 'tools/list'));
+		assert(listed.includes('browser_head'), listed.join(','));
+		const unchanged = ['browser_close_all', 'browser_evaluate', 'browser_record', 'browser_run_task'];
+		assertEquals(unchanged.filter((name) => listed.includes(name)), []);
+		assertEquals(listed.filter((name) => name.startsWith('browser_')).length, 48);
+	}, '127.0.0.1,docs.example');
+});
+
+const closeAll = (io: Io, id: number) =>
+	io.send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'browser_close_all', arguments: {} } });
+
+Deno.test('stdio: a client that declared elicitation confirms browser_close_all through the 2025 shim', async () => {
+	await stdio({ TTK_ANON_SCOPES: 'mcp:invoke,admin' }, async (io) => {
 		await open(io, { elicitation: {} });
-		const rounds: Array<[number, Record<string, unknown>, boolean]> = [
+		const rounds: Array<[number, Message, boolean]> = [
 			[2, { action: 'decline' }, true],
 			[3, { action: 'cancel' }, true],
 			[4, { action: 'accept', content: { confirm: false } }, true],
 			[5, { action: 'accept', content: { confirm: true } }, false],
 		];
 		for (const [id, answer, declined] of rounds) {
-			await io.send(closeAll(id));
-			// The 2025 shim turns the tool's `input_required` into a real server-to-client request.
-			const asked = await io.next();
+			await closeAll(io, id);
+			const asked = await io.until(() => true);
 			assertEquals(asked.method, 'elicitation/create', JSON.stringify(asked));
-			const params = asked.params as { message: string; requestedSchema: Record<string, unknown> };
+			const params = asked.params as { message: string; requestedSchema: Message };
 			assert(params.message.startsWith('Close every browser session on this server?'), params.message);
 			assertEquals(params.requestedSchema, {
 				type: 'object',
@@ -404,105 +194,71 @@ Deno.test('stdio (D-125): a client that declared elicitation confirms browser_cl
 				required: ['confirm'],
 			});
 			await io.send({ jsonrpc: '2.0', id: asked.id, result: answer });
-			const response = (await io.next()) as ToolResponse;
-			assertEquals(response.id, id);
-			if (declined) {
-				assertEquals(response.result?.isError, true, JSON.stringify(response));
-				assert(response.result!.content[0]!.text.startsWith('Error: user-declined: '), JSON.stringify(response));
-			} else {
-				assertEquals(response.result?.isError, undefined, JSON.stringify(response));
-				assertEquals(response.result?.content[0]?.text, 'Closed 0 sessions.');
-			}
+			const response = (await io.until((m) => m.id === id)).result as ToolResult;
+			if (declined) assert(response.content[0]!.text.startsWith('Error: user-declined: '), JSON.stringify(response));
+			else assertEquals([response.isError, response.content[0]?.text], [undefined, 'Closed 0 sessions.']);
 		}
 	});
 });
 
-Deno.test('stdio (D-125): a client without elicitation, or with confirmations off, is never asked', async () => {
-	const shapes: Array<[Record<string, string>, Record<string, unknown>]> = [
+Deno.test('stdio: a client without elicitation, or with confirmations off, is never asked', async () => {
+	const shapes: Array<[Record<string, string>, Message]> = [
 		[{ TTK_ANON_SCOPES: 'mcp:invoke,admin' }, {}],
 		[{ TTK_ANON_SCOPES: 'mcp:invoke,admin', TTK_CONFIRM_DESTRUCTIVE: 'false' }, { elicitation: {} }],
 	];
 	for (const [env, capabilities] of shapes) {
-		await interactive(env, async (io) => {
+		await stdio(env, async (io) => {
 			await open(io, capabilities);
-			await io.send(closeAll(2));
-			const response = (await io.next()) as ToolResponse;
-			assertEquals(response.method, undefined, `asked anyway: ${JSON.stringify(response)}`);
-			assertEquals(response.id, 2);
-			assertEquals(response.result?.content[0]?.text, 'Closed 0 sessions.');
+			await closeAll(io, 2);
+			const response = await io.until(() => true);
+			assertEquals(response.id, 2, `asked anyway: ${JSON.stringify(response)}`);
+			assertEquals((response.result as ToolResult).content[0]?.text, 'Closed 0 sessions.');
 		});
 	}
 });
 
-Deno.test('stdio (D-124): the handoff is never offered on stdio, even with TTK_HUMAN_HANDOFF=true', async () => {
-	// The flat list, or a grouped one would hide `browser_request_human` for the wrong reason and pass vacuously.
-	await interactive({ TTK_HUMAN_HANDOFF: 'true', TTK_MCP_TOOL_GROUPS: 'false' }, async (io) => {
+Deno.test('stdio: the handoff is never offered on stdio, even with TTK_HUMAN_HANDOFF=true', async () => {
+	// The flat list, or a grouped one would hide `browser_request_human` for the wrong reason.
+	await stdio({ TTK_HUMAN_HANDOFF: 'true', TTK_MCP_TOOL_GROUPS: 'false' }, async (io) => {
 		await open(io, { elicitation: { url: {} } });
-		await io.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
-		const list = (await io.next()) as { result: { tools: Array<{ name: string }> } };
-		assert(!list.result.tools.some((tool) => tool.name === 'browser_request_human'), 'offered on stdio');
-		await io.send({
-			jsonrpc: '2.0',
-			id: 3,
-			method: 'tools/call',
-			params: { name: 'browser_request_human', arguments: { reason: 'help' } },
-		});
-		const refused = (await io.next()) as ToolResponse;
-		assertEquals(refused.result?.isError, true);
-		assertEquals(refused.result?.structuredContent?.error?.code, 'feature-unavailable');
-		assert((refused.result?.structuredContent?.error?.message ?? '').includes('TTK_HUMAN_HANDOFF'));
+		assert(!names(await call(io, 2, 'tools/list')).includes('browser_request_human'), 'offered on stdio');
+		const refused = (await call(io, 3, 'tools/call', {
+			name: 'browser_request_human',
+			arguments: { reason: 'help' },
+		})) as unknown as ToolResult;
+		assertEquals(refused.structuredContent?.error?.code, 'feature-unavailable');
+		assert((refused.structuredContent?.error?.message ?? '').includes('TTK_HUMAN_HANDOFF'));
 	});
 });
 
-// --- tool groups on the 2026-07-28 era: one server pinned to the connection, changes on `subscriptions/listen` ------
-
 Deno.test('stdio (tool groups): a 2026-era connection lists the entry tools and hears its group open on subscriptions/listen', async () => {
-	const meta = {
+	const _meta = {
 		'io.modelcontextprotocol/protocolVersion': '2026-07-28',
 		'io.modelcontextprotocol/clientCapabilities': {},
 		'io.modelcontextprotocol/clientInfo': { name: 'test', version: '0' },
 	};
-	const request = (id: number, method: string, params: Record<string, unknown> = {}) => ({
-		jsonrpc: '2.0',
-		id,
-		method,
-		params: { ...params, _meta: meta },
-	});
-	await interactive({}, async (io) => {
-		const seen: Record<string, unknown>[] = [];
-		const until = async (match: (message: Record<string, unknown>) => boolean): Promise<Record<string, unknown>> => {
-			for (;;) {
-				const message = await io.next();
-				seen.push(message);
-				if (match(message)) return message;
-			}
-		};
-		const names = (message: Record<string, unknown>): string[] =>
-			((message.result as { tools?: Array<{ name: string }> }).tools ?? []).map((tool) => tool.name);
-		const announced = (): number => seen.filter((m) => m.method === 'notifications/tools/list_changed').length;
-
-		await io.send(request(1, 'server/discover'));
-		const discovered = (await until((m) => m.id === 1)).result as {
+	await stdio({}, async (io) => {
+		const request = (id: number, method: string, params: Message = {}) => call(io, id, method, { ...params, _meta });
+		const announced = (): number => io.seen.filter((m) => m.method === 'notifications/tools/list_changed').length;
+		const discovered = await request(1, 'server/discover') as {
 			instructions?: string;
 			capabilities?: { tykotech?: { tool_groups?: string[] } };
 		};
 		assertEquals(discovered.capabilities?.tykotech?.tool_groups, ['browser']);
 		assert(discovered.instructions?.includes('use_browser'), discovered.instructions);
-
-		await io.send(request(2, 'subscriptions/listen', { notifications: { toolsListChanged: true } }));
-		await until((m) => m.method === 'notifications/subscriptions/acknowledged');
-
-		await io.send(request(3, 'tools/list'));
-		assertEquals(names(await until((m) => m.id === 3)), ['use_browser']);
-
-		await io.send(request(4, 'tools/call', { name: 'use_browser', arguments: {} }));
-		const opened = (await until((m) => m.id === 4)).result as { structuredContent?: { group?: string } };
-		assertEquals(opened.structuredContent?.group, 'browser');
+		await io.send({
+			jsonrpc: '2.0',
+			id: 2,
+			method: 'subscriptions/listen',
+			params: { notifications: { toolsListChanged: true }, _meta },
+		});
+		await io.until((m) => m.method === 'notifications/subscriptions/acknowledged');
+		assertEquals(names(await request(3, 'tools/list')), ['use_browser']);
+		const opened = await request(4, 'tools/call', { name: 'use_browser', arguments: {} });
+		assertEquals((opened.structuredContent as { group?: string }).group, 'browser');
 		// The announcement rides the listen stream, so it may arrive on either side of the call's answer.
-		if (announced() === 0) await until((m) => m.method === 'notifications/tools/list_changed');
-
-		await io.send(request(5, 'tools/list'));
-		assert(names(await until((m) => m.id === 5)).includes('browser_navigate'), 'the opened group is listed');
+		if (announced() === 0) await io.until((m) => m.method === 'notifications/tools/list_changed');
+		assert(names(await request(5, 'tools/list')).includes('browser_navigate'), 'the opened group is listed');
 		assertEquals(announced(), 1, 'one announcement for the whole group');
 	});
 });

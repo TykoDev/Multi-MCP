@@ -1,21 +1,20 @@
 /**
  * Primitives shared across the typed CDP domain surface.
  *
- * Contract: SPECS/ARCHITECTURE.md §7.2 (D-CDP2), SPECS/DATA-MODEL.md §6.
- * Hand-written types are explicitly sanctioned at this stage; the rule is only that nothing is
+ * The types are hand-written; the rule is only that nothing is
  * typed as bare `any` — unknown-but-plausible fields are `unknown` or indexed records.
  */
 
-/** Flat-session id (`Target.attachToTarget({flatten: true})` — ARCHITECTURE §7.1). */
+/** Flat-session id (`Target.attachToTarget({flatten: true})`). */
 export type SessionId = string;
-/** Stable per-target id; the LLM-facing `tabId` is its 4-char suffix (ARCHITECTURE §7.3). */
+/** Stable per-target id; the LLM-facing `tabId` is its 4-char suffix. */
 export type TargetId = string;
 export type BrowserContextId = string;
 export type FrameId = string;
 export type LoaderId = string;
-/** Session-scoped, reusable (DATA-MODEL §6.1). */
+/** Session-scoped, reusable. */
 export type NodeId = number;
-/** The stable action handle; valid ONLY in its originating session (DATA-MODEL §6.1). */
+/** The stable action handle; valid ONLY in its originating session. */
 export type BackendNodeId = number;
 export type ExecutionContextId = number;
 export type RemoteObjectId = string;
@@ -35,7 +34,7 @@ export type EmptyResult = Record<never, never>;
 export interface CdpSendOptions {
 	/**
 	 * Overrides the client default and the `BUA_CDP_TIMEOUT_S` env value for this one call.
-	 * Precedence: call opts → client opts → env → 60 s built-in (ARCHITECTURE §8).
+	 * Precedence: call opts → client opts → env → 60 s built-in.
 	 */
 	requestTimeoutMs?: number;
 	/** Caller cancellation, composed with the timeout and the socket lifetime via `AbortSignal.any`. */
@@ -114,7 +113,7 @@ export interface ExceptionDetails {
 	exceptionMetaData?: Record<string, unknown>;
 }
 
-/** `Network.Cookie`. Round-trips through the Playwright-format storage state (DATA-MODEL §5.2). */
+/** `Network.Cookie`. Round-trips through the Playwright-format storage state. */
 export interface Cookie {
 	name: string;
 	value: string;

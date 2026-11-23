@@ -1,25 +1,10 @@
 /**
- * R12 (design §2.19, D-131, D-132): a workspace from a git remote — what a clone may ask for, checked before anything
- * touches the disk or the network, and the one fixed script that runs it.
- *
- * The clone runs where `git init` used to: in the workspace's provisioning cage (bwrap) or container (Docker), the
- * only moment its `.git` is writable; every later cage mounts `.git` read-only (sandbox.ts, docker_spec.ts). The
- * service never runs git itself — its only run grant is bwrap, and the Docker backend has none.
- *
- * The script is fixed: no caller text is ever part of it. The URL, the ref and the depth reach it through the
- * environment (`TTK_GIT_URL`, `TTK_GIT_REF`, `TTK_GIT_DEPTH`), each checked here first, and the URL comes after `--`.
- * git reads no system or global configuration, prompts for nothing, runs no hook (`core.hooksPath=/dev/null`, an
- * empty `--template`), follows no redirect, speaks https only (`protocol.allow=never` refuses file, ext, git and ssh),
- * checks every object it receives, and fetches no submodule, tag or other branch. Each setting is a `git -c`, never
- * `git clone -c`, which would write it into the new repository's own configuration.
- *
- * Two transports, chosen by the service and never by the caller:
- *
- * - public (`url`): the host must be on `TTK_SANDBOX_GIT_HOSTS`; git reaches it through the registry proxy opened with
- *   the git hosts only (proxy.ts), TLS end to end, for this one step;
- * - credentialed (`remote`): an operator-fixed remote from the remotes file; git talks plain http to the service's
- *   forwarder (git_forwarder.ts), which adds the credential service-side and makes its own TLS connection, so no
- *   credential ever enters the cage. The clone's `origin` is then set to the remote's public URL.
+ * A clone: its arguments, checked before disk or network is touched, and the one fixed script that runs it in the
+ * workspace's provisioning cage (the only moment `.git` is writable). No caller text is part of the script: URL,
+ * ref and depth arrive in the environment, the URL after `--`. git reads no system/global config, prompts for
+ * nothing, runs no hook, follows no redirect, speaks https only, checks every object, fetches no submodule, tag or
+ * other branch; each setting is `git -c`, never written into the repository. Public clones go through the proxy
+ * with the git hosts; credentialed ones through the forwarder (git_forwarder.ts), so no credential enters the cage.
  */
 import { PROXY_PORT } from './cage.ts';
 import { LIMITS } from './limits.ts';
@@ -28,32 +13,24 @@ import { RequestError } from './request.ts';
 
 /** Where a credentialed clone's git sends its requests: the forwarder, through the cage's socat on the proxy port. */
 export const FORWARD_URL = `http://127.0.0.1:${PROXY_PORT}/r`;
-/** The path prefix the forwarder serves (`/r/info/refs`, `/r/git-upload-pack`). */
-export const FORWARD_PATH = '/r';
 
 /** The most hosts `TTK_SANDBOX_GIT_HOSTS` may name. */
 export const MAX_GIT_HOSTS = 64;
-/** A clone's depth: shallow by default (owner decision 4), never a full history past this. */
+/** A clone's depth: shallow by default, never a full history past this. */
 export const DEPTH = { default: 1, min: 1, max: 1000 } as const;
 
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const URL_SHAPE = /^https:\/\/([A-Za-z0-9.-]{1,253})(?::443)?(\/[A-Za-z0-9._~\/-]{0,1023})$/;
 const REF = /^[A-Za-z0-9._\/-]{1,200}$/;
 
-/**
- * An exact DNS name a git host may be: lower-case labels, at least two of them, the last starting with a letter — so
- * no wildcard, no single-label name and no IPv4 or IPv6 literal.
- */
+/** An exact DNS name: lower-case labels, at least two, the last starting with a letter (no wildcard or literal). */
 export function isGitHostName(host: string): boolean {
 	if (host.length === 0 || host.length > 253) return false;
 	const labels = host.split('.');
 	return labels.length >= 2 && labels.every((label) => LABEL.test(label)) && /^[a-z]/.test(labels.at(-1)!);
 }
 
-/**
- * `TTK_SANDBOX_GIT_HOSTS`: a comma list of exact DNS names, port 443 implied, lower-cased. Unset or blank is no public
- * clone at all. Throws, naming the variable but never its value, on an entry that is not a host name.
- */
+/** `TTK_SANDBOX_GIT_HOSTS`: exact DNS names, lower-cased; blank is no public clone. Throws naming the variable only. */
 export function parseGitHosts(raw: string | undefined): ReadonlySet<string> {
 	const text = raw?.trim() ?? '';
 	const hosts = new Set<string>();
@@ -79,9 +56,8 @@ export interface GitOrigin {
 }
 
 /**
- * The shape every clone URL must have (design §2.19), or why not: `https:`, a host name, port 443 only, no
- * user-info, query or fragment, and a path of `[A-Za-z0-9._~/-]` of at most 1024 characters with no empty, `.` or
- * `..` segment. The raw text is checked, not what `URL` would normalise it to, so nothing is resolved away unseen.
+ * A clone URL's shape, or why not: `https:`, a host name, port 443, no user-info/query/fragment, a path of
+ * `[A-Za-z0-9._~/-]` ≤ 1024 with no empty, `.` or `..` segment — checked on the raw text, not `URL`'s normal form.
  */
 export function gitOrigin(value: unknown): GitOrigin | { refused: string } {
 	if (typeof value !== 'string' || value.length > 2048) return { refused: 'must be an https URL' };
@@ -110,9 +86,8 @@ export function parseCloneUrl(value: unknown, hosts: HostSet): GitOrigin {
 }
 
 /**
- * A clone's `ref` (a branch or tag), or null for the remote's default branch: `[A-Za-z0-9._/-]`, at most 200, no
- * `..`, not leading `-` (never an option), not ending `.lock`, and — as git itself requires — no empty segment and
- * none starting or ending with `.`.
+ * A `ref`, or null for the default branch: `[A-Za-z0-9._/-]` ≤ 200, no `..`, never a leading `-` (an option), not
+ * `.lock`, no empty segment or one starting or ending with `.`.
  */
 export function parseGitRef(value: unknown): string | null {
 	if (value === undefined || value === null) return null;
@@ -152,10 +127,7 @@ export function parseCloneTimeout(value: unknown): number {
 	return value;
 }
 
-/**
- * The settings every git call of the clone carries, as `git -c` (never written into the repository):
- * https only, no redirect, no hook, no fsmonitor, every received object checked, no submodule, no credential helper.
- */
+/** The `git -c` settings every git call of the clone carries. */
 export const CLONE_GIT_FLAGS = [
 	'-c protocol.allow=never',
 	'-c protocol.https.allow=always',
@@ -172,9 +144,8 @@ const COMMIT_LINE = 'ttk-clone-commit';
 const REF_LINE = 'ttk-clone-ref';
 
 /**
- * The clone step's script: fixed, with no part from the request. `forwarded` clones the forwarder's loopback URL
- * (plain http, allowed for that one call) and then points `origin` at the remote's public URL; `public` clones
- * `$TTK_GIT_URL` through the git-host proxy. Both end by printing the commit and the ref they landed on.
+ * The clone step's fixed script. `forwarded` clones the forwarder's loopback URL (plain http for that call only),
+ * then points `origin` at the public URL; `public` clones `$TTK_GIT_URL`. Both print the commit and ref.
  */
 export function cloneScript(transport: 'public' | 'forwarded'): string {
 	const git = ['git', ...CLONE_GIT_FLAGS].join(' ');
@@ -199,10 +170,7 @@ export function cloneScript(transport: 'public' | 'forwarded'): string {
 	].join('\n');
 }
 
-/**
- * The clone step's environment, on top of the cage's own: no system or global git configuration, no prompt, no
- * askpass program, and the checked values the fixed script reads.
- */
+/** The clone step's environment: no git config, prompt or askpass, and the checked values the script reads. */
 export function cloneEnv(input: { url: string; ref: string | null; depth: number }): Record<string, string> {
 	return {
 		GIT_CONFIG_NOSYSTEM: '1',

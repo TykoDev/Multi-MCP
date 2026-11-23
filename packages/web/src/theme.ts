@@ -1,154 +1,48 @@
 /**
- * Display preferences: the colour theme (D-089, four themes since D-152), the dock width (D-093) and (D-158) the
- * Agents screen's settings panel and New-chat boundary.
- *
- * A theme is one of four literals. Each sits on one of the kit's two base schemes — `wa-dark` for Dark and Shade,
- * `wa-light` for Light and Dawn — so every kit component already has a correct palette, and `data-theme` on `<html>`
- * names the variant whose overrides `tokens.css` applies on top. The choice is remembered per browser under
- * `ttk.theme`.
- *
- * Only the four literal values are ever written or honoured; the key holds no credential and nothing else is stored
- * here. Storage can be absent or throw (private mode, blocked site data), so every access is guarded.
+ * The colour theme, dark or light, remembered per browser. The only thing this app stores: `ttk.theme` holds a theme
+ * literal and nothing else (`web_test.ts` holds every module to that).
  */
 
-export type Theme = 'dark' | 'shade' | 'light' | 'dawn';
-
-/** The themes in the order the picker offers them: name, glyph, the kit scheme it sits on, one line on its character. */
-export const THEMES: ReadonlyArray<
-	{ readonly id: Theme; readonly label: string; readonly scheme: 'dark' | 'light'; readonly hint: string }
-> = [
-	{ id: 'dark', label: 'Dark', scheme: 'dark', hint: 'Deep ink; the screencast stands out most' },
-	{ id: 'shade', label: 'Shade', scheme: 'dark', hint: 'Dimmed slate; softer contrast for long sessions' },
-	{ id: 'light', label: 'Light', scheme: 'light', hint: 'Crisp white on cool grey' },
-	{ id: 'dawn', label: 'Dawn', scheme: 'light', hint: 'Warm paper and rose accents' },
-];
+export type Theme = 'dark' | 'light';
 
 export const THEME_STORAGE_KEY = 'ttk.theme';
-const listeners: Array<(theme: Theme) => void> = [];
-
-function isTheme(value: unknown): value is Theme {
-	return value === 'dark' || value === 'shade' || value === 'light' || value === 'dawn';
-}
 
 function stored(): Theme | null {
 	try {
 		const value = globalThis.localStorage?.getItem(THEME_STORAGE_KEY) ?? null;
-		return isTheme(value) ? value : null;
+		return value === 'dark' || value === 'light' ? value : null;
 	} catch {
 		return null;
 	}
 }
 
-/** This page's choice when storage is unavailable, so a pick still holds until the page is left. */
-let themeFallback: Theme | null = null;
+let fallback: Theme = 'dark';
 
-/**
- * The theme in effect: the stored choice, else dark. Dark is the default rather than the system preference
- * because the live screencast is the brightest thing on screen and the chrome around it should recede (D-089).
- */
 export function currentTheme(): Theme {
-	return stored() ?? themeFallback ?? 'dark';
-}
-
-/** The kit scheme a theme sits on. */
-export function schemeOf(theme: Theme): 'dark' | 'light' {
-	return THEMES.find((entry) => entry.id === theme)?.scheme ?? 'dark';
+	return stored() ?? fallback;
 }
 
 function apply(theme: Theme): void {
 	const root = document.documentElement;
-	const scheme = schemeOf(theme);
-	root.classList.toggle('wa-dark', scheme === 'dark');
-	root.classList.toggle('wa-light', scheme === 'light');
+	root.classList.toggle('wa-dark', theme === 'dark');
+	root.classList.toggle('wa-light', theme === 'light');
 	root.dataset.theme = theme;
-	document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', scheme);
+	document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme);
 }
 
-/** Applies the theme in effect; called once before the first render. */
 export function initTheme(): void {
 	apply(currentTheme());
 }
 
-export function setTheme(theme: Theme): void {
-	themeFallback = theme;
+/** Switches to the other theme, remembers it when storage allows, and returns it. */
+export function toggleTheme(): Theme {
+	const theme: Theme = currentTheme() === 'dark' ? 'light' : 'dark';
+	fallback = theme;
 	try {
 		globalThis.localStorage?.setItem(THEME_STORAGE_KEY, theme);
 	} catch {
 		// Not remembered; still applied for this page.
 	}
 	apply(theme);
-	for (const listener of listeners) listener(theme);
-}
-
-/** Moves to the next theme in picker order (the palette's "Next theme"); returns it. */
-export function cycleTheme(): Theme {
-	const at = THEMES.findIndex((entry) => entry.id === currentTheme());
-	const next = THEMES[(at + 1) % THEMES.length]?.id ?? 'dark';
-	setTheme(next);
-	return next;
-}
-
-/** Subscribes to theme changes; returns the unsubscribe (screens call it on leave). */
-export function onThemeChange(listener: (theme: Theme) => void): () => void {
-	listeners.push(listener);
-	return () => {
-		const index = listeners.indexOf(listener);
-		if (index >= 0) listeners.splice(index, 1);
-	};
-}
-
-/**
- * Whether the dock shows section names beside its icons (D-093), remembered under `ttk.dock` as the literal
- * `open` or `closed`. Like the theme it is a display preference and holds nothing else.
- */
-export const DOCK_STORAGE_KEY = 'ttk.dock';
-type DockState = 'open' | 'closed';
-/** The state for this page when storage is unavailable. */
-let dockFallback: DockState = 'closed';
-
-export function dockOpen(): boolean {
-	try {
-		const value = globalThis.localStorage?.getItem(DOCK_STORAGE_KEY) ?? null;
-		if (value === 'open' || value === 'closed') return value === 'open';
-	} catch {
-		// Fall through to this page's own choice.
-	}
-	return dockFallback === 'open';
-}
-
-export function setDockOpen(open: boolean): void {
-	const state: DockState = open ? 'open' : 'closed';
-	dockFallback = state;
-	try {
-		globalThis.localStorage?.setItem(DOCK_STORAGE_KEY, state);
-	} catch {
-		// Not remembered; still applied for this page.
-	}
-}
-
-/**
- * D-158: whether the Agents screen's settings panel is open, under `ttk.agents.side` as the literal `open` or `closed`
- * — a display preference like the dock's.
- */
-export const AGENTS_SIDE_STORAGE_KEY = 'ttk.agents.side';
-let sideFallback: DockState = 'closed';
-
-export function agentsSideOpen(): boolean {
-	try {
-		const value = globalThis.localStorage?.getItem(AGENTS_SIDE_STORAGE_KEY) ?? null;
-		if (value === 'open' || value === 'closed') return value === 'open';
-	} catch {
-		// Fall through to this page's own choice.
-	}
-	return sideFallback === 'open';
-}
-
-export function setAgentsSideOpen(open: boolean): void {
-	const state: DockState = open ? 'open' : 'closed';
-	sideFallback = state;
-	try {
-		globalThis.localStorage?.setItem(AGENTS_SIDE_STORAGE_KEY, state);
-	} catch {
-		// Not remembered; still applied for this page.
-	}
+	return theme;
 }

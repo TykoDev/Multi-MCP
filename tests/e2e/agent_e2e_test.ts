@@ -1,5 +1,5 @@
 /**
- * R1 (`browser_extract_content`) and R2 (`browser_run_task`) end to end.
+ * `browser_extract_content` and `browser_run_task` end to end.
  *
  * The browser is real, the MCP round trips are real, and the client really
  * implements the sampling capability — which in MCP is where the model lives.
@@ -46,7 +46,7 @@ interface TaskResult {
 }
 
 Deno.test({
-	name: 'e2e R1: extraction answers from the page the browser actually loaded',
+	name: 'e2e extract: extraction answers from the page the browser actually loaded',
 	ignore,
 	async fn(t) {
 		await using h = await harness({ sampling: extractionResponder() });
@@ -77,7 +77,7 @@ Deno.test({
 			});
 			assertEquals(result.result, h.site.nonce);
 
-			// Navigate away: the same question can no longer be answered, which
+			// Navigate away: the new page cannot answer the same question, which
 			// proves the prompt is rebuilt from the current document each time.
 			await h.callText('browser_navigate', { url: h.site.page('second') });
 			const after = await h.callJson<ExtractResult>('browser_extract_content', {
@@ -103,7 +103,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R1: a client with no model is told so, not left hanging',
+	name: 'e2e extract: a client with no model is told so, not left hanging',
 	ignore,
 	async fn() {
 		// No `sampling` responder, so the client declares no sampling capability.
@@ -117,7 +117,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R2: the task loop drives the real browser to completion',
+	name: 'e2e run_task: the task loop drives the real browser to completion',
 	ignore,
 	async fn(t) {
 		await using h = await harness({ sampling: agentResponder(), maxRounds: 20 });
@@ -172,9 +172,9 @@ Deno.test({
 			assertEquals(result.status, 'budget-exhausted');
 			assertEquals(result.resumable, true);
 			// Either index-family code, and which one is the model's choice rather than the product's:
-			// E-36 split the single `unknown-index` into two, so a model that acted on an index without
-			// reading the state first now gets `element-not-found` (there is no table to address) while
-			// one that read first and then guessed still gets `unknown-index`. Pinning one spelling here
+			// a model that acts on an index without reading the state first gets `element-not-found`
+			// (there is no table to address), while one that read first and then guessed gets
+			// `unknown-index`. Pinning one spelling here
 			// would make an LLM's step ordering a build gate.
 			const history = result.history.join('\n');
 			assert(
@@ -197,10 +197,10 @@ Deno.test({
 			socket.send({ type: 'control.take' });
 			await socket.waitFor('lock', (message) => message.lock?.holder === meta.viewerId);
 
-			// G-2: the loop stays listed and refuses at call time with the code a
-			// model can act on. It used to be withdrawn from `tools/list` and
-			// answered `disabled` — a weaker message, and on the all-held path a
-			// JSON-RPC error, which aborts the turn rather than saying "wait".
+			// The loop stays listed and refuses at call time with the code a
+			// model can act on. Withdrawing it from `tools/list` would leave a
+			// weaker message, and on the all-held path a JSON-RPC error, which
+			// aborts the turn rather than saying "wait".
 			const refused = await h.callError('browser_run_task', { task: 'x' });
 			assertStringIncludes(refused, 'Error: human-has-control');
 			// And the reason is discoverable from the tool that still works.
@@ -212,7 +212,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R2: a model that will not answer in JSON does not end the run',
+	name: 'e2e run_task: a model that will not answer in JSON does not end the run',
 	ignore,
 	async fn() {
 		await using h = await harness({ sampling: babblingResponder(), maxRounds: 12 });
@@ -230,7 +230,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R2: the task scope gates the autonomous loop',
+	name: 'e2e run_task: the task scope gates the autonomous loop',
 	ignore,
 	async fn() {
 		await using h = await harness({
@@ -264,13 +264,13 @@ if (!ignore) {
  *
  * Running several is not redundancy. Models differ in exactly the ways these
  * prompts have to survive — the two configured here differ in whether they think
- * before answering, and the reply shape that found E-28 (a `{thought}` object
+ * before answering, and one reply shape (a `{thought}` object
  * followed by a separate `{action}` object) is produced by only one of them. A
  * suite that proves the prompts work for one model proves it for one model.
  */
 for (const model of noModel ? [] : realModels()) {
 	Deno.test({
-		name: `e2e R1 (real model ${model}): the model answers from the real page`,
+		name: `e2e extract (real model ${model}): the model answers from the real page`,
 		async fn() {
 			await using h = await harness({ sampling: realModelResponder(model) });
 			await h.callText('browser_navigate', { url: h.site.page('article') });
@@ -288,17 +288,17 @@ for (const model of noModel ? [] : realModels()) {
 	});
 
 	Deno.test({
-		name: `e2e R2 (real model ${model}): the model drives the browser to the task`,
+		name: `e2e run_task (real model ${model}): the model drives the browser to the task`,
 		async fn(t) {
 			await using h = await harness({ sampling: realModelResponder(model), maxRounds: 20 });
 
 			// The tasks are phrased as a person would phrase them, not as a DOM
 			// query. That is a constraint the observation imposes and it is worth
 			// stating: the model is given the page as text plus the *interactive*
-			// elements, so page content carries no element ids. An earlier version
-			// asked for "the text in the element with id out" and the model clicked
-			// the button six times over — it had done the task and had no way to see
-			// that it had (E-26). A caller who needs ids has browser_get_html.
+			// elements, so page content carries no element ids. A task that asks for
+			// "the text in the element with id out" leaves the model clicking the
+			// button over and over — it has done the task and has no way to see that
+			// it has. A caller who needs ids has browser_get_html.
 			await t.step('a click task completes and reports what the page then showed', async () => {
 				await h.callText('browser_navigate', { url: h.site.page('index') });
 				const result = await h.callJson<TaskResult>('browser_run_task', {

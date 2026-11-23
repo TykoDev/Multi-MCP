@@ -1,13 +1,12 @@
-/**
- * A `SessionRecord` whose browser state comes from a recorded capture (D-TEST1).
- *
- * The unit tier proves the element record over the 36 captures under `packages/browser/fixtures/dom/`
- * with no browser in sight: the capture is merged and serialized by the same code the browser path
- * runs, and the resulting `BrowserStateSummary` is what a fake session answers every state request
- * with. Nothing about the record is mocked — only the CDP transport is absent.
- */
-import type { BrowserSession, BrowserStateSummary, DomCapture, PageInfo } from '@tykotech/browser';
-import { extractFromCapture, serializeDomState } from '@tykotech/browser';
+/** A `SessionRecord` whose browser state comes from a recorded capture. */
+import {
+	type BrowserSession,
+	type BrowserStateSummary,
+	type DomCapture,
+	extractFromCapture,
+	type PageInfo,
+	serializeDomState,
+} from '@tykotech/browser';
 import { EventBus } from '@tykotech/bus';
 import { fromFileUrl } from '@std/path';
 import { type SessionRecord, SessionRegistry } from '../src/registry.ts';
@@ -22,7 +21,7 @@ export async function loadCapture(name: string): Promise<DomCapture> {
 }
 
 /** `PageInfo` from the root session's recorded layout metrics, exactly as `toPageInfo` derives it. */
-export function pageInfoOf(capture: DomCapture): PageInfo {
+function pageInfoOf(capture: DomCapture): PageInfo {
 	const metrics = capture.sessions[0]?.layoutMetrics;
 	if (metrics === undefined) throw new Error('capture carried no sessions');
 	const pageWidth = Math.max(metrics.contentWidth, metrics.viewportWidth);
@@ -70,24 +69,42 @@ export function summaryOf(capture: DomCapture, options: { includeOffscreen?: boo
 	};
 }
 
-/** A session answering every state request from the capture; `includeOffscreen` is honoured. */
-export function captureSession(capture: DomCapture): BrowserSession {
-	const session = {
+/** The JSON-RPC message in a Streamable HTTP response, plain JSON or the first SSE `data:` frame. */
+export async function readRpc(response: Response): Promise<Record<string, unknown>> {
+	const text = await response.text();
+	if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {
+		for (const line of text.split('\n')) if (line.startsWith('data:')) return JSON.parse(line.slice(5).trim());
+		throw new Error(`no data frame in SSE body: ${text}`);
+	}
+	return JSON.parse(text);
+}
+
+/** A session with no page and no CDP client, over a real bus; `extra` overrides or adds members. */
+export function blankSession(extra: Record<string, unknown> = {}): BrowserSession & { eventBus: EventBus } {
+	return {
 		tabs: [],
+		cachedBrowserState: null,
 		agentFocusTargetId: null,
 		cdpClient: null,
 		sessionManager: null,
+		eventBus: new EventBus({ name: 'test-session' }),
+		stop: () => Promise.resolve(),
+		kill: () => Promise.resolve(),
+		...extra,
+	} as unknown as BrowserSession & { eventBus: EventBus };
+}
+
+/** A session answering every state request from the capture; `includeOffscreen` is honoured. */
+export function captureSession(capture: DomCapture): BrowserSession {
+	const session = blankSession({
 		cachedBrowserState: summaryOf(capture),
 		getBrowserStateSummary(options: { includeDom?: boolean; includeOffscreen?: boolean } = {}) {
 			const summary = summaryOf(capture, { includeOffscreen: options.includeOffscreen === true });
-			if (options.includeDom !== false) session.cachedBrowserState = summary;
+			if (options.includeDom !== false) (session as { cachedBrowserState: unknown }).cachedBrowserState = summary;
 			return Promise.resolve(summary);
 		},
-		eventBus: new EventBus({ name: 'capture-session' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	};
-	return session as unknown as BrowserSession;
+	});
+	return session;
 }
 
 /** A registry holding one capture-backed session, plus the tool context that reaches it. */
@@ -103,33 +120,18 @@ export async function captureHarness(name: string): Promise<{
 	return { capture, registry, record, ctx: { registry, allowedDomains: [], principal: 'test' } };
 }
 
-// --- the frame-scoped CDP wire (D-054): shared by the handler and the refusal tables ------------
+// --- the frame-scoped CDP wire: shared by the handler and the refusal tables --------------------
 
-/**
- * A unique string in the TOP document and nowhere else.
- *
- * Every refusal row on the `frame_id` path asserts its absence, which is how I-FH-1 is *asserted*
- * rather than asserted about: the handler's shape is `resolve -> authorize -> extract`, and if a
- * later edit moved the extraction above a gate this sentinel is the thing that would come back.
- */
+/** A unique string in the TOP document and nowhere else. */
 export const TOP_DOC_SENTINEL = 'TOP-DOCUMENT-SENTINEL-4KQ7';
 export const TOP_DOCUMENT = `<html><body><p>${TOP_DOC_SENTINEL}</p></body></html>`;
 export const CHILD_DOCUMENT = '<html><body><table><caption>BIL51</caption></table></body></html>';
 
 /** The CDP session id the fake hands back for the focused tab, and for a frame's own target. */
 export const PAGE_SESSION = 'S-page';
-export const OOPIF_SESSION = 'S-oopif';
+const OOPIF_SESSION = 'S-oopif';
 
-/**
- * What `documentElement.outerHTML` hands the in-page extraction — **not necessarily a string**.
- *
- * `outerHTML` is an ordinary configurable accessor on `Element.prototype`, so a page's getter may
- * return any object at all, and the in-page code D-057 ships touches exactly two of its members:
- * `.length` and `.slice(0, limit)`. A `string` satisfies that shape, which is why the honest case
- * needs no second spelling; an object carrying its own `length` and `slice` satisfies it too, and
- * that object is SEC-FH-24's whole exploit. A test that could only hand this fake a `string` could
- * only ever describe a cooperative renderer.
- */
+/** What `documentElement.outerHTML` hands the in-page extraction — **not necessarily a string**. */
 export type PageOuterHtml = string | { readonly length: number; slice(start: number, end: number): string };
 
 export interface FrameCdpScript {
@@ -141,10 +143,8 @@ export interface FrameCdpScript {
 	readonly childHtml?: PageOuterHtml;
 	/** Gate C's verdict for a frame the capture called same-process, or a failure to reach it. */
 	readonly owner?: 'same-process' | 'out-of-process' | 'throw';
-	/** Makes the extraction answer with something that is not a `{length, html}` pair (T-5). */
+	/** Makes the extraction answer with something that is not a `{length, html}` pair. */
 	readonly noDocument?: boolean;
-	/** Makes `Page.getFrameTree` fail, which is how a renderer that went away arrives. */
-	readonly treeThrows?: boolean;
 }
 
 /** One node of a scripted `Page.FrameTree`, as the fake browser holds it. */
@@ -163,40 +163,15 @@ export interface FrameCdpHarness {
 	readonly topFrameId: string;
 	readonly childFrameId: string;
 	methods(): string[];
-	/** How many times the element table was rebuilt — `observe()`'s one entry point (I-FH-6). */
+	/** How many times the element table was rebuilt — `observe()`'s one entry point. */
 	observations(): number;
-	/**
-	 * **Commits a new document in a frame of the fake browser — a navigation, not a flag.**
-	 *
-	 * The frame tree, the bytes an extraction answers with and the origin that extraction reports all
-	 * read from this one map, so they cannot be made to disagree: after this call `Page.getFrameTree`
-	 * reports the new URL *and* the read returns the new document *and* it reports the new origin,
-	 * which is what a renderer that committed a navigation does. A test that could set the origin
-	 * without moving the document would be describing the fix rather than exercising it (SEC-FH-17).
-	 */
+	/** **Commits a new document in a frame of the fake browser — a navigation, not a flag.** */
 	navigate(frameId: string, url: string, html: string): void;
-	/**
-	 * Runs `run` the instant after the wire has answered `method`, before the handler's next round
-	 * trip is sent.
-	 *
-	 * The only way a test can open a window *between* two CDP calls of a single handler invocation,
-	 * which is the whole subject of a time-of-check/time-of-use finding: the check reads one state
-	 * and the use reads another because the world moved in between. `nth` counts that method's
-	 * answers, so a path that reads the frame tree twice can be disturbed after the second read
-	 * rather than the first.
-	 */
+	/** Runs `run` the instant after the wire has answered `method`, before the handler's next round trip is sent. */
 	afterCall(method: string, run: (nth: number) => void): void;
 }
 
-/**
- * A capture-backed session wired to a scripted frame tree and a scripted extraction.
- *
- * The frame vocabulary is the capture's own, so Gate A's membership answer and the same-process /
- * OOPIF routing are what Chromium produced; only the CDP round trips are faked, and each one records
- * its method, its session and its parameters, because the content of these tests is *what was sent
- * where*. A refusal that never sent an extraction cannot have returned a document byte, and that is
- * a stronger statement than searching the result for one.
- */
+/** A capture-backed session wired to a scripted frame tree and a scripted extraction. */
 export async function frameCdpHarness(name: string, script: FrameCdpScript = {}): Promise<FrameCdpHarness> {
 	const h = await captureHarness(name);
 	const calls: Array<{ method: string; sessionId: string; params: Record<string, unknown> }> = [];
@@ -206,9 +181,6 @@ export async function frameCdpHarness(name: string, script: FrameCdpScript = {})
 	const topFrameId = frames[0]?.frameId ?? 'F-NO-TOP';
 	const childFrameId = frames[1]?.frameId ?? 'F-NO-CHILD';
 	// The fake browser's live state: every document a test committed with `navigate`, by frame id.
-	// The tree, the bytes and the reported origin are all derived from it, so the three cannot be
-	// made to disagree — which is what makes a navigation in this wire a navigation rather than a
-	// flag.
 	const committed = new Map<string, { url: string; html: string }>();
 	const hooks: Array<{ method: string; run: (nth: number) => void }> = [];
 	/** Records one round trip, then runs whatever the test scheduled for the moment after it. */
@@ -242,18 +214,8 @@ export async function frameCdpHarness(name: string, script: FrameCdpScript = {})
 		};
 		return find(liveTree()) ?? '';
 	};
-	// What the page-side extraction returns: the document's TRUE length beside an at-most-`HTML_LIMIT`
-	// slice of it (D-057), and the origin `location.origin` would report for it. The cap is reproduced
-	// here because it really is applied in the renderer — a fake that returned the whole string would
-	// be describing the behaviour this change replaced. The origin is derived from the frame's URL at
-	// the moment the read is answered, never from the URL the tree reported earlier: a renderer has
-	// only one document to answer from, and that coupling is the point (SEC-FH-17).
-	//
-	// **The arithmetic below is the page's, verbatim, and it is deliberately not defended** (SEC-FH-24):
-	// `document` is whatever `outerHTML` handed the extraction — a `string` for an honest renderer, or
-	// a {@linkcode PageOuterHtml} object whose own `length` and `slice` choose both numbers. The fake
-	// runs the same two member reads the shipped `HTML_EXPRESSION` / `HTML_FUNCTION` run, so the triple
-	// a hostile page puts on the wire is *derived here* rather than hand-written by a test.
+	// What the page-side extraction returns: the document's TRUE length beside an
+	// at-most-`HTML_LIMIT` slice of it, and the origin `location.origin` would report for it.
 	const pair = (document: PageOuterHtml, origin: string) => ({
 		result: {
 			type: 'object',
@@ -324,10 +286,6 @@ export async function frameCdpHarness(name: string, script: FrameCdpScript = {})
 			},
 			Page: {
 				getFrameTree: (_params: Record<string, unknown>, sessionId: string) => {
-					if (script.treeThrows === true) {
-						trip('Page.getFrameTree', sessionId, {});
-						return Promise.reject(new Error('the target is gone'));
-					}
 					// Built BEFORE the hook runs, so a navigation scheduled for "just after the tree read"
 					// lands on the world and not on the answer already in flight.
 					const answered = { frameTree: liveTree() };

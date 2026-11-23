@@ -1,5 +1,5 @@
 /**
- * U-7 (B2.2): the server-drawn highlight, measured by pixels.
+ * The server-drawn highlight, measured by pixels.
  *
  * Does an `Overlay` highlight appear in `Page.startScreencast` frames (the point) but not in
  * `Page.captureScreenshot` (what keeps `browser_screenshot` honest)? Both halves are measured on real
@@ -27,7 +27,7 @@ interface State {
 }
 
 Deno.test({
-	name: 'e2e highlight (U-7): a highlight reaches the screencast, never the DOM, and the screenshot answer is measured',
+	name: 'e2e highlight: a highlight reaches the screencast, never the DOM, and the screenshot answer is measured',
 	ignore,
 	async fn(t) {
 		await using h = await harness();
@@ -45,19 +45,13 @@ Deno.test({
 			socket.send({ type: 'live.highlight', bounds: { x: 20, y: 20, w: 400, h: 160 }, ttl_ms: 15_000 });
 			const after = await socket.waitForFrames(seen + 1);
 			const changed = !same(after.jpeg, settled.jpeg);
-			console.log(
-				`U-7 screencast: frame_after_highlight_differs=${changed} bytes_before=${settled.jpeg.length} bytes_after=${after.jpeg.length}`,
-			);
 			assert(changed, 'the highlight must reach the screencast frame');
 		});
 
-		await t.step('the screenshot half of U-7, measured and logged', async () => {
+		await t.step('the screenshot half, measured and logged', async () => {
 			const shotDuring = imageOf(await h.call('browser_screenshot', {}));
 			assert(shotDuring !== null);
 			const overlayInScreenshot = !same(shotDuring.bytes, shotBefore.bytes);
-			console.log(
-				`U-7 screenshot: overlay_visible_in_captureScreenshot=${overlayInScreenshot} bytes_before=${shotBefore.bytes.length} bytes_during=${shotDuring.bytes.length}`,
-			);
 			// The honesty contract: `browser_screenshot` shows the page, not the outline. Whichever way
 			// the primitive behaves, the tool's answer must be the same bytes as before the highlight.
 			assert(!overlayInScreenshot, 'browser_screenshot must not carry the overlay');

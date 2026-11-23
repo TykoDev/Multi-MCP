@@ -1,9 +1,9 @@
 /**
  * CDP `Page` domain — navigation, lifecycle, capture, dialogs, screencast.
  *
- * Feeds the navigation readiness model (SPECS/ARCHITECTURE.md §7.5: `loaderId`-keyed lifecycle
- * events, same-document detection), ScreenshotWatchdog (§6.6), PopupsWatchdog (§6.4),
- * RecordingWatchdog (§6.12) and the print-dialog→`printToPDF` interception (§6.10).
+ * Feeds the navigation readiness model (`loaderId`-keyed lifecycle
+ * events, same-document detection), ScreenshotWatchdog, PopupsWatchdog,
+ * RecordingWatchdog and the print-dialog→`printToPDF` interception.
  */
 
 import type { EmptyResult, ExecutionContextId, FrameId, LoaderId, NoParams, Rect } from './common.ts';
@@ -77,7 +77,7 @@ export interface ScreencastFrameMetadata {
 	timestamp?: number;
 }
 
-/** Lifecycle event names the readiness poller accepts (ARCHITECTURE §7.5 step 4). */
+/** Lifecycle event names the readiness poller accepts. */
 export type PageLifecycleName =
 	| 'init'
 	| 'firstPaint'
@@ -119,7 +119,7 @@ export interface PageParams {
 	'Page.navigate': {
 		url: string;
 		referrer?: string;
-		/** BrowserSession always sends `address_bar` (ARCHITECTURE §7.5 step 1). */
+		/** BrowserSession always sends `address_bar`. */
 		transitionType?: string;
 		frameId?: FrameId;
 		referrerPolicy?: string;
@@ -179,7 +179,7 @@ export interface PageResults {
 	};
 	'Page.getNavigationHistory': { currentIndex: number; entries: NavigationEntry[] };
 	'Page.handleJavaScriptDialog': EmptyResult;
-	/** No `loaderId` ⇒ same-document navigation; `errorText` is a hard error (ARCHITECTURE §7.5). */
+	/** No `loaderId` ⇒ same-document navigation; `errorText` is a hard error. */
 	'Page.navigate': { frameId: FrameId; loaderId?: LoaderId; errorText?: string };
 	'Page.navigateToHistoryEntry': EmptyResult;
 	'Page.printToPDF': { data: string; stream?: string };
@@ -203,7 +203,7 @@ export interface PageEvents {
 	'Page.frameStartedLoading': { frameId: FrameId };
 	'Page.frameStoppedLoading': { frameId: FrameId };
 	'Page.javascriptDialogClosed': { result: boolean; userInput: string };
-	/** PopupsWatchdog registers this per new tab (ARCHITECTURE §6.4). */
+	/** PopupsWatchdog registers this per new tab. */
 	'Page.javascriptDialogOpening': {
 		url: string;
 		message: string;
@@ -211,7 +211,7 @@ export interface PageEvents {
 		hasBrowserHandler: boolean;
 		defaultPrompt?: string;
 	};
-	/** The single global router the SessionManager keeps per D-CDP2. */
+	/** The single global router the SessionManager keeps. */
 	'Page.lifecycleEvent': { frameId: FrameId; loaderId: LoaderId; name: PageLifecycleName; timestamp: number };
 	'Page.loadEventFired': { timestamp: number };
 	'Page.navigatedWithinDocument': { frameId: FrameId; url: string };

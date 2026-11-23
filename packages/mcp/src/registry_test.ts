@@ -1,20 +1,17 @@
 import { assert, assertEquals, assertRejects } from '@std/assert';
-import type { BrowserSession } from '@tykotech/browser';
-import { BrowserErrorEvent, NavigationCompleteEvent, ReconnectController, TargetCrashedEvent } from '@tykotech/browser';
+import {
+	BrowserErrorEvent,
+	type BrowserSession,
+	NavigationCompleteEvent,
+	ReconnectController,
+	TargetCrashedEvent,
+} from '@tykotech/browser';
 import { FakeTime } from '@std/testing/time';
-import { silentBusLogger } from '@tykotech/bus';
-import { EventBus } from '@tykotech/bus';
+import { EventBus, silentBusLogger } from '@tykotech/bus';
 import { ToolError } from './errors.ts';
 import { DEFAULT_SESSION_ID, type LiveViewerHandle, type RegistryChange, SessionRegistry } from './registry.ts';
 
-/**
- * A stand-in for a started browser session: only what the registry touches.
- *
- * The event bus is a **real** one rather than a stub. The registry subscribes to
- * it to announce page changes (R4), and a fake that answered those calls with
- * nothing would let a broken subscription pass here and fail only in the
- * browser tier.
- */
+/** A stand-in for a started browser session: only what the registry touches. */
 function fakeSession(): BrowserSession & { stopped: boolean; eventBus: EventBus } {
 	const session = {
 		stopped: false,
@@ -85,7 +82,6 @@ Deno.test('registry: an omitted session id lazily creates the default session', 
 	assertEquals(record.id, DEFAULT_SESSION_ID);
 	assertEquals(h.launched, [DEFAULT_SESSION_ID]);
 
-	// A second resolve reuses it rather than launching again.
 	const again = await h.registry.resolve(undefined);
 	assertEquals(again.id, DEFAULT_SESSION_ID);
 	assertEquals(h.launched.length, 1);
@@ -146,7 +142,6 @@ Deno.test('registry: a takeover lock refuses mutation and is released on viewer 
 	const v = viewer('v1');
 	h.registry.addViewer(record, v);
 
-	// Unlocked: mutation is permitted.
 	h.registry.assertUnlocked(record);
 
 	assert(h.registry.takeControl(record, v));
@@ -161,7 +156,6 @@ Deno.test('registry: a takeover lock refuses mutation and is released on viewer 
 	})();
 	assertEquals(error.code, 'human-has-control');
 
-	// Viewers are told about the lock, both on take and on release.
 	assertEquals(v.sent.length, 1);
 
 	h.registry.removeViewer(record, v.id);
@@ -182,7 +176,6 @@ Deno.test('registry: a second viewer cannot steal a held lock', async () => {
 	assertEquals(h.registry.takeControl(record, second), false, 'the lock is exclusive');
 	assertEquals(record.lock?.holder, 'v1');
 
-	// A release by a non-holder is a no-op.
 	h.registry.releaseControl(record, 'v2');
 	assertEquals(record.lock?.holder, 'v1');
 
@@ -198,7 +191,6 @@ Deno.test('registry: closing a session stops the browser and evicts viewers', as
 	h.registry.addViewer(record, v);
 	h.registry.takeControl(record, v);
 
-	// Closing wins over a held lock: administrative intent outranks takeover.
 	assertEquals(await h.registry.close(record.id), true);
 	assertEquals(h.registry.peek(record.id), undefined);
 	assertEquals(v.closed, ['session-closed']);
@@ -236,7 +228,7 @@ Deno.test('registry: shutdown closes every session and refuses further work', as
 	assertEquals(error.code, 'browser-unavailable');
 });
 
-// --- change notifications (R4/R5) ------------------------------------------
+// --- change notifications ---------------------------------------------------
 
 Deno.test('registry: watchers see sessions appear and vanish', async () => {
 	const h = harness();
@@ -249,7 +241,6 @@ Deno.test('registry: watchers see sessions appear and vanish', async () => {
 	await h.registry.close(record.id, 'test');
 	assertEquals(seen.at(-1), { kind: 'session-removed', sessionId: DEFAULT_SESSION_ID });
 
-	// Unsubscribed watchers hear nothing more.
 	stop();
 	await h.registry.resolve();
 	assertEquals(seen.length, 2);
@@ -271,7 +262,6 @@ Deno.test('registry: taking and releasing the lock is announced', async () => {
 	assertEquals(seen.length, 2);
 	assertEquals(seen[1], { kind: 'lock-changed', sessionId: record.id });
 
-	// A release by a viewer that does not hold it changes nothing, so it is silent.
 	h.registry.releaseControl(record, 'someone-else');
 	assertEquals(seen.length, 2);
 	await h.registry.shutdown();
@@ -290,7 +280,6 @@ Deno.test('registry: a navigation on any session announces a page change', async
 	);
 	assertEquals(seen, [{ kind: 'page-changed', sessionId: record.id }]);
 
-	// After the session closes, its bus no longer reaches the registry.
 	await h.registry.close(record.id, 'test');
 	seen.length = 0;
 	await session.eventBus.dispatch(
@@ -305,15 +294,13 @@ Deno.test('registry: a throwing watcher cannot break a browser operation', async
 	h.registry.watch(() => {
 		throw new Error('a consumer exploded');
 	});
-	// The session is still created, and closing it still works.
 	const record = await h.registry.resolve();
 	assertEquals(record.id, DEFAULT_SESSION_ID);
 	assertEquals(await h.registry.close(record.id, 'test'), true);
 	await h.registry.shutdown();
 });
 
-// ---------------------------------------------------------------------------
-// session files (E-33)
+// --------------------------------------------------------------------------- session files
 // ---------------------------------------------------------------------------
 
 async function isPresent(path: string): Promise<boolean> {
@@ -354,7 +341,6 @@ Deno.test('registry: the downloads root lives under the data directory and stale
 	const stale = `${dataDir}/downloads/default-01stale`;
 	await Deno.mkdir(stale, { recursive: true });
 	await Deno.writeTextFile(`${stale}/leftover`, 'x');
-	// A sibling owner's data is never touched.
 	await Deno.mkdir(`${dataDir}/profiles/keep`, { recursive: true });
 	try {
 		const registry = new SessionRegistry({
@@ -363,7 +349,6 @@ Deno.test('registry: the downloads root lives under the data directory and stale
 			launch: () => Promise.resolve(fakeSession()),
 		});
 		assert(registry.downloadsRoot?.endsWith('downloads'));
-		// The sweep is awaited by the first launch.
 		await registry.resolve(undefined);
 		assertEquals(await isPresent(stale), false, 'a previous process’s download directory is gone');
 		assertEquals(await isPresent(`${dataDir}/profiles/keep`), true);
@@ -383,9 +368,6 @@ Deno.test('registry: shutting down before the first launch still drains the star
 			dataDir,
 			launch: () => Promise.resolve(fakeSession()),
 		});
-		// No launch: nothing else would ever await the sweep. Deno's leak detector
-		// is the other half of this assertion — an unawaited `Deno.readDir` started
-		// in the constructor used to surface as a failure in an unrelated later test.
 		await registry.shutdown();
 		assertEquals(await isPresent(stale), false, 'the sweep finished before shutdown returned');
 	} finally {
@@ -401,10 +383,10 @@ Deno.test('registry: peek never creates a session (the file tools’ contract)',
 });
 
 /**
- * S0 (design §2.0 item 3): the R8 seam returns today's answers. Every principal reaches every session in `shared`
- * mode, whoever asks; W5 changes these answers in `owner` mode only.
+ * The session-access argument in `shared` mode: every principal reaches every session, whoever asks; only `owner`
+ * mode narrows these answers.
  */
-Deno.test('registry: S0 access seam answers exactly as shared mode does today', async () => {
+Deno.test('registry: the session-access argument answers exactly as shared mode does', async () => {
 	const h = harness();
 	const alice = { owner: 'api-key:alice', admin: false };
 	const bob = { owner: 'api-key:bob', admin: false };
@@ -414,7 +396,7 @@ Deno.test('registry: S0 access seam answers exactly as shared mode does today', 
 
 	const own = await h.registry.resolve(undefined, alice);
 	const other = await h.registry.createNew('b', undefined, bob);
-	assertEquals(own.owner, null, 'S0 never stamps an owner');
+	assertEquals(own.owner, null, 'shared mode never stamps an owner');
 	assertEquals(other.owner, null);
 	assertEquals(await h.registry.resolve(other.id, alice), other, 'resolve ignores access');
 
@@ -431,7 +413,7 @@ Deno.test('registry: S0 access seam answers exactly as shared mode does today', 
 	await h.registry.shutdown();
 });
 
-// --- the event ring on the record (B1.7) ------------------------------------
+// --- the event ring on the record -------------------------------------------
 
 Deno.test('registry: a session record owns an event ring with its own epoch', async () => {
 	const h = harness();
@@ -465,7 +447,6 @@ Deno.test('registry: a navigation reaches the ring as origin and path, never a U
 		assertEquals(navigation.payload.origin, 'https://shop.example.test');
 		assertEquals(navigation.payload.path, '/checkout');
 		assertEquals(navigation.payload.has_query, true);
-		// The whole record, not just the field: a token must not survive anywhere.
 		const serialized = JSON.stringify(navigation);
 		assert(!serialized.includes('SECRET-TOKEN'), `a query reached the ring: ${serialized}`);
 		assert(!('url' in navigation.payload), 'a url field would defeat the whole shape');
@@ -474,10 +455,7 @@ Deno.test('registry: a navigation reaches the ring as origin and path, never a U
 	}
 });
 
-Deno.test('registry: a child-frame navigation carries the child frame id (A-2)', async () => {
-	// The top URL is unchanged and only the child moved. Without the frame id on
-	// the record a consumer sees a navigation it cannot attribute, which is the
-	// frameset case the requirement's §1.4 exists for.
+Deno.test('registry: a child-frame navigation carries the child frame id', async () => {
 	const h = harness();
 	try {
 		const record = await h.registry.resolve(undefined);
@@ -532,10 +510,8 @@ Deno.test('registry: closing a session closes its ring and releases every waiter
 });
 
 /**
- * The download ledger gate (owner item 6): a download whose final URL is outside
- * `TTK_ALLOWED_DOMAINS` is cancelled with `navigation-blocked`, whatever started
- * it. Driven through the watchdog's synchronous listener channel with a fake
- * ledger, because the question is what the registry does with the signal.
+ * The download ledger gate: a download whose final URL is outside
+ * `TTK_ALLOWED_DOMAINS` is cancelled with `navigation-blocked`, whatever started it.
  */
 Deno.test('registry: the ledger gate cancels a download whose final URL is off the allowlist', async () => {
 	const cancelled: Array<{ guid: string; reason: string }> = [];
@@ -583,35 +559,18 @@ Deno.test('registry: the ledger gate cancels a download whose final URL is off t
 	}
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	assertEquals(cancelled, [{ guid: 'g-bad', reason: 'navigation-blocked' }]);
-	// Only the origin is remembered — never the URL, which carried a token.
 	assertEquals(record.blockedDownloads?.get('g-bad'), 'https://evil.example.net');
 	assertEquals(record.blockedDownloads?.has('g-ok'), false);
 	assertEquals(record.blockedDownloads?.has('g-dot'), false, 'a trailing-dot spelling of an allowed host is allowed');
 	assertEquals(JSON.stringify([...record.blockedDownloads ?? []]).includes('SECRET'), false);
-	// The ring saw the start and, for the refused one, nothing that names a URL.
 	const entries = record.events.read({ kind: 'cursor', epoch: record.events.epoch, seq: 0 });
 	assertEquals(entries.filter((entry) => entry.kind === 'download.started').length, 3);
 	assertEquals(JSON.stringify(entries).includes('SECRET'), false);
 	await registry.shutdown();
 });
 
-/**
- * U-5 — does the ring's `seq` survive a browser crash and reconnect?
- *
- * Architecture §4.2 retires `seq` as load-bearing via the epoch and makes the
- * `browser-recovered` control record mandatory if the record does not survive.
- * Both are asserted here and the test names which was observed: the reconnect
- * ladder (`packages/browser/src/browser/reconnect.ts`) is driven on the
- * session's own bus, exactly as `CdpClient.onClose` drives it, and the ring is
- * read across the reconnect.
- *
- * Observed: the registry record — and with it the ring, its epoch and its
- * `seq` — lives in this process and is keyed by session id, not by the CDP
- * connection, so it **survives**: `seq` is continuous across the reconnect in
- * one epoch, with no `gap`. The `browser-recovered` control record is emitted
- * as well, so a consumer reads the discontinuity even though nothing was lost.
- */
-Deno.test('registry: U-5 — seq is continuous across a browser reconnect, and browser-recovered is minted', async () => {
+/** Does the ring's `seq` survive a browser crash and reconnect? */
+Deno.test('registry: seq is continuous across a browser reconnect, and browser-recovered is minted', async () => {
 	using time = new FakeTime();
 	const h = harness();
 	const record = await h.registry.resolve();
@@ -625,8 +584,6 @@ Deno.test('registry: U-5 — seq is continuous across a browser reconnect, and b
 	const lastSeqBefore = before.at(-1)?.seq ?? -1;
 	assert(lastSeqBefore >= 0, 'a navigation record was minted before the crash');
 
-	// The browser "crashes": an unintentional close starts the ladder, whose
-	// first attempt succeeds after the 1 s backoff.
 	const controller = new ReconnectController({
 		bus: session.eventBus,
 		connect: () => Promise.resolve(),
@@ -643,14 +600,12 @@ Deno.test('registry: U-5 — seq is continuous across a browser reconnect, and b
 		new NavigationCompleteEvent({ targetId: 'T' as never, url: 'https://example.test/after' }),
 	);
 	const after = record.events.read({ kind: 'cursor', epoch: epochBefore, seq: lastSeqBefore });
-	// Observed outcome A: the record survived — same epoch, contiguous seq, no gap.
 	assertEquals(record.events.epoch, epochBefore, 'the ring epoch changed: the record did not survive');
 	assertEquals(after.some((entry) => entry.kind === 'gap'), false, 'a gap means seq did not survive');
 	const seqs = after.map((entry) => entry.seq);
 	for (let i = 1; i < seqs.length; i += 1) {
 		assertEquals(seqs[i], (seqs[i - 1] ?? 0) + 1, `seq is not contiguous across the reconnect: ${seqs.join(',')}`);
 	}
-	// And outcome B holds as well: the control record is on the stream regardless.
 	const recovered = after.find((entry) => entry.kind === 'control' && entry.payload.event === 'browser-recovered');
 	assert(recovered !== undefined, 'browser-recovered was not minted');
 	assert(
@@ -660,14 +615,13 @@ Deno.test('registry: U-5 — seq is continuous across a browser reconnect, and b
 	await h.registry.shutdown();
 });
 
-Deno.test('registry: a crash tells viewers why and tears the session down; a blocked navigation does not (F4)', async () => {
+Deno.test('registry: a crash tells viewers why and tears the session down; a blocked navigation does not', async () => {
 	const h = harness();
 	const record = await h.registry.resolve();
 	const v = viewer('v1');
 	h.registry.addViewer(record, v);
 	const session = h.sessions.get(record.id)!;
 
-	// A refusal the session survives.
 	await session.eventBus.dispatch(new BrowserErrorEvent({ errorType: 'NavigationBlocked', message: 'blocked' }));
 	await new Promise((resolve) => setTimeout(resolve, 10));
 	assert(h.registry.peek(record.id) !== undefined);
@@ -685,7 +639,6 @@ Deno.test('registry: a crash tells viewers why and tears the session down; a blo
 	assert(error?.message.includes('renderer gone'));
 	assertEquals(v.closed, ['browser-crashed']);
 
-	// A browser that could not be reconnected ends its session the same way.
 	const second = await h.registry.createNew();
 	await h.sessions.get(second.id)!.eventBus.dispatch(
 		new BrowserErrorEvent({ errorType: 'ReconnectionFailed', message: 'gone' }),

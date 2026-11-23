@@ -1,17 +1,16 @@
 /**
- * `SecurityWatchdog` contract (ARCHITECTURE.md §6.2; SECURITY-AUTH.md §4.3; COMPLETIONS-CRITERIA.md
- * §3.2 watchdog row 2: "3 enforcement points: pre-nav block-and-throw, post-nav redirect→about:blank,
- * blocked new-tab close").
+ * `SecurityWatchdog` contract: pre-navigation block-and-throw, post-navigation redirect →
+ * about:blank, blocked new-tab close.
  *
  * **Every test here drives the watchdog's own handler.** The bus carries no `BrowserSession` — no
  * `onNavigateToUrlEvent` other than this watchdog's is registered, asserted by `handlerCount === 1`
- * in the first test. That is deliberate: build-run erratum E-3 makes `BrowserSession` refuse the same
- * URL through the same matcher, so a test that dispatched `NavigateToUrlEvent` at an assembled
- * session would stay green with this entire file deleted.
+ * in the first test. That is deliberate: `BrowserSession` refuses the same URL through the same
+ * matcher, so a test that dispatched `NavigateToUrlEvent` at an assembled session would stay green
+ * with this entire file deleted.
  *
- * Real bus, real `CdpClient`, real `SessionManager`, real CDP frames over `ChromeFixture` (D-TEST1).
+ * Real bus, real `CdpClient`, real `SessionManager`, real CDP frames over `ChromeFixture`.
  * Every URL is loopback: `localhost` is the allowed host and `127.0.0.1` the blocked one — two
- * genuinely different hostnames to the matcher (M6 vs M8), and no remote name anywhere.
+ * genuinely different hosts to the matcher (a hostname vs an IP literal), and no remote name anywhere.
  */
 
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
@@ -121,7 +120,7 @@ async function harness(
 
 Deno.test('security: LISTENS_TO is exactly the enforcement triggers, and nothing else handles them', async () => {
 	await using h = await harness();
-	// ERRATUM(E-94): `BrowserErrorEvent` carries E0 blocks from SessionManager to this watchdog.
+	// `BrowserErrorEvent` carries E0 blocks from SessionManager to this watchdog.
 	assertEquals(SecurityWatchdog.LISTENS_TO.map((cls) => cls.eventName), [
 		'NavigateToUrlEvent',
 		'NavigationCompleteEvent',
@@ -140,7 +139,7 @@ Deno.test('security: the policy is compiled once and reused across decisions', a
 	h.watchdog.allows(ALLOWED);
 	h.watchdog.allows(BLOCKED);
 	assert(h.watchdog.policy === first, 'compileDomainPolicy must not run per decision');
-	// M3 refusals are reported at compile time, which is why compiling once matters.
+	// Unsafe-pattern refusals are reported at compile time, which is why compiling once matters.
 	assertEquals(first.warnings.length, 1);
 	assertEquals(first.warnings[0]?.pattern, 'ex*mple.com');
 });
@@ -158,7 +157,7 @@ Deno.test('security: a profile whose domain lists changed recompiles rather than
 });
 
 // ---------------------------------------------------------------------------
-// E1 — pre-navigation veto (SECURITY-AUTH.md §4.3 E1)
+// E1 — pre-navigation veto
 // ---------------------------------------------------------------------------
 
 Deno.test('security E1: a blocked pre-navigation dispatches NavigationBlocked and throws', async () => {
@@ -239,7 +238,7 @@ Deno.test('security E2: a redirect that lands on a blocked URL is driven to abou
 	assertEquals(h.errors[0]?.details.targetId, targetId);
 });
 
-Deno.test('security: ERRATUM(E-78) a block is logged by origin only, at debug — the event keeps the URL', async () => {
+Deno.test('security: a block is logged by origin only, at debug — the event keeps the URL', async () => {
 	const lines: Array<{ level: string; message: string; fields: Record<string, unknown> | undefined }> = [];
 	const capture: BusLogger = {
 		debug: (message, fields) => void lines.push({ level: 'debug', message, fields }),
@@ -330,7 +329,7 @@ Deno.test('security E3: an allowed new tab survives', async () => {
 	assertEquals(h.errors, []);
 });
 
-Deno.test('security E3: ERRATUM(E-79) Chrome’s own *.top-chrome UI targets are left alone; other chrome: pages are not', async () => {
+Deno.test('security E3: Chrome’s own *.top-chrome UI targets are left alone; other chrome: pages are not', async () => {
 	await using h = await harness();
 	// Measured at browser close on real Chrome: the omnibox popup and a sub-page of it, as page targets.
 	h.fixture.addPage('chrome://omnibox-popup.top-chrome/');
@@ -383,7 +382,7 @@ Deno.test('security: prohibitedDomains drives the same three points as allowedDo
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-94) — E0's aftermath: one block, one record; a never-committed pop-up is closed
+// E0's aftermath: one block, one record; a never-committed pop-up is closed
 // ---------------------------------------------------------------------------
 
 /** What `SessionManager` dispatches for a document it refused before sending it. */
@@ -426,7 +425,7 @@ Deno.test('security E0: a different blocked URL on the same tab is still E2’s 
 
 Deno.test('security E0: a pop-up whose first document was refused is closed, and E3 adds nothing', async () => {
 	await using h = await harness();
-	// Chrome's "created, never navigated" state (E-16): the target reports url ''.
+	// Chrome's "created, never navigated" state: the target reports url ''.
 	const popup = h.fixture.addPage('');
 	await h.settle();
 	await h.bus.dispatch(e0(popup, BLOCKED));
@@ -469,7 +468,7 @@ Deno.test('security E0: the suppression lasts E0_MEMORY_MS and no longer', async
 });
 
 // ---------------------------------------------------------------------------
-// Review R2-1 — the main-frame commit check's E2: one record, and this watchdog stands down for that tab
+// the main-frame commit check's E2: one record, and this watchdog stands down for that tab
 // ---------------------------------------------------------------------------
 
 /** What `SessionManager`'s commit check dispatches after parking a tab. */
@@ -481,7 +480,7 @@ function commitPark(targetId: string, url: string): BrowserErrorEvent {
 	});
 }
 
-Deno.test('security R2-1: the commit check’s E2 is recorded here once', async () => {
+Deno.test('security commit check: the commit check’s E2 is recorded here once', async () => {
 	await using h = await harness();
 	const targetId = h.manager.mostRecentPageTarget()?.targetId ?? '';
 	await h.bus.dispatch(commitPark(targetId, BLOCKED));
@@ -492,7 +491,7 @@ Deno.test('security R2-1: the commit check’s E2 is recorded here once', async 
 	assertEquals(h.errors.length, 1, 'no second event from the watchdog');
 });
 
-Deno.test('security R2-1: E2 and E3 stand down for a tab the commit check parked', async () => {
+Deno.test('security commit check: E2 and E3 stand down for a tab the commit check parked', async () => {
 	await using h = await harness();
 	const targetId = h.manager.mostRecentPageTarget()?.targetId ?? '';
 	(h.manager as unknown as { parkedRecently(id: string): boolean }).parkedRecently = (id) => id === targetId;
@@ -504,10 +503,10 @@ Deno.test('security R2-1: E2 and E3 stand down for a tab the commit check parked
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-116) — a refused subresource or hint is not a navigation (AC11)
+// a refused subresource or hint is not a navigation
 // ---------------------------------------------------------------------------
 
-/** What `SessionManager` dispatches for a subresource or hint it refused (ERRATUM(E-114/E-115)). */
+/** What `SessionManager` dispatches for a subresource or hint it refused. */
 function requestBlock(
 	targetId: string,
 	url: string,
@@ -531,7 +530,7 @@ function requestBlock(
 }
 
 for (const requestKind of ['subresource', 'hint'] as const) {
-	Deno.test(`security E-116 (AC11): a refused ${requestKind} enters no E0 memory — E2 still contains`, async () => {
+	Deno.test(`security E0 request block: a refused ${requestKind} enters no E0 memory — E2 still contains`, async () => {
 		await using h = await harness();
 		const targetId = h.manager.mostRecentPageTarget()?.targetId ?? '';
 		await h.bus.dispatch(requestBlock(targetId, BLOCKED, requestKind));
@@ -541,7 +540,7 @@ for (const requestKind of ['subresource', 'hint'] as const) {
 		assertEquals(h.watchdog.blocks.map((block) => block.enforcementPoint), ['E2'], 'no E0 record for a request');
 	});
 
-	Deno.test(`security E-116 (AC11): a refused ${requestKind} on a never-committed pop-up closes nothing`, async () => {
+	Deno.test(`security E0 request block: a refused ${requestKind} on a never-committed pop-up closes nothing`, async () => {
 		await using h = await harness();
 		const popup = h.fixture.addPage('');
 		await h.settle();
@@ -551,7 +550,7 @@ for (const requestKind of ['subresource', 'hint'] as const) {
 		assertEquals(h.watchdog.blocks, []);
 	});
 
-	Deno.test(`security E-116 (AC11): a refused ${requestKind} does not suppress E3`, async () => {
+	Deno.test(`security E0 request block: a refused ${requestKind} does not suppress E3`, async () => {
 		await using h = await harness();
 		const targetId = h.manager.mostRecentPageTarget()?.targetId ?? '';
 		await h.bus.dispatch(requestBlock(targetId, BLOCKED, requestKind));
@@ -561,7 +560,7 @@ for (const requestKind of ['subresource', 'hint'] as const) {
 	});
 }
 
-Deno.test('security E-116: an E0 that says requestKind document is still a document', async () => {
+Deno.test('security E0 request block: an E0 that says requestKind document is still a document', async () => {
 	await using h = await harness();
 	const targetId = h.manager.mostRecentPageTarget()?.targetId ?? '';
 	const event = e0(targetId, BLOCKED);

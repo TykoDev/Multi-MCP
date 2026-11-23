@@ -1,14 +1,14 @@
 /**
- * D-096 (A2) on real Chromium: where an index-less `<secret>` lands, and which origin it is pinned to.
+ * On real Chromium: where an index-less `<secret>` lands, and which origin it is pinned to.
  *
- * Two review findings, each a way the focus walk named the wrong frame while the keystrokes went to another:
+ * Two shapes in which a focus walk could name the wrong frame while the keystrokes go to another:
  *
- * - **R3-1, frame owners that are not `<iframe>`.** A click inside a cross-origin `<object type=text/html>` or
+ * - **Frame owners that are not `<iframe>`.** A click inside a cross-origin `<object type=text/html>` or
  *   `<embed>` puts focus in the embedded document, and the top document's `activeElement` is then the
- *   `OBJECT`/`EMBED` element. The walk recognised only `IFRAME`/`FRAME`, pinned the secret to the top origin and
- *   typed it into the embedded one.
- * - **R3-2, a reused isolated-world id.** CDP execution-context ids are per renderer process. A world cached on
- *   one site, reused after the same tab navigated cross-site, evaluated in whatever context of the new process
+ *   `OBJECT`/`EMBED` element. A walk that recognised only `IFRAME`/`FRAME` would pin the secret to the top origin
+ *   and type it into the embedded one.
+ * - **A reused isolated-world id.** CDP execution-context ids are per renderer process. A world cached on one
+ *   site and reused after the same tab navigates cross-site evaluates in whatever context of the new process
  *   holds that number — measured, a page's own main world, which can redefine `activeElement`.
  *
  * The unit tier scripts both shapes (`packages/mcp/src/secret_pin_test.ts`); these legs exist because only a
@@ -24,7 +24,7 @@ import { type Harness, harness, skipUnlessBrowser, textOf } from '../support/har
 const ignore = skipUnlessBrowser('secret focus e2e');
 
 const PIN_SECRET = 'Zq8-E2E-FOCUS-SECRET-3vP';
-/** Pinned to the harness site's host with an explicit scheme, because the fixture site is plaintext (SEC-FH-23). */
+/** Pinned to the harness site's host with an explicit scheme, because the fixture site is plaintext. */
 const SECRETS = JSON.stringify({ site_password: { value: PIN_SECRET, domains: ['http://127.0.0.1'] } });
 /** `evaluate` reads the embedded documents back; `admin` reads the audit ledger. */
 const SCOPES = ['mcp:invoke', 'evaluate', 'admin'] as const;
@@ -80,7 +80,7 @@ async function secretFills(h: Harness): Promise<number> {
 }
 
 Deno.test({
-	name: 'e2e secret focus (R3-1): focus inside a cross-origin <object>/<embed> pins the embedded origin',
+	name: 'e2e secret focus (object/embed): focus inside a cross-origin <object>/<embed> pins the embedded origin',
 	ignore,
 	async fn(t) {
 		for (const page of ['objectcross', 'embedcross'] as const) {
@@ -112,8 +112,7 @@ Deno.test({
 						coordinate_y: Math.round(box.y + box.height / 2),
 					});
 					const active = await evaluate<string>(h, 'document.activeElement.tagName');
-					console.log(`[R3-1] ${page}: the top document's activeElement after the click is ${active}`);
-					assertEquals(active, page === 'objectcross' ? 'OBJECT' : 'EMBED', 'the precondition R3-1 is about');
+					assertEquals(active, page === 'objectcross' ? 'OBJECT' : 'EMBED', 'the precondition this leg is about');
 
 					// The control: ordinary text with no placeholder goes where focus is, the embedded field.
 					await h.callText('browser_type', { text: 'probe' });
@@ -121,10 +120,9 @@ Deno.test({
 					assertEquals(await settle(h, echo, 'inner:5'), 'inner:5', 'the keystrokes went into the embedded document');
 					assertEquals(await evaluate<number>(h, 'document.getElementById("top-field").value.length'), 0);
 
-					// The secret is pinned to http://127.0.0.1 — the TOP document's origin. Before the fix the walk
-					// stopped at the OBJECT/EMBED element, pinned the top, and typed the credential into localhost.
+					// The secret is pinned to http://127.0.0.1 — the TOP document's origin. A walk that stopped at the
+					// OBJECT/EMBED element would pin the top and type the credential into localhost.
 					const refused = await h.callError('browser_type', { text: '<secret>site_password</secret>' });
-					console.log(`[R3-1] ${page}: browser_type <secret> -> ${refused}`);
 					assertStringIncludes(refused, 'Error: navigation-blocked: ');
 					assertStringIncludes(refused, inner.url.replace(/\/$/, ''), 'the pin is the embedded frame’s origin');
 					assert(!refused.includes(PIN_SECRET));
@@ -140,7 +138,8 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e secret focus (R3-1): the converse — a secret pinned to an in-process <object> document is typed there',
+	name:
+		'e2e secret focus (object/embed): the converse — a secret pinned to an in-process <object> document is typed there',
 	ignore,
 	async fn() {
 		// Same host, another port: the same SITE, so the embedded document renders in the top's own process (the
@@ -170,14 +169,12 @@ Deno.test({
 			});
 			assertEquals(await evaluate<string>(h, 'document.activeElement.tagName'), 'OBJECT');
 
-			const typed = await h.callText('browser_type', { text: '<secret>inner_password</secret>' });
-			console.log(`[R3-1] same-site <object>: ${typed}`);
+			await h.callText('browser_type', { text: '<secret>inner_password</secret>' });
 			const echo = 'document.getElementById("inner-echo").textContent';
 			assertEquals(await settle(h, echo, `inner:${PIN_SECRET.length}`), `inner:${PIN_SECRET.length}`);
 			assertEquals(await evaluate<number>(h, 'document.getElementById("top-field").value.length'), 0);
 			const audit = (await h.call('browser_audit', {})).structuredContent as AuditRead;
 			const fills = audit.entries.filter((entry) => entry.kind === 'secret-fill');
-			console.log(`[R3-1] same-site <object> audit: ${JSON.stringify(fills)}`);
 			assertEquals(fills.length, 1);
 			assertEquals(fills[0]?.origin, innerOrigin, 'audited with the embedded frame’s origin');
 			const top = (await h.callJson<Frames>('browser_get_frames', {})).frames[0]?.id;
@@ -189,7 +186,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e secret focus (R3-2): a cross-site navigation of the same tab cannot hand the walk a lying world',
+	name: 'e2e secret focus (isolated world): a cross-site navigation of the same tab cannot hand the walk a lying world',
 	ignore,
 	async fn() {
 		await using h = await harness({ scopes: SCOPES, env: { TTK_SECRETS: SECRETS } });
@@ -205,7 +202,7 @@ Deno.test({
 			// renderer process, and every document gets its main world and then the vendored per-document isolated
 			// world, so on the liar page the odd ids are its lying main worlds and the even ids are honest. The tab's
 			// first document contributes one context, each later one two, so without one extra world in site A's
-			// process this server's own world takes an even id and the old code passes by luck.
+			// process this server's own world takes an even id and a walk that trusted a cached world id would pass by luck.
 			await h.callText('browser_navigate', { url: h.site.page('pseudoframe') });
 			const deco = JSON.parse(
 				await evaluate<string>(h, 'JSON.stringify(document.getElementById("deco").getBoundingClientRect())'),
@@ -215,7 +212,6 @@ Deno.test({
 				y: Math.round(deco.y + deco.height / 2),
 			});
 			assert(hit.isError !== true, textOf(hit));
-			console.log(`[R3-2] element_at over the child frame's ::before -> ${textOf(hit).slice(0, 200)}`);
 			const state = await h.callJson<{ interactive_elements: Array<{ index: number; tag: string }> }>(
 				'browser_get_state',
 				{},
@@ -225,20 +221,16 @@ Deno.test({
 			await h.callText('browser_click', { index: field.index });
 			await h.callText('browser_type', { text: '<secret>site_password</secret>' });
 			assertEquals(await secretFills(h), 1, 'the legitimate type on site A was audited');
-			const before = await h.callJson<Frames>('browser_get_frames', {});
+			await h.callJson<Frames>('browser_get_frames', {});
 
 			// The same tab, cross-site: a new renderer process, the same page target and CDP session.
 			await h.callText('browser_navigate', { url: liar.page('liar') });
 			await frameEndingWith(h, '/form');
-			const after = await h.callJson<Frames>('browser_get_frames', {});
-			console.log(
-				`[R3-2] main frame ${before.frames[0]?.id} -> ${after.frames[0]?.id}; ${after.frames.length} frames on B`,
-			);
+			await h.callJson<Frames>('browser_get_frames', {});
 			// The lie is live in the page's main world: that read names the bank frame, not the focused field.
 			assertEquals(await evaluate<string>(h, 'document.activeElement.id'), 'bank');
 
 			const refused = await h.callError('browser_type', { text: '<secret>site_password</secret>' });
-			console.log(`[R3-2] browser_type <secret> on the liar page -> ${refused}`);
 			assertStringIncludes(refused, 'Error: navigation-blocked: ');
 			assertStringIncludes(refused, liar.url.replace(/\/$/, ''), 'the pin is the liar page’s own frame');
 			assert(!refused.includes(PIN_SECRET));

@@ -1,87 +1,21 @@
-/**
- * The `tools/call` seam (D-A2).
- *
- * After {@linkcode registerCatalog} has registered every tool the principal may
- * see — which is what `tools/list` reads — this module installs a *replacement*
- * `tools/call` handler that dispatches from this repository's own `CATALOG`
- * instead of the SDK's registry.
- *
- * Why a replacement rather than a wrapper: three failure classes are otherwise
- * unreachable as *results*. An argument violation throws inside the SDK's own
- * handler and is converted by `createToolError` with a fixed
- * `Input validation error:` prefix and no `structuredContent`; a tool the
- * principal lacks the scope for and a tool the deployment cannot offer both
- * surface as `Tool <name> not found`, textually indistinguishable from a tool
- * this server has never had. A client that reads "not found" as "this build
- * lacks the feature" then degrades itself permanently.
- *
- * The seam is safe because `Protocol.setRequestHandler` ends in a plain
- * `Map.set` and `assertCanSetRequestHandler` is called only from the SDK's own
- * auto-install paths (`@modelcontextprotocol/server` 2.0.0). That is a fact
- * about a pinned dependency, so `dispatch_test.ts` asserts it: an SDK upgrade
- * that made the second registration throw fails at `deno install` time rather
- * than in production.
- */
-import { isInputRequiredResult, McpServer, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
-import type { CallToolResult, ClientCapabilities, ServerContext } from '@modelcontextprotocol/server';
+/** The `tools/call` seam. */
+import {
+	type CallToolResult,
+	type ClientCapabilities,
+	type ElicitRequestFormParams,
+	inputRequired,
+	inputResponse,
+	isInputRequiredResult,
+	McpServer,
+	ProtocolError,
+	ProtocolErrorCode,
+	type ServerContext,
+} from '@modelcontextprotocol/server';
 import type { ToolAvailability, ToolDefinition } from './catalog.ts';
-import { type ArgumentIssue, describeIssues, repairArguments } from './arguments.ts';
-import { CONFIRM_TOOL_NAMES, confirmGate } from './confirm.ts';
 import type { Scope } from './scopes.ts';
 import { ToolError } from './errors.ts';
+import { redactDeep } from './secrets.ts';
 import type { ClientFacts, ProgressReport, ToolContext, ToolResult } from './types.ts';
-
-/** How one dispatched call ended, in the D-101 vocabulary `/metrics` and the OTel trace share. */
-export type ToolCallOutcome = 'ok' | 'error' | 'input_required';
-
-/**
- * Opens a trace for one tool call and ends it with the call's outcome (R7, design §2.15, D-127). The gateway wires it
- * to OpenTelemetry when the runtime exports (`OTEL_DENO=true`); {@linkcode installToolDispatch} and
- * `createToolExecutor` call it. It sees the tool name only — no arguments, URLs, principals or session ids (the
- * D-101 label rule) — and a name outside the catalog reaches it as {@linkcode UNKNOWN_TOOL}, so a caller cannot mint
- * a series.
- */
-export type ToolTracer = (tool: string) => { end(outcome: ToolCallOutcome): void };
-
-/** The traced name of a call whose name is not in the catalog (D-127). */
-export const UNKNOWN_TOOL = '(unknown)';
-
-/** A result's outcome: `input_required` by the SDK's own predicate, `error` when flagged, else `ok`. */
-export function toolCallOutcome(result: ToolResult): ToolCallOutcome {
-	if (isInputRequiredResult(result)) return 'input_required';
-	return (result as CallToolResult).isError === true ? 'error' : 'ok';
-}
-
-/**
- * Runs one dispatch under the context's tracer, if it has one. A dispatch that throws — an unknown tool is a
- * protocol error — ends its trace as `error` and rethrows; a tracer that throws never fails the call.
- */
-export async function tracedDispatch(
-	dispatch: Pick<DispatchContext, 'catalog' | 'traceTool'>,
-	name: string,
-	call: () => Promise<ToolResult>,
-): Promise<ToolResult> {
-	let trace: { end(outcome: ToolCallOutcome): void } | undefined;
-	try {
-		trace = dispatch.traceTool?.(dispatch.catalog.has(name) ? name : UNKNOWN_TOOL);
-	} catch {
-		trace = undefined;
-	}
-	const end = (outcome: ToolCallOutcome): void => {
-		try {
-			trace?.end(outcome);
-		} catch { /* telemetry never fails a tool call */ }
-	};
-	let result: ToolResult;
-	try {
-		result = await call();
-	} catch (cause) {
-		end('error');
-		throw cause;
-	}
-	end(toolCallOutcome(result));
-	return result;
-}
 
 /** What the dispatcher needs to answer one call. Deliberately not `McpDeps`. */
 export interface DispatchContext {
@@ -96,25 +30,17 @@ export interface DispatchContext {
 	readonly logger?: { warn(msg: string): void; info(msg: string): void };
 	/** The heartbeat's tick, for tests; {@linkcode PROGRESS_INTERVAL_MS} otherwise. */
 	readonly progressIntervalMs?: number;
-	/** C11 (D-101): told each call's name and result once it ends; `McpDeps.onToolCall`. */
+	/** Told each call's name and result once it ends; `McpDeps.onToolCall`. */
 	readonly onToolCall?: (tool: string, result: ToolResult) => void;
 	/**
-	 * R5 (design §2.13, D-125): whether the {@linkcode CONFIRM_TOOL_NAMES} ask a form-capable client to confirm
-	 * (`TTK_CONFIRM_DESTRUCTIVE`). Absent means off, so a dispatcher built without it — a test, the task executor —
-	 * never asks.
+	 * Whether the {@linkcode CONFIRM_TOOL_NAMES} ask a form-capable client to confirm (`TTK_CONFIRM_DESTRUCTIVE`).
 	 */
 	readonly confirmations?: boolean;
-	/** R7 (design §2.15, D-127): the per-call trace, when the gateway exports OpenTelemetry. */
-	readonly traceTool?: ToolTracer;
 }
 
 /**
- * The four client facts the tools branch on, from the client's declared capabilities (design §2.0 item 6; S0 seam,
- * read by W4). `undefined` when the client declared none — the 2025 stateless path — so a handler cannot mistake
- * "unknown" for "declared nothing".
- *
- * Form elicitation follows the SDK's own reading: a bare `elicitation: {}` is form, and so is any declaration naming
- * `form`; one naming only `url` is not.
+ * The four client facts the tools branch on, from the client's declared capabilities, read by the confirmation,
+ * handoff and secret-choice paths.
  */
 export function clientFactsOf(caps: ClientCapabilities | undefined): ClientFacts | undefined {
 	if (caps === undefined) return undefined;
@@ -127,7 +53,7 @@ export function clientFactsOf(caps: ClientCapabilities | undefined): ClientFacts
 	};
 }
 
-/** A failure rendered as a result: the frozen text prefix plus the D-A2 payload. */
+/** A failure rendered as a result: the frozen text prefix plus the structured payload. */
 export function errorResult(error: ToolError): CallToolResult {
 	return {
 		isError: true,
@@ -136,16 +62,7 @@ export function errorResult(error: ToolError): CallToolResult {
 	};
 }
 
-/**
- * Which deployment fact a disabled tool is waiting on.
- *
- * Derived by probing the predicate rather than declared beside it, so a tool
- * cannot claim one feature in its message while gating on another. Returns
- * `undefined` when no single feature unblocks the tool, which after G-2 removed
- * `allSessionsLocked` from the predicates cannot happen for any catalog entry —
- * the assertion lives in `catalog_test.ts` rather than here, because a
- * dispatcher is the wrong place to fail a build.
- */
+/** Which deployment fact a disabled tool is waiting on. */
 export function missingFeature(
 	tool: ToolDefinition,
 	state: ToolAvailability,
@@ -159,8 +76,8 @@ export function missingFeature(
 
 /**
  * Validates a call's raw arguments against the tool's schema: the tool's own `normalizeArguments` first, then the
- * schema, then — only on a failure — the stringified-value repair (`arguments.ts`), whose output passes the same
- * schema or is not used. Exported for the task executor, which validates the same way.
+ * schema, then — only on a failure — the stringified-value repair ({@linkcode repairArguments}), whose output passes the same
+ * schema or is not used.
  */
 export function parseArguments(
 	tool: Pick<ToolDefinition, 'inputSchema' | 'normalizeArguments'>,
@@ -181,14 +98,7 @@ export function parseArguments(
 	return { success: false, message: describeIssues(repaired.issues) };
 }
 
-/**
- * Runs one handler and converts every throw into a result.
- *
- * The single place a non-`ToolError` throw becomes `browser-unavailable`, and
- * the single consumer of {@linkcode ToolError.wireText}. Exported so the SDK's
- * own registered executor — unreachable while the seam holds, but present so
- * `tools/list` works — cannot become a second error producer.
- */
+/** Runs one handler and converts every throw into a result. */
 export async function runToolHandler(
 	tool: ToolDefinition,
 	args: unknown,
@@ -198,12 +108,11 @@ export async function runToolHandler(
 	try {
 		return await tool.handler(args as never, ctx);
 	} catch (cause) {
-		// Every failure a caller can act on is a *result*, not a protocol error:
-		// a JSON-RPC error aborts the model's turn, while an error result is
-		// feedback it can respond to.
+		// Every failure a caller can act on is a *result*, not a protocol error: a JSON-RPC error aborts the model's
+		// turn, while an error result is feedback it can respond to.
 		if (cause instanceof ToolError) return errorResult(cause);
 		const detail = cause instanceof Error ? cause.message : String(cause);
-		// A10: a call its caller cancelled stopped early on purpose; that is not a tool failure worth a warning, and
+		// A call its caller cancelled stopped early on purpose; that is not a tool failure worth a warning, and
 		// the result is read by nobody (the SDK drops the response to a cancelled request).
 		if (ctx.signal?.aborted === true) {
 			return errorResult(new ToolError('browser-unavailable', `${tool.name} was cancelled by the caller`));
@@ -213,15 +122,7 @@ export async function runToolHandler(
 	}
 }
 
-/**
- * The replacement dispatcher, as a plain function so tests can drive it without
- * a transport.
- *
- * @param name the tool name from `params.name`
- * @param args the raw, unvalidated `params.arguments`
- * @throws ProtocolError when the name is not in the catalog at all — that is a
- * genuine protocol violation and the SDK's own behaviour, so it stays one.
- */
+/** The replacement dispatcher, as a plain function so tests can drive it without a transport. */
 export async function dispatchToolCall(
 	dispatch: DispatchContext,
 	name: string,
@@ -235,35 +136,23 @@ export async function dispatchToolCall(
 		throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Tool ${name} not found`);
 	}
 
-	// **N-6: the baseline scope is checked here, and it was checked nowhere.**
-	// `registerCatalog` filters on `tool.scope`, and only two catalog entries
-	// declare one (`task`, `admin`) — so every other tool was permitted to a
-	// principal holding *no* scopes at all. On the HTTP mount that was masked by
-	// the gateway's own route gate; **on stdio it was masked by nothing**, so a
-	// deployment setting `TTK_ANON_SCOPES=` — documented as "a principal that can
-	// do nothing" — still handed out the whole browser-control surface. It is
-	// enforced before `permitted`, because "you hold no authority here" is a
-	// different fact from "this tool needs a scope you lack", and the first is
-	// the one that must not depend on a catalog entry remembering to declare it.
-	// It is also what makes a future `evaluate` tool fail *closed* if that one
-	// line is ever forgotten.
+	// **The baseline scope is checked here, and only here.** `registerCatalog` filters on `tool.scope`, and most
+	// browser catalog entries declare none — so without this they would be permitted to a principal holding *no*
+	// scopes at all.
 	if (!dispatch.scopes.has('mcp:invoke')) {
 		return errorResult(new ToolError('scope-required', `this credential cannot use ${name}`));
 	}
 
 	if (!dispatch.permitted.has(name)) {
-		// The message never names the scope (SEC-17): the code tells an honest
-		// caller what happened, and naming the grant would tell a dishonest one
-		// exactly what to request or phish.
+		// The message never names the scope: the code tells an honest caller what happened, and naming the grant
+		// would tell a dishonest one exactly what to request or phish.
 		return errorResult(new ToolError('scope-required', `this credential cannot use ${name}`));
 	}
 
 	if (tool.available !== undefined && !tool.available(dispatch.availability)) {
 		const feature = missingFeature(tool, dispatch.availability);
-		// A tool that can explain its own refusal does (SR3-M2): the generic
-		// message names a feature, which is useless when the cause is a
-		// configuration the operator has to change rather than a capability the
-		// deployment lacks.
+		// A tool that can explain its own refusal does: the generic message names a feature, which is useless when
+		// the cause is a configuration the operator has to change rather than a capability the deployment lacks.
 		const detail = tool.unavailableDetail?.(dispatch.availability);
 		return errorResult(
 			new ToolError(
@@ -277,24 +166,23 @@ export async function dispatchToolCall(
 		);
 	}
 
-	// G-3: the SDK validates arguments *inside* its own handler and throws, so
+	// The SDK validates arguments *inside* its own handler and throws, so
 	// this is the only place an argument violation can be given a code.
 	const parsed = parseArguments(tool, args);
 	if (!parsed.success) return errorResult(new ToolError('invalid-arguments', parsed.message));
 
-	// R5 (D-125): a destructive call from a form-capable client waits for its human — after the arguments are known to
-	// be valid, so the message describes a call that could run, and before the heartbeat, so a call parked on a person
-	// reports no progress. `confirmations` is `TTK_CONFIRM_DESTRUCTIVE`; anything but a client that declared form
-	// elicitation passes straight through, which keeps every other client's results byte for byte what they were.
+	// A destructive call from a form-capable client waits for its human — after the arguments are known to be valid,
+	// so the message describes a call that could run, and before the heartbeat, so a call parked on a person reports
+	// no progress.
 	if (dispatch.confirmations === true && CONFIRM_TOOL_NAMES.has(name) && mcp !== undefined && client?.elicitForm) {
-		const gate = await confirmGate(name, parsed.data as Record<string, unknown>, mcp, client);
+		const gate = confirmGate(name, parsed.data as Record<string, unknown>, mcp, client);
 		if (gate !== 'proceed') return gate;
 	}
 
-	// D-079: the caller's `notifications/cancelled` reaches the tool. The SDK aborts the request's own signal; a
-	// bridge (A2A, stdio task) may have set one on the context too, and either ends the call.
+	// The caller's `notifications/cancelled` reaches the tool. The SDK aborts the request's own signal; an agent
+	// task's executor (`createToolExecutor`) may have set one on the context too, and either ends the call.
 	const signal = combineSignals(dispatch.ctx.signal, mcp?.mcpReq.signal);
-	// D-079: a caller that sent a progressToken hears from a call that runs past a second, once a second.
+	// A caller that sent a progressToken hears from a call that runs past a second, once a second.
 	const heartbeat = mcp === undefined ? null : startHeartbeat(mcp, name, dispatch.progressIntervalMs);
 	let result: ToolResult;
 	try {
@@ -306,9 +194,9 @@ export async function dispatchToolCall(
 				...(signal === undefined ? {} : { signal }),
 				...(mcp === undefined ? {} : { mcp }),
 				...(clientSupportsSampling === undefined ? {} : { clientSupportsSampling }),
-				// S0 seam (design §2.0 item 6): what the client declared, for W4's confirmation and handoff paths.
+				// What the client declared, for the confirmation and handoff paths.
 				...(client === undefined ? {} : { client }),
-				// A9: the handler reports into the heartbeat; it is never handed a way to notify on its own.
+				// The handler reports into the heartbeat; it is never handed a way to notify on its own.
 				...(heartbeat === null ? {} : { progress: heartbeat.report }),
 			},
 			dispatch.logger,
@@ -316,7 +204,9 @@ export async function dispatchToolCall(
 	} finally {
 		heartbeat?.stop();
 	}
-	return validateOutput(tool, result, dispatch.logger);
+	// Secret rule 2 ("nothing reads a secret back out"), at the one exit every tool result takes — successes, errors
+	// and sampling rounds alike: a typed value can come back through any page read.
+	return redactDeep(validateOutput(tool, result, dispatch.logger), dispatch.ctx.secrets);
 }
 
 /** One signal that aborts when either does; `undefined` when there is none. */
@@ -327,27 +217,16 @@ function combineSignals(a: AbortSignal | undefined, b: AbortSignal | undefined):
 }
 
 /** How often a running call reports progress; the first report comes after one interval. */
-export const PROGRESS_INTERVAL_MS = 1_000;
+const PROGRESS_INTERVAL_MS = 1_000;
 
 /** A running call's progress heartbeat: the one producer of its `notifications/progress`. */
-export interface Heartbeat {
-	/** A9: what the handler says about its progress; the next tick carries it. Never sends anything itself. */
+interface Heartbeat {
+	/** What the handler says about its progress; the next tick carries it. Never sends anything itself. */
 	report(report: ProgressReport): void;
 	stop(): void;
 }
 
-/**
- * D-079 / A9: `notifications/progress` for a call whose caller sent a `progressToken`. One producer for every tool,
- * ticking once per interval. Nothing is sent for a call that finishes within the first interval, nor to a caller
- * that sent no token; a notification that cannot be delivered is dropped, never fails the tool.
- *
- * Without a report the value is the seconds the call has run and no total is claimed. A handler that knows more
- * reports it (`ctx.progress`), and the tick then carries the handler's `total` and `message` with the value
- * `max(last sent, reported)` — the reported progress, or the elapsed seconds when the report names only a total
- * (a call bounded by a timeout), capped at that total. The spec requires every notification's value to exceed the
- * last one, so a tick whose value has not risen sends nothing rather than repeat itself: a handler that is stuck
- * on step 3 of 8 says so once, not once a second.
- */
+/** `notifications/progress` for a call whose caller sent a `progressToken`. */
 export function startHeartbeat(
 	mcp: ServerContext,
 	name: string,
@@ -386,20 +265,7 @@ export function startHeartbeat(
 	};
 }
 
-/**
- * Applies the tool's declared `outputSchema` to a success.
- *
- * The SDK's own `validateToolOutput` runs inside the handler this seam replaces,
- * so without this the schema would be advertised in `tools/list` and enforced
- * nowhere. Parsing in Zod's default strip mode is what the wire wants — an
- * undeclared key does not ship — and `schemas_test.ts` asserts *equality* rather
- * than parseability so a handler that grew a field before its schema did fails a
- * test instead of losing the field in silence.
- *
- * A schema violation is a server bug, and it is still answered as a *result*:
- * a JSON-RPC error would abort the calling model's turn over a fault it did not
- * cause and cannot fix.
- */
+/** Applies the tool's declared `outputSchema` to a success. */
 function validateOutput(
 	tool: ToolDefinition,
 	result: ToolResult,
@@ -407,11 +273,11 @@ function validateOutput(
 ): ToolResult {
 	// The SDK's own predicate, not a key test: an input-required result is
 	// identified by `resultType`, and a hand-rolled check that guessed the key
-	// name silently classified every sampling round as a malformed success.
+	// name would silently classify every sampling round as a malformed success.
 	if (isInputRequiredResult(result)) return result;
 	const call = result as CallToolResult;
 	// The output schema describes success only: the SDK exempts `isError` from
-	// output validation, and the D-A2 failure envelope is its own shape.
+	// output validation, and the failure envelope is its own shape.
 	if (call.isError === true) return call;
 	if (call.structuredContent === undefined) {
 		logger?.warn(`tool ${tool.name} returned a success with no structuredContent`);
@@ -431,32 +297,276 @@ function validateOutput(
 	return { ...call, structuredContent: checked.data as Record<string, unknown> };
 }
 
-/**
- * Installs the replacement handler on a server whose catalog is already
- * registered.
- *
- * Must run *after* `registerCatalog`: the SDK auto-installs its own `tools/call`
- * on the first `registerTool` and asserts none exists yet, so installing first
- * would make that assertion throw.
- */
+/** Installs the replacement handler on a server whose catalog is already registered. */
 export function installToolDispatch(server: McpServer, dispatch: DispatchContext): void {
 	server.server.setRequestHandler('tools/call', async (request, mcp) => {
-		// R7 (D-127): one `ttk.tool` span per call, opened in the request's own context so it nests under its span.
-		const result = await tracedDispatch(dispatch, request.params.name, () =>
-			dispatchToolCall(
-				dispatch,
-				request.params.name,
-				request.params.arguments,
-				mcp,
-				server.server.getClientCapabilities()?.sampling !== undefined,
-				clientFactsOf(server.server.getClientCapabilities()),
-			));
+		const result = await dispatchToolCall(
+			dispatch,
+			request.params.name,
+			request.params.arguments,
+			mcp,
+			server.server.getClientCapabilities()?.sampling !== undefined,
+			clientFactsOf(server.server.getClientCapabilities()),
+		);
 		dispatch.onToolCall?.(request.params.name, result);
 		if (isInputRequiredResult(result)) return result;
-		// Every `outputSchema` in this catalog is object-rooted (I-5), so the
-		// projection is the identity on the 2026 era and the `{result: …}` wrap
-		// cannot fire on the 2025 one. Routing through the SDK anyway keeps the
-		// era logic in the codec, which is where it belongs.
+		// Every `outputSchema` in this catalog is object-rooted, so the projection is the identity on the 2026 era
+		// and the `{result: …}` wrap cannot fire on the 2025 one.
 		return server.server.projectCallToolResult(result as CallToolResult, undefined);
 	});
+}
+
+// --- Argument repair and argument-error wording for the `tools/call` path. ----------------------------------------
+
+/** One Zod issue, as much of it as this module reads. Zod v4's `invalid_union` carries its branches in `errors`. */
+export interface ArgumentIssue {
+	readonly path: readonly PropertyKey[];
+	readonly message: string;
+	readonly code?: string;
+	/** `invalid_type`: the type the schema wanted. */
+	readonly expected?: string;
+	readonly errors?: readonly (readonly ArgumentIssue[])[];
+}
+
+/** How many repair rounds one call gets: one per nesting level a client stringified, which is never deep. */
+const MAX_REPAIR_ROUNDS = 4;
+
+/** The largest string the repair will try to parse; beyond any argument a tool accepts as structure. */
+const MAX_REPAIR_CHARS = 512 * 1024;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The value at `path` inside `root`, or `undefined` when the path leaves the structure. */
+function valueAt(root: unknown, path: readonly PropertyKey[]): unknown {
+	let node = root;
+	for (const key of path) {
+		if (Array.isArray(node) && typeof key === 'number') node = node[key];
+		else if (isRecord(node) && typeof key === 'string' && Object.hasOwn(node, key)) node = node[key];
+		else return undefined;
+	}
+	return node;
+}
+
+/** A copy of `root` with the value at `path` replaced; `path` is known to resolve. */
+function withValueAt(root: unknown, path: readonly PropertyKey[], value: unknown): unknown {
+	if (path.length === 0) return value;
+	const [head, ...rest] = path;
+	if (Array.isArray(root) && typeof head === 'number') {
+		const copy = [...root];
+		copy[head] = withValueAt(root[head], rest, value);
+		return copy;
+	}
+	if (isRecord(root) && typeof head === 'string') {
+		return { ...root, [head]: withValueAt(root[head], rest, value) };
+	}
+	return root;
+}
+
+/**
+ * The structured value a string spells, or `undefined` when it spells none: JSON whose top level is an object, an
+ * array, a finite number or a boolean.
+ */
+function parsedStructure(text: string): unknown {
+	const trimmed = text.trim();
+	if (trimmed === '' || trimmed.length > MAX_REPAIR_CHARS) return undefined;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(trimmed);
+	} catch {
+		return undefined;
+	}
+	if (typeof parsed === 'number') return Number.isFinite(parsed) ? parsed : undefined;
+	if (typeof parsed === 'boolean' || Array.isArray(parsed) || isRecord(parsed)) return parsed;
+	return undefined;
+}
+
+/** True for an issue that refuses a value for being a string where the schema wanted structure. */
+function refusesString(issue: ArgumentIssue): boolean {
+	return issue.code === 'invalid_union' || (issue.code === 'invalid_type' && issue.expected !== 'string');
+}
+
+/**
+ * Every path, from `issues` and any union branches inside them, at which the schema refused a string for its type —
+ * never a string refused for its content (too long, a bad pattern), which re-reading as JSON could only make worse.
+ */
+function stringPaths(args: unknown, issues: readonly ArgumentIssue[], into: Map<string, PropertyKey[]>): void {
+	for (const issue of issues) {
+		if (refusesString(issue) && typeof valueAt(args, issue.path) === 'string') {
+			into.set(JSON.stringify(issue.path.map(String)), [...issue.path]);
+		}
+		for (const branch of issue.errors ?? []) {
+			// A branch's issue paths are relative to the union's own value.
+			stringPaths(args, branch.map((inner) => ({ ...inner, path: [...issue.path, ...inner.path] })), into);
+		}
+	}
+}
+
+/**
+ * Re-reads each string a schema refused for its type as the JSON structure it spells (a client that stringified an
+ * object, array, number or boolean), one nesting level per round, at most {@linkcode MAX_REPAIR_ROUNDS} rounds.
+ */
+export function repairArguments<T>(
+	args: unknown,
+	firstIssues: readonly ArgumentIssue[],
+	parse: (value: unknown) => { success: true; data: T } | { success: false; issues: readonly ArgumentIssue[] },
+): { ok: true; data: T } | { ok: false; issues: readonly ArgumentIssue[] } {
+	let current = args;
+	let issues = firstIssues;
+	for (let round = 0; round < MAX_REPAIR_ROUNDS; round++) {
+		const paths = new Map<string, PropertyKey[]>();
+		stringPaths(current, issues, paths);
+		let next = current;
+		for (const path of paths.values()) {
+			const structure = parsedStructure(valueAt(next, path) as string);
+			if (structure !== undefined) next = withValueAt(next, path, structure);
+		}
+		if (next === current) break;
+		current = next;
+		const attempt = parse(current);
+		if (attempt.success) return { ok: true, data: attempt.data };
+		issues = attempt.issues;
+	}
+	return { ok: false, issues };
+}
+
+/** How far a union branch got: fewer issues is closer, and among equals the deeper first issue is. */
+function branchDistance(branch: readonly ArgumentIssue[]): [number, number] {
+	const depth = branch.reduce((deepest, issue) => Math.max(deepest, issue.path.length), 0);
+	return [branch.length, -depth];
+}
+
+/**
+ * The issues to report for one issue: itself, or — for a union no branch of which matched — the issues of the branch
+ * the value came closest to, with the union's path in front, recursively.
+ */
+function flatten(issue: ArgumentIssue): ArgumentIssue[] {
+	const branches = issue.errors?.filter((branch) => branch.length > 0) ?? [];
+	if (issue.code !== 'invalid_union' || branches.length === 0) return [issue];
+	let best = branches[0]!;
+	let bestDistance = branchDistance(best);
+	for (const branch of branches.slice(1)) {
+		const distance = branchDistance(branch);
+		if (distance[0] < bestDistance[0] || (distance[0] === bestDistance[0] && distance[1] < bestDistance[1])) {
+			best = branch;
+			bestDistance = distance;
+		}
+	}
+	return best.flatMap((inner) => flatten({ ...inner, path: [...issue.path, ...inner.path] }));
+}
+
+/** Renders validation issues as `<path>: <issue>`, joined, unions resolved to their closest branch; root is `(root)`. */
+export function describeIssues(issues: readonly ArgumentIssue[]): string {
+	const lines = issues.flatMap(flatten).map((issue) =>
+		`${issue.path.length === 0 ? '(root)' : issue.path.map(String).join('.')}: ${issue.message}`
+	);
+	return [...new Set(lines)].join('; ');
+}
+
+// --- Confirmations for destructive tools. ------------------------------------------------------------------------
+
+/**
+ * The tools that ask a form-capable client to confirm before they run: each ends stored data a caller cannot
+ * get back — every browser session, a coding workspace, a shared file, a skill, a prompt or a published surface.
+ */
+export const CONFIRM_TOOL_NAMES: ReadonlySet<string> = new Set([
+	'browser_close_all',
+	'sandbox_delete',
+	'file_delete',
+	'skill_delete',
+	'prompt_delete',
+	'a2ui_delete',
+	// The agents' memory is persistent data like the library's; deleting it is asked for like theirs.
+	'memory_delete',
+]);
+
+/** The `inputRequests` key the confirmation rides under, and the one its answer comes back under. */
+export const CONFIRM_KEY = 'ttk_confirm';
+
+/** How much of one argument value a confirmation message quotes. */
+const SHOWN_LIMIT = 120;
+
+/**
+ * One argument value as a message may show it: control characters (C0, DEL, C1) stripped — a path or a name is
+ * caller text, and a newline or an escape sequence in it could make the prompt a human reads say something other
+ * than what the call does — then cut to {@linkcode SHOWN_LIMIT} characters.
+ */
+function shown(value: unknown): string {
+	// deno-lint-ignore no-control-regex -- the control characters are exactly what this strips.
+	const text = String(value ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+	return text.length <= SHOWN_LIMIT ? text : `${text.slice(0, SHOWN_LIMIT)}…`;
+}
+
+/** Builds one tool's confirmation question from the call's validated arguments. */
+type ConfirmMessage = (args: Readonly<Record<string, unknown>>) => string;
+
+/** What the human is asked, per tool: what the call ends, in the words the tool's own arguments give. */
+export const CONFIRM_MESSAGES: ReadonlyMap<string, ConfirmMessage> = new Map<string, ConfirmMessage>([
+	[
+		'browser_close_all',
+		() => 'Close every browser session on this server? Their tabs, logins and unsaved page state end now.',
+	],
+	[
+		'sandbox_delete',
+		(args) =>
+			`Delete the coding workspace ${shown(args.workspace_id)} and its caches? Running work in it is cancelled.`,
+	],
+	[
+		'file_delete',
+		(args) =>
+			args.recursive === true
+				? `Delete ${shown(args.path)} and everything under it from the file share?`
+				: `Delete ${shown(args.path)} from the file share?`,
+	],
+	['skill_delete', (args) => `Delete the skill ${shown(args.name)} and every file in it?`],
+	['prompt_delete', (args) => `Delete the stored prompt ${shown(args.name)}?`],
+	['a2ui_delete', (args) => `Delete the UI surface ${shown(args.surface_id)}?`],
+	// A whole collection, or the named items of one.
+	[
+		'memory_delete',
+		(args) =>
+			args.all === true
+				? `Delete the memory collection ${shown(args.collection)} and everything in it?`
+				: `Delete ${Array.isArray(args.ids) ? args.ids.length : 0} item(s) from the memory collection ${
+					shown(args.collection)
+				}?`,
+	],
+]);
+
+/** The form the human answers: one required boolean. Flat primitives only, as form elicitation allows. */
+const CONFIRM_SCHEMA: ElicitRequestFormParams['requestedSchema'] = {
+	type: 'object',
+	properties: { confirm: { type: 'boolean', title: 'Confirm' } },
+	required: ['confirm'],
+};
+
+/** Decides whether one call of a destructive tool may run. */
+export function confirmGate(
+	tool: string,
+	args: Readonly<Record<string, unknown>>,
+	mcp: ServerContext | undefined,
+	client: ClientFacts | undefined,
+): 'proceed' | ToolResult {
+	const message = CONFIRM_MESSAGES.get(tool);
+	if (message === undefined || mcp === undefined || client?.elicitForm !== true) return 'proceed';
+
+	const answer = inputResponse(mcp.mcpReq.inputResponses, CONFIRM_KEY);
+	if (answer.kind === 'missing') {
+		return inputRequired({
+			inputRequests: {
+				[CONFIRM_KEY]: inputRequired.elicit({ message: message(args), requestedSchema: CONFIRM_SCHEMA }),
+			},
+		}) as ToolResult;
+	}
+	if (answer.kind === 'elicit' && answer.action === 'accept' && answer.content?.confirm === true) return 'proceed';
+
+	const what = answer.kind !== 'elicit'
+		? 'was not given'
+		: answer.action === 'decline'
+		? 'was declined'
+		: answer.action === 'cancel'
+		? 'was cancelled'
+		: 'was not given';
+	return errorResult(new ToolError('user-declined', `the confirmation for ${tool} ${what}; the tool did not run`));
 }

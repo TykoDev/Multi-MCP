@@ -1,11 +1,4 @@
-/**
- * The element record (B1.5), proven over the recorded corpus rather than hand-built nodes.
- *
- * Four things are measured here rather than asserted: A-1 (the OOPIF composition arithmetic at the
- * pinned 1280x900 viewport), A-4 (bytes per element under each preset, with the default's cost on
- * the heaviest capture as the plan's gate), I-15 (at most one focused element, and `focused_index`
- * agrees with the array) and the DD-7 masking of a real password field with a real sentinel value.
- */
+/** The element record, proven over the recorded corpus rather than hand-built nodes. */
 import { assert, assertAlmostEquals, assertEquals, assertGreater, assertLess, assertNotEquals } from '@std/assert';
 import { DOM_FIXTURE_PAGES } from '../../browser/fixtures/dom/pages.ts';
 import { captureHarness } from '../fixtures/capture_session.ts';
@@ -19,7 +12,8 @@ import {
 	type ObservedElement,
 	resolveFields,
 } from './element_record.ts';
-import { observationPayload, observationStructured, observe } from './observe.ts';
+import { labelOf, observationPayload, observationStructured, observe, promptBlock } from './observe.ts';
+import type { EnhancedDomTreeNode } from '@tykotech/browser';
 
 /** The password the `form_attributes` corpus page ships in markup. Its appearance anywhere is a failure. */
 const SENTINEL = 'P4ssw0rd-SENTINEL-DO-NOT-LEAK-9f3a2b';
@@ -50,7 +44,6 @@ Deno.test('fields: omitted means core, presets and names union, and every option
 	assertEquals([...resolveFields(['core', 'locators', 'bounds'])].sort(), [...FIELD_PRESETS.core, 'locators'].sort());
 	assertEquals([...resolveFields(['full'])].sort(), [...FIELD_NAMES].sort(), 'full is every field');
 	assertEquals(FIELD_OPTIONS.length, 3 + FIELD_NAMES.length);
-	// D-035: `locator` is opt-in, not in the default (see the A-4 measurement below).
 	assert(!FIELD_PRESETS.core.includes('locator'));
 });
 
@@ -90,7 +83,6 @@ Deno.test('element record: an unknown frame id is reported, never refused, and t
 	const named = await elementsOf('iframe_crossorigin', ['core'], { frames: [child.id, 'no-such-frame'] });
 	assertEquals(named.framesUnknown, ['no-such-frame']);
 	assertEquals(named.elements.length, all.elements.length, 'the top document plus the one named frame is everything');
-	// The frame list itself is not filtered: it is one row per frame and always the whole page.
 	assertEquals(named.frames.length, 2);
 });
 
@@ -99,8 +91,6 @@ Deno.test('element record: element_limit keeps the elements painted last, in ind
 	assertEquals(full.elementsTotal, 1201);
 	assertEquals(full.elementsTruncated, false);
 
-	// The helper pins a 5000 limit so the other tests see whole arrays; here the limit is left to the
-	// contract, which implies 500 for `full`.
 	const capped = await elementsOf('truncation_large', ['full'], { elementLimit: undefined });
 	assertEquals(capped.elements.length, IMPLIED_ELEMENT_LIMIT, 'full implies 500');
 	assertEquals(capped.elementsTotal, 1201);
@@ -114,12 +104,9 @@ Deno.test('element record: element_limit keeps the elements painted last, in ind
 	assertEquals(explicit.elementsTruncated, true);
 });
 
-// --- I-15 -------------------------------------------------------------------------------------------
+// --- focus ------------------------------------------------------------------------------------------
 
-Deno.test('I-15: at most one element is focused on every recorded capture, and focused_index agrees', async () => {
-	// Observed, not assumed: no recorded capture carries a focused AX node, so this pins the
-	// negative case only; the positive case (exactly one, the autofocused field) is on the browser
-	// tier, because a recorded page has no focus to report.
+Deno.test('at most one element is focused on every recorded capture, and focused_index agrees', async () => {
 	let focusedCaptures = 0;
 	for (const page of DOM_FIXTURE_PAGES) {
 		const observation = await elementsOf(page.name, ['core']);
@@ -131,12 +118,7 @@ Deno.test('I-15: at most one element is focused on every recorded capture, and f
 	assertEquals(focusedCaptures, 0, 'the corpus was recorded without focus; if that changes, so should this');
 });
 
-Deno.test('B1.9: a state read over a capture with no focus mints no focus record', async () => {
-	// The honest negative, and the only half of the producer the unit tier can
-	// reach: the corpus was recorded without focus, so a read finds none and must
-	// mint nothing. A `focus` record on a page with no focused node would be an
-	// event that did not happen. The positive case — focus moving between two
-	// reads — is on the browser tier for the same reason I-15's positive case is.
+Deno.test('a state read over a capture with no focus mints no focus record', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		await observe(h.record, { fields: resolveFields(['core']), elementLimit: 5000 });
@@ -148,9 +130,9 @@ Deno.test('B1.9: a state read over a capture with no focus mints no focus record
 	}
 });
 
-// --- A-1 --------------------------------------------------------------------------------------------
+// --- bounds -----------------------------------------------------------------------------------------
 
-Deno.test('A-1: bounds is absolutePosition minus the top scroll, and document_bounds is absolutePosition', async () => {
+Deno.test('bounds is absolutePosition minus the top scroll, and document_bounds is absolutePosition', async () => {
 	for (const page of DOM_FIXTURE_PAGES) {
 		const observation = await elementsOf(page.name, ['bounds', 'document_bounds']);
 		for (const element of observation.elements) {
@@ -167,11 +149,7 @@ Deno.test('A-1: bounds is absolutePosition minus the top scroll, and document_bo
 	}
 });
 
-Deno.test('A-1: the OOPIF composition at 1280x900 — recorded numbers, host box plus border, child scroll subtracted', async () => {
-	// `iframe_crossorigin`: the host <iframe> sits at (12, 143.28) with a 1 px border; the child
-	// button's local box is (8, 55.6) in a 520 px-wide frame. The composed number is what the action
-	// path clicks at for an OOPIF element (`default_action_geometry.ts`), so publishing it publishes
-	// the number the server already trusts.
+Deno.test('the OOPIF composition at 1280x900 — recorded numbers, host box plus border, child scroll subtracted', async () => {
 	const crossorigin = await elementsOf('iframe_crossorigin', ['full']);
 	const host = byId(crossorigin.elements, 'xorigin-frame');
 	const button = byId(crossorigin.elements, 'xo-button');
@@ -179,21 +157,15 @@ Deno.test('A-1: the OOPIF composition at 1280x900 — recorded numbers, host box
 	assertEquals(button.bounds, { x: 21, y: 199.875, w: 127.890625, h: 21 });
 	assertNotEquals(button.frame_id, host.frame_id, 'the button is in the child frame');
 	assertEquals(button.frame?.url, 'http://localhost:38112/frames/frame_crossorigin_child.html');
-	// Inside the host's content box, which is the whole claim.
 	assert(button.bounds!.x >= host.bounds!.x + 1 && button.bounds!.y >= host.bounds!.y + 1);
 	assert(button.bounds!.x + button.bounds!.w <= host.bounds!.x + host.bounds!.w);
 
-	// `iframe_oopif_scrolled`: the child document is scrolled by 260 px, so its first row sits above
-	// the host box — a negative viewport y is the correct answer and is not clamped.
 	const scrolled = await elementsOf('iframe_oopif_scrolled', ['full']);
 	const frame = byId(scrolled.elements, 'oos-frame');
 	assertEquals(frame.bounds, { x: 12, y: 109.6875, w: 480, h: 200 });
 	assertEquals(byId(scrolled.elements, 'fp-b01').bounds, { x: 25, y: -137.3125, w: 111.5625, h: 21 });
 	assertEquals(byId(scrolled.elements, 'fp-b03').bounds, { x: 25, y: -17.3125, w: 111.5625, h: 21 });
 
-	// `scroll_page_prescrolled`: the TOP document is scrolled 2000 px, so `bounds` and
-	// `document_bounds` differ by exactly that, and the band ±1000 px around the viewport is what
-	// the index admits.
 	const prescrolled = await elementsOf('scroll_page_prescrolled', ['full']);
 	assertEquals(prescrolled.scroll.y, 2000);
 	const b6 = byId(prescrolled.elements, 'ps-b6');
@@ -203,20 +175,17 @@ Deno.test('A-1: the OOPIF composition at 1280x900 — recorded numbers, host box
 		assert(element.bounds!.y >= -1000 - element.bounds!.h && element.bounds!.y <= 900 + 1000, `${element.attrs?.id}`);
 	}
 
-	// `iframe_oopif_index_collision`: the same backendNodeId in two sessions composes into two
-	// different places, which is exactly what the composite key exists to keep apart.
 	const collision = await elementsOf('iframe_oopif_index_collision', ['full']);
 	assertEquals(byId(collision.elements, 'cc-c01').bounds, { x: 22, y: 282.40625, w: 12, h: 12 });
 	assertEquals(byId(collision.elements, 'hc-b01').bounds, { x: 13, y: 89.6875, w: 100, h: 19.1875 });
-	// And the same-site control: a pierced frame composes through the same code.
 	const sameSite = await elementsOf('iframe_same_site_port', ['full']);
 	assertEquals(byId(sameSite.elements, 'd2-button').bounds, { x: 21, y: 219.46875, w: 99.75, h: 21 });
 	assertEquals(byId(sameSite.elements, 'd2-button').frame?.url, 'http://127.0.0.1:38112/frames/frame_depth2.html');
 });
 
-// --- A-4 --------------------------------------------------------------------------------------------
+// --- cost -------------------------------------------------------------------------------------------
 
-Deno.test('A-4: the default set costs at most 310 B/element on the heaviest recorded capture', async () => {
+Deno.test('the default set costs at most 310 B/element on the heaviest recorded capture', async () => {
 	const perElement = async (fields: Parameters<typeof resolveFields>[0]) => {
 		const observation = await elementsOf('truncation_large', fields);
 		return JSON.stringify(observation.elements).length / observation.elements.length;
@@ -224,18 +193,14 @@ Deno.test('A-4: the default set costs at most 310 B/element on the heaviest reco
 	const minimal = await perElement(['minimal']);
 	const core = await perElement(['core']);
 	const withLocator = await perElement(['core', 'locator']);
-	// The numbers, so the report carries what was measured rather than what was predicted:
-	// minimal 106.5, core 250.4, core+locator 368.4 on `truncation_large` (1201 elements).
 	assertAlmostEquals(minimal, 106.5, 0.1);
 	assertAlmostEquals(core, 250.4, 0.1);
 	assertAlmostEquals(withLocator, 368.4, 0.1);
-	assert(core <= 310, `the default costs ${core.toFixed(1)} B/element; the plan's gate is 310`);
-	// D-035, on the record: the design's default included `locator` and measured 307 with placeholder
-	// strings; the real candidate carries a 32-hex frame id and pushes the set to 368. It was cut.
+	assert(core <= 310, `the default costs ${core.toFixed(1)} B/element; the budget is 310`);
 	assertGreater(withLocator, 310);
 });
 
-Deno.test('A-4: the mean over the corpus, so a later change to any field shows up as a number', async () => {
+Deno.test('the mean over the corpus, so a later change to any field shows up as a number', async () => {
 	const sums = { minimal: 0, core: 0, full: 0, n: 0 };
 	for (const page of DOM_FIXTURE_PAGES) {
 		const [minimal, core, full] = await Promise.all(
@@ -248,15 +213,14 @@ Deno.test('A-4: the mean over the corpus, so a later change to any field shows u
 		sums.n += 1;
 	}
 	assertEquals(sums.n, 35, 'every capture but empty_page carries elements');
-	// Measured 2026-09-09: minimal 61.9, core ~215, full ~990 (full is a floor: labels vary by page).
 	assertAlmostEquals(sums.minimal / sums.n, 61.9, 0.5);
 	assertLess(sums.core / sums.n, 260);
 	assertLess(sums.full / sums.n, 1100);
 });
 
-// --- DD-7 -------------------------------------------------------------------------------------------
+// --- masking ----------------------------------------------------------------------------------------
 
-Deno.test('DD-7: a real password field with a real value discloses nothing on any element surface', async () => {
+Deno.test('a real password field with a real value discloses nothing on any element surface', async () => {
 	const observation = await elementsOf('form_attributes', ['full']);
 	const field = byId(observation.elements, 'f-password');
 	assertEquals(field.input?.value, MASKED_INPUT_VALUE, 'a value is present; that is all a consumer learns');
@@ -264,11 +228,9 @@ Deno.test('DD-7: a real password field with a real value discloses nothing on an
 	assert(!('value' in (field.attrs ?? {})), 'attrs never carries value');
 	assertEquals(field.text, undefined, 'text is empty and therefore omitted');
 	assertEquals(field.label, 'Account password', 'the accessible name is not a secret');
-	// And nothing, anywhere, in either half.
 	assert(!JSON.stringify(observationStructured(observation)).includes(SENTINEL));
 	assert(!JSON.stringify(observationPayload(observation)).includes(SENTINEL));
 	assert(!observation.page.includes(SENTINEL));
-	// The sentinel really is in the capture, so the test is not passing on an absent value.
 	const h = await captureHarness('form_attributes');
 	try {
 		assert(JSON.stringify(h.capture).includes(SENTINEL), 'the corpus carries the sentinel');
@@ -290,7 +252,7 @@ Deno.test('input: the live value, the live checked state and a select report wha
 
 // --- the structured half and the frozen text ------------------------------------------------------
 
-Deno.test('I-4: the text payload carries the five frozen fields whatever fields were requested', async () => {
+Deno.test('the text payload carries the five frozen fields whatever fields were requested', async () => {
 	const rich = await elementsOf('form_attributes', ['full']);
 	const text = observationPayload(rich);
 	for (const element of text.interactive_elements as ObservedElement[]) {
@@ -328,11 +290,129 @@ Deno.test('include_hidden: off-screen elements arrive with visible:false and the
 });
 
 Deno.test('enabled: every indexed element is enabled, by construction of the interactivity predicate', async () => {
-	// Rule 4 of `isInteractiveElement` refuses disabled controls, so `enabled` is `true` for every
-	// element this tool can emit today. It is emitted anyway because the contract names it and a
-	// later change to rule 4 would make it load-bearing; recorded here so nobody reads it as a bug.
 	for (const page of DOM_FIXTURE_PAGES) {
 		const observation = await elementsOf(page.name, ['enabled']);
 		assert(observation.elements.every((element) => element.enabled === true), page.name);
 	}
+});
+
+// --- One password predicate, one implementation, and the containment check that keeps it that way. ---
+
+/** A seed chosen so its length collides with nothing legitimate in a label. */
+const SECRET = 'Q7x-SEED-9fk';
+
+function node(attributes: Record<string, string>, axName?: string): EnhancedDomTreeNode {
+	return {
+		nodeName: 'INPUT',
+		attributes,
+		axNode: axName === undefined ? null : { name: axName, role: 'textbox' },
+		childrenNodes: [],
+		compoundChildren: [],
+	} as unknown as EnhancedDomTreeNode;
+}
+
+// --- the predicate, arm by arm ----------------------------------------------
+
+Deno.test('observe: a password field never contributes its value to a label', () => {
+	const cases: Array<[string, Record<string, string>]> = [
+		['type=password', { type: 'password', value: SECRET }],
+		['type=PASSWORD, case-insensitive', { type: 'PASSWORD', value: SECRET }],
+		['type=password with surrounding space', { type: ' password ', value: SECRET }],
+		['autocomplete=current-password', { type: 'text', autocomplete: 'current-password', value: SECRET }],
+		['autocomplete=new-password', { type: 'text', autocomplete: 'NEW-PASSWORD', value: SECRET }],
+	];
+	for (const [name, attributes] of cases) {
+		assertEquals(labelOf(node(attributes)), '', name);
+	}
+});
+
+Deno.test('observe: the emitted element carries no `label` key at all for an unnamed password field', () => {
+	const label = labelOf(node({ type: 'password', value: SECRET }));
+	assertEquals(label, '');
+});
+
+Deno.test('observe: a password field still gets a label from a real accessible name', () => {
+	assertEquals(labelOf(node({ type: 'password', value: SECRET }, 'Password')), 'Password');
+	assertEquals(labelOf(node({ type: 'password', value: SECRET, 'aria-label': 'Your password' })), 'Your password');
+	assertEquals(labelOf(node({ type: 'password', value: SECRET, placeholder: 'Password' })), 'Password');
+});
+
+Deno.test('observe: an ordinary text input still shows its value, which is the point of the fallback', () => {
+	assertEquals(labelOf(node({ type: 'text', value: 'London' })), 'London');
+	assertEquals(labelOf(node({ type: 'submit', value: 'Sign in' })), 'Sign in');
+});
+
+Deno.test('observe: no surface derived from a label leaks a password (the sampling paths)', () => {
+	const observation = {
+		sessionId: 's',
+		url: 'https://example.com/login',
+		title: 'Sign in',
+		humanHasControl: false,
+		tabs: [],
+		viewport: { width: 1280, height: 720 },
+		scroll: { x: 0, y: 0, pixelsAbove: 0, pixelsBelow: 0 },
+		elements: [{ index: 1, tag: 'input' }],
+		page: 'Sign in',
+		stateToken: null,
+		elementsTotal: 1,
+		elementsTruncated: false,
+		focusedIndex: null,
+		frames: [],
+		framesUnknown: [],
+		captureTruncated: false,
+	};
+	const rendered = promptBlock(observation);
+	assert(!rendered.includes(SECRET), rendered);
+});
+
+// --- the containment check ---------------------------------------------------
+
+/** Where a password value may be read from. */
+const READERS: Readonly<Record<string, number>> = {
+	'browser/src/dom/extract_snapshot.ts': 2,
+	'browser/src/dom/serialize_attrs.ts': 1,
+	'browser/src/dom/state_token.ts': 1,
+	'browser/src/watchdogs/default_action.ts': 1,
+	'mcp/src/element_record.ts': 3,
+	'mcp/src/observe.ts': 1,
+};
+
+/** Every way a module can ask for an element's value. */
+const VALUE_READS: readonly RegExp[] = [
+	/\battributes\s*\.\s*value\b/,
+	/\battributes\s*\[\s*(['"`])value\1\s*\]/,
+	/\battributes\s*\.\s*valuetext\b/,
+	/\battributes\s*\[\s*(['"`])valuetext\1\s*\]/,
+	/\(\s*node[^,)]*,\s*(['"`])(?:value|valuetext)\1\s*\)/,
+	/\baxNode\s*\??\.\s*value\b/,
+	/\.\s*(?:inputValue|textValue)\b/,
+];
+
+async function* walk(dir: URL): AsyncGenerator<URL> {
+	for await (const entry of Deno.readDir(dir)) {
+		if (entry.name === 'node_modules' || entry.name === 'fixtures' || entry.name === 'dist') continue;
+		const child = new URL(`${entry.name}${entry.isDirectory ? '/' : ''}`, dir);
+		if (entry.isDirectory) yield* walk(child);
+		else if (entry.name.endsWith('.ts') && !entry.name.endsWith('_test.ts')) yield child;
+	}
+}
+
+Deno.test('observe: only the named modules read an element value, and each reads it once', async () => {
+	const root = new URL('../../', import.meta.url);
+	const counts: Record<string, number> = {};
+	for await (const file of walk(root)) {
+		const path = file.href.replace(root.href, '');
+		for (const line of (await Deno.readTextFile(file)).split('\n')) {
+			if (VALUE_READS.some((pattern) => pattern.test(line))) counts[path] = (counts[path] ?? 0) + 1;
+		}
+	}
+
+	assertEquals(
+		Object.keys(counts).filter((path) => !(path in READERS)).sort(),
+		[],
+		`an element value is read outside the password predicate's reach: ${Object.keys(counts).join(', ')}`,
+	);
+	assertEquals(Object.keys(counts).sort(), Object.keys(READERS).sort());
+	assertEquals(counts, READERS);
+	assertEquals(VALUE_READS.length, 7);
 });

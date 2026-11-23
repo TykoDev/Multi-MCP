@@ -1,22 +1,4 @@
-/**
- * R15 (D-123): external secret providers — HashiCorp Vault KV v2 and 1Password Connect.
- *
- * `TTK_API_KEYS_REF` and `TTK_SECRETS_REF` name a secret a provider holds, in place of a `*_FILE` or an inline value.
- * `resolveSecrets` (secrets.ts) reads each one **once, at startup**, into the same logical key the `*_FILE` form fills,
- * so `loadConfig` never learns where a value came from and nothing downstream changes. Three rules shape this module:
- *
- * - **Fail closed.** A provider that cannot be reached, answers anything but 200, times out, redirects, sends more
- *   than 1 MiB or a body without the named key refuses the start. There is no cache and no fallback: a gateway that
- *   started without its API keys would be unreachable, and one without its browser secrets would type nothing.
- * - **Nothing secret in an error.** A failure names the variable, the provider and a status class or `timed out` —
- *   never the value, the token, or the reference's path, which itself describes how the operator laid secrets out.
- *   An underlying `fetch` error is never quoted: Deno's text for it carries the request URL, and so that path.
- * - **Nothing in `Deno.env`.** The provider token arrives by file (`TTK_VAULT_TOKEN_FILE`, `TTK_OP_CONNECT_TOKEN_FILE`)
- *   and is threaded by argument, because Chromium inherits this process's environment.
- *
- * This module imports nothing from the rest of the gateway: `config.ts` reads {@linkcode configuredSecretRefs} for the
- * diagnostics, and `secrets.ts` owns the orchestration (environment, files, `SecretError`).
- */
+/** External secret providers — HashiCorp Vault KV v2 and 1Password Connect. */
 
 /** A parsed reference: which provider holds the secret, and where. */
 export type SecretRef =
@@ -43,9 +25,9 @@ export const SECRET_REF_VARS: Readonly<Record<string, string>> = {
 };
 
 /** How long one provider read may take, connection to last byte. */
-export const PROVIDER_TIMEOUT_MS = 10_000;
+const PROVIDER_TIMEOUT_MS = 10_000;
 /** The largest provider answer read; a Vault secret or a 1Password item is a few KiB. */
-export const PROVIDER_BODY_LIMIT_BYTES = 1_048_576;
+const PROVIDER_BODY_LIMIT_BYTES = 1_048_576;
 
 /**
  * A provider failure. `variable` and `source` name configuration only; `detail` is a fixed phrase or a status class.
@@ -109,8 +91,8 @@ function providerOf(raw: string | undefined): SecretProviderName | null {
 }
 
 /**
- * The references configured in `env`, as variable and provider name only. Read by `config.ts` for the admin
- * diagnostics and by `doctor`; the full parse (and every refusal) happens in `resolveSecrets`.
+ * The references configured in `env`, as variable and provider name only. Read by `config.ts` for the admin diagnostics
+ * and by `doctor`; the full parse (and every refusal) happens in `resolveSecrets`.
  */
 export function configuredSecretRefs(
 	env: Readonly<Record<string, string | undefined>>,
@@ -231,9 +213,8 @@ async function boundedJson(response: Response): Promise<unknown> {
 }
 
 /**
- * One GET against a provider: no redirects (a redirect could carry the token's request to another host), a
- * {@linkcode PROVIDER_TIMEOUT_MS} bound on the whole exchange, and failures reduced to a fixed phrase or a status
- * class. The timer is a plain `setTimeout` cleared in `finally`, so a test's op sanitizer sees nothing left behind.
+ * One GET against a provider: no redirects (a redirect could carry the token's request to another host), a {@linkcode
+ * PROVIDER_TIMEOUT_MS} bound on the whole exchange, and failures reduced to a fixed phrase or a status class.
  */
 async function getJson(
 	options: ProviderOptions,
@@ -288,8 +269,7 @@ function record(value: unknown): Record<string, unknown> | null {
 
 /**
  * HashiCorp Vault, KV secrets engine version 2: `GET {addr}/v1/{mount}/data/{path}` with `X-Vault-Token` (and
- * `X-Vault-Namespace` on Enterprise); the value is `data.data[key]`. A string is taken as written; an object or array
- * (a JSON document stored structured) is serialized, so `TTK_SECRETS` may live in Vault either way.
+ * `X-Vault-Namespace` on Enterprise); the value is `data.data[key]`.
  */
 export class VaultKv2Provider implements SecretProvider {
 	readonly name = 'vault' as const;
@@ -317,8 +297,7 @@ export class VaultKv2Provider implements SecretProvider {
 
 /**
  * 1Password Connect: `GET {url}/v1/vaults/{vault}/items/{item}` with a bearer token; the value is the field whose `id`
- * equals the reference's field, or else the one field whose `label` does. Two fields sharing that label is refused
- * rather than guessed between.
+ * equals the reference's field, or else the one field whose `label` does.
  */
 export class OnePasswordConnectProvider implements SecretProvider {
 	readonly name = '1password' as const;

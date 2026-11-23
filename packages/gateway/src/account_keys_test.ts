@@ -1,11 +1,4 @@
-/**
- * D-146: accounts hold API keys minted from the control plane — the store, the verifier and the routes.
- *
- * The properties pinned here: the store never holds a raw key and never lists a hash; a key never holds a scope its
- * account does not, and narrowing the account narrows the key; a key authenticates **as its account**
- * (`admin:<username>`) under its own credential (`user-key:<sha256>`), so revoking it — or disabling or deleting the
- * account — ends its sign-ins, tasks and streams at once while the password sign-in carries on.
- */
+/** Accounts hold API keys minted from the control plane — the store, the verifier and the routes. */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
 import { SessionRegistry } from '@tykotech/mcp';
@@ -16,15 +9,9 @@ import { loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
 import { LoginStore, sha256Hex } from './logins.ts';
 import { grantScopesInFile, MAX_KEYS_PER_ACCOUNT, UserStore, UserStoreError } from './users.ts';
+import { quiet, scratch } from './support_test.ts';
 
 const ORIGIN = 'http://127.0.0.1:8787';
-const quiet = () => createLogger({ level: 'error', write: (): void => {} });
-
-async function scratch(): Promise<string> {
-	const dir = join('tests/.scratch', `account-keys-${crypto.randomUUID().slice(0, 8)}`);
-	await Deno.mkdir(dir, { recursive: true });
-	return dir;
-}
 
 /** A freshly minted key as the route hands it to the store: never the secret. */
 async function minted(scopes?: string[], label?: string) {
@@ -41,15 +28,7 @@ async function minted(scopes?: string[], label?: string) {
 	};
 }
 
-async function until(predicate: () => boolean, label: string): Promise<void> {
-	const deadline = Date.now() + 5_000;
-	while (!predicate()) {
-		if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`);
-		await new Promise((resolve) => setTimeout(resolve, 20));
-	}
-}
-
-Deno.test('D-146: generateAccountKey mints a ttk_ key, a path-safe id and the prefix and hash the store keeps', async () => {
+Deno.test('account keys: generateAccountKey mints a ttk_ key, a path-safe id and the prefix and hash the store keeps', async () => {
 	const key = await generateAccountKey();
 	assert(key.secret.startsWith('ttk_'));
 	assert(/^k_[a-z2-7]{10}$/.test(key.id), key.id);
@@ -58,7 +37,7 @@ Deno.test('D-146: generateAccountKey mints a ttk_ key, a path-safe id and the pr
 	assert((await generateAccountKey()).id !== key.id);
 });
 
-Deno.test('D-146: the store adds, finds and removes keys under the account rules, and persists only hashes', async () => {
+Deno.test('account keys: the store adds, finds and removes keys under the account rules, and persists only hashes', async () => {
 	const dir = await scratch();
 	try {
 		const { record } = await generateAdminUser('root');
@@ -159,7 +138,7 @@ Deno.test('D-146: the store adds, finds and removes keys under the account rules
 		const bare = JSON.parse(await Deno.readTextFile(join(dir, 'users.json'))).users.find(
 			(user: { username: string }) => user.username === 'alice',
 		);
-		assertEquals('keys' in bare, false, 'an account with no keys is written as before D-146');
+		assertEquals('keys' in bare, false, 'an account with no keys is written without a keys field');
 
 		// Deleting the account deletes its keys.
 		const third = await minted();
@@ -171,7 +150,7 @@ Deno.test('D-146: the store adds, finds and removes keys under the account rules
 	}
 });
 
-Deno.test('D-146: an account holds at most 25 keys; a refused first key creates no account; memory is read-only', async () => {
+Deno.test('account keys: an account holds at most 25 keys; a refused first key creates no account; memory is read-only', async () => {
 	const dir = await scratch();
 	try {
 		const { record } = await generateAdminUser('root');
@@ -207,7 +186,7 @@ Deno.test('D-146: an account holds at most 25 keys; a refused first key creates 
 	}
 });
 
-Deno.test('D-146: an account key authenticates as its account, narrowed, and its revocation ends its work now', async () => {
+Deno.test('account keys: an account key authenticates as its account, narrowed, and its revocation ends its work now', async () => {
 	const { record } = await generateAdminUser('root');
 	const dir = await scratch();
 	try {
@@ -242,16 +221,16 @@ Deno.test('D-146: an account key authenticates as its account, narrowed, and its
 		assertEquals(await verifier.resolve(`ttk_${'A'.repeat(43)}`), null);
 		assertEquals(await verifier.resolve(key.secret.slice(4)), null);
 
-		// GW-1: work bound to the key answers for the key, and only as its own account.
+		// Work bound to the key answers for the key, and only as its own account.
 		assertEquals(
 			[...verifier.authorizeTask(owner, new Set(['mcp:invoke', 'view:watch']), principal.credential)!],
 			['mcp:invoke'],
 			'a task never holds more than the key',
 		);
 		assertEquals(verifier.authorizeTask('api-key:admin:root', new Set(['mcp:invoke']), principal.credential), null);
-		assert(verifier.stillAuthorized(principal));
-		// D-148: a signed link minted under the key answers for the key (its id is the link's `k`); one with no key — a
-		// password sign-in's, or any minted before D-148 — for the account.
+		assert(verifier.currentScopes(principal) !== null);
+		// A signed link minted under the key answers for the key (its id is the link's `k`); one with no key — a
+		// password sign-in's, or one that names no key — for the account.
 		assert(verifier.ownerScopes(owner)?.has('view:watch'));
 		assertEquals([...verifier.ownerScopes(owner, key.input.id)!].sort(), ['agent:invoke', 'mcp:invoke']);
 
@@ -283,7 +262,7 @@ Deno.test('D-146: an account key authenticates as its account, narrowed, and its
 		assertEquals(await verifier.resolve(session.token), null);
 		assertEquals(verifier.authorizeTask(owner, new Set(['mcp:invoke']), principal.credential), null);
 		assertEquals(verifier.authorizeTask(owner, new Set(['mcp:invoke']), viaSession!.credential), null);
-		assertEquals(verifier.stillAuthorized(principal), false);
+		assertEquals(verifier.currentScopes(principal), null);
 		assertEquals((await verifier.resolve(passwordSession.token))?.id, 'admin:alice');
 
 		// Disabling the account ends its keys' sign-ins through the lapsed sweep.
@@ -296,13 +275,13 @@ Deno.test('D-146: an account key authenticates as its account, narrowed, and its
 		assertEquals(await verifier.resolve(other.secret), null);
 		assertEquals(verifier.revokeLapsedAccountKeys(), 1);
 		assertEquals(verifier.logins.get(await sha256Hex(otherSession.token)), null);
-		assertEquals(verifier.stillAuthorized(otherPrincipal!), false);
+		assertEquals(verifier.currentScopes(otherPrincipal!), null);
 	} finally {
 		await Deno.remove(dir, { recursive: true });
 	}
 });
 
-Deno.test('D-146: the routes mint a key once, list it without its secret or hash, and revoke what it backed', async () => {
+Deno.test('account keys: the routes mint a key once, list it without its secret or hash, and revoke what it backed', async () => {
 	const dir = await scratch();
 	const { record, password } = await generateAdminUser('root');
 	const config = loadConfig({
@@ -361,7 +340,7 @@ Deno.test('D-146: the routes mint a key once, list it without its secret or hash
 		const sha = await sha256Hex(secret);
 		assert(!JSON.stringify(created.json.user).includes(sha));
 
-		// `true` is a key with the account's scopes; no `api_key` is no key, as before.
+		// `true` is a key with the account's scopes; no `api_key` is no key.
 		const plain = await call('POST', '/api/v1/users', root, { username: 'plain', password: 'correct horse' });
 		assertEquals(plain.json.user.keys, []);
 		assertEquals(plain.json.api_key, undefined);
@@ -411,7 +390,7 @@ Deno.test('D-146: the routes mint a key once, list it without its secret or hash
 		assertEquals(exchanged.json.user.username, 'ops');
 		const keySession: string = exchanged.json.token;
 		assertEquals((await call('GET', '/api/v1/auth/me', keySession)).json.session.backing, 'user-key');
-		// D-148: it may change its account's password, but only given the current one (pinned in full below).
+		// It may change its account's password, but only given the current one (pinned in full below).
 		assertEquals(
 			(await call('POST', '/api/v1/auth/password', keySession, { current: 'a', next: 'brand new pass' })).status,
 			401,
@@ -467,7 +446,7 @@ Deno.test('D-146: the routes mint a key once, list it without its secret or hash
 	}
 });
 
-Deno.test('D-146: the routes answer persistence-required without a data directory', async () => {
+Deno.test('account keys: the routes answer persistence-required without a data directory', async () => {
 	const { record, password } = await generateAdminUser('root');
 	const config = loadConfig({ TTK_HOST: '127.0.0.1', TTK_PORT: '8787', TTK_ADMIN_USER: JSON.stringify(record) });
 	const verifier = new VerifierChain({ config, allowAnonymous: false });
@@ -494,48 +473,7 @@ Deno.test('D-146: the routes answer persistence-required without a data director
 	}
 });
 
-Deno.test({
-	name: 'D-146: a key minted on one cluster node resolves on the other, and its revocation reaches both',
-	sanitizeResources: false,
-	sanitizeOps: false,
-	fn: async () => {
-		const dir = await scratch();
-		const file = join(dir, 'cluster.kv');
-		const { record } = await generateAdminUser('root');
-		const config = loadConfig({ TTK_ADMIN_USER: JSON.stringify(record) });
-		const kvA = await Deno.openKv(file);
-		const kvB = await Deno.openKv(file);
-		const usersA = new UserStore({ dataDir: join(dir, 'a'), seed: record });
-		const usersB = new UserStore({ dataDir: join(dir, 'b'), seed: null });
-		try {
-			await usersA.attachCluster(kvA, { pollMs: 50 });
-			await usersB.attachCluster(kvB, { pollMs: 50 });
-			const nodeB = new VerifierChain({ config, allowAnonymous: false, users: usersB });
-			const key = await minted(['mcp:invoke']);
-			await usersA.addKey('root', key.input);
-			await until(() => usersB.findKey(key.input.sha256) !== null, 'B seeing the key');
-			assertEquals((await nodeB.resolve(key.secret))?.id, 'admin:root');
-			// Concurrent mints on both nodes both land: the loser retries against the fresh record.
-			const [fromA, fromB] = [await minted(), await minted()];
-			await Promise.all([usersA.addKey('root', fromA.input), usersB.addKey('root', fromB.input)]);
-			await until(
-				() => usersA.get('root')?.keys.length === 3 && usersB.get('root')?.keys.length === 3,
-				'both mints on both nodes',
-			);
-			await usersB.removeKey('root', key.input.id);
-			await until(() => usersA.findKey(key.input.sha256) === null, 'A seeing the revocation');
-			assertEquals(await nodeB.resolve(key.secret), null);
-		} finally {
-			usersA.detachCluster();
-			usersB.detachCluster();
-			kvA.close();
-			kvB.close();
-			await Deno.remove(dir, { recursive: true }).catch(() => {});
-		}
-	},
-});
-
-Deno.test('D-148: a link minted under an account key binds that key; a password sign-in, or no credential, binds the account', async () => {
+Deno.test('account keys: a link minted under an account key binds that key; a password sign-in, or no credential, binds the account', async () => {
 	const { record } = await generateAdminUser('root');
 	const dir = await scratch();
 	try {
@@ -564,7 +502,7 @@ Deno.test('D-148: a link minted under an account key binds that key; a password 
 		const viaKeySession = (await verifier.resolve(keySession.token))!;
 		assertEquals(viaKeySession.credential?.startsWith('session:'), true);
 		assertEquals(verifier.linkBinding(owner, viaKeySession.credential), bound);
-		// A password sign-in, and a call with no credential bound at all (every link before D-148), bind the account.
+		// A password sign-in, and a call with no credential bound at all, bind the account.
 		const password = await verifier.mintSession((await verifier.verifyAdmin('alice', 'correct horse'))!);
 		const viaPassword = (await verifier.resolve(password.token))!;
 		assertEquals(verifier.linkBinding(owner, viaPassword.credential), { digest: account });
@@ -594,7 +532,7 @@ Deno.test('D-148: a link minted under an account key binds that key; a password 
 		assertEquals(verifier.ownerCredentialDigest(owner), account);
 
 		// A password change moves every binding of the account, its keys' included; disabling ends them, enabling
-		// restores them (D-140's residual, unchanged).
+		// restores them.
 		await users.setPassword('alice', 'another horse');
 		assert(verifier.ownerCredentialDigest(owner, two.input.id) !== twoDigest);
 		assert(verifier.ownerCredentialDigest(owner) !== account);
@@ -608,7 +546,7 @@ Deno.test('D-148: a link minted under an account key binds that key; a password 
 	}
 });
 
-Deno.test('D-148: a sign-in opened with an account key changes its account’s password, given the current one', async () => {
+Deno.test('account keys: a sign-in opened with an account key changes its account’s password, given the current one', async () => {
 	const dir = await scratch();
 	const { record } = await generateAdminUser('root');
 	const config = loadConfig({
@@ -653,7 +591,7 @@ Deno.test('D-148: a sign-in opened with an account key changes its account’s p
 		assertEquals((await change(viaKey, 'not it')).status, 401);
 		assert(lines.some((line) => line.msg === 'auth.password_change_refused' && line.user === 'alice'));
 		assertEquals((await call('/api/v1/auth/me', passwordA)).status, 200);
-		// A raw bearer is no sign-in: the key presented directly is refused, as before — with the right password too.
+		// A raw bearer is no sign-in: the key presented directly is refused — with the right password too.
 		const raw = await change(key.secret, 'correct horse');
 		assertEquals(raw.status, 400);
 		assertStringIncludes(raw.json.detail, 'only a sign-in to an account');
@@ -679,7 +617,7 @@ Deno.test('D-148: a sign-in opened with an account key changes its account’s p
 		const logged = JSON.stringify(lines);
 		assert(!logged.includes('brand new pass') && !logged.includes('correct horse') && !logged.includes(key.secret));
 
-		// A password sign-in's change is as before: no key on its audit line, and it keeps itself.
+		// A password sign-in's change carries no key on its audit line, and it keeps itself.
 		const viaPassword = await signIn({ username: 'alice', password: 'brand new pass' });
 		assertEquals(
 			(await call('/api/v1/auth/password', viaPassword, { current: 'brand new pass', next: 'third pass!' }))

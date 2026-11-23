@@ -1,17 +1,18 @@
 /**
- * R12 (design §2.19, AC32, AC34, M8): the credentialed clone's forwarder against a fake TLS upstream on loopback, with
- * a throwaway CA (testing_tls.ts) and a relay in front of it that records the server name each ClientHello asks for.
+ * The credentialed clone's forwarder against a fake TLS upstream on loopback, with
+ * a throwaway CA (testing_tls.ts) and a relay in front of it that records the server name each ClientHello asks for
+ * (read by the registry proxy's own `clientHelloSni`).
  * No external network: the "public" address the forwarder dials is mapped to the relay by its `connect` dependency.
  *
  * What is proven: only upload-pack is forwarded (push and every other path 403); the credential is added service-side
  * and the cage's own Authorization, Cookie and Host never pass; only checked public literals are dialled; TLS verifies
- * the remote's name and sends it as SNI over that literal dial (M8); a 3xx is refused, never passed on; bodies are
+ * the remote's name and sends it as SNI over that literal dial; a 3xx is refused, never passed on; bodies are
  * bounded and forwarded by length or chunked; nothing secret reaches a log line.
  */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { DEFAULT_GIT_USERNAME, type ForwardOrigin, GitForwarder, parseGitRemotes } from './git_forwarder.ts';
-import { type ProxyDeps } from './proxy.ts';
-import { clientHelloServerName, testPki } from './testing_tls.ts';
+import { clientHelloSni, type HelloSni, type ProxyDeps } from './proxy.ts';
+import { testPki } from './testing_tls.ts';
 
 const HOST = 'git.example.test';
 const TOKEN = 'ghp_test_only_token_0123456789abcdef';
@@ -129,15 +130,15 @@ async function upstream(answer: (request: Received) => Answer) {
 				let up: Deno.Conn | null = null;
 				try {
 					let hello: Uint8Array = new Uint8Array(0);
-					let name: string | null | undefined;
+					let seen: HelloSni = { need: true };
 					const buffer = new Uint8Array(4096);
-					while (name === undefined) {
+					while ('need' in seen) {
 						const n = await client.read(buffer);
 						if (n === null) return;
 						hello = concat(hello, buffer.subarray(0, n));
-						name = clientHelloServerName(hello);
+						seen = clientHelloSni(hello);
 					}
-					sni.push(name);
+					sni.push('sni' in seen ? seen.sni : null);
 					up = await Deno.connect({ hostname: '127.0.0.1', port: (tls.addr as Deno.NetAddr).port });
 					await up.write(hello);
 					const target = up;
@@ -222,7 +223,7 @@ async function ask(port: number, request: string | Uint8Array): Promise<string> 
 
 const ADVERTISEMENT = '001e# service=git-upload-pack\n0000';
 
-Deno.test('R12 forwarder: the ref advertisement reaches the remote with the credential added service-side', async () => {
+Deno.test('forwarder: the ref advertisement reaches the remote with the credential added service-side', async () => {
 	const up = await upstream(() => ({
 		status: 200,
 		headers: {
@@ -258,7 +259,7 @@ Deno.test('R12 forwarder: the ref advertisement reaches the remote with the cred
 			accept: '*/*',
 			connection: 'close',
 		});
-		// M8: the literal dial carried the remote's name as SNI, and its certificate was verified for that name.
+		// The literal dial carried the remote's name as SNI, and its certificate was verified for that name.
 		assertEquals(up.sni, [HOST]);
 		// Only the public literal of the three the name resolved to was dialled.
 		assertEquals(f.dialled, [PUBLIC]);
@@ -270,7 +271,7 @@ Deno.test('R12 forwarder: the ref advertisement reaches the remote with the cred
 	}
 });
 
-Deno.test('R12 forwarder: upload-pack bodies pass by length or chunked; a remote without a credential gets none', async () => {
+Deno.test('forwarder: upload-pack bodies pass by length or chunked; a remote without a credential gets none', async () => {
 	const up = await upstream((request) => ({
 		status: 200,
 		headers: { 'Content-Type': 'application/x-git-upload-pack-result' },
@@ -308,7 +309,7 @@ Deno.test('R12 forwarder: upload-pack bodies pass by length or chunked; a remote
 	}
 });
 
-Deno.test('R12 forwarder: a push, any other path and any other method are refused before the remote is dialled', async () => {
+Deno.test('forwarder: a push, any other path and any other method are refused before the remote is dialled', async () => {
 	const up = await upstream(() => ({ status: 200 }));
 	const f = forwarder(up);
 	try {
@@ -357,7 +358,7 @@ Deno.test('R12 forwarder: a push, any other path and any other method are refuse
 	}
 });
 
-Deno.test('R12 forwarder: a redirect from the remote is refused, never passed on', async () => {
+Deno.test('forwarder: a redirect from the remote is refused, never passed on', async () => {
 	const up = await upstream(() => ({ status: 301, headers: { Location: 'https://evil.example/steal' } }));
 	const f = forwarder(up);
 	try {
@@ -372,7 +373,7 @@ Deno.test('R12 forwarder: a redirect from the remote is refused, never passed on
 	}
 });
 
-Deno.test('R12 forwarder: a remote that resolves only inward is never dialled', async () => {
+Deno.test('forwarder: a remote that resolves only inward is never dialled', async () => {
 	const up = await upstream(() => ({ status: 200 }));
 	const f = forwarder(up, { resolved: ['127.0.0.1', '10.1.2.3', '169.254.169.254', 'fd00::1', '::1'] });
 	try {
@@ -387,7 +388,7 @@ Deno.test('R12 forwarder: a remote that resolves only inward is never dialled', 
 	}
 });
 
-Deno.test("R12 forwarder (M8): TLS verifies the remote's own name; another name or an unknown CA ends the request", async () => {
+Deno.test("forwarder: TLS verifies the remote's own name; another name or an unknown CA ends the request", async () => {
 	const up = await upstream(() => ({ status: 200, body: 'never' }));
 	// The certificate is for HOST; a remote of another name is refused although the connection reaches the server.
 	const named = forwarder(up, { origin: { host: 'other.example.test', url: 'https://other.example.test/a.git' } });
@@ -410,7 +411,7 @@ Deno.test("R12 forwarder (M8): TLS verifies the remote's own name; another name 
 	}
 });
 
-Deno.test('R12 remotes: the file is a bounded list of ids, URLs and optional credentials, refused without echoing them', () => {
+Deno.test('remotes: the file is a bounded list of ids, URLs and optional credentials, refused without echoing them', () => {
 	const parsed = parseGitRemotes(JSON.stringify([
 		{ id: 'app', url: 'https://github.com/acme/app.git', token: TOKEN },
 		{ id: 'docs.site', url: 'https://gitlab.example.org/team/docs', username: 'bot', token: 'glpat-xyz123' },

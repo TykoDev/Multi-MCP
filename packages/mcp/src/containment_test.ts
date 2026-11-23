@@ -1,20 +1,10 @@
 /**
- * R3 (D-115, ERRATUM(E-94)) on the MCP side: what an E0 block — a document request the browser refused before
- * sending it — leaves in the registry, and what the tools that issued the navigation answer.
- *
- * The browser is a stand-in with a **real** event bus: the vendored `SessionManager` reports E0 as a
- * `BrowserErrorEvent` on that bus, so dispatching the same event here exercises exactly the registry path the
- * browser tier does. The vendored half (the veto itself) is proven in `session_manager_test.ts` and on Chrome 154
- * in `tests/e2e/containment_e2e_test.ts`.
+ * Navigation containment on the MCP side: what an E0 block — a document request the browser refused before sending it
+ * — leaves in the registry, and what the tools that issued the navigation answer.
  */
-import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
-import {
-	BrowserErrorEvent,
-	type BrowserSession,
-	GoBackEvent,
-	NavigateToUrlEvent,
-	NavigationCompleteEvent,
-} from '@tykotech/browser';
+import { blankSession } from '../fixtures/capture_session.ts';
+import { assert, assertEquals, assertNotEquals, assertRejects, assertStringIncludes } from '@std/assert';
+import { BrowserErrorEvent, GoBackEvent, NavigateToUrlEvent, NavigationCompleteEvent } from '@tykotech/browser';
 import { EventBus } from '@tykotech/bus';
 import { isToolError } from './errors.ts';
 import {
@@ -29,7 +19,9 @@ import {
 	SessionRegistry,
 } from './registry.ts';
 import { browserDownload, browserGoBack, browserNavigate } from './tools.ts';
-import type { ToolContext } from './types.ts';
+import type { McpAppsDeps, SignedLinkMinter, ToolContext } from './types.ts';
+import { type AuthInfo, McpServer } from '@modelcontextprotocol/server';
+import { registerCatalog } from './server.ts';
 
 const TOP = 'T-top';
 const OFF = 'https://idp.evil.test/callback?code=Zq8-E0-CODE-3vP';
@@ -49,7 +41,7 @@ function e0(
 
 /**
  * The slice of a CDP client the registry arms (`client.on`), with a way to deliver an event — enough to drive the
- * main-frame commits review R2-2 attributes blocks by.
+ * main-frame commits the registry attributes blocks by.
  */
 class FakeClient {
 	readonly #listeners = new Map<string, Array<(params: unknown, sessionId?: string) => void>>();
@@ -81,17 +73,12 @@ async function fixture(client: FakeClient | null = null): Promise<Fixture> {
 	let now = 50_000;
 	const infos: string[] = [];
 	const bus = new EventBus({ name: 'containment' });
-	const session = {
+	const session = blankSession({
 		cdpClient: client,
-		sessionManager: null,
-		tabs: [],
-		cachedBrowserState: null,
 		agentFocusTargetId: TOP,
 		eventBus: bus,
 		getBrowserStateSummary: () => Promise.resolve({ url: 'https://example.com/home', title: 'home' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
+	});
 	const registry = new SessionRegistry({
 		reapIntervalMs: 0,
 		now: () => now,
@@ -120,10 +107,9 @@ function ring(record: SessionRecord) {
 	return record.events.read({ kind: 'cursor', epoch: record.events.epoch, seq: 0 });
 }
 
-Deno.test('R3: an E0 block is one navigation record — blocked, request-blocked, not committed, redacted', async () => {
+Deno.test('an E0 block is one navigation record — blocked, request-blocked, not committed, redacted', async () => {
 	await using f = await fixture();
 	await f.bus.dispatch(e0(OFF));
-	// The session's own completion for the same URL (a navigation that reported the refused URL) adds nothing.
 	await f.bus.dispatch(
 		new NavigationCompleteEvent({ targetId: TOP as never, url: OFF, errorMessage: 'net::ERR_ABORTED' }),
 	);
@@ -140,18 +126,16 @@ Deno.test('R3: an E0 block is one navigation record — blocked, request-blocked
 	assertEquals(navigation?.payload.frame_id, TOP);
 	assertEquals(navigation?.tab_id, TOP);
 	assert(!JSON.stringify(records).includes('Zq8-E0-CODE'), 'a token reached the ring');
-	// The log names the origin only (E-78), and says what happened.
 	assertEquals(f.infos.length, 1);
 	assertStringIncludes(f.infos[0] ?? '', 'document request refused before it was sent');
 	assertStringIncludes(f.infos[0] ?? '', 'https://idp.evil.test');
 	assert(!(f.infos[0] ?? '').includes('/callback'), f.infos[0]);
-	// What `blockedSince` reads: origin only.
 	assertEquals(f.record.documentBlocks, [
 		{ targetId: TOP, frameId: TOP, origin: 'https://idp.evil.test', at: 50_000, chainHost: null },
 	]);
 });
 
-Deno.test('R3 (F25): a frame’s block keeps its frame id, and only a main-frame block answers blockedSince', async () => {
+Deno.test('a frame’s block keeps its frame id, and only a main-frame block answers blockedSince', async () => {
 	await using f = await fixture();
 	await f.bus.dispatch(e0('https://frame.evil.test/x', TOP, 'F-child'));
 	await f.bus.dispatch(e0('https://popup.evil.test/x', 'T-popup'));
@@ -165,7 +149,7 @@ Deno.test('R3 (F25): a frame’s block keeps its frame id, and only a main-frame
 	assertEquals(blockedSince(f.record, TOP, 50_011), null, 'a block before `since` is not this navigation’s');
 });
 
-Deno.test('R3: the session remembers at most DOCUMENT_BLOCK_MEMORY blocks, newest last', async () => {
+Deno.test('the session remembers at most DOCUMENT_BLOCK_MEMORY blocks, newest last', async () => {
 	await using f = await fixture();
 	for (let index = 0; index < DOCUMENT_BLOCK_MEMORY + 4; index++) {
 		await f.bus.dispatch(e0(`https://n${index}.evil.test/`));
@@ -181,9 +165,8 @@ async function toolError(run: () => Promise<unknown>): Promise<{ code: string; m
 	return { code: error.code, message: error.message };
 }
 
-Deno.test('R3 (AC1): browser_navigate through a refused redirect answers navigation-blocked, origin only', async () => {
+Deno.test('browser_navigate through a refused redirect answers navigation-blocked, origin only', async () => {
 	await using f = await fixture();
-	// The browser's own answer to a refused hop: the navigation fails with ERR_ABORTED, after E0 was reported.
 	f.bus.on(NavigateToUrlEvent, async (event) => {
 		await f.bus.dispatch(e0(OFF));
 		throw new Error(`navigation to ${event.url} failed: net::ERR_ABORTED`);
@@ -195,7 +178,7 @@ Deno.test('R3 (AC1): browser_navigate through a refused redirect answers navigat
 	});
 });
 
-Deno.test('R3: the success path is checked too — a block during the tool’s navigation is its answer', async () => {
+Deno.test('the success path is checked too — a block during the tool’s navigation is its answer', async () => {
 	await using f = await fixture();
 	f.bus.on(NavigateToUrlEvent, async () => {
 		await f.bus.dispatch(e0(OFF));
@@ -206,7 +189,7 @@ Deno.test('R3: the success path is checked too — a block during the tool’s n
 	);
 });
 
-Deno.test('R3 (F25): a frame’s block does not turn the tool’s own failure into navigation-blocked', async () => {
+Deno.test('a frame’s block does not turn the tool’s own failure into navigation-blocked', async () => {
 	await using f = await fixture();
 	f.bus.on(NavigateToUrlEvent, async () => {
 		await f.bus.dispatch(e0(OFF, TOP, 'F-child'));
@@ -218,7 +201,7 @@ Deno.test('R3 (F25): a frame’s block does not turn the tool’s own failure in
 	);
 });
 
-Deno.test('R3: browser_go_back whose history entry is refused answers navigation-blocked', async () => {
+Deno.test('browser_go_back whose history entry is refused answers navigation-blocked', async () => {
 	await using f = await fixture();
 	f.bus.on(GoBackEvent, async () => {
 		await f.bus.dispatch(e0(OFF));
@@ -229,7 +212,7 @@ Deno.test('R3: browser_go_back whose history entry is refused answers navigation
 	assert(!refused.message.includes('/callback'), refused.message);
 });
 
-Deno.test('R3 (F23): browser_download {url} checks right after dispatch, on the ERR_ABORTED swallow path too', async () => {
+Deno.test('browser_download {url} checks right after dispatch, on the ERR_ABORTED swallow path too', async () => {
 	await using f = await fixture();
 	f.bus.on(NavigateToUrlEvent, async () => {
 		await f.bus.dispatch(e0('https://files.evil.test/export.csv?sig=Zq8'));
@@ -246,15 +229,12 @@ Deno.test('R3 (F23): browser_download {url} checks right after dispatch, on the 
 	assertEquals(f.record.files.list(), [], 'no ledger row: nothing reached the network');
 });
 
-// ---------------------------------------------------------------------------
-// Review R2-2: a tool answers navigation-blocked only for its own request chain
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------- A tool answers navigation-blocked only
+// for its own request chain ---------------------------------------------------------------------------
 
-Deno.test('R2-2: browser_navigate to an on-list page whose script leaves at once succeeds — the block is the page’s', async () => {
+Deno.test('browser_navigate to an on-list page whose script leaves at once succeeds — the block is the page’s', async () => {
 	const client = new FakeClient();
 	await using f = await fixture(client);
-	// What Chrome 154 does for `/auto` (tests/.scratch/fxb_probe_base.log, L6): the tool's navigation commits, then the
-	// landed page's own `location.href = <off-list>` is refused before it is sent.
 	f.bus.on(NavigateToUrlEvent, async (event) => {
 		f.advance(5);
 		client.commit(event.url);
@@ -263,13 +243,12 @@ Deno.test('R2-2: browser_navigate to an on-list page whose script leaves at once
 	});
 	const result = await browserNavigate({ url: 'https://example.com/auto' }, f.ctx);
 	assert(result.isError !== true, JSON.stringify(result));
-	// The block is still on the ring — visible, just not the tool's failure.
 	const blocked = ring(f.record).filter((record) => record.payload.blocked === true);
 	assertEquals(blocked.length, 1);
 	assertEquals(blocked[0]?.payload.containment, 'request-blocked');
 });
 
-Deno.test('R2-2: the tool’s own refused redirect hop still answers navigation-blocked (no commit, its chain)', async () => {
+Deno.test('the tool’s own refused redirect hop still answers navigation-blocked (no commit, its chain)', async () => {
 	const client = new FakeClient();
 	await using f = await fixture(client);
 	f.bus.on(NavigateToUrlEvent, async (event) => {
@@ -281,11 +260,9 @@ Deno.test('R2-2: the tool’s own refused redirect hop still answers navigation-
 	assertEquals(refused.message, "navigation-blocked: https://idp.evil.test is not in the server's allowed-domain list");
 });
 
-Deno.test('R2-2: a page spinning blocked navigations does not fail a tool navigation that is in flight', async () => {
+Deno.test('a page spinning blocked navigations does not fail a tool navigation that is in flight', async () => {
 	const client = new FakeClient();
 	await using f = await fixture(client);
-	// The previous page's script keeps trying to leave while the tool's (failing for another reason) navigation runs:
-	// those chains began off-list, not at the URL the tool asked for.
 	f.bus.on(NavigateToUrlEvent, async () => {
 		f.advance(5);
 		await f.bus.dispatch(e0(OFF, TOP, TOP, { chainStart: OFF, resourceType: 'Document' }));
@@ -297,7 +274,7 @@ Deno.test('R2-2: a page spinning blocked navigations does not fail a tool naviga
 	);
 });
 
-Deno.test('R2-2: blockedSince — a commit after `since` ends the tool’s chain; a chain begun elsewhere is not the tool’s', async () => {
+Deno.test('blockedSince — a commit after `since` ends the tool’s chain; a chain begun elsewhere is not the tool’s', async () => {
 	const client = new FakeClient();
 	await using f = await fixture(client);
 	f.advance(10);
@@ -310,7 +287,6 @@ Deno.test('R2-2: blockedSince — a commit after `since` ends the tool’s chain
 	client.commit('https://example.com/start');
 	assertEquals(blockedSince(f.record, TOP, 50_000), null, 'the tab committed after since');
 	assertEquals(f.record.commits.get(TOP), 50_020);
-	// A child frame's commit is not the tab's.
 	client.emit('Page.frameNavigated', {
 		frame: {
 			id: 'F-child',
@@ -324,7 +300,7 @@ Deno.test('R2-2: blockedSince — a commit after `since` ends the tool’s chain
 	assertEquals(f.record.commits.has('F-child'), false);
 });
 
-Deno.test('R2-1: a refused speculative request is recorded but never answers a tool', async () => {
+Deno.test('a refused speculative request is recorded but never answers a tool', async () => {
 	await using f = await fixture();
 	await f.bus.dispatch(e0(OFF, TOP, TOP, { chainStart: OFF, resourceType: 'Prefetch' }));
 	assertEquals(ring(f.record).filter((record) => record.payload.blocked === true).length, 1);
@@ -332,7 +308,7 @@ Deno.test('R2-1: a refused speculative request is recorded but never answers a t
 	assertEquals(blockedSince(f.record, TOP, 0), null);
 });
 
-Deno.test('R2-1: the commit check’s E2 is one blocked, committed record parked on about:blank', async () => {
+Deno.test('the commit check’s E2 is one blocked, committed record parked on about:blank', async () => {
 	await using f = await fixture();
 	await f.bus.dispatch(
 		new BrowserErrorEvent({
@@ -349,12 +325,11 @@ Deno.test('R2-1: the commit check’s E2 is one blocked, committed record parked
 	assertEquals(blockedSince(f.record, TOP, 0), null, 'E2 is not a refused request');
 });
 
-// ---------------------------------------------------------------------------
-// D-138 / D-139 — the request scope on the MCP side: where subresource and hint refusals surface (AC12), the resolver
-// layer composed into the launch profile (AC13), and the startup notices (AC8)
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------- The request scope on the MCP side:
+// where subresource and hint refusals surface, the resolver layer composed into the launch profile, and the startup
+// notices ---------------------------------------------------------------------------
 
-/** What the vendored `SessionManager` dispatches for a refused subresource or hint (ERRATUM(E-114/E-115)). */
+/** What the vendored `SessionManager` dispatches for a refused subresource or hint. */
 function requestBlock(url: string, requestKind: 'subresource' | 'hint', targetId: string = TOP): BrowserErrorEvent {
 	return new BrowserErrorEvent({
 		errorType: 'NavigationBlocked',
@@ -373,7 +348,7 @@ function requestBlock(url: string, requestKind: 'subresource' | 'hint', targetId
 }
 
 for (const requestKind of ['subresource', 'hint'] as const) {
-	Deno.test(`D-138 (AC12): a refused ${requestKind} is a log line only — no ring record, no documentBlocks`, async () => {
+	Deno.test(`a refused ${requestKind} is a log line only — no ring record, no documentBlocks`, async () => {
 		await using f = await fixture();
 		const changes: unknown[] = [];
 		const unwatch = f.registry.watch((change) => void changes.push(change));
@@ -383,7 +358,6 @@ for (const requestKind of ['subresource', 'hint'] as const) {
 			assertEquals(f.record.documentBlocks, [], 'nothing blockedSince reads');
 			assertEquals(blockedSince(f.record, TOP, 0), null);
 			assertEquals(changes, [], 'no page-changed announce');
-			// The rate-limited, origin-only info line counts it.
 			assertEquals(f.infos.length, 1);
 			assertStringIncludes(f.infos[0] ?? '', `request refused before it was sent (${requestKind})`);
 			assertStringIncludes(f.infos[0] ?? '', 'https://idp.evil.test');
@@ -394,7 +368,7 @@ for (const requestKind of ['subresource', 'hint'] as const) {
 	});
 }
 
-Deno.test('D-138 (AC12): request refusals share the block line’s rate limit, and never enter containedNavigations', async () => {
+Deno.test('request refusals share the block line’s rate limit, and never enter containedNavigations', async () => {
 	await using f = await fixture();
 	for (let index = 0; index < 10; index++) {
 		await f.bus.dispatch(requestBlock(`https://n${index}.evil.test/p.png`, 'subresource'));
@@ -404,14 +378,13 @@ Deno.test('D-138 (AC12): request refusals share the block line’s rate limit, a
 	await f.bus.dispatch(requestBlock('https://late.evil.test/p.png', 'subresource'));
 	assertEquals(f.infos.length, 2);
 	assertStringIncludes(f.infos[1] ?? '', '(10 blocks since the last report)');
-	// A refused subresource is not a contained navigation: the session's own completion for that URL is not hidden.
 	await f.bus.dispatch(
 		new NavigationCompleteEvent({ targetId: TOP as never, url: 'https://late.evil.test/p.png' }),
 	);
 	assertEquals(ring(f.record).filter((record) => record.payload.blocked === true), []);
 });
 
-Deno.test('D-138 (AC12): a document E0 next to request refusals is still one record that answers blockedSince', async () => {
+Deno.test('a document E0 next to request refusals is still one record that answers blockedSince', async () => {
 	await using f = await fixture();
 	await f.bus.dispatch(requestBlock('https://img.evil.test/p.png', 'subresource'));
 	await f.bus.dispatch(e0(OFF));
@@ -429,14 +402,14 @@ const PROFILE_BASE = {
 	chromiumSandbox: true,
 } as const;
 
-Deno.test('D-138 (AC13): all composes exactly one --host-resolver-rules, in the designed order', () => {
+Deno.test('all composes exactly one --host-resolver-rules, in the designed order', () => {
 	const skipped: string[] = [];
 	const allowedDomains = ['Example.com.', '10.0.0.5', '[::1]', '%%bad'];
 	const browserArgs = ['--host-resolver-rules=MAP x 127.0.0.1', '--proxy-server=http://p:3128'];
 	const expected = 'MAP x 127.0.0.1, EXCLUDE example.com, EXCLUDE *.example.com, EXCLUDE 10.0.0.5, EXCLUDE ::1, ' +
 		'EXCLUDE p, MAP * ~NOTFOUND';
 	assertEquals(resolverLayerRules(allowedDomains, browserArgs, (message) => void skipped.push(message)), expected);
-	assertEquals(skipped.length, 1, 'the unreadable entry is skipped with a warning (F9)');
+	assertEquals(skipped.length, 1, 'the unreadable entry is skipped with a warning');
 	assertStringIncludes(skipped[0] ?? '', '"%%bad"');
 
 	const profile = sessionProfile({ ...PROFILE_BASE, allowedDomains, browserArgs, allowedDomainsScope: 'all' });
@@ -445,7 +418,7 @@ Deno.test('D-138 (AC13): all composes exactly one --host-resolver-rules, in the 
 	assertEquals(profile.args?.filter((arg) => arg.startsWith('--host-resolver-rules')).length, 1);
 });
 
-Deno.test('D-138 (AC13): documents — and an unrestricted deployment — leave the profile byte-identical', () => {
+Deno.test('documents — and an unrestricted deployment — leave the profile byte-identical', () => {
 	const browserArgs = ['--host-resolver-rules=MAP x 127.0.0.1', '--proxy-server=http://p:3128'];
 	const documents = sessionProfile({ ...PROFILE_BASE, allowedDomains: ['example.com'], browserArgs });
 	assertEquals(
@@ -454,10 +427,8 @@ Deno.test('D-138 (AC13): documents — and an unrestricted deployment — leave 
 	);
 	assertEquals(documents.args, browserArgs);
 	assertEquals(documents.requestScope, undefined);
-	// `all` over an empty allowlist (which config refuses) changes nothing either: there is no list to scope.
 	const open = sessionProfile({ ...PROFILE_BASE, allowedDomains: [], browserArgs, allowedDomainsScope: 'all' });
 	assertEquals(open, sessionProfile({ ...PROFILE_BASE, allowedDomains: [], browserArgs }));
-	// No operator args at all: the layer is the only one.
 	const bare = sessionProfile({
 		...PROFILE_BASE,
 		allowedDomains: ['example.com'],
@@ -467,7 +438,7 @@ Deno.test('D-138 (AC13): documents — and an unrestricted deployment — leave 
 	assertEquals(bare.args, ['--host-resolver-rules=EXCLUDE example.com, EXCLUDE *.example.com, MAP * ~NOTFOUND']);
 });
 
-Deno.test('D-138 (N7): an underscore host is left out of the layer with a warning — it does not resolve (fail closed)', () => {
+Deno.test('an underscore host is left out of the layer with a warning — it does not resolve (fail closed)', () => {
 	const skipped: string[] = [];
 	const rules = resolverLayerRules(['my_host.example', 'ok.example'], [], (message) => void skipped.push(message));
 	assertEquals(rules, 'EXCLUDE ok.example, EXCLUDE *.ok.example, MAP * ~NOTFOUND');
@@ -475,12 +446,7 @@ Deno.test('D-138 (N7): an underscore host is left out of the layer with a warnin
 	assertStringIncludes(skipped[0] ?? '', 'my_host.example');
 });
 
-Deno.test('D-138 (SB-1): an allowlist entry holding `*` is left out with a warning — it never writes `EXCLUDE *…`', () => {
-	// An `EXCLUDE` voids every `MAP` for the hosts it matches (measured, Chrome 154), so `EXCLUDE *` would cancel
-	// `MAP * ~NOTFOUND` for every name and `EXCLUDE *.org` for every `.org` name: WebSockets, dns-prefetch and
-	// preconnect would silently resolve again under `all`. Such an entry matches nothing in either other layer
-	// (`browserAllowedDomains` makes it `*.*…`, which the matcher refuses; `isHostAllowed` compares canonical hosts),
-	// so it must match nothing here either.
+Deno.test('an allowlist entry holding `*` is left out with a warning — it never writes `EXCLUDE *…`', () => {
 	for (const wildcard of ['*', '*.org', 'a*b.example']) {
 		const skipped: string[] = [];
 		const rules = resolverLayerRules(['example.com', wildcard], [], (message) => void skipped.push(message));
@@ -490,7 +456,7 @@ Deno.test('D-138 (SB-1): an allowlist entry holding `*` is left out with a warni
 	}
 });
 
-Deno.test('D-138: the last operator --host-resolver-rules wins, and every proxy host of a rule list is excluded', () => {
+Deno.test('the last operator --host-resolver-rules wins, and every proxy host of a rule list is excluded', () => {
 	const rules = resolverLayerRules(['a.example'], [
 		'--host-resolver-rules=MAP old 127.0.0.1',
 		'--host-resolver-rules=MAP new 127.0.0.1',
@@ -505,14 +471,11 @@ Deno.test('D-138: the last operator --host-resolver-rules wins, and every proxy 
 	assertEquals(browserArgsUseProxy(['--no-proxy-server']), false);
 });
 
-Deno.test('D-138: an allowlisted host the operator maps is not excluded — an EXCLUDE would void the operator MAP', () => {
-	// Measured on Chrome 154 (request_scope_e2e_test.ts): with `EXCLUDE ttk-site-b.test` after the operator's
-	// `MAP ttk-site-b.test 127.0.0.1`, the name stopped resolving at all.
+Deno.test('an allowlisted host the operator maps is not excluded — an EXCLUDE would void the operator MAP', () => {
 	assertEquals(
 		resolverLayerRules(['127.0.0.1', 'ttk-site-b.test'], ['--host-resolver-rules=MAP ttk-site-b.test 127.0.0.1']),
 		'MAP ttk-site-b.test 127.0.0.1, EXCLUDE 127.0.0.1, EXCLUDE *.ttk-site-b.test, MAP * ~NOTFOUND',
 	);
-	// Glob patterns, a port suffix and an operator catch-all are read the way Chromium matches them.
 	assertEquals(
 		resolverLayerRules(['a.example', 'b.example'], ['--host-resolver-rules=MAP *.a.example:443 10.0.0.1']),
 		'MAP *.a.example:443 10.0.0.1, EXCLUDE a.example, EXCLUDE b.example, EXCLUDE *.b.example, MAP * ~NOTFOUND',
@@ -534,7 +497,7 @@ function startupWarnings(options: ConstructorParameters<typeof SessionRegistry>[
 	return registry.shutdown().then(() => warnings);
 }
 
-Deno.test('D-138 (AC8, F11): all with a proxy flag logs the WebSocket caveat once at startup; documents does not', async () => {
+Deno.test('all with a proxy flag logs the WebSocket caveat once at startup; documents does not', async () => {
 	for (const flag of ['--proxy-server=http://p:3128', '--proxy-pac-url=http://pac/p.pac', '--proxy-auto-detect']) {
 		const warnings = await startupWarnings({
 			allowedDomains: ['example.com'],
@@ -555,12 +518,11 @@ Deno.test('D-138 (AC8, F11): all with a proxy flag logs the WebSocket caveat onc
 	);
 });
 
-Deno.test('D-138 (AC13, F9): the registry names an unreadable allowlist entry once at startup, under all only', async () => {
+Deno.test('the registry names an unreadable allowlist entry once at startup, under all only', async () => {
 	const all = await startupWarnings({ allowedDomains: ['example.com', '%%bad'], allowedDomainsScope: 'all' });
 	assertEquals(all.length, 1);
 	assertStringIncludes(all[0] ?? '', '"%%bad"');
 	assertEquals(await startupWarnings({ allowedDomains: ['example.com', '%%bad'] }), []);
-	// An injected launcher (an edge node, a test) never launches the profile the layer would change.
 	assertEquals(
 		await startupWarnings({
 			allowedDomains: ['%%bad'],
@@ -570,4 +532,129 @@ Deno.test('D-138 (AC13, F9): the registry names an unreadable allowlist entry on
 		}),
 		[],
 	);
+});
+
+function registry(scope?: 'documents' | 'all'): SessionRegistry {
+	return new SessionRegistry({
+		reapIntervalMs: 0,
+		...(scope === undefined ? {} : { allowedDomainsScope: scope }),
+		launch: () => Promise.resolve(blankSession()),
+	});
+}
+
+const INCARNATION = /^[A-Za-z0-9_-]{12}$/;
+
+Deno.test('every record has a 12-character base64url incarnation, new for each creation', async () => {
+	const sessions = registry('all');
+	try {
+		const first = await sessions.resolve(undefined);
+		assertEquals(first.id, DEFAULT_SESSION_ID);
+		assert(INCARNATION.test(first.incarnation), first.incarnation);
+		assertEquals((await sessions.resolve(undefined)).incarnation, first.incarnation);
+
+		const other = await sessions.createNew();
+		assert(INCARNATION.test(other.incarnation), other.incarnation);
+		assertNotEquals(other.incarnation, first.incarnation);
+
+		await sessions.close(DEFAULT_SESSION_ID);
+		const again = await sessions.resolve(undefined);
+		assertEquals(again.id, DEFAULT_SESSION_ID);
+		assert(INCARNATION.test(again.incarnation), again.incarnation);
+		assertNotEquals(again.incarnation, first.incarnation);
+	} finally {
+		await sessions.shutdown();
+	}
+});
+
+Deno.test('allowedDomainsScope is accepted; documents leaves sessionProfile unchanged', () => {
+	const base = {
+		headless: true,
+		downloadsDir: '/data/downloads/x',
+		browserPath: null,
+		browserArgs: ['--proxy-server=http://p:3128'],
+		userDataDir: null,
+		storageState: null,
+		chromiumSandbox: true,
+		allowedDomains: ['example.com'],
+	} as const;
+	const unset = sessionProfile(base);
+	assertEquals(sessionProfile({ ...base, allowedDomainsScope: 'documents' }), unset);
+	assertNotEquals(sessionProfile({ ...base, allowedDomainsScope: 'all' }), unset);
+});
+
+Deno.test('an MCP Apps ticket carries the mount’s credential, never one a tool passes', async () => {
+	const sessions = registry();
+	const seen: (string | undefined)[] = [];
+	const mcpApps = {
+		mode: 'watch',
+		liveViewHtml: '',
+		a2uiHtml: '',
+		terminalHtml: '',
+		connectDomains: [],
+		origins: [],
+		mintTicket: (input: { credential?: string }) => {
+			seen.push(input.credential);
+			return Promise.reject(new Error('not minted in this test'));
+		},
+	} as unknown as McpAppsDeps;
+	const server = new McpServer({ name: 'containment-seam-test', version: '0' });
+	try {
+		const ctx = registerCatalog(server, { registry: sessions, version: '0', mcpApps }, {
+			token: 't',
+			clientId: 'c',
+			scopes: ['mcp:invoke', 'view:watch'],
+			extra: { owner: 'api-key:c', credential: 'api-key:c' },
+		}).ctx;
+		await ctx.mcpApps!.mintTicket({
+			principal: 'c',
+			access: { owner: 'api-key:c', admin: false },
+			scopes: new Set(['view:watch']),
+			mode: 'watch',
+			origin: 'https://host.example',
+			holderName: null,
+			credential: 'forged',
+		}).catch(() => {});
+		assertEquals(seen, ['api-key:c']);
+	} finally {
+		await server.close();
+		await sessions.shutdown();
+	}
+});
+
+/** An `AuthInfo` as the bearer gate stamps it, with `credential` on its `extra` when given. */
+function auth(credential?: unknown): AuthInfo {
+	return {
+		token: 't',
+		clientId: 'subject',
+		scopes: ['mcp:invoke'],
+		extra: { owner: 'api-key:subject', ...(credential === undefined ? {} : { credential }) },
+	};
+}
+
+Deno.test('registerCatalog binds the call’s own credential into the link minter; a tool cannot supply one', async () => {
+	const sessions = registry();
+	const asked: Parameters<SignedLinkMinter>[0][] = [];
+	const signedLink: SignedLinkMinter = (input) => {
+		asked.push(input);
+		return Promise.resolve({ url: 'https://gw.test/l', expiresAt: '2026-10-07T00:00:00.000Z', ttlSeconds: 60 });
+	};
+	const minterFor = async (authInfo: AuthInfo | undefined) => {
+		const server = new McpServer({ name: 'containment-seam-test', version: '0' });
+		try {
+			return registerCatalog(server, { registry: sessions, version: '0', signedLink }, authInfo).ctx.signedLink!;
+		} finally {
+			await server.close();
+		}
+	};
+	const request = { sessionId: 's', fileId: 'f', owner: 'api-key:admin:alice', incarnation: 'incarnation1' };
+	try {
+		await (await minterFor(auth('user-key:abc')))({ ...request, credential: 'user-key:forged' });
+		assertEquals(asked.at(-1), { ...request, credential: 'user-key:abc' });
+		for (const authInfo of [auth(), auth(''), auth(42), undefined]) {
+			await (await minterFor(authInfo))({ ...request, credential: 'user-key:forged' });
+			assertEquals(asked.at(-1), request, JSON.stringify(authInfo?.extra));
+		}
+	} finally {
+		await sessions.shutdown();
+	}
 });

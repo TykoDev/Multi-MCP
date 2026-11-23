@@ -1,18 +1,16 @@
 /**
  * @module
- * `ScreenshotWatchdog` — handles `ScreenshotEvent` (ARCHITECTURE.md §6.6).
+ * `ScreenshotWatchdog` — handles `ScreenshotEvent`.
  *
  * "validates/repairs focus to a page target, removes JS highlights before capture,
  * `Page.captureScreenshot` (PNG, optional full-page/clip), returns base64 as the event result."
- * Result contract and 15 s budget: DATA-MODEL.md §5.1.1. Contract-test focus:
- * COMPLETIONS-CRITERIA.md §3.2 watchdog row 6 — "focus validation/repair, highlight removal, PNG
- * base64 result".
+ * The event has a 15 s budget.
  *
  * ## Why focus is *repaired* rather than trusted
  *
  * The agent's focus pointer can name a target that has since been destroyed, or (after a crash and an
  * imperfect recovery) one that is not a page at all. SessionManager's detach-driven recovery normally
- * fixes that, but a screenshot is taken **every step** (invariant I-14) and is often the first thing
+ * fixes that, but a screenshot is taken **every step** and is often the first thing
  * to touch the session after a tab died. Failing the capture would blind the agent at exactly the
  * moment it needs to see; so a focus that does not point at a live page target is moved to the most
  * recent one before capturing.
@@ -20,7 +18,7 @@
  * ## Highlights
  *
  * The DOM layer paints interaction highlights into the page (`BrowserProfile.highlightElements` /
- * `domHighlightElements`, DATA-MODEL.md §5.2). They exist for humans watching a headful run and MUST
+ * `domHighlightElements`). They exist for humans watching a headful run and MUST
  * NOT reach the model: a screenshot with numbered boxes drawn over the UI is a screenshot of a
  * different page than the DOM text describes.
  */
@@ -40,10 +38,9 @@ import { BaseWatchdog } from './base.ts';
 /**
  * Id of the overlay container the DOM layer injects highlights into.
  *
- * ERRATUM(M1-watchdogs-action-4): §6.6 requires highlight removal but no spec section defines how a
- * highlight is *marked*, so there is nothing to remove by name. This module declares the contract —
- * one container by id, plus an attribute for anything painted outside it — and exports both constants
- * so the injector (DOMWatchdog, §6.7) can align on them rather than the two guessing separately.
+ * Highlight removal needs highlights to be *marked*, so this module declares the contract — one
+ * container by id, plus an attribute for anything painted outside it — and exports both constants
+ * so the injector (DOMWatchdog) can align on them rather than the two guessing separately.
  * Removal is a no-op on a page with no highlights, which is the common case.
  */
 export const HIGHLIGHT_CONTAINER_ID = 'bua-highlight-container';
@@ -67,10 +64,10 @@ export const REMOVE_HIGHLIGHTS_EXPRESSION = `(function () {
 /**
  * Chrome's maximum texture dimension; a capture beyond it fails or returns a blank image.
  *
- * ERRATUM(M1-watchdogs-action-11): §6.6 offers `fullPage` with no bound. An infinite-scroll feed can
- * report a content height of tens of thousands of pixels, and asking Chrome for that either errors or
- * burns the whole 15 s budget producing an unusable PNG. The full-page clip is therefore capped at
- * this dimension — the capture is truncated, never failed.
+ * An infinite-scroll feed can report a content height of tens of thousands of pixels, and asking
+ * Chrome for a `fullPage` capture of that either errors or burns the whole 15 s budget producing an
+ * unusable PNG. The full-page clip is therefore capped at this dimension — the capture is truncated,
+ * never failed.
  */
 export const MAX_SCREENSHOT_DIMENSION_PX = 16_384;
 
@@ -82,7 +79,7 @@ export class ScreenshotWatchdog extends BaseWatchdog {
 	static override readonly LISTENS_TO = [ScreenshotEvent];
 	static override readonly EMITS = [];
 
-	/** PNG bytes, base64, no `data:` prefix (DATA-MODEL.md §5.1.1). */
+	/** PNG bytes, base64, no `data:` prefix. */
 	async onScreenshotEvent(event: ScreenshotEvent, context?: HandlerContext): Promise<string> {
 		const sessionId = await this.#focusedPageSession();
 		const client = this.cdpFor(context);
@@ -101,7 +98,7 @@ export class ScreenshotWatchdog extends BaseWatchdog {
 	/**
 	 * Validates the agent's focus and repairs it when it does not name a live page target.
 	 *
-	 * `getOrCreateCdpSession(targetId, true)` is the only sanctioned accessor (ARCHITECTURE.md §7.3);
+	 * `getOrCreateCdpSession(targetId, true)` is the only sanctioned accessor;
 	 * the validation happens *before* calling it with a focus flag, because that call throws for a
 	 * non-page target rather than repairing it — which is the right behaviour there and the wrong one
 	 * here.
@@ -143,16 +140,15 @@ export class ScreenshotWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * ERRATUM(E-47). The live view's `live.highlight` (B2.2) draws through the DevTools overlay
-	 * (`Overlay.highlightRect` / `highlightNode`, E-46), which never enters the DOM — so the strip
-	 * above cannot see it, and U-7 measured that the overlay **does** appear in
-	 * `Page.captureScreenshot` (`build/evidence/b2_2_u7_overlay_probe.log`: `screenshot_differs=true`
-	 * with a highlight up, `false` after `hideHighlight`). The honesty rule in the module note applies
-	 * to it exactly as to the DOM highlights: a screenshot with a server-drawn outline is a screenshot
-	 * of a different page than the DOM text describes. One line, beside the existing strip, hides it
-	 * before capture. Cosmetic, like the strip: a session whose overlay was never enabled answers an
-	 * error here and is photographed anyway. A highlight interrupted by a screenshot is not restored;
-	 * its owner's timer simply finds nothing to hide.
+	 * The live view's `live.highlight` draws through the DevTools overlay (`Overlay.highlightRect` /
+	 * `highlightNode`), which never enters the DOM — so the strip above cannot see it, and measured on
+	 * Chromium the overlay **does** appear in `Page.captureScreenshot` (the capture differs with a
+	 * highlight up and not after `hideHighlight`). The honesty rule in the module note applies to it
+	 * exactly as to the DOM highlights: a screenshot with a server-drawn outline is a screenshot of a
+	 * different page than the DOM text describes. One line, beside the strip, hides it before capture.
+	 * Cosmetic, like the strip: a session whose overlay was never enabled answers an error here and is
+	 * photographed anyway. A highlight interrupted by a screenshot is not restored; its owner's timer
+	 * simply finds nothing to hide.
 	 */
 	async #hideOverlay(client: CdpClient, sessionId: SessionId): Promise<void> {
 		try {

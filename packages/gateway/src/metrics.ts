@@ -1,28 +1,8 @@
-/**
- * C11 (D-101): the gateway's Prometheus exposition, `GET /metrics` when `TTK_METRICS=true`.
- *
- * **Every label is low-cardinality by construction.** `route` is the *matched route pattern*
- * (`/api/v1/sessions/:sessionId/files/:fileId`), never the request path, so a client cannot mint a series by
- * inventing a URL; `tool` is a catalog name, because the dispatcher answers an unknown name with a protocol error
- * before the observer runs; `status`, `outcome` and `state` are closed sets. Each family is still capped at
- * {@linkcode MAX_SERIES}, past which new label sets fold into one `other` series — a defect elsewhere must cost a
- * line of resolution, never the scraper's memory.
- *
- * Nothing here carries a credential, a principal, a URL, a session id or an argument. Counters live in this
- * process only: a restart resets them, which is what Prometheus `rate()` expects of a counter.
- *
- * The format is the text exposition 0.0.4: `# HELP` and `# TYPE` per family, one sample per line, label values
- * escaped (`\\`, `\"`, `\n`).
- */
+/** The gateway's Prometheus exposition, `GET /metrics` when `TTK_METRICS=true`. */
 import { type CallToolResult, isInputRequiredResult } from '@modelcontextprotocol/server';
 import type { SessionSummary, ToolResult } from '@tykotech/mcp';
 
-/**
- * The scope that reads `/metrics` without administrative power (C11, G11).
- *
- * Referenced by string because the vocabulary is `packages/mcp/src/scopes.ts`'s to declare; a credential holding
- * `admin` is admitted too, so the endpoint works before and after the vocabulary carries this name.
- */
+/** The scope that reads `/metrics` without administrative power. */
 export const METRICS_SCOPE = 'metrics:read';
 
 /** The exposition's media type (Prometheus text format 0.0.4). */
@@ -95,9 +75,8 @@ export class GatewayMetrics {
 	#loginFailures = 0;
 
 	/**
-	 * One answered HTTP request, observed at the gateway's front so a refusal there (host, origin, body cap, drain)
-	 * is counted like any other answer. A 429 is a rate-limit refusal, whether the per-principal limiter or the
-	 * sign-in guard gave it; a 401 from the sign-in route is a failed sign-in.
+	 * One answered HTTP request, observed at the gateway's front so a refusal there (host, origin, body cap, drain) is
+	 * counted like any other answer.
 	 */
 	observeRequest(method: string, route: string, status: number): void {
 		this.#requests.inc([route, String(status)]);

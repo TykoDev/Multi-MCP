@@ -1,13 +1,9 @@
 /**
  * DOM intermediate representation — the merged IR of three CDP trees.
  *
- * Contract owner: SPECS/DATA-MODEL.md §6.1 (EnhancedDomTreeNode), §6.2 (EnhancedAxNode /
- * EnhancedSnapshotNode), §6.3 (SerializedDomState + selectorMap), §6.6 (replay keys).
- *
- * This file is **orchestrator-owned**: it is the seam between the extraction builder (which
- * populates these nodes from `DOMSnapshot` + `DOM` + `Accessibility`) and the serialization builder
- * (which renders them to the LLM-visible text of §6.4). Neither may edit it; a change here is a
- * boundary rewind. Declarations only — no runtime logic lives here.
+ * This file is the seam between the extraction builder (which populates these nodes from
+ * `DOMSnapshot` + `DOM` + `Accessibility`) and the serialization builder (which renders them to the
+ * LLM-visible text). Declarations only — no runtime logic lives here.
  */
 
 /** Page-absolute CSS-pixel rectangle. */
@@ -30,7 +26,7 @@ export type NodeType =
 export type ShadowRootType = 'open' | 'closed' | 'user-agent';
 
 /**
- * The 10 whitelisted computed styles (DATA-MODEL §6.2). Exactly these — requesting more crashes
+ * The 10 whitelisted computed styles. Exactly these — requesting more crashes
  * Chrome on heavy sites, which is why the list is normative rather than advisory.
  */
 export const REQUIRED_COMPUTED_STYLES = [
@@ -48,7 +44,7 @@ export const REQUIRED_COMPUTED_STYLES = [
 
 export type RequiredComputedStyle = (typeof REQUIRED_COMPUTED_STYLES)[number];
 
-/** Accessibility-tree projection, joined to the DOM node by `backendNodeId` (§6.2). */
+/** Accessibility-tree projection, joined to the DOM node by `backendNodeId`. */
 export interface EnhancedAxNode {
 	axNodeId: string;
 	ignored: boolean;
@@ -60,7 +56,7 @@ export interface EnhancedAxNode {
 	childIds: string[] | null;
 }
 
-/** DOMSnapshot projection, joined to the DOM node by `backendNodeId` (§6.2). */
+/** DOMSnapshot projection, joined to the DOM node by `backendNodeId`. */
 export interface EnhancedSnapshotNode {
 	/** Device px ÷ devicePixelRatio → CSS px; document coordinates. */
 	bounds: DomRect | null;
@@ -76,8 +72,7 @@ export interface EnhancedSnapshotNode {
 	/** Chrome-detected click handler (`RareBooleanData` → set). */
 	isClickable: boolean;
 	/**
-	 * ERRATUM(E-39). The four value columns `DOMSnapshot.captureSnapshot` already returns and the
-	 * decode used to discard: the **live** `value` property of an input (`inputValue`), the live
+	 * The four value columns `DOMSnapshot.captureSnapshot` already returns: the **live** `value` property of an input (`inputValue`), the live
 	 * `checked` state (`inputChecked`), an `<option>`'s live `selected` state (`optionSelected`) and a
 	 * `<textarea>`'s live text (`textValue`). `null` when the column carries no entry for the node,
 	 * which is what Chrome emits for every element that has no such state. These are decoded, not
@@ -89,14 +84,14 @@ export interface EnhancedSnapshotNode {
 	textValue: string | null;
 }
 
-/** Scroll geometry surfaced in the serialized output's scroll suffixes (§6.4). */
+/** Scroll geometry surfaced in the serialized output's scroll suffixes. */
 export interface ScrollInfo {
 	pagesAbove: number;
 	pagesBelow: number;
 	horizontalPercent: number | null;
 }
 
-/** Hidden-element hint carried out of iframes (§6.4 `... (N more elements below …)`). */
+/** Hidden-element hint carried out of iframes (`... (N more elements below …)`). */
 export interface HiddenElementInfo {
 	tagName: string;
 	text: string;
@@ -104,8 +99,8 @@ export interface HiddenElementInfo {
 }
 
 /**
- * The merged IR (§6.1). **Cyclic** via `parentNode` — any JSON serialization MUST strip
- * parent/children cycles (see `ElementSelectedEvent`, §5.1).
+ * The merged IR. **Cyclic** via `parentNode` — any JSON serialization MUST strip
+ * parent/children cycles (see `ElementSelectedEvent`).
  */
 export interface EnhancedDomTreeNode {
 	// ---- DOM provenance ----
@@ -158,8 +153,8 @@ export interface EnhancedDomTreeNode {
 }
 
 /**
- * Derived members of {@link EnhancedDomTreeNode} (§6.1 "Derived members (contract, not storage)").
- * Implemented alongside the node rather than stored on it, so the IR stays JSON-shaped.
+ * Derived members of {@link EnhancedDomTreeNode}: a contract, not storage. Implemented alongside the
+ * node rather than stored on it, so the IR stays JSON-shaped.
  */
 export interface DomNodeDerived {
 	/** Lowercase `nodeName`. */
@@ -173,7 +168,7 @@ export interface DomNodeDerived {
 	/** First of `value`/`aria-label`/`title`/`placeholder`/`alt`, else children text. */
 	getMeaningfulTextForLlm(node: EnhancedDomTreeNode): string;
 
-	// ---- replay keys (§6.1 element hashes, consumed by §6.6) ----
+	// ---- replay keys (element hashes, consumed by the replay cascade) ----
 	/** sha256[:16 hex] over parent-tag-path | sorted static attrs | AX name. */
 	elementHash(node: EnhancedDomTreeNode): Promise<string>;
 	/** As `elementHash`, with dynamic CSS class tokens filtered out. */
@@ -182,15 +177,15 @@ export interface DomNodeDerived {
 	parentBranchHash(node: EnhancedDomTreeNode): Promise<string>;
 }
 
-/** §6.3 — the serializer's output tree. */
+/** The serializer's output tree. */
 export interface SimplifiedNode {
 	originalNode: EnhancedDomTreeNode;
 	children: SimplifiedNode[];
 	shouldDisplay: boolean;
 	isInteractive: boolean;
-	/** R6.1: the node's `backendNodeId`, or a synthetic index on collision. */
+	/** The node's `backendNodeId`, or a synthetic index on collision. */
 	selectorIndex: number | null;
-	/** R6.2: absent from the previous step's `(sessionId, backendNodeId)` set. */
+	/** Absent from the previous step's `(sessionId, backendNodeId)` set. */
 	isNew: boolean;
 	ignoredByPaintOrder: boolean;
 	excludedByParent: boolean;
@@ -198,16 +193,16 @@ export interface SimplifiedNode {
 	isCompoundComponent: boolean;
 }
 
-/** §6.3 — what the DOM pipeline hands to `BrowserStateSummary`. */
+/** What the DOM pipeline hands to `BrowserStateSummary`. */
 export interface SerializedDomState {
 	root: SimplifiedNode | null;
-	/** LLM index → node. Rebuilt every `BrowserStateRequestEvent` (R6.3). */
+	/** LLM index → node. Rebuilt every `BrowserStateRequestEvent`. */
 	selectorMap: Map<number, EnhancedDomTreeNode>;
 }
 
 /**
- * §6.6 — persisted per executed action, consumed by the replay cascade.
- * Note `MatchLevel` is a const object rather than a TS `enum` (AGENTS.md §3 bans enums); the numeric
+ * Persisted per executed action, consumed by the replay cascade.
+ * Note `MatchLevel` is a const object rather than a TS `enum` (the house style bans enums); the numeric
  * values are load-bearing because the cascade tries them in ascending order.
  */
 export const MatchLevel = {

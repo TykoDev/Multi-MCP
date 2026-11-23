@@ -1,33 +1,6 @@
 /**
  * MCP Apps streams beyond the browser: the **terminal** of a live sandbox shell session and the **live A2UI surface**,
- * served to their embeds exactly the way the live view is served to its own (R9, design §2.20, D-134/D-135).
- *
- * The browser's live view is a ticket-gated WebSocket an embed opens after minting a single-use, origin-bound,
- * 30-second ticket through an app-only tool. Tools whose output is something a person watches — a shell, a surface an
- * agent keeps updating — get the same transport rather than a second one with different rules:
- *
- * - **Mint.** `sandbox_session_ticket` / `a2ui_surface_ticket` (app-only, `ui_resources.ts`) call
- *   {@linkcode EmbedStreams.mintTerminal} / {@linkcode EmbedStreams.mintSurface}. The origin passes the very gate the
- *   live-view mint uses (`embedOriginGate` in `mcp_apps.ts`); the target must exist and belong to the caller now; the
- *   ticket is bound to the origin, the kind and the target, lives 30 s and redeems once.
- * - **Socket.** `/live/terminal/:id/ws` and `/live/surface/:id/ws`, under the `/live/` prefix so the bearer gate, the
- *   per-request rate limit and drain treat them as they treat the live-view socket: the ticket is the credential,
- *   presented once at upgrade together with the `Origin` it is bound to. The front's Host/Origin checks still run.
- * - **Authority.** A ticket carries the minting credential's owner, scopes and GW-1 fingerprint, and the socket
- *   re-earns them on the gateway's horizon ({@linkcode EVENT_STREAM_REVALIDATE_MS}) and on every credential change
- *   (`revalidateAll`), ending at {@linkcode EVENT_STREAM_LIFETIME_MS} like every other long-lived stream (GW-3); the
- *   embed reconnects with a fresh ticket. Each socket holds one of the principal's long-lived connection slots, the
- *   ceiling it shares with the live view and the event streams.
- *
- * The terminal is interactive (`input` messages are fed to the shell: the minting credential holds
- * `sandbox:execute`, which is exactly the authority `sandbox_session_input` needs). The surface is read-only, as the
- * A2UI embed always was: no action registration reaches it and nothing it sends is read.
- *
- * Messages are JSON text frames. Server → embed: `meta`, `output {seq, data, gap}`, `end {exit_code, killed}`
- * (terminal); `meta`, `surface {surface}`, `removed` (surface); `ping`, `error {code, message}` and
- * `bye {reason}` on both. Embed → server: `input {data}` (terminal only).
- *
- * @module
+ * served to their embeds exactly the way the live view is served to its own.
  */
 import type { Context, Hono } from 'hono';
 import type { SandboxClient } from '@tykotech/sandbox';
@@ -44,7 +17,7 @@ import { TICKET_TTL_MS, TicketStore } from './tickets.ts';
 export type EmbedStreamKind = 'terminal' | 'surface';
 
 /** The socket path of a stream, relative to the public URL. */
-export function embedStreamPath(kind: EmbedStreamKind, id: string): string {
+function embedStreamPath(kind: EmbedStreamKind, id: string): string {
 	return `/live/${kind}/${encodeURIComponent(id)}/ws`;
 }
 
@@ -55,7 +28,7 @@ const KIND_SCOPE: Readonly<Record<EmbedStreamKind, string>> = {
 };
 
 /** Largest input frame the terminal accepts, which is `sandbox_session_input`'s own bound. */
-export const TERMINAL_INPUT_MAX_CHARS = 16_384;
+const TERMINAL_INPUT_MAX_CHARS = 16_384;
 /** How long one sandbox long-poll waits: the service's ceiling. */
 const TERMINAL_READ_WAIT_MS = 10_000;
 /** A keepalive a reverse proxy sees inside its idle timeout; the embed ignores it. */
@@ -70,7 +43,7 @@ export interface EmbedStreamCaller {
 	/** The resource owner (`expansionOwner`), whose sandbox sessions and surfaces the stream reads. */
 	readonly owner: string;
 	readonly scopes: ReadonlySet<string>;
-	/** GW-1: the credential fingerprint, re-checked by {@linkcode EmbedStreamsOptions.authorize}. */
+	/** The credential fingerprint, re-checked by {@linkcode EmbedStreamsOptions.authorize}. */
 	readonly credential?: string;
 }
 
@@ -94,7 +67,7 @@ export interface EmbedStreamsOptions {
 	readonly surfaces?: A2uiStore;
 	/** The long-lived connection ceiling shared with the live view and event streams. */
 	readonly connections?: { admitPrincipal(principal: string): boolean; releasePrincipal(principal: string): void };
-	/** GW-1: the scopes the credential still holds, or `null` once it is gone; absent keeps the minted scopes. */
+	/** The scopes the credential still holds, or `null` once it is gone; absent keeps the minted scopes. */
 	readonly authorize?: (owner: string, scopes: ReadonlySet<string>, credential: string | undefined) =>
 		| ReadonlySet<string>
 		| null;
@@ -207,7 +180,7 @@ export class EmbedStreams {
 
 	#upgrade(c: Context, kind: EmbedStreamKind): Response {
 		const requestId = c.get('requestId');
-		// F2, as the live view: a request that is not an upgrade cannot burn a ticket.
+		// As in the live view: a request that is not an upgrade cannot burn a ticket.
 		if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
 			return new Response('expected a WebSocket upgrade', { status: 426 });
 		}
@@ -230,7 +203,7 @@ export class EmbedStreams {
 			return problemResponse(slug, requestId, `${kind} stream ticket ${reason}`);
 		}
 		const caller = grant.caller;
-		// The minting decision is re-earned now, not trusted for the 30 s the ticket lived.
+		// The minting decision is re-earned at the upgrade, not trusted for the 30 s the ticket lived.
 		if (this.#scopesNow(caller)?.has(KIND_SCOPE[kind]) !== true) {
 			return problemResponse('forbidden-scope', requestId, 'the credential that minted this ticket no longer may');
 		}
@@ -243,7 +216,8 @@ export class EmbedStreams {
 			}
 		}
 		const connections = this.#options.connections;
-		// Reserved synchronously, before the upgrade, as the live view does: a later increment admits every racing upgrade.
+		// Reserved synchronously, before the upgrade, as the live view does: a later increment admits every racing
+		// upgrade.
 		if (connections !== undefined && !connections.admitPrincipal(caller.principal)) {
 			return problemResponse('rate-limited', requestId, 'too many live connections for this principal', {
 				'retry-after': '5',
@@ -413,7 +387,7 @@ export class EmbedStreams {
 		socket.addEventListener('open', () => {
 			life.send({ type: 'meta', kind: 'surface', surface_id: surfaceId, interactive: false });
 			try {
-				// The snapshot is re-read at open, so a change between the upgrade and now is not lost.
+				// The snapshot is re-read at open, so a change between the upgrade and the open is not lost.
 				const current = this.#options.surfaces!.get(caller.owner, surfaceId);
 				life.send({ type: 'surface', surface: current });
 				unwatch = this.#options.surfaces!.watch(caller.owner, surfaceId, (surface) => {

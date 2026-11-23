@@ -1,10 +1,4 @@
-/**
- * D-154: opening the data directory's database for a process — `serve`, `stdio` and the `seed` command share this.
- *
- * Opens `<TTK_DATA_DIR>/ttk.db`, opens its vault with `TTK_DB_KEY_FILE`'s key (or locked without one), seeds what was
- * never seeded (`seed.ts`), and answers which browser secrets are in force. Without a data directory there is no
- * database: the configuration's own values are used as they are, and nothing is stored.
- */
+/** Opening the data directory's database for a process — `serve`, `stdio` and the `seed` command share this. */
 import type { SecretEntry } from '@tykotech/mcp';
 import type { Config } from './config.ts';
 import { Database } from './database.ts';
@@ -33,11 +27,7 @@ export interface OpenedDataStore {
 /** The configuration fields this reads. */
 export type DataStoreConfig = Pick<Config, 'dataDir' | 'dbKey' | 'modelProviders' | 'secrets' | 'secretsSource'>;
 
-/**
- * Opens the database (when there is a data directory), seeds it, and resolves the browser secrets in force. Throws a
- * `DatabaseError`, `VaultError` or `SeedError` — each naming a variable or path and a fixed phrase — rather than start
- * with secrets it could not keep encrypted.
- */
+/** Opens the database (when there is a data directory), seeds it, and resolves the browser secrets in force. */
 export async function openDataStore(
 	config: DataStoreConfig,
 	options: {
@@ -86,8 +76,8 @@ export async function openDataStore(
 }
 
 /**
- * One line per seed source that no longer matches what the database holds, so an operator who edited a file knows
- * why nothing changed. Ids and names only — never a value.
+ * One line per seed source that differs from what the database holds, so an operator who edited a file knows why
+ * nothing changed. Ids and names only — never a value.
  */
 function drift(store: DataStore, config: DataStoreConfig): string[] {
 	const lines: string[] = [];
@@ -118,8 +108,8 @@ function canonicalSecrets(entries: readonly SecretEntry[]): string {
 }
 
 /**
- * The doctor's line for the database: where it is, whether the vault key is set, and what it holds — counts only,
- * read without creating the file and without the key (no secret is opened). `null` without a data directory.
+ * The doctor's line for the database: where it is, whether the vault key is set, and what it holds — counts only, read
+ * without creating the file and without the key (no secret is opened). `null` without a data directory.
  */
 export function databaseDoctorLine(dataDir: string | null, keySet: boolean): string | null {
 	if (dataDir === null) return null;

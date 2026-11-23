@@ -1,21 +1,8 @@
 /**
- * D-108: a minimal Docker Engine API client — HTTP/1.1 over the daemon's unix socket, no dependency.
- *
- * Only the calls the Docker backend makes exist here, each with its path built from validated ids, so nothing a
- * caller sends can reach another endpoint: `_ping`, `volumes/{name}`, `containers/json` (by label),
- * `containers/create`, `containers/{id}/{json,start,stop,pause,unpause}`, `DELETE containers/{id}`,
- * `containers/{id}/exec`, `exec/{id}/start` (the attached, multiplexed raw stream) and `exec/{id}/json`. Create and
- * exec bodies are checked against their allowlists (docker_spec.ts) inside the methods that send them, before a
- * connection is opened.
- *
- * ERRATUM(E-91): `pause` and `unpause` are beyond the design's endpoint list (review R2-2). They freeze and thaw a
- * workspace container's processes (the cgroup freezer) while the service measures its files from its own side of the
- * volume, so a process of the workspace cannot change the tree under the measurement. They take no body, change no
- * configuration and grant nothing; a paused container that is stopped or removed is unpaused by the daemon itself.
- *
- * Every call has a deadline and a response-size bound, and opens its own connection (`Connection: close`), so a
- * stuck daemon costs one call, not the client. The API version is pinned to 1.45 (Engine 26), the first with
- * volume subpaths; an older daemon refuses it, and the backend then refuses to start.
+ * A minimal Docker Engine API client: HTTP/1.1 over the daemon's unix socket. Only the calls the backend makes
+ * exist, each path built from validated ids, and create/exec bodies are checked against their allowlists
+ * (docker_spec.ts) before a connection opens. Every call has a deadline and a size bound on its own connection, so a
+ * stuck daemon costs one call. The API is pinned to 1.45 (Engine 26, the first with volume subpaths).
  */
 import { checkCreateBody, checkExecBody, type CreateFor, EXEC_START, LABEL_SANDBOX } from './docker_spec.ts';
 
@@ -54,11 +41,11 @@ export interface ContainerInfo {
 	id: string;
 	/** Docker's `State.Running`, which a paused container also has. */
 	running: boolean;
-	/** Frozen by `pause` (R2-2): its processes run again only once it is unpaused. */
+	/** Frozen by `pause`: its processes run again only once it is unpaused. */
 	paused: boolean;
 	/** The image as the body named it (`Config.Image`): a tag or digest. */
 	image: string;
-	/** R2-6: the image it was created from, by id (`Image`), whatever its tag points at now. */
+	/** The image it was created from, by id (`Image`), whatever its tag points at now. */
 	imageId: string;
 	labels: Record<string, string>;
 	/** `HostConfig.Mounts`, as created. */
@@ -317,10 +304,7 @@ export class Engine {
 		this.#maxBytes = options.maxResponseBytes ?? 1024 * 1024;
 	}
 
-	/**
-	 * Sends one request on a connection of its own. With `upgrade`, the daemon's 101 (or 200) leaves the connection
-	 * open as an exec stream; otherwise the answer is read whole, within the bound, and the connection closed.
-	 */
+	/** One request on its own connection; with `upgrade`, the connection stays open as an exec stream. */
 	async #send(
 		method: 'GET' | 'POST' | 'DELETE',
 		path: string,
@@ -496,7 +480,7 @@ export class Engine {
 		]);
 	}
 
-	/** R2-2 (E-91): freezes every process in a running container; 409 when it is not running or already paused. */
+	/** Freezes every process in a running container; 409 when it is not running or already paused. */
 	async pauseContainer(id: string): Promise<void> {
 		await this.#call('POST', `/containers/${checkName(id, 'container')}/pause`, [204]);
 	}

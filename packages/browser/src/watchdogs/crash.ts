@@ -1,10 +1,10 @@
 /**
  * @module
- * `CrashWatchdog` ○ — **defined, not attached** (ARCHITECTURE.md §6.11).
+ * `CrashWatchdog` ○ — **defined, not attached**.
  *
  * > optional target-crash and network-timeout sentinel (`Runtime.evaluate('1+1')` health probes).
- * > SessionManager's detach-driven focus recovery is the load-bearing mechanism; a port MUST keep
- * > that and MAY skip this watchdog.
+ * > SessionManager's detach-driven focus recovery is the load-bearing mechanism; this watchdog is
+ * > optional on top of it.
  *
  * It is therefore absent from `WATCHDOG_ATTACH_ORDER` — pinned by a test in
  * `attach_order_test.ts`, not by a comment — and an embedder that wants it opts in explicitly:
@@ -24,15 +24,14 @@
  * detection — a renderer that is hung rather than detached emits no CDP event whatsoever, so the only
  * way to notice is to ask it something and see whether it answers.
  *
- * ## The probe cadence is an invented number (ERRATUM(M1-watchdogs-rest-8))
+ * ## The probe cadence is a chosen number
  *
- * §6.11 names the probe (`Runtime.evaluate('1+1')`) but gives no interval, no per-probe cap, and no
+ * The probe (`Runtime.evaluate('1+1')`) comes with no given interval, per-probe cap, or
  * network-stall threshold. All three are declared here as named constants, asserted in tests, and
- * inert by default (nothing attaches this watchdog). They are sized off constants the spec does fix:
- * the probe cap equals `LocalBrowserWatchdog`'s graceful-kill grace (5 s, ARCHITECTURE.md §6.1), the
- * interval equals the cap so probes cannot overlap, and the network-stall threshold is 30 s — the bus
- * default event budget (E-1), i.e. the longest a request may stall before *some* handler would have
- * timed out anyway.
+ * inert by default (nothing attaches this watchdog). They are sized off fixed budgets elsewhere:
+ * the probe cap equals `LocalBrowserWatchdog`'s graceful-kill grace (5 s), the interval equals the
+ * cap so probes cannot overlap, and the network-stall threshold is 30 s — the bus default event
+ * budget, i.e. the longest a request may stall before *some* handler would have timed out anyway.
  */
 
 import type { HandlerContext } from '@tykotech/bus';
@@ -42,10 +41,10 @@ import { withTimeout } from '../browser/reconnect.ts';
 import { BaseWatchdog, type WatchdogHost } from './base.ts';
 
 // ---------------------------------------------------------------------------
-// constants (see the module note: invented, inert, asserted)
+// constants (see the module note: chosen, inert, asserted)
 // ---------------------------------------------------------------------------
 
-/** The health probe of §6.11, verbatim. */
+/** The health probe expression. */
 export const CRASH_PROBE_EXPRESSION = '1+1';
 
 /** What a live renderer answers. Anything else is a crash signal. */
@@ -83,7 +82,7 @@ export interface CrashProbeResult {
 interface TrackedRequest {
 	readonly requestId: string;
 	readonly url: string;
-	/** `Date.now()` at reception — never CDP's monotonic `timestamp` (the E-17 clock lesson). */
+	/** `Date.now()` at reception — never CDP's monotonic `timestamp`, whose epoch is arbitrary. */
 	readonly startedAt: number;
 	readonly sessionId: SessionId | undefined;
 }
@@ -250,7 +249,7 @@ export class CrashWatchdog extends BaseWatchdog {
 
 	async #evaluate(targetId: string): Promise<unknown> {
 		const session = await this.sessions.getOrCreateCdpSession(targetId, false);
-		// Bare `this.cdp` on purpose (ERRATUM(E-52) allowlist): the crash sentinel runs from `setInterval`,
+		// Bare `this.cdp` on purpose: the crash sentinel runs from `setInterval`,
 		// not from a dispatch, so there is no `HandlerContext` in scope to bind. Its bound is
 		// `CRASH_PROBE_TIMEOUT_MS`, applied by `probeOnce`, and `disarm()` stops the loop.
 		const outcome = await this.cdp.send.Runtime.evaluate(

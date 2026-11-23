@@ -1,16 +1,16 @@
 /**
- * DOM serialization — the merged IR (DATA-MODEL §6.1) rendered to the exact text the LLM reads
- * (§6.4/§6.5), together with the selector map and index-assignment rules of §6.3 (R6.1–R6.4).
+ * DOM serialization — the merged IR rendered to the exact text the LLM reads, together with the
+ * selector map, index assignment, new-element marking and the wall-clock fail-safe.
  *
- * This module is the whole of parity risk R1's output half: the string it returns *is* the product
+ * This module is the output half of serialization parity: the string it returns *is* the product
  * surface, so every rule it applies is enumerated and pinned by a golden fixture rather than left to
  * the shape of the code. The pipeline is three passes, in order:
  *
  * 1. {@linkcode simplifyDomTree} — IR → `SimplifiedNode` tree, index assignment, new-element marking.
- * 2. {@linkcode renderSimplifiedTree} — `SimplifiedNode` tree → §6.4 text (§6.5 attribute rules inside).
+ * 2. {@linkcode renderSimplifiedTree} — `SimplifiedNode` tree → text (attribute rules inside).
  * 3. Hard truncation at `maxClickableElementsLength` (40 000 chars).
  *
- * The fail-safe of R6.4 is a *safety* property, not an error path: whenever the request cannot be
+ * The budget fail-safe is a *safety* property, not an error path: whenever the request cannot be
  * completed, the caller gets a state whose selector map is empty, so an LLM can never act on an index
  * that no longer resolves.
  */
@@ -51,27 +51,27 @@ export {
 	type StateTokenInput,
 } from './state_token.ts';
 
-/** `AgentSettings.maxClickableElementsLength` (DATA-MODEL §2.1, §6.4). */
+/** `AgentSettings.maxClickableElementsLength`. */
 export const MAX_CLICKABLE_ELEMENTS_LENGTH = 40_000;
 
-/** `stateError` text of the R6.4 non-actionable state. */
+/** `stateError` text of the non-actionable fail-safe state. */
 export const STATE_TIMEOUT_ERROR = 'DOM serialization exceeded its budget; selector map withheld';
 
 /** Options for {@linkcode serializeDomState}. */
 export interface SerializeOptions {
-	/** Derived members (§6.1). Defaults to {@linkcode defaultDerived} until `derived.ts` lands. */
+	/** Derived members. Defaults to {@linkcode defaultDerived}. */
 	readonly derived?: SerializerDerived | undefined;
-	/** R6.2 — the previous step's key set, from the previous result's `keys`. */
+	/** The previous step's key set, from the previous result's `keys`. */
 	readonly previousKeys?: ReadonlySet<string> | undefined;
-	/** `AgentSettings.includeAttributes` (§6.5). */
+	/** `AgentSettings.includeAttributes`. */
 	readonly includeAttributes?: readonly string[] | undefined;
 	/** Default {@linkcode MAX_CLICKABLE_ELEMENTS_LENGTH}. */
 	readonly maxClickableElementsLength?: number | undefined;
 	/** `BrowserProfile.paintOrderFiltering`, default `true`. */
 	readonly paintOrderFiltering?: boolean | undefined;
-	/** Interactivity override (§6.3 has no normative predicate — see `serialize_simplify.ts`). */
+	/** Interactivity override — see `serialize_simplify.ts`. */
 	readonly isInteractive?: SimplifyOptions['isInteractive'] | undefined;
-	/** ERRATUM(E-41): admit offscreen-but-rendered elements to the index (`include_hidden`). */
+	/** Admit offscreen-but-rendered elements to the index (`include_hidden`). */
 	readonly includeOffscreen?: boolean | undefined;
 	/** Emits `[Start of page]` when `0`. */
 	readonly pixelsAbove?: number | undefined;
@@ -79,7 +79,7 @@ export interface SerializeOptions {
 	readonly pixelsBelow?: number | undefined;
 	/** Cap on iframe hidden-element hints; default 10. */
 	readonly maxHiddenElementHints?: number | undefined;
-	/** R6.4 — whole-request wall-clock budget in ms. */
+	/** Whole-request wall-clock budget in ms. */
 	readonly budgetMs?: number | undefined;
 	/** Clock injection point for the budget; defaults to {@linkcode Date.now}. */
 	readonly now?: (() => number) | undefined;
@@ -89,22 +89,22 @@ export interface SerializeOptions {
 	readonly frames?: readonly StateTokenFrame[] | undefined;
 }
 
-/** What the DOM pipeline hands to `DOMWatchdog` (ARCHITECTURE §6.7). */
+/** What the DOM pipeline hands to `DOMWatchdog`. */
 export interface DomSerializationResult {
-	/** §6.3 — the frozen seam type: simplified tree + `selectorMap`. */
+	/** The seam type: simplified tree + `selectorMap`. */
 	readonly state: SerializedDomState;
-	/** The §6.4 text, already truncated. */
+	/** The rendered text, already truncated. */
 	readonly text: string;
-	/** R6.3 — cached reverse map, `sessionId:backendNodeId` → index. */
+	/** Cached reverse map, `sessionId:backendNodeId` → index. */
 	readonly reverseMap: Map<string, number>;
-	/** R6.2 — pass as `previousKeys` on the next request. */
+	/** Pass as `previousKeys` on the next request. */
 	readonly keys: Set<string>;
-	/** R6.4 — non-null exactly when the state is the non-actionable fallback (§5.3 `stateError`). */
+	/** Non-null exactly when the state is the non-actionable fallback (`stateError`). */
 	readonly stateError: string | null;
-	/** True when §6.4's hard cap clipped the text. */
+	/** True when the hard cap clipped the text. */
 	readonly truncated: boolean;
 	/**
-	 * I-1 — the identity of the index table in `state`, or `null` when there is no table to address.
+	 * The identity of the index table in `state`, or `null` when there is no table to address.
 	 *
 	 * `null` exactly when `selectorMap` is empty by fail-safe: a caller holding a token can then be
 	 * told `no-state` rather than being silently resolved against a table that is not there.
@@ -113,7 +113,7 @@ export interface DomSerializationResult {
 }
 
 /**
- * R6.4 — the non-actionable state.
+ * The non-actionable state.
  *
  * Empty `selectorMap`, empty text, `stateError` set. `DOMWatchdog` synthesizes this on a whole-event
  * timeout so that no stale index survives into the next prompt.
@@ -131,7 +131,7 @@ export function failSafeDomState(reason: string = STATE_TIMEOUT_ERROR): DomSeria
 }
 
 /**
- * R6.3 — recognizes the CDP "the id you held is gone" family.
+ * Recognizes the CDP "the id you held is gone" family.
  *
  * These mean "rebuild the state", never "crash": the map is rebuilt on every
  * `BrowserStateRequestEvent` anyway, so a stale id is an ordinary consequence of the page moving on.
@@ -164,7 +164,7 @@ export function serializeDomState(
 		budgetMs: options.budgetMs,
 		now: options.now,
 	});
-	// R6.4: a partial walk must never yield a partial map — the indices in it would out-live the tree
+	// A partial walk must never yield a partial map — the indices in it would out-live the tree
 	// they were derived from.
 	if (simplified.timedOut) return failSafeDomState();
 
@@ -175,18 +175,16 @@ export function serializeDomState(
 		pixelsBelow: options.pixelsBelow,
 		maxHiddenElementHints: options.maxHiddenElementHints,
 	});
-	// ERRATUM(M1-corpus-1): the 40 000-char cap is a PROMPT-LAYER concern, not a serializer one.
-	// §6.4: "The prompt layer embeds the output under `Interactive elements:`, hard-truncated at
-	// maxClickableElementsLength (40 000) chars." Empirically confirmed against the recorded corpus:
-	// the reference's serialized output for `truncation_large` is 225 423 chars with its tail intact,
-	// i.e. it does not truncate at this layer. Capping here would silently discard ~185 000 chars of
-	// page content before the prompt layer ever saw it, removing elements the reference makes
-	// available to the model. The cap is therefore OPT-IN: M2's MessageManager passes
-	// MAX_CLICKABLE_ELEMENTS_LENGTH explicitly when it assembles the prompt.
+	// The 40 000-char cap is a PROMPT-LAYER concern, not a serializer one: the prompt layer embeds the
+	// output under `Interactive elements:`, hard-truncated. The recorded corpus confirms it — the
+	// reference's serialized output for `truncation_large` is 225 423 chars with its tail intact.
+	// Capping here would silently discard ~185 000 chars of page content before the prompt layer ever
+	// saw it, removing elements the reference makes available to the model. The cap is therefore
+	// OPT-IN: a prompt assembler passes MAX_CLICKABLE_ELEMENTS_LENGTH explicitly.
 	const cap = options.maxClickableElementsLength ?? Number.POSITIVE_INFINITY;
 	const truncated = rendered.length > cap;
 
-	// Minted from the table that was actually emitted, after the R6.4 fail-safe has had its say, so a
+	// Minted from the table that was actually emitted, after the budget fail-safe has had its say, so a
 	// token can never name a map the caller was not given.
 	const minted = mintStateToken({
 		topUrl: options.topUrl ?? '',
@@ -198,8 +196,7 @@ export function serializeDomState(
 
 	return {
 		state: { root: simplified.root, selectorMap: simplified.selectorMap },
-		// ERRATUM(M1-dom-serialize-5): §6.4 says "hard-truncated"; no ellipsis or marker is specified,
-		// so the cut is a plain slice and may land mid-line.
+		// A hard truncation: no ellipsis or marker, so the cut is a plain slice and may land mid-line.
 		text: truncated ? rendered.slice(0, cap) : rendered,
 		reverseMap: simplified.reverseMap,
 		keys: simplified.keys,

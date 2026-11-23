@@ -1,12 +1,6 @@
-/**
- * RFC 7807 `application/problem+json` responses.
- *
- * Every non-MCP error leaves the gateway in this shape, carrying the request
- * id so a report from the field can be joined to a log line.
- * See SPECS/API-CONTRACT.md §6.
- */
+/** RFC 7807 `application/problem+json` responses. */
 
-export const PROBLEM_TYPE_BASE = 'https://tykotech.eu/problems/';
+const PROBLEM_TYPE_BASE = 'https://tykotech.eu/problems/';
 
 export const PROBLEM_SLUGS = [
 	'unauthenticated',
@@ -17,47 +11,28 @@ export const PROBLEM_SLUGS = [
 	'unknown-session',
 	'ticket-expired',
 	'ticket-consumed',
-	/**
-	 * F2: a live-view ticket this server never issued, or one minted for another session than the path names. The
-	 * contract answers every bad ticket 403 before the upgrade; `unauthenticated` (401) wrongly asked for a credential
-	 * the socket cannot send.
-	 */
+	/** A live-view ticket this server never issued, or one minted for another session than the path names. */
 	'ticket-invalid',
 	'payload-too-large',
 	'not-found',
-	/**
-	 * A caller-supplied REST body that is malformed or refused by policy (B1.10).
-	 *
-	 * There was no generic 400 slug before this: `host-forbidden` is a 400 but
-	 * names one specific cause, and every other refusal here is 401/403/404/429.
-	 * `PUT /api/v1/live/origins` is the first route in the product that validates
-	 * a caller-supplied body against a policy, and "the body was wrong" is not
-	 * "you may not do this".
-	 */
+	/** A caller-supplied REST body that is malformed or refused by policy. */
 	'invalid-request',
-	/**
-	 * A write on a deployment with no `TTK_DATA_DIR` (B1.10).
-	 *
-	 * D-A3 degrades such a deployment to read-only rather than pretending a write
-	 * succeeded, and 409 says the request conflicts with the server's state
-	 * rather than with the caller's authority — which a 403 would wrongly imply.
-	 */
+	/** A write on a deployment with no `TTK_DATA_DIR`. */
 	'persistence-required',
 	/**
-	 * A write the server's own state refuses (D-074): a duplicate username, deleting or disabling the account that
-	 * is making the request, or leaving no enabled account with the `admin` scope. The caller is authorized; the
-	 * request cannot be honoured as the state stands.
+	 * A write the server's own state refuses: a duplicate username, deleting or disabling the account that is making
+	 * the request, or leaving no enabled account with the `admin` scope.
 	 */
 	'conflict',
 	/**
-	 * F5: the server is shutting down (BACKEND §7, stage 1). New sessions, tickets and live-view sockets are refused
+	 * The server is shutting down (the drain's first stage). New sessions, tickets and live-view sockets are refused
 	 * with `Retry-After`; `/healthz` and work already in flight keep answering until their stage ends.
 	 */
 	'service-unavailable',
 	/**
-	 * B4 / D-097: a request authenticated by the sign-in cookie that changes state (`POST`, `PUT`, `PATCH`, `DELETE`)
-	 * without the `x-ttk-csrf` value derived from that session, or without an allowed `Origin`. 403 because the
-	 * credential is fine and the request is not proven to come from the control plane's own page.
+	 * A request authenticated by the sign-in cookie that changes state (`POST`, `PUT`, `PATCH`, `DELETE`) without the
+	 * `x-ttk-csrf` value derived from that session, or without an allowed `Origin`. 403 because the credential is fine
+	 * and the request is not proven to come from the control plane's own page.
 	 */
 	'csrf-failed',
 	'internal',

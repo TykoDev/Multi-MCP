@@ -1,6 +1,4 @@
-/**
- * D-082: private services watched while the server runs; their tools follow their health.
- */
+/** Private services watched while the server runs; their tools follow their health. */
 import { assert, assertEquals } from '@std/assert';
 import { SessionRegistry } from '@tykotech/mcp';
 import type { SandboxClient } from '@tykotech/sandbox';
@@ -8,7 +6,7 @@ import { createGatewayApp } from './app.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
-import { bridgeProbe, ServiceHealth } from './service_health.ts';
+import { ServiceHealth } from './service_health.ts';
 
 const ORIGIN = 'http://127.0.0.1:8787';
 
@@ -39,20 +37,13 @@ Deno.test('service health: transitions are logged and announced once each; probe
 	assertEquals(seen, [{ sandbox: false }, { sandbox: true }]);
 	assert(lines.some((line) => line.includes('not reachable')) && lines.some((line) => line.includes('is reachable')));
 	// A probe that throws counts as down.
-	const failing = new ServiceHealth({ agents: () => Promise.reject(new Error('boom')) });
+	const failing = new ServiceHealth({ sandbox: () => Promise.reject(new Error('boom')) });
 	await failing.probe();
-	assertEquals(failing.states(), { agents: false });
+	assertEquals(failing.states(), { sandbox: false });
 	assertEquals(new ServiceHealth({}).watching, false);
 });
 
-Deno.test('service health: the bridge probe reads /healthz and treats anything else as down', async () => {
-	const ok = bridgeProbe('http://runner:8080', () => Promise.resolve(new Response('{}')));
-	const down = bridgeProbe('http://runner:8080', () => Promise.resolve(new Response('{}', { status: 503 })));
-	const gone = bridgeProbe('http://runner:8080', () => Promise.reject(new TypeError('refused')));
-	assertEquals([await ok(), await down(), await gone()], [true, false, false]);
-});
-
-Deno.test('service health: sandbox tools leave and return with the service, and calls say why (D-082)', async () => {
+Deno.test('service health: sandbox tools leave and return with the service, and calls say why', async () => {
 	const coder = await generateApiKey('coder', ['mcp:invoke', 'sandbox:execute']);
 	const config = loadConfig({ TTK_HOST: '127.0.0.1', TTK_PORT: '8787', TTK_API_KEYS: JSON.stringify([coder.record]) });
 	let up = false;

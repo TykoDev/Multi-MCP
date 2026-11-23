@@ -1,24 +1,16 @@
-/**
- * mcp-recommendations W4 at the gateway: `TTK_CONFIRM_DESTRUCTIVE` (R5, D-125) and `TTK_HUMAN_HANDOFF` (R2, D-124)
- * from the environment to the wire.
- *
- * The parse first; then the composed app, through its real `/mcp` route, with a faked browser: the handoff tool is
- * present by default (D-150) and absent once switched off, and hands out the control plane's live-view route under the
- * *configured* public URL — never the request's Host — with no ticket in it; the admin diagnostics name both switches.
- */
+/** `TTK_CONFIRM_DESTRUCTIVE` and `TTK_HUMAN_HANDOFF` at the gateway, from the environment to the wire. */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import { SessionRegistry } from '@tykotech/mcp';
 import { createGatewayApp } from './app.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
 import { ConfigError, ENV_NAMES, loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
+import { fakeSession } from './support_test.ts';
 
 const PUBLIC = 'https://mcp.example.test';
 
-Deno.test('W4 config: confirmations and (D-150) the handoff default on, both strict booleans', () => {
+Deno.test('config: confirmations and the handoff default on, both strict booleans', () => {
 	assert((ENV_NAMES as readonly string[]).includes('TTK_CONFIRM_DESTRUCTIVE'));
 	assert((ENV_NAMES as readonly string[]).includes('TTK_HUMAN_HANDOFF'));
 	const base = { TTK_HOST: '127.0.0.1' };
@@ -35,19 +27,6 @@ Deno.test('W4 config: confirmations and (D-150) the handoff default on, both str
 		assertStringIncludes(error.message, name);
 	}
 });
-
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'w4-fake-session' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
 
 async function gateway(env: Record<string, string>) {
 	const user = await generateApiKey('user-key', ['mcp:invoke', 'view:watch', 'view:control']);
@@ -113,12 +92,12 @@ async function gateway(env: Record<string, string>) {
 const listed = async (g: Awaited<ReturnType<typeof gateway>>) =>
 	((await g.mcp('tools/list', {})).result?.tools as Array<{ name: string }>).map((tool) => tool.name);
 
-Deno.test('W4 gateway (D-150): by default the handoff is offered, switched off it is absent, and the diagnostics say so', async () => {
+Deno.test('gateway: by default the handoff is offered, switched off it is absent, and the diagnostics say so', async () => {
 	{
 		await using g = await gateway({});
 		const names = await listed(g);
 		assert(names.includes('browser_list_sessions'), 'the listing is the real catalog');
-		assert(names.includes('browser_request_human'), 'D-150: on by default');
+		assert(names.includes('browser_request_human'), 'on by default');
 		const config = await g.diagnostics();
 		assertEquals(config.confirmations, true);
 		assertEquals(config.humanHandoff, true);
@@ -128,7 +107,7 @@ Deno.test('W4 gateway (D-150): by default the handoff is offered, switched off i
 	assertEquals((await off.diagnostics()).humanHandoff, false);
 });
 
-Deno.test('W4 gateway: TTK_HUMAN_HANDOFF hands out <TTK_PUBLIC_URL>/#/view/<id>, with no ticket and no query', async () => {
+Deno.test('gateway: TTK_HUMAN_HANDOFF hands out <TTK_PUBLIC_URL>/#/view/<id>, with no ticket and no query', async () => {
 	await using g = await gateway({ TTK_HUMAN_HANDOFF: 'true', TTK_CONFIRM_DESTRUCTIVE: 'false' });
 	assert((await listed(g)).includes('browser_request_human'));
 	const config = await g.diagnostics();

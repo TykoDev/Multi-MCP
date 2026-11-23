@@ -1,5 +1,5 @@
 /**
- * `EventHandle` — the awaitable returned by `dispatch()` (ARCHITECTURE.md §4.2).
+ * `EventHandle` — the awaitable returned by `dispatch()`.
  *
  * Two settlement views over one run:
  *  - `await handle` resolves when **all** handlers have settled, rejecting with the first handler

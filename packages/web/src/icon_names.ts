@@ -15,7 +15,10 @@
  * stylesheet, so a glyph's colour always follows the text it sits beside.
  */
 
-/** App icon name → Lucide glyph name. `@` marks a glyph drawn in `CUSTOM_ICONS`. */
+/**
+ * App icon name → Lucide glyph name. `@` marks a glyph drawn in `CUSTOM_ICONS`. The map is also the vocabulary an A2UI
+ * `Icon` component may name (`a2ui.ts`), so a name the app itself does not draw still renders on an agent's surface.
+ */
 export const ICONS = {
 	// Brand and sections
 	logo: '@logo',
@@ -59,7 +62,6 @@ export const ICONS = {
 	pen: 'pencil',
 	undo: 'rotate-ccw',
 	history: 'rotate-ccw',
-	// The Tasks view's run history: a request arriving, and a log cut at its bound.
 	inbox: 'inbox',
 	scissors: 'scissors',
 	filter: 'funnel',
@@ -76,10 +78,6 @@ export const ICONS = {
 	move: 'folder-input',
 	grip: 'grip-vertical',
 	settings: 'settings',
-	// The configuration composer (run model-providers-ui).
-	sliders: 'sliders-horizontal',
-	// Run tool, the task composer's second kind.
-	wrench: 'wrench',
 	enter: 'corner-down-left',
 	repeat: 'repeat-2',
 	hash: 'hash',
@@ -151,7 +149,6 @@ export const ICONS = {
 	toggle: 'toggle-right',
 	'toggle-off': 'toggle-left',
 	// System
-	// The `metrics:read` scope's glyph (D-098): the counters' pulse.
 	activity: 'activity',
 	cpu: 'cpu',
 	memory: 'memory-stick',
@@ -170,7 +167,6 @@ export const ICONS = {
 	orbit: 'orbit',
 	moon: 'moon',
 	sun: 'sun',
-	// D-152: the Shade and Dawn themes.
 	'cloud-moon': 'cloud-moon',
 	sunrise: 'sunrise',
 	// Files and content
@@ -199,7 +195,6 @@ export const ICONS = {
 	'list-checks': 'list-checks',
 	grid: 'layout-grid',
 	rows: 'rows-3',
-	// Arrays of objects in jsonFacts, and the surface builder's gallery.
 	table: 'table',
 	template: 'layout-template',
 	book: 'book-open',
@@ -212,14 +207,11 @@ export const ICONS = {
 	skills: 'blocks',
 	surface: 'layout-dashboard',
 	flask: 'flask-conical',
-	// A model provider (the providers fact row) and a delegation to a peer agent.
 	model: 'bot-message-square',
 	delegate: 'arrow-right-left',
-	// D-152: the agent surfaces in the Resources tree and System's Agents tab — A2A (a tower that answers peers),
-	// peers (a route between points), the ACP bridge (a cable to a local agent), a provider's settings, a tool leaf.
 	a2a: 'radio-tower',
 	peers: 'waypoints',
-	acp: 'cable',
+	runtime: 'cable',
 	provider: 'server-cog',
 	fn: 'square-function',
 	webhook: 'webhook',
@@ -317,38 +309,6 @@ export const SYSTEM_ICONS = {
 	'volume-xmark': 'volume-x',
 	xmark: 'x',
 } as const satisfies Record<string, string>;
-
-/**
- * Glyphs for scopes, keyed by a scope's namespace and, where one namespace has
- * several scopes, its verb (`view:watch` → `view` → `watch`). The vocabulary
- * itself is declared once, in `packages/mcp/src/scopes.ts`, and reaches the SPA
- * from the server; this map only says how a namespace looks, so it is not a
- * second copy of the list (`scopes_test.ts` keeps it that way).
- */
-export const SCOPE_GLYPHS: Readonly<Record<string, IconName | Readonly<Record<string, IconName>>>> = {
-	mcp: 'plug',
-	view: { watch: 'eye', control: 'control' },
-	task: 'list-checks',
-	admin: 'shield',
-	evaluate: 'braces',
-	sandbox: 'terminal',
-	agent: 'agents',
-	a2ui: 'surface',
-	files: { read: 'file-search', write: 'file-pen' },
-	metrics: 'activity',
-	// S0 (design §2.2): `network:read`, W1's request URLs, headers and bodies.
-	network: 'network',
-	// D-143 (model-providers-ui): `model:invoke`, text tasks on a configured model provider.
-	model: 'model',
-};
-
-/** The glyph for a scope; an unknown scope still gets a key. */
-export function scopeIcon(scope: string): IconName {
-	const [namespace = '', verb = ''] = scope.split(':');
-	const entry = SCOPE_GLYPHS[namespace];
-	if (entry === undefined) return 'key';
-	return typeof entry === 'string' ? entry : entry[verb] ?? 'key';
-}
 
 /** Where the generated sprite is served (the gateway serves `dist/` under `/assets/`). */
 export const SPRITE_URL = '/assets/icons.svg';

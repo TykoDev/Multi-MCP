@@ -1,212 +1,155 @@
 /**
- * AC22 (F7, D-094): `TTK_BROWSER_ARGS` refuses every sandbox-weakening and launcher-owned Chromium switch at
- * parse time, naming the switch; `TTK_CHROMIUM_NO_SANDBOX` is the one way to run Chromium unsandboxed.
- *
- * The lists below are the design's (report_design.md §2.1), written out here rather than imported from the
- * implementation: a switch dropped from `config.ts` must fail this file, not quietly shrink it.
+ * `TTK_BROWSER_ARGS` refuses every sandbox-weakening and launcher-owned Chromium switch at parse time, naming the
+ * switch; `TTK_CHROMIUM_NO_SANDBOX` is the one way to run Chromium unsandboxed.
  */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import { ConfigError, ENV_NAMES, loadConfig } from './config.ts';
+import { ConfigError, loadConfig } from './config.ts';
 import { generateDbKey } from './vault.ts';
 
-/** Sandbox-weakening switches: refused, and the refusal names `TTK_CHROMIUM_NO_SANDBOX`. */
-const SANDBOX_WEAKENING = [
-	'--no-sandbox',
-	'--disable-setuid-sandbox',
-	'--no-zygote',
-	'--single-process',
-	'--disable-seccomp-filter-sandbox',
-	'--disable-namespace-sandbox',
-	'--disable-gpu-sandbox',
-	// R1-4: the GPU process as a thread of the unsandboxed browser process — the GPU analogue of --single-process.
-	'--in-process-gpu',
-	// Beyond the design's seven: every switch whose name says "sandbox", so the next spelling is caught too.
-	'--no-zygote-sandbox',
-	'--no-sandbox-and-elevated',
-	'--allow-sandbox-debugging',
-] as const;
+/** Each refused family: its switches, the phrase its refusal carries, and whether it rides behind a benign switch. */
+const REFUSED: ReadonlyArray<readonly [readonly string[], string]> = [
+	[[
+		'--no-sandbox',
+		'--disable-setuid-sandbox',
+		'--no-zygote',
+		'--single-process',
+		'--disable-seccomp-filter-sandbox',
+		'--disable-namespace-sandbox',
+		'--disable-gpu-sandbox',
+		// The GPU process as a thread of the unsandboxed browser process.
+		'--in-process-gpu',
+		// Off the named list: every switch whose name says "sandbox", so the next spelling is caught too.
+		'--no-zygote-sandbox',
+		'--no-sandbox-and-elevated',
+		'--allow-sandbox-debugging',
+	], 'TTK_CHROMIUM_NO_SANDBOX'],
+	[[
+		'--remote-debugging-port',
+		'--remote-debugging-pipe',
+		'--remote-debugging-address',
+		'--remote-allow-origins',
+		'--user-data-dir',
+		'--remote-debugging-io-pipes',
+	], 'launcher'],
+	[[
+		'--renderer-cmd-prefix',
+		'--utility-cmd-prefix',
+		'--gpu-launcher',
+		'--browser-subprocess-path',
+		'--zygote-cmd-prefix',
+		'--ppapi-plugin-launcher',
+	], 'execute another program'],
+	[[
+		'--disable-site-isolation-trials',
+		'--disable-web-security',
+		'--allow-file-access-from-files',
+		'--allow-file-access',
+		'--load-extension',
+		'--disable-extensions-except',
+	], 'isolation'],
+];
 
-/** Launcher-owned switches: the DevTools endpoint and the profile directory. */
-const LAUNCHER_OWNED = [
-	'--remote-debugging-port',
-	'--remote-debugging-pipe',
-	'--remote-debugging-address',
-	'--remote-allow-origins',
-	'--user-data-dir',
-	'--remote-debugging-io-pipes',
-] as const;
+const refusal = (args: string): ConfigError =>
+	assertThrows(() => loadConfig({ TTK_BROWSER_ARGS: args }), ConfigError) as ConfigError;
 
-/** Switches that make Chromium execute another program, by name and by suffix. */
-const COMMAND = [
-	'--renderer-cmd-prefix',
-	'--utility-cmd-prefix',
-	'--gpu-launcher',
-	'--browser-subprocess-path',
-	'--zygote-cmd-prefix',
-	'--ppapi-plugin-launcher',
-] as const;
-
-/** Each switch in the three spellings an operator writes: bare, with a value, and in another case. */
-function spellings(name: string): string[] {
-	return [
-		name,
-		`${name}=1`,
-		`${name}=/opt/value with spaces`,
-		name.toUpperCase(),
-		`${name.slice(0, 4).toUpperCase()}${name.slice(4)}=x`,
-	];
-}
-
-function refusal(args: string): ConfigError {
-	return assertThrows(() => loadConfig({ TTK_BROWSER_ARGS: args }), ConfigError) as ConfigError;
-}
-
-Deno.test('AC22: every sandbox-weakening switch is refused at parse time, naming it and TTK_CHROMIUM_NO_SANDBOX', () => {
-	for (const name of SANDBOX_WEAKENING) {
-		for (const entry of spellings(name)) {
-			const error = refusal(`--lang=en-US,${entry}`);
-			assertStringIncludes(error.message, 'TTK_BROWSER_ARGS', entry);
-			assertStringIncludes(error.message, name, `${entry}: the refusal must name the switch`);
-			assertStringIncludes(error.message, 'TTK_CHROMIUM_NO_SANDBOX', entry);
+Deno.test('TTK_BROWSER_ARGS: every weakening, launcher-owned or program-running switch is refused in any spelling, by name', () => {
+	for (const [names, phrase] of REFUSED) {
+		for (const name of names) {
+			const spellings = [
+				name,
+				`${name}=1`,
+				`${name}=/opt/value with spaces`,
+				name.toUpperCase(),
+				`${name.slice(0, 4).toUpperCase()}${name.slice(4)}=x`,
+			];
+			for (const entry of spellings) {
+				const error = refusal(`--lang=en-US,${entry}`);
+				for (const part of ['TTK_BROWSER_ARGS', name, phrase]) assertStringIncludes(error.message, part, entry);
+			}
 		}
 	}
+	// A refusal names the switch and never echoes its value.
+	const profile = refusal('--user-data-dir=C:\\Users\\operator\\secret-profile');
+	assert(!profile.message.includes('secret-profile'), profile.message);
+	assert(!refusal('--gpu-launcher=/usr/bin/env TOKEN=abc123').message.includes('abc123'));
 });
 
-Deno.test('AC22: every launcher-owned switch is refused at parse time, naming it', () => {
-	for (const name of LAUNCHER_OWNED) {
-		for (const entry of spellings(name)) {
-			const error = refusal(entry);
-			assertStringIncludes(error.message, 'TTK_BROWSER_ARGS', entry);
-			assertStringIncludes(error.message, name, `${entry}: the refusal must name the switch`);
-			assertStringIncludes(error.message, 'launcher', entry);
-		}
-	}
-});
-
-Deno.test('AC22: every switch that runs another program is refused, by name and by suffix', () => {
-	for (const name of COMMAND) {
-		for (const entry of spellings(name)) {
-			const error = refusal(entry);
-			assertStringIncludes(error.message, name, entry);
-			assertStringIncludes(error.message, 'execute another program', entry);
-		}
-	}
-});
-
-Deno.test('AC22: an entry that is not a --switch is refused (F7), whatever it looks like', () => {
+Deno.test('TTK_BROWSER_ARGS: non-switches, sandbox or isolation features and unsafe V8 flags are refused; the rest pass in order', () => {
 	for (const entry of ['-no-sandbox', '/no-sandbox', 'no-sandbox', 'about:blank', '--', '--=x', '--\u00a0no-sandbox']) {
-		const error = refusal(entry);
-		assertStringIncludes(error.message, 'TTK_BROWSER_ARGS', entry);
-		assertStringIncludes(error.message, 'not a Chromium switch', entry);
+		assertStringIncludes(refusal(entry).message, 'not a Chromium switch', entry);
 	}
-	// A comma inside a value splits it, and the tail is not a switch — said so, rather than failing at launch.
-	const split = refusal('--disable-features=Translate,MediaRouter');
-	assertStringIncludes(split.message, 'split on commas');
-});
-
-Deno.test('AC22: a feature list that disables a sandbox is refused like the switch would be', () => {
-	const error = refusal('--disable-features=NetworkServiceSandbox');
-	assertStringIncludes(error.message, 'NetworkServiceSandbox');
-	assertStringIncludes(error.message, 'TTK_CHROMIUM_NO_SANDBOX');
-});
-
-Deno.test('AC22: a refusal names the switch and never echoes its value', () => {
-	const error = refusal('--user-data-dir=C:\\Users\\operator\\secret-profile');
-	assertStringIncludes(error.message, '--user-data-dir');
-	assert(!error.message.includes('secret-profile'), error.message);
-	const proxy = refusal('--gpu-launcher=/usr/bin/env TOKEN=abc123');
-	assert(!proxy.message.includes('abc123'), proxy.message);
-});
-
-Deno.test('AC22: ordinary switches still pass through, unchanged and in order', () => {
+	// A comma inside a value splits it; said so, rather than failing at launch.
+	assertStringIncludes(refusal('--disable-features=Translate,MediaRouter').message, 'split on commas');
+	const sandboxFeature = refusal('--disable-features=NetworkServiceSandbox').message;
+	assertStringIncludes(sandboxFeature, 'NetworkServiceSandbox');
+	assertStringIncludes(sandboxFeature, 'TTK_CHROMIUM_NO_SANDBOX');
+	for (
+		const feature of ['site-per-process', 'SitePerProcess', 'IsolateOrigins', 'isolate-origins', 'StrictSiteIsolation']
+	) {
+		const error = refusal(`--disable-features=${feature}`);
+		assertStringIncludes(error.message, feature);
+		assertStringIncludes(error.message, 'site isolation');
+	}
+	for (const value of ['--no-v8-sandbox', '--allow-natives-syntax', '--expose-gc --Allow_Natives_Syntax']) {
+		const error = refusal(`--js-flags=${value}`);
+		assertStringIncludes(error.message, '--js-flags');
+		assert(!error.message.includes('expose-gc'), error.message);
+	}
 	const args = [
 		'--lang=fr-FR',
 		'--disable-gpu',
 		'--force-color-profile=srgb',
 		'--disable-features=Translate',
 		'--proxy-server=http://127.0.0.1:3128',
+		'--js-flags=--expose-gc',
 	];
 	assertEquals(loadConfig({ TTK_BROWSER_ARGS: args.join(',') }).browser.args, args);
 	assertEquals(loadConfig({ TTK_BROWSER_ARGS: ` ${args[0]} , ${args[1]} ` }).browser.args, args.slice(0, 2));
 	assertEquals(loadConfig({}).browser.args, []);
 });
 
-Deno.test('D-094: TTK_CHROMIUM_NO_SANDBOX defaults to a sandboxed Chromium and parses as a strict boolean', () => {
-	assertEquals(loadConfig({}).browser.chromiumSandbox, true);
-	assertEquals(loadConfig({ TTK_CHROMIUM_NO_SANDBOX: '' }).browser.chromiumSandbox, true);
-	assertEquals(loadConfig({ TTK_CHROMIUM_NO_SANDBOX: 'false' }).browser.chromiumSandbox, true);
-	assertEquals(loadConfig({ TTK_CHROMIUM_NO_SANDBOX: 'true' }).browser.chromiumSandbox, false);
-	assertEquals(loadConfig({ TTK_CHROMIUM_NO_SANDBOX: '1' }).browser.chromiumSandbox, false);
+Deno.test('TTK_CHROMIUM_NO_SANDBOX defaults to a sandboxed Chromium and parses as a strict boolean', () => {
+	for (
+		const [value, sandboxed] of [[undefined, true], ['', true], ['false', true], ['true', false], ['1', false]] as const
+	) {
+		const env = value === undefined ? {} : { TTK_CHROMIUM_NO_SANDBOX: value };
+		assertEquals(loadConfig(env).browser.chromiumSandbox, sandboxed, String(value));
+	}
 	assertThrows(() => loadConfig({ TTK_CHROMIUM_NO_SANDBOX: 'sometimes' }), ConfigError, 'TTK_CHROMIUM_NO_SANDBOX');
-	// Setting it is how --no-sandbox is reached; spelling the switch is still refused alongside it.
+	// Setting it is how --no-sandbox is reached; spelling the switch is refused alongside it.
 	assertThrows(
 		() => loadConfig({ TTK_CHROMIUM_NO_SANDBOX: 'true', TTK_BROWSER_ARGS: '--no-sandbox' }),
 		ConfigError,
 		'--no-sandbox',
 	);
-	assert((ENV_NAMES as readonly string[]).includes('TTK_CHROMIUM_NO_SANDBOX'), 'read only if it is in ENV_NAMES');
-	assert((ENV_NAMES as readonly string[]).includes('TTK_BROWSER_ARGS'));
 });
 
-// --- containment-otel-links S0 (design §2.0 item 1, §2.1) -----------------------------------------------------------
-
-Deno.test('S0: TTK_OTEL_ENDPOINTS and TTK_ALLOWED_DOMAINS_SCOPE are read from the process (ENV_NAMES)', () => {
-	for (const name of ['TTK_OTEL_ENDPOINTS', 'TTK_ALLOWED_DOMAINS_SCOPE', 'TTK_ALLOWED_DOMAINS']) {
-		assert((ENV_NAMES as readonly string[]).includes(name), `${name} is read only if it is in ENV_NAMES`);
-	}
-});
-
-Deno.test('AC9: TTK_ALLOWED_DOMAINS_SCOPE defaults to documents, is case-insensitive, and refuses the rest', () => {
+Deno.test('TTK_ALLOWED_DOMAINS_SCOPE defaults to documents, is case-insensitive, and all needs a list', () => {
 	const domains = { TTK_ALLOWED_DOMAINS: 'example.com' };
-	assertEquals(loadConfig({}).allowedDomainsScope, 'documents');
-	assertEquals(loadConfig({ TTK_ALLOWED_DOMAINS_SCOPE: '' }).allowedDomainsScope, 'documents');
-	assertEquals(loadConfig({ ...domains }).allowedDomainsScope, 'documents');
-	assertEquals(loadConfig({ ...domains, TTK_ALLOWED_DOMAINS_SCOPE: 'documents' }).allowedDomainsScope, 'documents');
-	// `documents` with no allowlist is the default deployment, and stays accepted.
-	assertEquals(loadConfig({ TTK_ALLOWED_DOMAINS_SCOPE: 'Documents' }).allowedDomainsScope, 'documents');
+	for (const env of [{}, { TTK_ALLOWED_DOMAINS_SCOPE: '' }, domains, { TTK_ALLOWED_DOMAINS_SCOPE: 'Documents' }]) {
+		assertEquals(loadConfig(env).allowedDomainsScope, 'documents');
+	}
 	for (const spelling of ['all', 'ALL', ' All ', '\tall']) {
 		assertEquals(loadConfig({ ...domains, TTK_ALLOWED_DOMAINS_SCOPE: spelling }).allowedDomainsScope, 'all', spelling);
 	}
 	for (const other of ['any', 'none', 'subresources', 'documents,all', 'true']) {
-		const error = assertThrows(
-			() => loadConfig({ ...domains, TTK_ALLOWED_DOMAINS_SCOPE: other }),
-			ConfigError,
-		) as ConfigError;
-		assertStringIncludes(error.message, 'TTK_ALLOWED_DOMAINS_SCOPE', other);
-		assertStringIncludes(error.message, 'documents|all', other);
+		assertThrows(() => loadConfig({ ...domains, TTK_ALLOWED_DOMAINS_SCOPE: other }), ConfigError, 'documents|all');
 	}
-});
-
-Deno.test('AC9: TTK_ALLOWED_DOMAINS_SCOPE=all with an empty TTK_ALLOWED_DOMAINS is refused', () => {
 	for (const empty of [{}, { TTK_ALLOWED_DOMAINS: '' }, { TTK_ALLOWED_DOMAINS: ' , ,' }]) {
-		const error = assertThrows(
-			() => loadConfig({ ...empty, TTK_ALLOWED_DOMAINS_SCOPE: 'all' }),
-			ConfigError,
-		) as ConfigError;
+		const error = assertThrows(() => loadConfig({ ...empty, TTK_ALLOWED_DOMAINS_SCOPE: 'all' }), ConfigError);
 		assertEquals(error.message, 'TTK_ALLOWED_DOMAINS_SCOPE: all needs a non-empty TTK_ALLOWED_DOMAINS');
 	}
 });
 
-Deno.test('S0: TTK_OTEL_ENDPOINTS is carried as a trimmed list for the diagnostics, empty by default', () => {
-	assertEquals(loadConfig({}).otelEndpoints, []);
-	assertEquals(loadConfig({ TTK_OTEL_ENDPOINTS: '  ' }).otelEndpoints, []);
-	assertEquals(
-		loadConfig({ TTK_OTEL_ENDPOINTS: ' http://collector:4318 ,, https://otel.example.test ' }).otelEndpoints,
-		['http://collector:4318', 'https://otel.example.test'],
-	);
-});
-
-Deno.test('AC18 (G5): TTK_SIGNED_LINK_TTL_S accepts 10–3600, defaults to 3600, and refuses 3601', () => {
+Deno.test('TTK_SIGNED_LINK_TTL_S accepts 10–3600, defaults to 3600, and refuses 3601', () => {
+	// A generated link key is sealed in the vault, so the data directory needs the vault's key.
 	const on = (ttl?: string) =>
 		loadConfig({
 			TTK_SIGNED_LINKS: 'true',
 			TTK_DATA_DIR: '/data',
 			...(ttl === undefined ? {} : { TTK_SIGNED_LINK_TTL_S: ttl }),
-			// D-154: a generated link key is sealed in the vault, so the data directory needs the vault's key.
 		}, { secrets: { TTK_DB_KEY: generateDbKey() } }).signedLinks?.ttlS;
-	assertEquals(on(), 3600);
-	assertEquals(on('10'), 10);
-	assertEquals(on('3600'), 3600);
+	assertEquals([on(), on('10'), on('3600')], [3600, 10, 3600]);
 	for (const ttl of ['9', '3601', '86400']) {
 		assertThrows(() => on(ttl), ConfigError, 'TTK_SIGNED_LINK_TTL_S: expected an integer in [10, 3600]');
 	}

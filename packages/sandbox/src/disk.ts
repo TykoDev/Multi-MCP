@@ -1,28 +1,11 @@
 /**
- * SB-1: a cage's disk use, watched while it runs. Docker volumes have no quotas, so a run's budget
- * is enforced by watching; measuring before and after a command alone let one command write until
- * the volume was nearly full.
+ * A cage's disk use, watched while it runs (volumes have no quotas). Every check reads free space (one statfs):
+ * below the floor the cage stops, whoever fills the disk; once the volume lost more than the cage's allowance since
+ * the last measurement, its files are measured again (beside the checks) and it stops past its limit. A cage running
+ * alone owns every byte lost, less a share for other writers: past its allowance by more it stops at once, and also
+ * when du explains too little of the loss (deleted files held open). Two cages at once are each held to du.
  *
- * Every check reads the volume's free space (one statfs), and:
- *
- * - below the free-space floor the cage is stopped, whoever is filling the disk;
- * - once the volume has lost more than the cage's allowance since its files were last measured,
- *   they are measured again (du, which the sandbox runs with the right to read directories a
- *   command locked), and the cage is stopped past its limit. The measurement runs beside the
- *   checks, so the floor is still read every time while it does;
- * - a cage that has run alone owns every byte the volume lost meanwhile, less a share for other
- *   writers (the gateway's database may live on the same disk). Past its allowance by more than
- *   that it is stopped at once, without waiting for du, and also when du explains too little of
- *   the loss: the rest is in files it deleted but holds open, which no measurement by name sees.
- *
- * Two cages at once share the volume, and neither can be charged with the other's writes, so each
- * is then held to what du says, with the floor behind it (SB-2 records that one principal may hold
- * both slots). What a command writes between two checks, and during a measurement, is what it can
- * overshoot by; the run cannot grow at all once over its budget (see Sandbox.exec).
- *
- * `treeUsage` at the end is the Docker backend's measurer (review R2-2): the service's own walk of
- * its view of the volume, run while the workspace's container is paused, so no process of the
- * workspace can change the tree under it.
+ * `treeUsage` is the Docker backend's measurer: the service's own walk, with the container paused.
  */
 
 export interface DiskWatchDeps {
@@ -144,11 +127,7 @@ export interface TreeUsageOptions {
 	/** The walk fails once this many milliseconds have passed, and so fails closed. */
 	timeoutMs: number;
 	signal?: AbortSignal;
-	/**
-	 * Gives a directory without owner read and search those back (`chmod u+rx`) before reading it, as the bwrap
-	 * measurer's CAP_DAC_READ_SEARCH reads one anyway. Sound only while nothing else can change the tree: the Docker
-	 * backend measures with the workspace's container paused.
-	 */
+	/** `chmod u+rx` a locked directory before reading it; sound only while nothing can change the tree (paused). */
 	repair?: boolean;
 }
 
@@ -158,14 +137,9 @@ const WALK_BATCH = 64;
 const LINKED_FILES = 1_000_000;
 
 /**
- * SB-1 (review R2-2): the bytes the trees at `roots` take on disk, as `du -s -c` counts them — every entry's allocated
- * blocks, a hard-linked file once, a link never followed (counted as the link itself). Depth-first, holding only the
- * directories still to read, so memory follows the tree's directories rather than its files.
- *
- * Fails closed: a root or entry that does not exist (any more) counts nothing, and anything else that cannot be read —
- * a directory that stays unreadable, an I/O error, the deadline, the signal — fails the whole measurement, which every
- * caller then treats as over budget. A total is never what was left after skipping what could not be read, which is
- * what `du` gave when its exit status was ignored.
+ * The bytes the trees at `roots` take, as `du -s -c` counts them: allocated blocks, hard links once, links never
+ * followed. Fails closed: a missing entry counts nothing, anything else unreadable (or the deadline, or the signal)
+ * fails the whole measurement, which callers treat as over budget — never a total that skipped what it could not read.
  */
 export async function treeUsage(roots: readonly string[], options: TreeUsageOptions): Promise<number> {
 	const deadline = Date.now() + options.timeoutMs;

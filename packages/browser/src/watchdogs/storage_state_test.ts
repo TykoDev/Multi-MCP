@@ -1,7 +1,6 @@
 /**
- * `StorageStateWatchdog` contract tests (ARCHITECTURE.md §6.9; COMPLETIONS-CRITERIA.md §3.2 watchdog
- * row 9: "load before first nav, 60 s diff-save loop, atomic `.tmp`/`.bak` write, no cookie
- * stringification"; DATA-MODEL.md §5.1.5, §5.2, §9 R9.2).
+ * `StorageStateWatchdog` contract tests: load before the first navigation, the 60 s diff-save loop,
+ * the atomic `.tmp`/`.bak` write, and no cookie stringification.
  *
  * Real throughout: a `Deno.serve` CDP endpoint answering `Storage.getCookies` / `Storage.setCookies`
  * / `DOMStorage.*`, a real `BrowserSession`, a real `EventBus`, and real files under
@@ -149,7 +148,7 @@ async function harness(options: {
 // constants + conditional attachment
 // ---------------------------------------------------------------------------
 
-Deno.test('storage-state: the ARCHITECTURE §6.9 constants are encoded verbatim', () => {
+Deno.test('storage-state: the timing and file constants are encoded verbatim', () => {
 	assertEquals(STORAGE_MONITOR_INTERVAL_MS, 60_000);
 	assertEquals(STORAGE_TMP_SUFFIX, '.tmp');
 	assertEquals(STORAGE_BACKUP_SUFFIX, '.bak');
@@ -384,7 +383,7 @@ Deno.test('storage-state: BrowserStopEvent takes a final save before the socket 
 });
 
 // ---------------------------------------------------------------------------
-// the save budget — ERRATUM(CANCEL-2)
+// the save budget
 // ---------------------------------------------------------------------------
 
 /** The context the bus hands a stop handler, with the signal the test wants. */
@@ -398,7 +397,7 @@ async function entriesOf(dir: string): Promise<string[]> {
 	return names.sort();
 }
 
-Deno.test('ERRATUM(CANCEL-2): an abandoned stop never starts the write, so the good file survives', async () => {
+Deno.test('storage-state: an abandoned stop never starts the write, so the good file survives', async () => {
 	const dir = await scratchDir('bua-ss-cancel-stop-');
 	const path = join(dir, 'state.json');
 	try {
@@ -407,7 +406,7 @@ Deno.test('ERRATUM(CANCEL-2): an abandoned stop never starts the write, so the g
 		const good = await Deno.readTextFile(path);
 		const before = await entriesOf(dir);
 
-		// The dangerous case the audit names: a save assembled from a half-dead browser landing on top
+		// The dangerous case: a save assembled from a half-dead browser landing on top
 		// of a good file, while the bus has already moved on to killing Chrome and closing the socket.
 		h.setJar([cdpCookie({ value: 'from-a-dying-browser' })]);
 		await h.watchdog.onBrowserStopEvent(new BrowserStopEvent(), stopContext(AbortSignal.abort()));
@@ -422,7 +421,7 @@ Deno.test('ERRATUM(CANCEL-2): an abandoned stop never starts the write, so the g
 	}
 });
 
-Deno.test('ERRATUM(CANCEL-2): a skipped save leaves the diff dirty, so the next pass still writes', async () => {
+Deno.test('storage-state: a skipped save leaves the diff dirty, so the next pass still writes', async () => {
 	const dir = await scratchDir('bua-ss-cancel-diff-');
 	const path = join(dir, 'state.json');
 	try {
@@ -441,7 +440,7 @@ Deno.test('ERRATUM(CANCEL-2): a skipped save leaves the diff dirty, so the next 
 	}
 });
 
-Deno.test('ERRATUM(CANCEL-2): detach cancels a monitor tick caught between its read and its write', async () => {
+Deno.test('storage-state: detach cancels a monitor tick caught between its read and its write', async () => {
 	const dir = await scratchDir('bua-ss-cancel-tick-');
 	const path = join(dir, 'state.json');
 	try {
@@ -460,7 +459,7 @@ Deno.test('ERRATUM(CANCEL-2): detach cancels a monitor tick caught between its r
 });
 
 // ---------------------------------------------------------------------------
-// the cookie-leak prevention rule (§6.9: "in-memory dicts are never stringified")
+// the cookie-leak prevention rule: in-memory dicts are never stringified
 // ---------------------------------------------------------------------------
 
 Deno.test('storage-state: an in-memory storageState is never written to disk and never logged', async () => {
@@ -503,7 +502,7 @@ Deno.test('storage-state: an in-memory storageState is never written to disk and
 // pure helpers
 // ---------------------------------------------------------------------------
 
-Deno.test('storage-state: CDP cookies round-trip through the Playwright format (§9 R9.2)', () => {
+Deno.test('storage-state: CDP cookies round-trip through the Playwright format', () => {
 	const persistent = toStorageCookie({
 		name: 'a',
 		value: 'b',
@@ -519,7 +518,7 @@ Deno.test('storage-state: CDP cookies round-trip through the Playwright format (
 	assertEquals(persistent.sameSite, 'Strict');
 	assertEquals(toCookieParam(persistent).expires, 1893456000);
 
-	// §5.2: `-1` marks a session cookie, and a session cookie is written back without an expiry.
+	// `-1` marks a session cookie, and a session cookie is written back without an expiry.
 	const sessionCookie = toStorageCookie({
 		name: 'a',
 		value: 'b',
@@ -585,7 +584,7 @@ Deno.test('storage-state: parsing is defensive — junk degrades, it does not th
 	assertEquals(partial.state.origins[0]?.sessionStorage, []);
 });
 
-Deno.test('R1-1, ERRATUM(E-109): an unparseable document is reported without quoting any of it', () => {
+Deno.test('storage-state: an unparseable document is reported without quoting any of it', () => {
 	// The reason is logged, and a cookie jar is a credential store. V8's own message quotes the document's text — all of
 	// it when short, its start otherwise — so a truncated or corrupted file would put a cookie value into the log.
 	for (const text of ['Q7SENTINEL-session-cookie', '{"cookies": [{"name": "s", "value": "Q7SENTINEL"},, ]}']) {

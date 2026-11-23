@@ -1,7 +1,7 @@
 /**
- * The MCP Apps terminal and surface streams (`embed_streams.ts`): the mint's checks, and the sockets end to end over
- * a real loopback server — ticket redemption with its origin binding, the terminal's replay, input and end, the
- * surface's live revisions and removal, the connection ceiling, the re-check and shutdown.
+ * The MCP Apps terminal and surface streams (`embed_streams.ts`): the mint's checks, and the sockets end to end over a
+ * real loopback server — ticket redemption with its origin binding, the terminal's replay, input and end, the surface's
+ * live revisions and removal, the connection ceiling, the re-check and shutdown.
  */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { Hono } from 'hono';
@@ -80,7 +80,7 @@ interface Fixture {
 	readonly shell: FakeShell;
 	readonly base: string;
 	readonly held: Map<string, number>;
-	/** Mutable: what the GW-1 re-check answers. */
+	/** Mutable: what the credential re-check answers. */
 	readonly scopesNow: { value: ReadonlySet<string> | null };
 	[Symbol.asyncDispose](): Promise<void>;
 }

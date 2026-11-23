@@ -1,9 +1,8 @@
 /**
- * Derived members of `EnhancedDomTreeNode` — DATA-MODEL.md §6.1 "Derived members (contract, not
- * storage)".
+ * Derived members of `EnhancedDomTreeNode`: computed on demand, never stored on the node.
  *
  * They are functions rather than fields so the IR stays JSON-shaped (the node graph is cyclic via
- * `parentNode`; adding methods would make the cycle-stripping rule of §6.1 harder, not easier).
+ * `parentNode`; adding methods would make stripping that cycle for serialization harder, not easier).
  *
  * The three replay hashes of the same contract (`elementHash`, `stableHash`, `parentBranchHash`) live
  * in `hashes.ts` and are owned by the serialization builder; {@linkcode DomNodeDerivedCore} is exactly
@@ -21,15 +20,15 @@ const DOCUMENT_NODE = 9;
 const NON_TEXT_TAGS: ReadonlySet<string> = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
 
 /**
- * Attribute order for {@linkcode getMeaningfulTextForLlm} (DATA-MODEL §6.1: "first of
- * `value`/`aria-label`/`title`/`placeholder`/`alt`, else children text").
+ * Attribute order for {@linkcode getMeaningfulTextForLlm}: the first non-empty of
+ * `value`/`aria-label`/`title`/`placeholder`/`alt`, else the children's text.
  */
 export const MEANINGFUL_TEXT_ATTRIBUTES: readonly string[] = ['value', 'aria-label', 'title', 'placeholder', 'alt'];
 
 /**
  * A scroll extent must exceed its client extent by more than this (CSS px) to count as scrollable.
  *
- * ERRATUM(M1-dom-extract-7): the spec gives no epsilon. 1 px absorbs the sub-pixel rounding Chrome
+ * 1 px absorbs the sub-pixel rounding Chrome
  * applies to `scrollWidth`/`scrollHeight`, which otherwise reports a 1 px "scrollable" overflow on
  * ordinary non-scrolling boxes.
  */
@@ -38,7 +37,7 @@ export const SCROLLABLE_EPSILON_PX = 1;
 /** This file's half of the `DomNodeDerived` contract — everything except the three replay hashes. */
 export type DomNodeDerivedCore = Omit<DomNodeDerived, 'elementHash' | 'stableHash' | 'parentBranchHash'>;
 
-/** Lowercase `nodeName` (DATA-MODEL §6.1). */
+/** Lowercase `nodeName`. */
 export function tagName(node: EnhancedDomTreeNode): string {
 	return node.nodeName.toLowerCase();
 }
@@ -49,21 +48,21 @@ export function isFrameTag(node: EnhancedDomTreeNode): boolean {
 }
 
 /**
- * Same-tag XPath; passes shadow roots; stops at iframe boundaries (DATA-MODEL §6.1).
+ * Same-tag XPath; passes shadow roots; stops at iframe boundaries.
  *
  * The walk terminates at the first `DOCUMENT_NODE`, which is precisely the iframe boundary: a frame's
  * document is the root of its own coordinate *and* id space, and its `parentNode` (the host `<iframe>`
  * in the enclosing document) belongs to a different document. Shadow roots are `DOCUMENT_FRAGMENT`s
  * and contribute no step, so the path passes straight through them — deliberately not a resolvable
- * document XPath, but the one MatchLevel.XPATH (§6.6) is defined against.
+ * document XPath, but the one `MatchLevel.XPATH` is defined against.
  *
  * Non-element nodes contribute no step of their own, so a text node's xpath is its parent element's.
  *
- * ERRATUM(M1-parity-1): the recorded reference corpus spells this `html/body/main/button` — **no**
- * leading slash, and a `[k]` position **only** where the element actually has same-tag siblings
+ * The path reads `html/body/main/button`, as the recorded reference corpus spells it: **no** leading
+ * slash, and a `[k]` position **only** where the element actually has same-tag siblings
  * (`html/body/main/table[1]/tfoot/tr`: `tfoot` holds one `tr`, `tbody` holds three and they are
- * numbered). §6.1 fixes neither point. Both are load-bearing beyond cosmetics because this string is
- * the §6.6 `MatchLevel.XPATH` replay key. Adjudicated in DECISION-REGISTER §9.6 (E-23) item 2.
+ * numbered). Both points are load-bearing beyond cosmetics because this string is the
+ * `MatchLevel.XPATH` replay key.
  */
 export function xpath(node: EnhancedDomTreeNode): string {
 	const steps: string[] = [];
@@ -115,8 +114,8 @@ export function overflowAllowsScrolling(node: EnhancedDomTreeNode): boolean {
 /**
  * Whether the node can actually be scrolled, as opposed to merely being marked scrollable.
  *
- * **This is the sole implementation of the §6.1 predicate.** `serialize_derived.ts` re-exports it;
- * it previously carried a second copy that disagreed on gate 1 — see ERRATUM(E-33) below.
+ * **This is the sole implementation of the predicate.** `serialize_derived.ts` re-exports it rather
+ * than keeping a copy, so the serializer and the extractor cannot disagree.
  *
  * Three gates, in order:
  *
@@ -124,23 +123,19 @@ export function overflowAllowsScrolling(node: EnhancedDomTreeNode): boolean {
  *    scrollable area", and nothing else has that information.
  * 2. The computed `overflow` must admit scrolling on at least one axis. Corroboration, not a
  *    substitute: the reference wraps `#scroller`/`#auto-scroller` in `|scroll element|` and emits
- *    `#hidden-overflow`'s buttons bare (DECISION-REGISTER §9.6 (E-23) item 3).
+ *    `#hidden-overflow`'s buttons bare.
  * 3. The geometry decides: `scrollRects` carries `[scrollLeft, scrollTop, scrollWidth, scrollHeight]`
  *    and `clientRects` carries `[clientLeft, clientTop, clientWidth, clientHeight]`, so a real overflow
  *    is `scrollExtent - clientExtent > `{@linkcode SCROLLABLE_EPSILON_PX}. A flagged box with no
  *    layout row at all passes — that is the document node, which Chrome flags and DOMSnapshot skips.
  *
- * ERRATUM(E-33): gate 1 read `isScrollable === false` here and `isScrollable !== true` in
- * `serialize_derived.ts`, so the two copies returned **opposite answers** whenever the flag was
- * `null`. `null` is not a corner case — it is what CDP emits for every unflagged box, because
- * `DOM.Node.isScrollable` is an *optional* field (`packages/cdp/src/domains/dom.ts:56`) that Blink
- * sets only when true. Measured over the 37 recorded captures: 24 occurrences, **all `true`, none
- * `false`**. So `=== false` was unreachable and this copy was in effect ignoring gate 1 entirely,
- * deciding scrollability by recomputing Blink's answer from two proxies. `!== true` — the serializer's
- * reading, and the one production already ran on — is correct. The discriminating input is a real
- * corpus node: `select_native`'s `<select multiple>` has the UA's `overflow-y: scroll` and no flag,
- * and its options fit its box by exactly 0 px; one more `<option>` and the old gate would have
- * emitted a `|scroll element|` marker the reference does not.
+ * Gate 1 reads `isScrollable !== true`, not `=== false`: `DOM.Node.isScrollable` is an *optional*
+ * field (`packages/cdp/src/domains/dom.ts`) that Blink sets only when true, so `null` is what CDP emits
+ * for every unflagged box. Across the 37 recorded captures the flag occurs 24 times, **all `true`, none
+ * `false`**, so `=== false` would never fire and scrollability would be decided from the two proxies
+ * alone. The discriminating input is a real corpus node: `select_native`'s `<select multiple>` has the
+ * UA's `overflow-y: scroll` and no flag, and its options fit its box by exactly 0 px; one more
+ * `<option>` and a proxy-only reading would emit a `|scroll element|` marker the reference does not.
  */
 export function isActuallyScrollable(node: EnhancedDomTreeNode): boolean {
 	if (node.isScrollable !== true) return false;
@@ -155,7 +150,7 @@ export function isActuallyScrollable(node: EnhancedDomTreeNode): boolean {
 }
 
 /**
- * Scroll position expressed the way §6.4's suffixes render it: pages above/below plus an optional
+ * Scroll position expressed the way the serializer's scroll suffixes render it: pages above/below plus an optional
  * horizontal percentage. `null` when the node has no usable scroll geometry.
  */
 export function scrollInfo(node: EnhancedDomTreeNode): ScrollInfo | null {
@@ -177,7 +172,7 @@ export function scrollInfo(node: EnhancedDomTreeNode): ScrollInfo | null {
 	return { pagesAbove, pagesBelow, horizontalPercent };
 }
 
-/** Whether §6.4's `(X.X pages above, Y.Y pages below)` suffix has anything to say about this node. */
+/** Whether the serializer's `(X.X pages above, Y.Y pages below)` suffix has anything to say about this node. */
 export function shouldShowScrollInfo(node: EnhancedDomTreeNode): boolean {
 	if (!isActuallyScrollable(node)) return false;
 	const info = scrollInfo(node);
@@ -192,8 +187,7 @@ export function shouldShowScrollInfo(node: EnhancedDomTreeNode): boolean {
  * (their content is rendered as part of this element) but never into `contentDocument` — an iframe's
  * text belongs to the iframe, not to its host.
  *
- * ERRATUM(M1-dom-extract-8): §6.1 does not say whether invisible text counts. Subtrees whose node has
- * `isVisible === false` are skipped, because everything downstream of this function is LLM-visible
+ * Subtrees whose node has `isVisible === false` are skipped, because everything downstream of this function is LLM-visible
  * text and `display:none` copy is exactly the kind of content that must not reach the model.
  * `isVisible === null` (unknown, e.g. fragments) still descends.
  */
@@ -204,12 +198,11 @@ export function getAllChildrenText(node: EnhancedDomTreeNode, maxDepth: number, 
 }
 
 /**
- * The text of an element the *viewport* gate excluded, for §6.4's "scroll to reveal" hints.
+ * The text of an element the *viewport* gate excluded, for the serializer's "scroll to reveal" hints.
  *
- * ERRATUM(M1-parity-19): `getMeaningfulTextForLlm` skips `isVisible === false` subtrees, which is right
- * for prompt text and wrong here — a hidden-element hint fires precisely because the element is
- * off-band, so reusing that helper produced hints with empty labels ("`<button> "" ~2.3 pages down`"),
- * naming nothing. Positional invisibility must not blank the label; `display:none` still does, because
+ * `getMeaningfulTextForLlm` skips `isVisible === false` subtrees, which is right for prompt text and
+ * wrong here — a hidden-element hint fires precisely because the element is off-band, so that helper
+ * would give hints empty labels ("`<button> "" ~2.3 pages down`"), naming nothing. Positional invisibility must not blank the label; `display:none` still does, because
  * `isHiddenHintCandidate` applies the CSS gate before this is ever called.
  */
 export function getOffscreenTextForLlm(node: EnhancedDomTreeNode): string {
@@ -242,9 +235,9 @@ function collectText(
 
 /**
  * The text an LLM should see for this element: the first non-empty of
- * `value` / `aria-label` / `title` / `placeholder` / `alt`, else its children's text (§6.1).
+ * `value` / `aria-label` / `title` / `placeholder` / `alt`, else its children's text.
  *
- * `value` is skipped for password inputs — §6.5's anti-exfiltration rule forbids ever emitting it, and
+ * `value` is skipped for password inputs — the anti-exfiltration rule forbids ever emitting it, and
  * a helper that leaks it into an iframe hint or a log line would defeat the rule at the emission site.
  */
 export function getMeaningfulTextForLlm(node: EnhancedDomTreeNode): string {
@@ -260,13 +253,12 @@ export function getMeaningfulTextForLlm(node: EnhancedDomTreeNode): string {
 /**
  * Attribute-name tokens that mark a field as a credential.
  *
- * ERRATUM(E-37): deliberately bounded and anchored on token boundaries rather than a bare substring.
+ * Deliberately bounded and anchored on token boundaries rather than a bare substring.
  * A bare `/pass/` would scrub `passenger_name`, `boarding_pass` and `compass`; the boundary
  * characters are the four separators HTML form names actually use (`-`, `_`, `.`, `[`).
  *
- * ERRATUM(E-38, security review): `pass`, `pw`, `pin`, `secret` and the API/access-token spellings
- * were missing. `name="pass"` is the single most common credential field name in PHP and Rails forms
- * in existence, so its absence made arm 3 a great deal narrower than E-37 claimed.
+ * `pass`, `pw`, `pin`, `secret` and the API/access-token spellings are included: `name="pass"` is the
+ * single most common credential field name in PHP and Rails forms in existence.
  */
 const CREDENTIAL_NAME_PATTERN =
 	/(?:^|[-_.[])(?:pass|passwd|password|passphrase|passcode|pwd|pword|pw|secret|otp|totp|mfa[-_.]?code|2fa[-_.]?code|cvv|cvc|pin|apikey|api[-_.]?key|access[-_.]?token|auth[-_.]?token)(?:[-_.\]]|$)/i;
@@ -274,8 +266,7 @@ const CREDENTIAL_NAME_PATTERN =
 /**
  * Label text that says the field is a credential, in the words a human reader would see.
  *
- * ERRATUM(E-38, security review): English-only was the largest single gap in a product whose whole
- * job is visiting arbitrary sites — `Contraseña`, `Mot de passe`, `Passwort` and `パスワード` are the
+ * Not English-only, because the job is visiting arbitrary sites: `Contraseña`, `Mot de passe`, `Passwort` and `パスワード` are the
  * *visible* label on a login form that arms 1 and 2 may not reach. The CJK and Cyrillic spellings sit
  * outside the `\b` group because `\b` is defined over ASCII word characters and would never match
  * beside them.
@@ -304,10 +295,9 @@ const LABEL_ATTRIBUTES: readonly string[] = ['aria-label', 'placeholder', 'title
 /**
  * `autocomplete` tokens with which the page tells a password manager "fill a secret here".
  *
- * ERRATUM(E-38): `cc-number` and `cc-csc` are in. A card number is not a password, but it is exactly
- * the class of value DD-7 exists to keep out of a transcript and a third-party model's context, and
- * arm 3 already scrubs the `cvv`/`cvc` *name* spelling — leaving the `autocomplete` spelling out was
- * an inconsistency, not a decision.
+ * `cc-number` and `cc-csc` are in. A card number is not a password, but it is exactly the class of
+ * value that must stay out of a transcript and a third-party model's context, and arm 3 already
+ * scrubs the `cvv`/`cvc` *name* spelling.
  */
 const CREDENTIAL_AUTOCOMPLETE: ReadonlySet<string> = new Set([
 	'current-password',
@@ -321,7 +311,7 @@ const CREDENTIAL_AUTOCOMPLETE: ReadonlySet<string> = new Set([
 const REVEAL_MARKER_ATTRIBUTES: readonly string[] = ['class', 'data-testid', 'data-test', 'data-qa'];
 
 /**
- * Input types that structurally cannot hold a typed credential (E-38).
+ * Input types that structurally cannot hold a typed credential.
  *
  * A **denylist**, deliberately: anything not named here — including an unrecognised `type` keyword,
  * which HTML renders as a text box, and `hidden`, which a server can re-render a credential into —
@@ -345,23 +335,81 @@ const NON_CREDENTIAL_INPUT_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The fields a secret was typed into, by CDP session id, then `backendNodeId`. This lives here rather
+ * than in the embedding server because {@linkcode isPasswordField} is consulted inside this package — the attribute
+ * serializer emits a text field's live AX value as `value=`, `getMeaningfulTextForLlm` reads the
+ * `value` attribute (which React keeps in sync with the live value), and the `state_token` mint hashes
+ * the value — and a server-side mask on only its own surfaces would leave those three emitting it. A
+ * `<textarea>` or a text input none of the five arms recognises would otherwise be protected only by
+ * exact-match redaction of the secret, which `maxlength` truncation, page reformatting, CRLF
+ * normalisation, whitespace collapsing or the 100-character attribute cap all defeat.
+ *
+ * Keyed by `(sessionId, backendNodeId)` rather than by node object because every capture builds new
+ * node objects; the pair names the field across captures. A reused `backendNodeId` in a later document
+ * is then masked too — over-scrubbing, the predicate's stated bias. Bounded: past
+ * {@linkcode SECRET_FILLED_CAP} entries the oldest CDP session's set is dropped first, which by then
+ * names a target long gone.
+ */
+const SECRET_FILLED = new Map<string, Set<number>>();
+
+/** The most `(sessionId, backendNodeId)` pairs {@linkcode markSecretFilled} holds at once. */
+export const SECRET_FILLED_CAP = 4096;
+
+let secretFilledCount = 0;
+
+/**
+ * Records that a secret was typed into the node `backendNodeId` of CDP session `sessionId`, so that
+ * {@linkcode isPasswordField} treats it as a password field from now on. Call it
+ * before the keystrokes are dispatched: a capture racing the dispatch then already masks the field.
+ */
+export function markSecretFilled(sessionId: string, backendNodeId: number): void {
+	// A node with no session could never be matched again by `isSecretFilled`; recording it would only cost room.
+	if (typeof sessionId !== 'string') return;
+	let set = SECRET_FILLED.get(sessionId);
+	if (set === undefined) {
+		set = new Set();
+		SECRET_FILLED.set(sessionId, set);
+	}
+	if (set.has(backendNodeId)) return;
+	set.add(backendNodeId);
+	secretFilledCount += 1;
+	for (const [oldest, ids] of SECRET_FILLED) {
+		if (secretFilledCount <= SECRET_FILLED_CAP || oldest === sessionId) break;
+		SECRET_FILLED.delete(oldest);
+		secretFilledCount -= ids.size;
+	}
+}
+
+/** Whether {@linkcode markSecretFilled} recorded this node. Never throws (it guards emission paths). */
+export function isSecretFilled(node: EnhancedDomTreeNode): boolean {
+	const sessionId = node?.sessionId;
+	if (typeof sessionId !== 'string') return false;
+	return SECRET_FILLED.get(sessionId)?.has(node.backendNodeId) === true;
+}
+
+/**
  * Is this element a credential field?
  *
- * **The single definition of "is a password" in the tree** (E-29 recorded what happens when there are
- * two). It guards the §6.5 anti-exfiltration path — it gates `value` out of the attribute string, out
- * of {@linkcode getMeaningfulTextForLlm}, out of `browser_get_state`'s element labels (E-34) and out
- * of the `state_token` content half (E-36) — so it is deliberately biased towards over-scrubbing: a
+ * **The single definition of "is a password" in the tree**: two definitions drift apart. It guards the
+ * anti-exfiltration path — it gates `value` out of the attribute string, out of
+ * {@linkcode getMeaningfulTextForLlm}, out of `browser_get_state`'s element labels and out of the
+ * `state_token` content half — so it is deliberately biased towards over-scrubbing: a
  * false positive costs a model one field's value, a false negative puts a credential in a transcript
  * and in a third-party model's context.
  *
- * ERRATUM(E-37): five arms, not two. `type="password"` and the `autocomplete` arm (E-29) between them
- * miss the two shapes a security review found on real login pages — a field the page names or labels
+ * Five arms, not two. `type="password"` and the `autocomplete` arm between them miss the two shapes a security review found on real login pages — a field the page names or labels
  * as a password without declaring either attribute, and a field a reveal toggle has switched to
  * `type="text"` while the value is visible. `<textarea>` and `<select>` are excluded because neither
  * can be a password input; every other element type is excluded because `value` means something else
  * on it.
+ *
+ * **And a field the embedding server itself typed a secret into**
+ * ({@linkcode markSecretFilled}), whatever its shape — a `<textarea>` included. The five arms judge
+ * the page's word for what a field is; a server that has just spent a credential on a field knows
+ * better, and the field must then be scrubbed exactly as a password is.
  */
 export function isPasswordField(node: EnhancedDomTreeNode): boolean {
+	if (isSecretFilled(node)) return true;
 	if (node.nodeName !== 'INPUT') return false;
 	const attributes = node.attributes ?? {};
 	const type = (attributes['type'] ?? '').trim().toLowerCase();
@@ -373,16 +421,14 @@ export function isPasswordField(node: EnhancedDomTreeNode): boolean {
 	// `<input type="checkbox" name="save_password">` is a preference, and scrubbing it would cost a
 	// model a control it can act on and protect nothing.
 	//
-	// ERRATUM(E-38, security review of E-37): this was written as an ALLOWLIST of scrubbable types and
-	// that made the whole predicate evadable with one attribute. HTML's `input.type` IDL falls back to
-	// **text** for any unrecognised keyword, so `<input type="passcode" name="password"
-	// autocomplete="current-password">` renders as an ordinary text box, takes a credential, and took
-	// the early return before arms 2-5 ever ran — four disclosure paths from one bit a hostile page
-	// fully controls. It is a denylist now: unknown keywords, and `hidden` (which a server can
-	// re-render a credential into), fall through to the arms.
+	// A denylist, not an allowlist of scrubbable types: HTML's `input.type` IDL falls back to **text**
+	// for any unrecognised keyword, so `<input type="passcode" name="password"
+	// autocomplete="current-password">` renders as an ordinary text box and takes a credential. An
+	// allowlist would let that one attribute, which a hostile page fully controls, skip arms 2-5.
+	// Unknown keywords, and `hidden` (which a server can re-render a credential into), fall through.
 	if (NON_CREDENTIAL_INPUT_TYPES.has(type)) return false;
 
-	// Arm 2 (E-29) — what password managers fill.
+	// Arm 2 — what password managers fill.
 	const autocomplete = (attributes['autocomplete'] ?? '').trim().toLowerCase();
 	if (CREDENTIAL_AUTOCOMPLETE.has(autocomplete)) return true;
 
@@ -399,7 +445,7 @@ export function isPasswordField(node: EnhancedDomTreeNode): boolean {
 	}
 	if (CREDENTIAL_LABEL_PATTERN.test(node.axNode?.name ?? '')) return true;
 
-	// Arm 5 — the reveal toggle. See {@linkcode REVEAL_MARKER_PATTERN}. ERRATUM(E-38): the marks are
+	// Arm 5 — the reveal toggle. See {@linkcode REVEAL_MARKER_PATTERN}. The marks are
 	// read on the input AND on its two nearest ancestors, because the common Bootstrap/Tailwind reveal
 	// pattern puts `password-toggle` on the wrapping `<div>` while the input itself carries only
 	// `form-control` — read on the input alone this arm would almost never fire in practice.

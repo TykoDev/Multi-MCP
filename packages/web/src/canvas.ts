@@ -28,7 +28,7 @@ function isPrintable(event: KeyboardEvent): boolean {
 }
 
 /**
- * The off-screen element that receives keystrokes and IME composition (R13).
+ * The off-screen element that receives keystrokes and IME composition.
  *
  * A `<canvas>` cannot host a composition: the browser's input method needs a
  * real editable target to attach its candidate window to, and without one every
@@ -170,7 +170,7 @@ export function createCanvas(send: (message: ClientMsg) => void): CanvasSurface 
 		send({ type: 'input.key', kind: 'up', key: event.key, code: event.code, modifiers: modifiersOf(event) });
 	}));
 
-	// --- IME composition (R13) ---------------------------------------------
+	// --- IME composition ---------------------------------------------
 
 	offs.push(on(keyboard, 'compositionstart', () => {
 		if (!interactive) return;

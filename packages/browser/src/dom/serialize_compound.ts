@@ -1,10 +1,8 @@
 /**
- * Compound-component detection — the `compound_components=(…)` groups of DATA-MODEL §6.5.
+ * Compound-component detection — the `compound_components=(…)` attribute groups.
  *
- * ERRATUM(M1-dom-serialize-14, CLOSED): §6.5 shows the *rendering* of `compound_components` and §6.1
- * types `compoundChildren`, but no section says which elements are compound or where the groups' names
- * come from. That gap is now closed by the recorded reference corpus, which is the only place the rule
- * is written down. Read off the goldens:
+ * Which elements are compound, and the groups' names, come from the recorded reference corpus, the
+ * only place the rule is written down. Read off the goldens:
  *
  * | element | groups |
  * |---|---|
@@ -21,8 +19,8 @@
  * in any golden, which is what bounds the table to these five kinds.
  *
  * Two consequences beyond the attribute string, both corroborated by the goldens: a compound element is
- * always `isNew` (R6.2 says so; all eleven compound elements in the corpus are starred `*` and no other
- * element is), and the group list is exempt from the §6.5 dedupe and 100-char cap.
+ * always `isNew` (all eleven compound elements in the corpus are starred `*` and no other element is),
+ * and the group list is exempt from the attribute dedupe and 100-char cap.
  *
  * `min`/`max` are rendered as Python float literals (`0` → `0.0`) because the reference is CPython and
  * interpolates `float(...)`; `1.5` stays `1.5`.
@@ -100,7 +98,7 @@ function withBounds(group: CompoundGroup, node: EnhancedDomTreeNode): CompoundGr
 /**
  * The compound groups this element's user-agent widget is made of, or `[]` when it is not compound.
  *
- * `node.compoundChildren` wins when populated: §6.1 declares it "synthesized by serializer", so a
+ * `node.compoundChildren` wins when populated: it is synthesized by the serializer, so a
  * caller that has already synthesized a richer description keeps it.
  */
 export function compoundComponents(node: EnhancedDomTreeNode, tag: string): readonly CompoundGroup[] {

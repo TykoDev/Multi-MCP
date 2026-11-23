@@ -1,9 +1,10 @@
 import { assertEquals, assertRejects, assertThrows } from '@std/assert';
 import { ConfigError, loadConfig } from './config.ts';
+import { serviceUrl } from './expansion_config.ts';
 import { resolveSecrets, SecretError } from './secrets.ts';
 import { NOT_TASKABLE } from './taskable.ts';
 
-Deno.test('C4 / B1 / A11: agent task bounds and the push host list parse with their ranges and defaults', () => {
+Deno.test('agent task bounds and the push host list parse with their ranges and defaults', () => {
 	const defaults = loadConfig({}).expansion;
 	assertEquals(defaults.taskTimeoutMs, 600_000);
 	assertEquals(defaults.taskRetentionMs, 86_400_000);
@@ -41,14 +42,13 @@ Deno.test('C4 / B1 / A11: agent task bounds and the push host list parse with th
 Deno.test('expansion config: execution services are absent by default and require file-backed credentials', () => {
 	assertEquals(loadConfig({}).expansion, {
 		sandbox: null,
-		bridge: null,
 		peers: [],
 		a2uiActions: [],
 		taskTimeoutMs: 600_000,
 		taskRetentionMs: 86_400_000,
 		pushAllowedHosts: [],
 	});
-	// E-4: configured A2UI actions are validated at startup; built-in names and argument overrides are refused.
+	// Configured A2UI actions are validated at startup; built-in names and argument overrides are refused.
 	for (
 		const actions of [
 			[{ name: 'cancelTask', tool: 'sandbox_list' }],
@@ -61,7 +61,6 @@ Deno.test('expansion config: execution services are absent by default and requir
 		const env of [
 			{ TTK_SANDBOX_URL: 'http://sandbox:8080' },
 			{ TTK_SANDBOX_TOKEN_FILE: '/secret' },
-			{ TTK_AGENT_BRIDGE_URL: 'http://agent-runner:8789' },
 		]
 	) assertThrows(() => loadConfig(env), ConfigError);
 	assertThrows(() =>
@@ -70,7 +69,7 @@ Deno.test('expansion config: execution services are absent by default and requir
 		}), ConfigError);
 });
 
-Deno.test('X-1 (AC24): an A2UI action naming a NOT_TASKABLE tool refuses startup; taskable actions are unchanged', () => {
+Deno.test('an A2UI action naming a NOT_TASKABLE tool refuses startup; taskable actions are accepted', () => {
 	for (const tool of NOT_TASKABLE) {
 		const error = assertThrows(
 			() =>
@@ -84,7 +83,7 @@ Deno.test('X-1 (AC24): an A2UI action naming a NOT_TASKABLE tool refuses startup
 		);
 		assertEquals(error.message, `TTK_A2UI_ACTIONS: action "go" names ${tool}, which cannot run indirectly`, tool);
 	}
-	// A taskable tool is configured exactly as before.
+	// A taskable tool is configured as written.
 	assertEquals(
 		loadConfig({
 			TTK_A2UI_ACTIONS: JSON.stringify([{ name: 'list', tool: 'sandbox_list', context: ['workspace_id'] }]),
@@ -100,6 +99,9 @@ Deno.test('expansion config: service addresses cannot contain hidden credentials
 			'http://user:pass@sandbox:8080',
 			'http://sandbox:8080?x=1',
 			'http://sandbox:8080#x',
+			// An empty query or fragment reads as '' from the parser, but the raw text is refused all the same.
+			'http://sandbox:8080?',
+			'http://sandbox:8080/#',
 		]
 	) {
 		assertThrows(() =>
@@ -122,7 +124,7 @@ Deno.test('expansion config: peer token references resolve by argument and only 
 	};
 	const secrets = await resolveSecrets({
 		env,
-		// A path the test does not name is absent, as on a real disk: the implicit admin-record file (C6) is read too.
+		// A path the test does not name is absent, as on a real disk: the implicit admin-record file is read too.
 		readFile: (path: string): Promise<string> =>
 			values[path] === undefined ? Promise.reject(new Deno.errors.NotFound(path)) : Promise.resolve(values[path]),
 	});
@@ -149,4 +151,14 @@ Deno.test('expansion config: duplicate, unknown, malformed peers fail without ex
 			}), SecretError);
 		assertEquals(error.message.includes('sensitive-test-value'), false);
 	}
+});
+
+Deno.test('serviceUrl refuses any raw ? or #, even an empty query or fragment the parser reads as ""', () => {
+	for (
+		const raw of ['https://api.example/v1?', 'https://api.example/v1#', 'https://api.example/v1/?', 'http://h:1/?#']
+	) {
+		assertThrows(() => serviceUrl(raw), Error, 'query or fragment', raw);
+	}
+	assertEquals(serviceUrl('https://api.example/v1/'), 'https://api.example/v1');
+	assertEquals(serviceUrl('https://api.example/v1%3Fx'), 'https://api.example/v1%3Fx');
 });

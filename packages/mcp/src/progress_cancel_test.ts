@@ -1,24 +1,25 @@
-/**
- * A9 (AC16) and A10 (AC17): handler-reported progress through the one heartbeat, and cancellation that stops each
- * listed tool family early. Driven through `dispatchToolCall` with the request context the SDK hands a handler,
- * against the capture fixtures (no Chromium) and, for `browser_head`, a loopback listener.
- */
+/** Handler-reported progress through the one heartbeat, and cancellation that stops each listed tool family early. */
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { delay } from '@std/async/delay';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
-import type { ServerContext } from '@modelcontextprotocol/server';
-import { captureHarness } from '../fixtures/capture_session.ts';
+import {
+	CLIENT_CAPABILITIES_META_KEY,
+	createMcpHandler,
+	McpServer,
+	PROTOCOL_VERSION_META_KEY,
+	type ServerContext,
+} from '@modelcontextprotocol/server';
+import { blankSession, captureHarness } from '../fixtures/capture_session.ts';
 import { ToolError } from './errors.ts';
 import { CATALOG, type ToolDefinition } from './catalog.ts';
-import { type DispatchContext, dispatchToolCall, startHeartbeat } from './dispatch.ts';
+import { type DispatchContext, dispatchToolCall, installToolDispatch, startHeartbeat } from './dispatch.ts';
 import { extensionTools } from './extension_tools.ts';
 import type { LibraryStore } from './library.ts';
 import { libraryTools } from './library_tools.ts';
 import { DEFAULT_SESSION_ID, type LaunchedSession, SessionRegistry } from './registry.ts';
-import { SCOPES } from './scopes.ts';
+import { type Scope, SCOPES } from './scopes.ts';
 import * as tools from './tools.ts';
 import type { ToolContext, ToolResult } from './types.ts';
+import * as z from 'zod';
 
 interface Sent {
 	method: string;
@@ -75,9 +76,9 @@ function isError(result: ToolResult): boolean {
 	return (result as { isError?: boolean }).isError === true;
 }
 
-// --- A9: the heartbeat ------------------------------------------------------------------------------------------
+// --- the heartbeat ------------------------------------------------------------------------------------------------
 
-Deno.test('A9: the heartbeat carries reported progress and total, never repeats a value and never falls', async () => {
+Deno.test('progress: the heartbeat carries reported progress and total, never repeats a value and never falls', async () => {
 	const sent: Sent[] = [];
 	const heartbeat = startHeartbeat(request(new AbortController().signal, sent), 'x', 10)!;
 	try {
@@ -96,11 +97,10 @@ Deno.test('A9: the heartbeat carries reported progress and total, never repeats 
 	} finally {
 		heartbeat.stop();
 	}
-	// A report naming only a total is elapsed time against it, capped there.
 	const timed: Sent[] = [];
 	const bounded = startHeartbeat(request(new AbortController().signal, timed), 'y', 10)!;
 	bounded.report({ total: 0.03, message: 'waiting' });
-	await delay(80);
+	await delay(200);
 	bounded.stop();
 	const values = timed.map((n) => n.params.progress);
 	assert(values.length >= 2, `expected a rising series, got ${values}`);
@@ -109,9 +109,8 @@ Deno.test('A9: the heartbeat carries reported progress and total, never repeats 
 	assert(timed.every((n) => n.params.total === 0.03 && n.params.message === 'waiting'));
 });
 
-Deno.test('AC16: browser_run_task reports steps against max_steps, monotonic, through the heartbeat alone', async () => {
+Deno.test('progress: browser_run_task reports steps against max_steps, monotonic, through the heartbeat alone', async () => {
 	const h = await captureHarness('baseline_button');
-	// Each page read takes a moment, as a real one does, so the heartbeat ticks inside every round.
 	const session = h.record.session as unknown as { getBrowserStateSummary: (o: unknown) => Promise<unknown> };
 	const read = session.getBrowserStateSummary.bind(session);
 	session.getBrowserStateSummary = async (options) => {
@@ -131,7 +130,6 @@ Deno.test('AC16: browser_run_task reports steps against max_steps, monotonic, th
 	try {
 		const first = await round({ task: 'find the button', max_steps: 3 });
 		assertEquals((first as { resultType?: string }).resultType, 'input_required');
-		// A failing action is a step like any other: it is taken, recorded, and counted.
 		await round({ task: 'find the button', max_steps: 3 }, answer('{"action":"switch_tab","tab_id":"ZZZZ"}'));
 		const done = await round({ task: 'find the button', max_steps: 3 }, answer('{"action":"done","answer":"ok"}'));
 		assertEquals((done as { structuredContent: { status: string; steps: number } }).structuredContent.status, 'done');
@@ -143,7 +141,6 @@ Deno.test('AC16: browser_run_task reports steps against max_steps, monotonic, th
 		for (const sent of rounds) {
 			for (let i = 1; i < sent.length; i += 1) assert(sent[i]!.params.progress > sent[i - 1]!.params.progress);
 		}
-		// Round one is step 0 of 3; round two ends having taken step 1.
 		assertEquals(rounds[0]!.at(-1)?.params.progress, 0);
 		assertEquals(rounds[1]!.at(-1)?.params.progress, 1);
 	} finally {
@@ -151,8 +148,7 @@ Deno.test('AC16: browser_run_task reports steps against max_steps, monotonic, th
 	}
 });
 
-Deno.test('A9: sandbox_exec, browser_wait_for and browser_download report elapsed time against their bounds', async () => {
-	// sandbox_exec: the timeout the call named (or the service default) is the total.
+Deno.test('progress: sandbox_exec, browser_wait_for and browser_download report elapsed time against their bounds', async () => {
 	const exec = extensionTools({ sandbox_exec: () => delay(60).then(() => ({})) });
 	const registry = new SessionRegistry({ reapIntervalMs: 0 });
 	const ctx: ToolContext = { registry, allowedDomains: [], principal: 'test' };
@@ -167,7 +163,6 @@ Deno.test('A9: sandbox_exec, browser_wait_for and browser_download report elapse
 	assert(sent.every((n) => n.params.total === 2 && n.params.message === 'sandbox_exec running in the cage'));
 	await registry.shutdown();
 
-	// browser_wait_for: elapsed against timeout_ms, named by its condition, never past the bound.
 	const h = await captureHarness('baseline_button');
 	try {
 		const waitFor = CATALOG.find((tool) => tool.name === 'browser_wait_for')!;
@@ -187,7 +182,7 @@ Deno.test('A9: sandbox_exec, browser_wait_for and browser_download report elapse
 	}
 });
 
-// --- A10: cancellation, one family at a time --------------------------------------------------------------------
+// --- cancellation, one family at a time -------------------------------------------------------------------------
 
 /** A capture session whose page read never finishes, as a stuck renderer's would not. */
 async function stuckHarness() {
@@ -197,7 +192,7 @@ async function stuckHarness() {
 	return h;
 }
 
-Deno.test('AC17: browser_get_state and browser_find stop waiting for the DOM build when cancelled', async () => {
+Deno.test('cancellation: browser_get_state and browser_find stop waiting for the DOM build when cancelled', async () => {
 	for (
 		const [name, call] of [
 			['browser_get_state', (ctx: ToolContext) => tools.browserGetState({}, ctx)],
@@ -216,7 +211,7 @@ Deno.test('AC17: browser_get_state and browser_find stop waiting for the DOM bui
 	}
 });
 
-Deno.test('AC17: a full-page browser_screenshot stops waiting for the capture when cancelled', async () => {
+Deno.test('cancellation: a full-page browser_screenshot stops waiting for the capture when cancelled', async () => {
 	const h = await captureHarness('baseline_button');
 	const bus = h.record.session.eventBus as unknown as { dispatch: unknown };
 	bus.dispatch = () => ({ eventResult: () => new Promise(() => {}) });
@@ -230,7 +225,7 @@ Deno.test('AC17: a full-page browser_screenshot stops waiting for the capture wh
 	}
 });
 
-Deno.test('AC17: browser_run_task takes no action after a cancellation, between steps and around sampling', async () => {
+Deno.test('cancellation: browser_run_task takes no action after a cancellation, between steps and around sampling', async () => {
 	const h = await captureHarness('baseline_button');
 	const runTask = CATALOG.find((tool) => tool.name === 'browser_run_task')!;
 	const dispatch = dispatchFor(h.ctx, [runTask], 1_000);
@@ -246,7 +241,6 @@ Deno.test('AC17: browser_run_task takes no action after a cancellation, between 
 		assertEquals((started as { resultType?: string }).resultType, 'input_required');
 		const run = h.record.run!;
 		const before = { steps: run.steps, history: [...run.history] };
-		// Between steps: the model's answer arrives on a call its caller has already cancelled.
 		const cancelled = new AbortController();
 		cancelled.abort();
 		const refused = await dispatchToolCall(
@@ -260,7 +254,6 @@ Deno.test('AC17: browser_run_task takes no action after a cancellation, between 
 		assertEquals({ steps: run.steps, history: run.history }, before, 'no step was taken or counted');
 		assertEquals(h.record.run, run, 'the run stays parked for resume');
 
-		// Around sampling: cancelled while the page is being read for the next question — no question is asked.
 		const session = h.record.session as unknown as { getBrowserStateSummary: (o: unknown) => Promise<unknown> };
 		const read = session.getBrowserStateSummary.bind(session);
 		const slowRead = new AbortController();
@@ -279,7 +272,6 @@ Deno.test('AC17: browser_run_task takes no action after a cancellation, between 
 		setTimeout(() => mid.abort(), 20);
 		const result = await within(150, pending, 'browser_run_task');
 		assert(isError(result), 'a cancelled round returns no input_required');
-		// The abandoned read is the fake browser's; let it finish rather than leak its timer.
 		slowRead.abort();
 		await delay(10);
 	} finally {
@@ -287,18 +279,8 @@ Deno.test('AC17: browser_run_task takes no action after a cancellation, between 
 	}
 });
 
-Deno.test('AC17: browser_download stops waiting for the announcement when cancelled', async () => {
-	const session = {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'download-cancel' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-	// A browser that navigates but never announces a download: the tool would wait out its whole window.
+Deno.test('cancellation: browser_download stops waiting for the announcement when cancelled', async () => {
+	const session = blankSession();
 	const registry = new SessionRegistry({
 		reapIntervalMs: 0,
 		launch: () =>
@@ -327,14 +309,13 @@ Deno.test('AC17: browser_download stops waiting for the announcement when cancel
 		);
 		setTimeout(() => cancel.abort(), 120);
 		assert(isError(await within(1_000, pending, 'browser_download')), 'well inside the 5 s detection window');
-		// A9 rode along: the wait reported against its own window.
 		assert(sent.length > 0 && sent.every((n) => n.params.total === 5), JSON.stringify(sent));
 	} finally {
 		await registry.shutdown();
 	}
 });
 
-Deno.test('AC17: browser_head ends its request when cancelled (the fetch carries the call signal)', async () => {
+Deno.test('cancellation: browser_head ends its request when cancelled (the fetch carries the call signal)', async () => {
 	const slow = new AbortController();
 	const listener = Deno.serve(
 		{ hostname: '127.0.0.1', port: 0, onListen: () => {} },
@@ -347,13 +328,11 @@ Deno.test('AC17: browser_head ends its request when cancelled (the fetch carries
 	const cancel = new AbortController();
 	try {
 		const url = `http://127.0.0.1:${listener.addr.port}/slow`;
-		// A loopback literal on a non-default port is reachable only when named exactly (SR-HEAD-REDIRECT).
 		const allowedDomains = ['127.0.0.1', `127.0.0.1:${listener.addr.port}`];
 		const ctx: ToolContext = { registry, allowedDomains, principal: 'test', signal: cancel.signal };
 		const started = performance.now();
 		const pending = tools.browserHead({ url }, ctx);
 		setTimeout(() => cancel.abort(), 30);
-		// The fetch was aborted (mapped like any aborted HEAD), not refused by policy before it was sent.
 		const error = await assertRejects(() => pending, ToolError);
 		assertEquals(error.code, 'timeout');
 		assert(performance.now() - started < 300, 'the request ended with the call, not with the server');
@@ -364,7 +343,7 @@ Deno.test('AC17: browser_head ends its request when cancelled (the fetch carries
 	}
 });
 
-Deno.test('AC17: library reads stop at a cancellation; writes are refused before they start, never abandoned', async () => {
+Deno.test('cancellation: library reads stop at a cancellation; writes are refused before they start, never abandoned', async () => {
 	let writes = 0;
 	const store = {
 		readBytes: () => new Promise(() => {}),
@@ -383,7 +362,6 @@ Deno.test('AC17: library reads stop at a cancellation; writes are refused before
 		setTimeout(() => cancel.abort(), 20);
 		await within(1_000, assertRejects(() => reading), 'file_read');
 
-		// A write already under way finishes and says so: an early answer would claim nothing happened.
 		const late = new AbortController();
 		const writing = byName.get('file_write')!.handler(
 			{ path: 'a.txt', content: 'x' } as never,
@@ -391,7 +369,6 @@ Deno.test('AC17: library reads stop at a cancellation; writes are refused before
 		);
 		setTimeout(() => late.abort(), 10);
 		assertEquals(isError(await writing), false);
-		// A write whose call was cancelled before it began never starts.
 		await assertRejects(() =>
 			byName.get('file_write')!.handler({ path: 'b.txt', content: 'x' } as never, {
 				...base,
@@ -404,7 +381,7 @@ Deno.test('AC17: library reads stop at a cancellation; writes are refused before
 	}
 });
 
-Deno.test('AC17: agent_* and sandbox_* calls stop waiting on their service when cancelled', async () => {
+Deno.test('cancellation: agent_* and sandbox_* calls stop waiting on their service when cancelled', async () => {
 	const seen: AbortSignal[] = [];
 	const extension = extensionTools({
 		agent_get_task: () => new Promise(() => {}),
@@ -430,10 +407,184 @@ Deno.test('AC17: agent_* and sandbox_* calls stop waiting on their service when 
 			setTimeout(() => cancel.abort(), 20);
 			await within(1_000, assertRejects(() => pending), name);
 		}
-		// The service is told too: the sandbox action got the call's own signal, now aborted.
 		assertEquals(seen.length, 1);
 		assertEquals(seen[0]!.aborted, true);
 	} finally {
 		await registry.shutdown();
 	}
 });
+
+// --- A caller's cancellation reaches the running tool, and a caller that asked for progress hears from a call that runs long. Driven through `dispatchToolCall` with the request context the SDK hands a handler. ---
+
+/** A tool that runs until its call is cancelled, or `ms` passes, and says which. */
+function waiter(seen: { signal?: AbortSignal }): ToolDefinition {
+	return {
+		name: 'test_wait',
+		title: 'Wait',
+		description: 'waits',
+		inputSchema: z.object({ ms: z.number() }),
+		outputSchema: z.object({ ended: z.string() }),
+		mutates: false,
+		handler: async (args: unknown, ctx: ToolContext) => {
+			seen.signal = ctx.signal;
+			const { ms } = args as { ms: number };
+			const ended = await new Promise<string>((resolve) => {
+				const timer = setTimeout(() => resolve('finished'), ms);
+				ctx.signal?.addEventListener('abort', () => {
+					clearTimeout(timer);
+					resolve('cancelled');
+				}, { once: true });
+			});
+			return { content: [{ type: 'text', text: ended }], structuredContent: { ended } };
+		},
+	} as unknown as ToolDefinition;
+}
+
+function context(tool: ToolDefinition, signal?: AbortSignal): DispatchContext {
+	const scopes = new Set<Scope>(['mcp:invoke']);
+	return {
+		catalog: new Map([[tool.name, tool]]),
+		permitted: new Set([tool.name]),
+		scopes,
+		availability: { persistence: false, recording: false, egress: false, headRouting: null },
+		ctx: {
+			registry: new SessionRegistry({ reapIntervalMs: 0 }),
+			allowedDomains: [],
+			principal: 'test',
+			scopes,
+			...(signal === undefined ? {} : { signal }),
+		},
+	};
+}
+
+/** The part of the SDK's per-request context these paths read. */
+function cancelRequest(
+	signal: AbortSignal,
+	meta: Record<string, unknown> | undefined,
+	sent: unknown[],
+): ServerContext {
+	return {
+		mcpReq: {
+			id: 1,
+			method: 'tools/call',
+			...(meta === undefined ? {} : { _meta: meta }),
+			signal,
+			notify: (notification: unknown) => {
+				sent.push(notification);
+				return Promise.resolve();
+			},
+		},
+	} as unknown as ServerContext;
+}
+
+Deno.test('notifications/cancelled aborts the running tool through the request signal', async () => {
+	const seen: { signal?: AbortSignal } = {};
+	const cancel = new AbortController();
+	const started = performance.now();
+	const pending = dispatchToolCall(
+		context(waiter(seen)),
+		'test_wait',
+		{ ms: 30_000 },
+		cancelRequest(cancel.signal, undefined, []),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert(seen.signal !== undefined, 'the tool was given a signal');
+	cancel.abort();
+	const result = await pending as { structuredContent: { ended: string } };
+	assertEquals(result.structuredContent.ended, 'cancelled');
+	assert(performance.now() - started < 5_000, 'the tool stopped at once, not after its 30 s');
+});
+
+Deno.test('a bridge signal and the request signal both end the call', async () => {
+	const bridge = new AbortController();
+	const pending = dispatchToolCall(
+		context(waiter({}), bridge.signal),
+		'test_wait',
+		{ ms: 30_000 },
+		cancelRequest(new AbortController().signal, undefined, []),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	bridge.abort();
+	assertEquals((await pending as { structuredContent: { ended: string } }).structuredContent.ended, 'cancelled');
+});
+
+Deno.test('progress is sent only to a caller that asked, rising, and stops with the call', async () => {
+	const sent: Array<{ method: string; params: { progressToken: unknown; progress: number; message: string } }> = [];
+	const asked = cancelRequest(new AbortController().signal, { progressToken: 'p-1' }, sent as unknown[]);
+	const heartbeat = startHeartbeat(asked, 'test_wait', 30)!;
+	await new Promise((resolve) => setTimeout(resolve, 250));
+	heartbeat.stop();
+	const count = sent.length;
+	await new Promise((resolve) => setTimeout(resolve, 70));
+	assertEquals(sent.length, count, 'nothing after stop');
+	assert(count >= 2, `expected at least two updates, got ${count}`);
+	assert(sent.every((n) => n.method === 'notifications/progress' && n.params.progressToken === 'p-1'));
+	for (let i = 1; i < sent.length; i += 1) assert(sent[i]!.params.progress > sent[i - 1]!.params.progress);
+	assertEquals(sent[0]!.params.message, 'test_wait running');
+
+	assertEquals(startHeartbeat(cancelRequest(new AbortController().signal, undefined, []), 'x', 30), null);
+	const quick: unknown[] = [];
+	await dispatchToolCall(
+		context(waiter({})),
+		'test_wait',
+		{ ms: 10 },
+		cancelRequest(new AbortController().signal, {
+			progressToken: 7,
+		}, quick),
+	);
+	assertEquals(quick, []);
+});
+
+Deno.test('a long call through the dispatcher reports progress to a caller with a token', async () => {
+	const sent: unknown[] = [];
+	await dispatchToolCall(
+		context(waiter({})),
+		'test_wait',
+		{ ms: 1_300 },
+		cancelRequest(new AbortController().signal, {
+			progressToken: 'long',
+		}, sent),
+	);
+	assertEquals(sent.length, 1);
+	assertEquals((sent[0] as { params: { progress: number } }).params.progress, 1);
+});
+
+for (const era of ['2025-06-18', '2026-07-28']) {
+	Deno.test(`cancellation (${era}): a client that drops the HTTP request cancels the tool behind the seam`, async () => {
+		const seen: { signal?: AbortSignal } = {};
+		const tool = waiter(seen);
+		const server = new McpServer({ name: 'cancel-probe', version: '0.0.0' });
+		server.registerTool(tool.name, { description: tool.description, inputSchema: z.object({}) }, () => ({
+			content: [],
+		}));
+		installToolDispatch(server, context(tool));
+		const handler = createMcpHandler(() => server, { legacy: 'stateless' });
+		const params: Record<string, unknown> = { name: tool.name, arguments: { ms: 30_000 } };
+		const headers: Record<string, string> = {
+			'content-type': 'application/json',
+			accept: 'application/json, text/event-stream',
+		};
+		if (era === '2026-07-28') {
+			params._meta = { [PROTOCOL_VERSION_META_KEY]: era, [CLIENT_CAPABILITIES_META_KEY]: {} };
+			headers['mcp-protocol-version'] = era;
+			headers['mcp-method'] = 'tools/call';
+			headers['mcp-name'] = tool.name;
+		}
+		const client = new AbortController();
+		const pending = handler.fetch(
+			new Request('http://127.0.0.1/mcp', {
+				method: 'POST',
+				signal: client.signal,
+				headers,
+				body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params }),
+			}),
+		).then((response) => response.text()).catch(() => '');
+		for (let i = 0; i < 50 && seen.signal === undefined; i += 1) await new Promise((r) => setTimeout(r, 10));
+		assert(seen.signal !== undefined, 'the tool started');
+		client.abort();
+		for (let i = 0; i < 100 && !seen.signal.aborted; i += 1) await new Promise((r) => setTimeout(r, 10));
+		assert(seen.signal.aborted, 'the tool saw the cancellation');
+		await pending;
+		await handler.close();
+	});
+}

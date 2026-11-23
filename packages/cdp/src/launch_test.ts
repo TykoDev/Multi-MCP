@@ -1,5 +1,5 @@
 /**
- * Tier 1 unit tests for the launch/discovery primitives (OBSERVABILITY-TESTING-CICD.md §4.2).
+ * Tier 1 unit tests for the launch/discovery primitives.
  * No `--allow-run`, no `--allow-net`, no browser: everything here is either pure or fails before it
  * can touch a permission-gated API.
  */
@@ -36,7 +36,7 @@ const WINDOWS_ROOTS = {
 	home: 'C:\\Users\\tester',
 };
 
-Deno.test('launch: speced timing constants are the ARCHITECTURE §6.1 values', () => {
+Deno.test('launch: timing constants hold their contract values', () => {
 	assertEquals(READINESS_POLL_INTERVAL_MS, 100);
 	assertEquals(READINESS_TIMEOUT_MS, 30_000);
 	assertEquals(MAX_LAUNCH_ATTEMPTS, 3);
@@ -141,18 +141,18 @@ Deno.test('discovery: BrowserNotFoundError lists what was searched and how to fi
 });
 
 /**
- * ERRATUM(SEAM-1). `searched` is prose for an operator; `probes` is the structured twin consumers
+ * `searched` is prose for an operator; `probes` is the structured twin consumers
  * classify from. Two properties, both load-bearing:
  *
- * 1. **They cannot drift**, because `searched` is derived from `probes` at the throw. If a future
- *    edit improves `describeProbe`'s wording — and it will, it is user-facing — the structured
+ * 1. **They cannot drift**, because `searched` is derived from `probes` at the throw. If an
+ *    edit changes `describeProbe`'s user-facing wording, the structured
  *    verdict is unaffected. That is the entire point of the export.
- * 2. **The E-24 verdict is correct under a narrow grant.** This test runs with the repo matrix's
+ * 2. **The not-installed/not-permitted verdict is correct under a narrow grant.** This test runs with the repo matrix's
  *    `--allow-read=.` and `--allow-env=BUA_*,…`, so `/usr/bin/google-chrome` stats as `NotCapable`
  *    and `PATH` is unreadable. Every candidate is denied and the `PATH` sweep never runs: the honest
- *    answer is "I was not allowed to look", and `not-installed` here would be the E-24 collapse.
+ *    answer is "I was not allowed to look", and `not-installed` here would be wrong.
  */
-// ERRATUM(E-119): `test:unit` grants unscoped read (D-157); these two tests pin read back to `.` themselves, so the
+// `test:unit` grants unscoped read; these two tests pin read back to `.` themselves, so the
 // candidates outside it are still denials. Every other permission is revoked for them, which is what they assume.
 const READ_SCOPED: Deno.TestDefinition['permissions'] = { read: ['.'] };
 
@@ -299,7 +299,7 @@ Deno.test('args: a matching --user-data-dir in args is accepted without duplicat
 	assertEquals(args.filter((a) => a.startsWith('--user-data-dir')), ['--user-data-dir=/tmp/p']);
 });
 
-Deno.test('args: args must start with -- (DATA-MODEL §5.2)', () => {
+Deno.test('args: args must start with --', () => {
 	assertThrows(
 		() => composeLaunchArgs({ userDataDir: '/tmp/p', port: 1, args: ['no-dashes'] }),
 		BrowserLaunchError,
@@ -404,18 +404,16 @@ Deno.test('retry: a browser that stayed alive but never became ready is not retr
 });
 
 /**
- * Regression for E-24. `discoverBrowserExecutable` must classify a plain, non-execute-bit file as a
- * usable browser **on Windows**, where `Deno.stat().mode` is a synthesized `0o100666` that never
- * carries an execute bit. The original guard tested `mode !== null` on the stated belief that
- * Windows reports `null`; it does not, so every real `.exe` was rejected and table-driven discovery
- * could never succeed on Windows at all.
+ * `discoverBrowserExecutable` must classify a plain, non-execute-bit file as a usable browser
+ * **on Windows**, where `Deno.stat().mode` is a synthesized `0o100666` that never carries an
+ * execute bit.
  *
- * This exercises the **table** branch against the **real filesystem**, which is precisely the path
- * the original unit tests missed: they asserted the discovery *table contained* the right path
- * (data), while every integration test supplied `BUA_TEST_CHROMIUM` or an explicit path and so took
- * the earlier branches. The one code path a real user hits was the only one never run.
+ * This exercises the **table** branch against the **real filesystem**: asserting the discovery
+ * table *contains* the right path (data) is not enough, and integration tests that supply
+ * `BUA_TEST_CHROMIUM` or an explicit path take the earlier branches. This is the path a real user
+ * hits.
  */
-Deno.test('discovery: a real on-disk executable is found through the table, execute bit or not (E-24)', async () => {
+Deno.test('discovery: a real on-disk executable is found through the table, execute bit or not', async () => {
 	// Under `tests/.scratch` on purpose: the repo's test matrix grants `--allow-read=.` +
 	// `--allow-write=tests/.scratch`, so a system temp dir would probe as `permission-denied` and the
 	// test would pass or fail for the wrong reason.

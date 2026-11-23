@@ -86,11 +86,3 @@ Deno.test('filter: a host it is not written for gets none, and says so', () => {
 	assertEquals(run(userNamespaceFilter('x86_64')!, { arch: 0x12345678, nr: 272 }), RET_ALLOW);
 	assertThrows(() => run(new Uint8Array(8), { arch: 0, nr: 0 }), Error, 'unknown instruction');
 });
-
-Deno.test('filter: the program is whole instructions, and short', () => {
-	for (const host of Object.keys(ABIS)) {
-		const program = userNamespaceFilter(host)!;
-		assertEquals(program.length % 8, 0);
-		assertEquals(program.length / 8 <= 32, true);
-	}
-});

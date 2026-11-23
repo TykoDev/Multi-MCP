@@ -1,9 +1,4 @@
-/**
- * Session handlers: tabs, session lifecycle, persistent storage state, and recording.
- *
- * The machinery these drive is the registry and the session manager rather than the page, which is
- * why they sit together: none of them reads an element or moves a document.
- */
+/** Session handlers: tabs, session lifecycle, persistent storage state, and recording. */
 import {
 	CloseTabEvent,
 	LoadStorageStateEvent,
@@ -12,12 +7,13 @@ import {
 	SwitchTabEvent,
 } from '@tykotech/browser';
 import { ToolError } from '../errors.ts';
-import { freshTabs, tabsOf } from '../observe.ts';
-import { safeProfileName } from '../registry.ts';
+import { freshTabs, observe, tabsOf } from '../observe.ts';
+import { safeProfileName, type SessionRecord } from '../registry.ts';
 import { applyEmulation, applyViewport } from '../page_viewport.ts';
-import type { SessionRecord } from '../registry.ts';
-import { json, projected, say, type ToolContext, type ToolResult } from '../types.ts';
-import { assertTab, dispatch, peekSession, target } from './shared.ts';
+import { json, type McpAppsDeps, projected, say, type ToolContext, type ToolResult } from '../types.ts';
+import { assertTab, dispatch, heldToken, peekSession, target } from './shared.ts';
+import { inputRequired, inputResponse } from '@modelcontextprotocol/server';
+import type { Scope } from '../scopes.ts';
 
 export async function browserListTabs(
 	args: { session_id?: string },
@@ -38,8 +34,7 @@ export async function browserSwitchTab(
 	await dispatch(record.session, new SwitchTabEvent({ targetId }));
 	await freshTabs(record.session);
 	ctx.registry.touch(record.id);
-	// The new focus is the point of the call, so it is reported rather than left
-	// for a follow-up round trip.
+	// The new focus is the point of the call, so it is reported rather than left for a follow-up round trip.
 	return json({ session_id: record.id, focused_tab_id: args.tab_id, tabs: tabsOf(record.session) });
 }
 
@@ -55,19 +50,7 @@ export async function browserCloseTab(
 	return json({ session_id: record.id, closed_tab_id: args.tab_id, tabs: tabsOf(record.session) });
 }
 
-/**
- * One session's full description (B2.6).
- *
- * The **one** builder behind both `browser_get_session` and `browser_list_sessions`, which is what
- * makes AC-P1-26's "carry the same fields" a property of the code rather than of two literals that
- * agree today. `origin_allowlist` is the list effective for **this principal**, so a caller reads
- * what actually constrains it rather than a server-wide default it may not be subject to.
- *
- * `viewport` reports the tool-set override when there is one and the profile's launch viewport
- * otherwise, and `idle_timeout_s` reports the timeout this session is actually subject to — the
- * per-session override, else the registry's. Neither is restated here: both are read from the one
- * place that owns them.
- */
+/** One session's full description. */
 export function sessionDetail(record: SessionRecord, ctx: ToolContext): Record<string, unknown> {
 	const profile = record.session.profile as {
 		viewport?: { width: number; height: number } | null;
@@ -104,10 +87,7 @@ export function sessionDetail(record: SessionRecord, ctx: ToolContext): Record<s
 }
 
 export function browserListSessions(_args: Record<never, never>, ctx: ToolContext): Promise<ToolResult> {
-	// I-4 / D-3: the text block keeps its frozen 0.1.0 payload byte for byte, and B2.6's fuller
-	// records land in the structured half only. Doubling the largest listing in the catalog to say
-	// the same thing twice would be paid on every call, by every client, for no consumer.
-	// R8 (D-128): the sessions this caller may reach — all of them in `shared` mode — in the same shapes.
+	// The text block keeps its frozen payload byte for byte, and the fuller records land in the structured half only.
 	const summaries = ctx.registry.listFor(ctx.access);
 	return Promise.resolve(projected(
 		{ sessions: summaries, details: ctx.registry.visibleTo(ctx.access).map((record) => sessionDetail(record, ctx)) },
@@ -115,13 +95,7 @@ export function browserListSessions(_args: Record<never, never>, ctx: ToolContex
 	));
 }
 
-/**
- * `browser_get_session` — everything the server knows about one session (B2.6, AC-P1-26).
- *
- * Read-only, so it stays available while a human holds the lock: a client that cannot see who holds
- * a session is worse off than one that merely cannot act on it, and `holder` is exactly what it
- * needs to explain the refusal it just got.
- */
+/** `browser_get_session` — everything the server knows about one session. */
 export async function browserGetSession(
 	args: { session_id?: string },
 	ctx: ToolContext,
@@ -132,16 +106,7 @@ export async function browserGetSession(
 	return json(sessionDetail(record, ctx));
 }
 
-/**
- * `browser_set_viewport` — emulate a viewport for the whole session (B2.6, AC-P1-18).
- *
- * `device_scale` maps to `deviceScaleFactor` — device pixel ratio — and **never** to
- * `Emulation.setDeviceMetricsOverride`'s `scale`, which is page scale. The distinction is invariant
- * I-16 and the reason is at `page_viewport.ts`: page scale makes the dormant layout-versus-visual
- * viewport divergence reachable on demand, and this delivery does not do that. The prohibition is
- * enforced by the one builder both call sites use, and asserted by a unit test on the dispatched
- * object rather than by reading this comment.
- */
+/** `browser_set_viewport` — emulate a viewport for the whole session. */
 export async function browserSetViewport(
 	args: { width: number; height: number; device_scale?: number; session_id?: string },
 	ctx: ToolContext,
@@ -159,20 +124,7 @@ export async function browserSetViewport(
 	);
 }
 
-/**
- * `browser_set_session_options` — the options a session can be reconfigured with (B2.6, AC-P1-27).
- *
- * **`applied` and `unsupported` are the contract, not decoration.** The fields have different
- * degrees of plumbing behind them and a tool that answered "ok" for all of them would be lying about
- * at least one on some deployment. What actually took effect comes back in `applied`; what this
- * build could not apply comes back in `unsupported`, by name.
- *
- * `accept_downloads` is applied at runtime since A3 (E-77): through **the session's own downloads
- * watchdog**, which owns the download directory and the `Browser.setDownloadBehavior` state, so the
- * browser and the watchdog's profile move together — `deny` when false, the watchdog's accepting
- * behaviour when true. It lands in `applied` only when the browser accepted it; a session with no
- * watchdog, or a browser that refused, reports it in `unsupported` as before.
- */
+/** `browser_set_session_options` — the options a session can be reconfigured with. */
 export async function browserSetSessionOptions(
 	args: {
 		viewport?: { width: number; height: number };
@@ -223,31 +175,12 @@ export async function browserSetSessionOptions(
 	);
 }
 
-/**
- * `browser_health` — is this server serving, and what can this credential do with it (B3.2, §8)?
- *
- * **A read, and only a read.** It never resolves a session and therefore never launches a browser:
- * a health check that minted Chromium the first time it was polled would be a liveness probe that
- * changed the thing it measured. It reports what the registry already holds.
- *
- * `browser_ok` is the honest half of "browser liveness", and since A4 it is measured rather than
- * inferred: a session counts only when its browser **answered** `Browser.getVersion` within
- * {@linkcode HEALTH_PROBE_TIMEOUT_MS}. An attached CDP client used to be enough, and a wedged Chromium —
- * socket open, renderer or browser process stuck — kept reporting healthy. A connected session that
- * does not answer in time, or answers with an error, is `browser_unresponsive`; a session with no client
- * at all is neither. The probes run in parallel, so one wedged browser costs the poll two seconds, not
- * two seconds per session, and `Browser.getVersion` is a browser-level read that touches no page.
- *
- * `capabilities` is the same already-scope-filtered block the `initialize` result and
- * `ttk://capabilities` carry (report_design.md §10.1 location 3), so a client that polls health also
- * learns when a deployment fact changed — a data directory mounted, an encoder installed — without a
- * reconnect.
- */
+/** `browser_health` — is this server serving, and what can this credential do with it? */
 export async function browserHealth(
 	_args: Record<never, never>,
 	ctx: ToolContext,
 ): Promise<ToolResult> {
-	// R8 (D-128): counts over the sessions this caller may reach, so `owner` mode does not leak how many others run.
+	// Counts over the sessions this caller may reach, so `owner` mode does not leak how many others run.
 	const records = ctx.registry.visibleTo(ctx.access);
 	const probes = await Promise.all(records.map((record) => probeBrowser(record)));
 	const answered = probes.filter((probe) => probe === 'ok').length;
@@ -259,9 +192,8 @@ export async function browserHealth(
 		viewers: records.reduce((sum, record) => sum + record.viewers.size, 0),
 		tabs: records.reduce((sum, record) => sum + record.session.tabs.length, 0),
 	};
-	// `degraded` is a real state, not decoration: sessions exist and at least one
-	// cannot be driven — no CDP client, or a browser that did not answer — so a
-	// caller polling this can tell "nothing is running" from "something is
+	// `degraded` is a real state, not decoration: sessions exist and at least one cannot be driven — no CDP client,
+	// or a browser that did not answer — so a caller polling this can tell "nothing is running" from "something is
 	// running and cannot be driven".
 	const status = records.length > 0 && answered < records.length ? 'degraded' : 'ok';
 	return json({
@@ -272,15 +204,12 @@ export async function browserHealth(
 	});
 }
 
-/** How long one session's browser has to answer `browser_health`'s probe (A4). */
+/** How long one session's browser has to answer `browser_health`'s probe. */
 export const HEALTH_PROBE_TIMEOUT_MS = 2000;
 
 /**
- * One session's liveness: `ok` when its browser answered `Browser.getVersion` in time, `unresponsive` when
- * it is connected and did not, `disconnected` when it has no CDP client. Never throws, never launches.
- *
- * The CDP request carries the same timeout, so the client abandons it too; the local timer is what bounds
- * a stand-in client, or one whose transport is stuck before the request is even written.
+ * One session's liveness: `ok` when its browser answered `Browser.getVersion` in time, `unresponsive` when it is
+ * connected and did not, `disconnected` when it has no CDP client. Never throws, never launches.
  */
 async function probeBrowser(record: SessionRecord): Promise<'ok' | 'unresponsive' | 'disconnected'> {
 	const client = record.session.cdpClient;
@@ -305,7 +234,7 @@ export async function browserCloseSession(
 	ctx: ToolContext,
 ): Promise<ToolResult> {
 	// Closing is administrative: it succeeds even while a human holds the lock,
-	// and the viewers are told why their socket ended. R8 (D-128): only a session the caller may reach is found.
+	// and the viewers are told why their socket ended. Only a session the caller may reach is found.
 	const record = ctx.registry.peekFor(args.session_id, ctx.access);
 	const closed = record !== undefined && await ctx.registry.close(record.id, 'session-closed');
 	if (!closed) throw new ToolError('unknown-session', `no session with id ${args.session_id}`);
@@ -320,21 +249,12 @@ export async function browserCloseAll(
 	return say({ closed: count }, `Closed ${count} session${count === 1 ? '' : 's'}.`);
 }
 
-/**
- * Saves or loads a named storage-state document (R3).
- *
- * It moves state by *name*, server-side. The obvious alternative — returning
- * the document so a caller can hand it back later — would put live session
- * cookies into a tool result, and from there into the model's context and the
- * client's transcript. That is a credential disclosure with extra steps, so
- * the contents never leave this process; the result carries counts only.
- */
+/** Saves or loads a named storage-state document. */
 export async function browserStorageState(
 	args: { action: 'save' | 'load'; name: string; session_id?: string },
 	ctx: ToolContext,
 ): Promise<ToolResult> {
-	const dir = ctx.registry.storageDir;
-	if (dir === null) {
+	if (ctx.registry.storageDir === null) {
 		throw new ToolError(
 			'invalid-arguments',
 			'storage state needs a data directory; start the server with TTK_DATA_DIR set',
@@ -342,6 +262,9 @@ export async function browserStorageState(
 	}
 	// Loading mutates the browser; saving only reads it.
 	const record = await target(ctx, args, args.action === 'load');
+	// In `owner` mode the name is the *caller's* — its own directory — so another owner's saved login can be
+	// neither loaded nor overwritten by naming it. `shared` mode keeps the flat directory.
+	const dir = (await ctx.registry.storageDirFor(ctx.access))!;
 	const path = `${dir}/${safeProfileName(args.name)}.json`;
 
 	if (args.action === 'save') {
@@ -359,12 +282,8 @@ export async function browserStorageState(
 	// Counts, never contents.
 	let cookies = 0;
 	let origins = 0;
-	// B2.6 / SEC-19: which origins a load restored, by **name**. A workflow needs to assert that its
-	// login is present, and a count alone cannot answer "present for which site?". Names only: no
-	// cookie value, no cookie name, no localStorage key and no localStorage value ever reaches this
-	// array, because the whole point of moving state by name server-side is that the document does
-	// not leave the process. Load only — a save restored nothing, so the key is absent there rather
-	// than an empty array a caller might read as "restored nothing".
+	// Which origins a load restored, by **name**. A workflow needs to assert that its login is present, and a count
+	// alone cannot answer "present for which site?".
 	let restoredOrigins: string[] = [];
 	try {
 		const parsed = parseStorageState(await Deno.readTextFile(path));
@@ -373,8 +292,7 @@ export async function browserStorageState(
 		origins = list.length;
 		if (args.action === 'load') restoredOrigins = list.map((entry) => entry.origin);
 	} catch {
-		// A state that cannot be read back is still a completed action; the counts
-		// are the only thing lost.
+		// A state that cannot be read back is still a completed action; the counts are the only thing lost.
 	}
 	ctx.registry.touch(record.id);
 	return json({
@@ -387,13 +305,7 @@ export async function browserStorageState(
 	});
 }
 
-/**
- * Starts, stops or reports a session recording.
- *
- * The video is written server-side and downloaded over HTTP rather than
- * returned here: a minute of screen is megabytes, and a tool result is a place
- * for facts a model can reason about, not for a payload it will only pass on.
- */
+/** Starts, stops or reports a session recording. */
 export async function browserRecord(
 	args: { action: 'start' | 'stop' | 'status'; name?: string; session_id?: string },
 	ctx: ToolContext,
@@ -402,8 +314,7 @@ export async function browserRecord(
 	if (recorder === undefined) {
 		throw new ToolError('invalid-arguments', 'this deployment cannot record (no data directory or no ffmpeg)');
 	}
-	// Recording only observes; a human holding the browser is a reason to record
-	// it, not a reason to refuse.
+	// Recording only observes; a human holding the browser is a reason to record it, not a reason to refuse.
 	const record = await target(ctx, args, false);
 	ctx.registry.touch(record.id);
 
@@ -413,33 +324,15 @@ export async function browserRecord(
 	}
 	if (args.action === 'start') {
 		const name = args.name ?? `${record.id}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-		// R8 (D-128): the recording is bound to its starter, so the recordings route can refuse anyone else.
+		// The recording is bound to its starter, so the recordings route can refuse anyone else.
 		return json({ ...(await recorder.start(record.id, name, ctx.access?.owner)) });
 	}
 	return json({ ...(await recorder.stop(record.id)) });
 }
 
-// --- B2.8: reading the audit ledger -------------------------------------------
+// --- reading the audit ledger -------------------------------------------------
 
-/**
- * `browser_audit` — the record that a privileged operation happened (B2.8, SEC-08, design §6.5).
- *
- * One ledger per session, written by every `browser_evaluate` call and by every use of a server-held
- * secret; this is its only reader. Two properties decide the whole design and neither is a nicety.
- *
- * **The row filter is here, in the handler, not in `registerCatalog`.** The tool is useful to an
- * `mcp:invoke` principal — "did *my* worker spend a credential, and where" — and to an `admin` one,
- * and only its rows differ. Gating registration would take the tool away from the caller it was asked
- * for instead of narrowing what it returns. So `admin` reads everything and everyone else reads their
- * own entries, and `ctx.scopes` being absent means *not privileged*: a missing authorization fact
- * fails closed.
- *
- * **Own means this principal's, not this session's.** Sessions are shared among `mcp:invoke` holders
- * by design (`SPECS/SECURITY-AUTH.md` §8.3), so an unfiltered read under that scope would hand every
- * session-sharing principal a map of every other principal's credential use — which is the finding,
- * not a refinement of it. `dropped` is on the wire so an overflow is visible rather than inferred,
- * and the ledger is in memory, per session, and never written to disk.
- */
+/** `browser_audit` — the record that a privileged operation happened. */
 // deno-lint-ignore require-await -- a handler is always awaited; a synchronous throw would escape the result mapping.
 export async function browserAudit(
 	args: { since?: string; limit?: number; session_id?: string },
@@ -458,4 +351,187 @@ export async function browserAudit(
 		dropped: read.dropped,
 		scope: read.scope,
 	});
+}
+
+// --- `browser_request_human`: hand a session to a person through the live view. ----------------------------------
+
+/** The `inputRequests` key the handoff rides under, and the one its answer comes back under. */
+export const HANDOFF_KEY = 'ttk_handoff';
+/** The `requestState` kind a handoff round is sealed under. */
+const HANDOFF_STATE_KIND = 'handoff';
+
+export async function browserRequestHuman(
+	args: { session_id?: string; reason: string },
+	ctx: ToolContext,
+): Promise<ToolResult> {
+	ctx.signal?.throwIfAborted();
+	// The catalog withholds the tool unless the switch is on; this is the same refusal for a caller that reaches the
+	// handler some other way (a direct drive, the task executor), so the URL builder is never assumed.
+	const viewUrl = ctx.viewUrl;
+	if (viewUrl === undefined) {
+		throw new ToolError(
+			'feature-unavailable',
+			'browser_request_human is off on this deployment; the operator enables it with TTK_HUMAN_HANDOFF=true',
+		);
+	}
+	const record = peekSession(ctx, args.session_id);
+	const url = viewUrl(record.id);
+
+	// --- round 2: the person is done ------------------------------------------------------------------------------
+	const answer = inputResponse(ctx.mcp?.mcpReq.inputResponses, HANDOFF_KEY);
+	if (answer.kind !== 'missing') {
+		assertHandoffBound(ctx, record);
+		if (answer.kind !== 'elicit') {
+			throw new ToolError('invalid-arguments', 'the handoff answer is not an elicitation result');
+		}
+		if (answer.action !== 'accept') {
+			throw new ToolError(
+				'user-declined',
+				`the person ${answer.action === 'decline' ? 'declined' : 'cancelled'} the handoff for session ${record.id}`,
+			);
+		}
+		return handoffResult(record, url, 'elicitation', 'accepted', await freshToken(record, ctx));
+	}
+
+	// --- round 1 ----------------------------------------------------------------------------------------------------
+	if (ctx.client?.elicitUrl === true && ctx.mcp !== undefined && ctx.stateCodec !== undefined) {
+		return inputRequired({
+			inputRequests: { [HANDOFF_KEY]: inputRequired.elicitUrl({ message: args.reason, url }) },
+			requestState: await ctx.stateCodec.mint({ k: HANDOFF_STATE_KIND, s: record.id }, ctx.mcp),
+		}) as ToolResult;
+	}
+	return handoffResult(record, url, 'link', 'link-returned', heldToken(record));
+}
+
+/** Refuses a handoff answer whose verified state does not name this session. */
+function assertHandoffBound(ctx: ToolContext, record: SessionRecord): void {
+	const state = ctx.mcp?.mcpReq.requestState<unknown>?.();
+	const bound = state !== null && typeof state === 'object' &&
+		(state as Record<string, unknown>).k === HANDOFF_STATE_KIND &&
+		(state as Record<string, unknown>).s === record.id;
+	if (!bound) {
+		throw new ToolError(
+			'invalid-arguments',
+			`this answer does not belong to a handoff of session ${record.id}; call browser_request_human again`,
+		);
+	}
+}
+
+/**
+ * The element table's token once the person is done. Re-read rather than reported from the cache: the whole point of
+ * a handoff is that someone else may have moved the page.
+ */
+async function freshToken(record: SessionRecord, ctx: ToolContext): Promise<string | null> {
+	try {
+		await observe(record, { signal: ctx.signal });
+	} catch {
+		ctx.signal?.throwIfAborted();
+		return null;
+	}
+	ctx.registry.touch(record.id);
+	return heldToken(record);
+}
+
+function handoffResult(
+	record: SessionRecord,
+	url: string,
+	delivery: 'elicitation' | 'link',
+	outcome: 'accepted' | 'link-returned',
+	stateToken: string | null,
+): ToolResult {
+	const humanHasControl = record.lock !== null;
+	return say(
+		{
+			session_id: record.id,
+			live_view_url: url,
+			delivery,
+			outcome,
+			human_has_control: humanHasControl,
+			state_token: stateToken,
+		},
+		outcome === 'accepted'
+			? `The person is done with session ${record.id}${
+				humanHasControl ? ' and still holds control' : ''
+			}. Read the page again before acting on it.`
+			: `Show the user this live view of session ${record.id} and ask them to take over: ${url}`,
+	);
+}
+
+// --- MCP Apps handlers: `browser_live_view` and `browser_live_ticket`. -------------------------------------------
+
+/** The longest page title the live view reports; the embed shows one line of it. */
+const MAX_TITLE_CHARS = 512;
+
+/** The deployment's MCP Apps, or the same refusal the dispatcher gives when the feature is off. */
+function appsOf(ctx: ToolContext, name: string): McpAppsDeps {
+	if (ctx.mcpApps === undefined) {
+		throw new ToolError(
+			'feature-unavailable',
+			`${name} needs MCP Apps, which is off on this deployment; set TTK_MCP_APPS=watch or control`,
+		);
+	}
+	return ctx.mcpApps;
+}
+
+/** The origin of an `http(s)` page, or `null` for a page with none (`about:blank`, `data:`, a browser page). */
+function originOf(url: string): string | null {
+	const parsed = URL.parse(url);
+	if (parsed === null || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return null;
+	return parsed.origin;
+}
+
+/** `browser_live_view` — what the embedded live view shows, and whether it may offer control. */
+export async function browserLiveView(args: { session_id?: string }, ctx: ToolContext): Promise<ToolResult> {
+	const apps = appsOf(ctx, 'browser_live_view');
+	const record = peekSession(ctx, args.session_id);
+	await freshTabs(record.session);
+	const tabs = tabsOf(record.session);
+	const focused = tabs.find((tab) => tab.focused === true) ?? tabs[0];
+	const origin = originOf(typeof focused?.url === 'string' ? focused.url : '');
+	const title = (typeof focused?.title === 'string' ? focused.title : '').slice(0, MAX_TITLE_CHARS);
+	const payload = {
+		session_id: record.id,
+		origin,
+		title,
+		viewers: record.viewers.size,
+		human_has_control: record.lock !== null,
+		control_available: apps.mode === 'control' && ctx.scopes?.has('view:control') === true,
+	};
+	return say(
+		payload,
+		`Showing session ${record.id} (${origin ?? 'no page origin'}) in the live view. It connects only when the user ` +
+			`presses Watch${record.lock === null ? '' : '; a human holds control of it right now'}.`,
+	);
+}
+
+/** `browser_live_ticket` — a single-use, 30-second ticket bound to the embed's origin (app-only). */
+export async function browserLiveTicket(
+	args: { session_id?: string; mode?: 'watch' | 'control'; origin: string },
+	ctx: ToolContext,
+): Promise<ToolResult> {
+	const apps = appsOf(ctx, 'browser_live_ticket');
+	// The ticket is issued to the principal *id* — the per-token origin overlay and the per-principal connection
+	// ceiling both key on it — while the session is looked up by the realm-qualified *owner*.
+	const owner = ctx.extensionPrincipal;
+	if (owner === undefined) {
+		throw new ToolError('invalid-arguments', 'call browser_live_ticket directly; it cannot run as a background task');
+	}
+	const scopes: ReadonlySet<Scope> = ctx.scopes ?? new Set<Scope>();
+	const access = ctx.access ?? { owner, admin: scopes.has('admin') };
+	const minted = await apps.mintTicket({
+		principal: ctx.principal,
+		access,
+		scopes,
+		...(args.session_id === undefined ? {} : { sessionId: args.session_id }),
+		mode: args.mode ?? 'watch',
+		origin: args.origin,
+		// The label is the credential's, and only the gateway holds the key records it is declared in; `null`
+		// asks the gateway's mint to resolve it.
+		holderName: null,
+	});
+	return say(
+		{ ...minted },
+		`Minted a single-use ${minted.mode} ticket for session ${minted.session_id}, bound to ${minted.origin_bound}; ` +
+			`it expires in ${minted.expires_in} s.`,
+	);
 }

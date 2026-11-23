@@ -1,27 +1,4 @@
-/**
- * MCP Apps, the gateway half (R9, design §2.20, D-134 – D-136).
- *
- * Two jobs, both behind `TTK_MCP_APPS`:
- *
- * 1. **The embed documents.** `scripts/build_embed.ts` writes `dist/embed_live.html`, `dist/embed_a2ui.html` and
- *    `dist/embed_terminal.html`, each one self-contained HTML file whose meta CSP pins its one inline script and one
- *    inline style by hash and leaves `connect-src` as the placeholder {@linkcode CONNECT_SRC_PLACEHOLDER}. They are
- *    read here once, through the resolver the static SPA uses, and the placeholder becomes the WebSocket origin of
- *    `TTK_PUBLIC_URL` — the only place an embed may connect to, and the same value `_meta.ui.csp.connectDomains`
- *    declares to the host.
- *    A missing document refuses startup: a deployment that turned the feature on must not offer tools whose embed
- *    cannot load.
- * 2. **The embed ticket.** `browser_live_ticket` mints through the same core the REST route uses
- *    (`mintLiveTicket`), so the scope ceiling, the TTL clamp, the origin binding and the session check cannot
- *    drift between the two. What this adds is narrowing only: the mode cannot exceed `TTK_MCP_APPS`, the origin must
- *    be one of `TTK_MCP_APPS_ORIGINS` — or, with that list empty (D-150), any `isAppsOrigin` origin — **and** allowed
- *    for this credential by `TTK_ALLOWED_ORIGINS` and the per-token overlay (F10), and every ticket is origin-bound,
- *    single-use and lives 30 s.
- *
- * No new HTTP route exists for any of this. The embed connects to the existing ticket-gated `/live/:sessionId/ws`,
- * whose front and adapter Origin checks admit the host's sandbox hostname only when `TTK_ALLOWED_ORIGINS` lists it —
- * which `loadConfig` already required of every listed origin here, and which the mint checks of an unlisted one.
- */
+/** MCP Apps, the gateway half. */
 import { join } from '@std/path';
 import {
 	DEFAULT_SESSION_ID,
@@ -47,7 +24,7 @@ export const EMBED_A2UI_FILE = 'embed_a2ui.html';
 export const EMBED_TERMINAL_FILE = 'embed_terminal.html';
 /** The token the build leaves in each embed's meta CSP for the gateway to replace with its socket origin. */
 export const CONNECT_SRC_PLACEHOLDER = '__TTK_CONNECT_SRC__';
-/** Every embed ticket's life: the unbound default, though an embed ticket is always bound (design §2.20). */
+/** Every embed ticket's life: the unbound default, though an embed ticket is always bound. */
 export const EMBED_TICKET_TTL_MS = TICKET_TTL_MS;
 
 /** The embed documents, placeholder already replaced. */
@@ -57,22 +34,12 @@ export interface EmbedDocuments {
 	readonly terminalHtml: string;
 }
 
-/**
- * The WebSocket origin of `TTK_PUBLIC_URL`: `wss://` behind https, `ws://` otherwise.
- *
- * From the configured public URL, never from a request's `Host` (E-33): this value is written into a CSP and handed
- * to a host as the one domain the embed may reach.
- */
+/** The WebSocket origin of `TTK_PUBLIC_URL`: `wss://` behind https, `ws://` otherwise. */
 export function socketOrigin(publicUrl: URL): string {
 	return `${publicUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${publicUrl.host}`;
 }
 
-/**
- * Reads both embeds from the built `dist` and substitutes the socket origin into their CSP.
- *
- * @throws ConfigError naming `TTK_MCP_APPS` when either document is missing or was not built with the placeholder
- *   — a stale or hand-edited `dist` must not be served as if it carried the policy this build writes.
- */
+/** Reads the three embeds from the built `dist` and substitutes the socket origin into their CSP. */
 export function loadEmbedDocuments(publicUrl: URL, root?: string): EmbedDocuments {
 	const roots = resolveRoot(root);
 	const connect = socketOrigin(publicUrl);
@@ -107,19 +74,17 @@ export interface McpAppsOptions {
 	readonly config: Pick<Config, 'publicUrl' | 'allowedOrigins' | 'mcpApps'>;
 	readonly registry: SessionRegistry;
 	readonly tickets: TicketStore;
-	/** The per-token origin overlay (B1.10); the embed ticket can only be narrowed by it (F10). */
+	/** The per-token origin overlay; the embed ticket can only be narrowed by it. */
 	readonly origins: Pick<OriginOverlay, 'forToken'>;
-	/** The API-key records in force now, for the label a control lock shows (F21). */
+	/** The API-key records in force, for the label a control lock shows. */
 	readonly keyRecords: () => readonly ApiKeyRecord[];
 	/** `info` is optional: a test that only watches warnings passes `warn` alone. */
 	readonly logger?: Pick<Logger, 'warn'> & Partial<Pick<Logger, 'info'>>;
 	/** Already-loaded documents; absent, they are read from the web root. */
 	readonly embeds?: EmbedDocuments;
-	/** Overrides web-root discovery (tests). */
-	readonly root?: string;
 }
 
-/** The refusal a failed core mint becomes, in the tool error vocabulary; no message names a scope (SEC-17). */
+/** The refusal a failed core mint becomes, in the tool error vocabulary; no message names a scope. */
 function refusalOf(
 	failed: Extract<MintLiveTicketResult, { ok: false }>,
 	mode: 'watch' | 'control',
@@ -149,22 +114,14 @@ export interface EmbedOriginGateOptions {
 
 /**
  * The origin admission every MCP Apps embed ticket passes — the live view's and the terminal and surface streams'
- * (`embed_streams.ts`) — so the rule cannot drift between them. Throws `invalid-arguments` for an origin that may not
- * hold a ticket for `principal`; returns for one that may.
+ * (`embed_streams.ts`) — so the rule cannot drift between them.
  */
 export function embedOriginGate(options: EmbedOriginGateOptions): (principal: string, origin: string) => void {
 	const { settings, allowedOrigins, origins } = options;
 	return (principal: string, origin: string): void => {
 		// The origin must be one the operator listed for Apps hosts AND one this credential's overlay still allows: the
-		// overlay is a narrowing the REST mint already honours at the front door, and a tool call has no Origin header
-		// for that door to read, so it is applied to the binding instead (F10).
-		//
-		// D-150: with no list, any origin of the `TTK_MCP_APPS_ORIGINS` form (https, or http on a loopback host) stands
-		// in for "listed", and the effective allowed origins alone decide — `TTK_ALLOWED_ORIGINS` by hostname, or the
-		// overlay's exact origins when it has any, which is the admission the socket upgrade applies before a ticket is
-		// looked at. The ticket is still bound to exactly this origin, single-use and 30 s, so naming an origin the
-		// host's sandbox does not present yields a ticket no socket can redeem. `isAppsOrigin` also keeps an empty
-		// string out: `originAllowed` passes a missing Origin header, which a binding must never be.
+		// overlay is a narrowing the REST mint honours at the front door, and a tool call has no Origin header for that
+		// door to read, so it is applied to the binding instead.
 		const effective = effectiveOrigins(allowedOrigins, origins.forToken(principal));
 		const listed = settings.origins.length === 0 ? isAppsOrigin(origin) : settings.origins.includes(origin);
 		if (!listed || !originAllowed(origin, effective)) {
@@ -182,20 +139,16 @@ export function embedOriginGate(options: EmbedOriginGateOptions): (principal: st
 
 /**
  * The deployment's MCP Apps, or `undefined` when `TTK_MCP_APPS` is off — the value `McpDeps.mcpApps` takes, so
- * `undefined` keeps every tool's availability, `tools/list` and the resource list exactly as they were.
- *
- * @throws ConfigError when the feature is on and the embed documents cannot be loaded.
+ * `undefined` leaves every tool's availability, `tools/list` and the resource list without MCP Apps.
  */
 export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined {
 	const { config, registry, tickets, origins, keyRecords } = options;
 	const settings = config.mcpApps;
 	if (settings === null) return undefined;
-	const embeds = options.embeds ?? loadEmbedDocuments(config.publicUrl, options.root);
+	const embeds = options.embeds ?? loadEmbedDocuments(config.publicUrl);
 	if (config.publicUrl.protocol !== 'https:') {
-		// Design §2.20 "Reachability": a host page served over https cannot open `ws://` to a non-loopback gateway, and
-		// Chrome's Local Network Access may block or prompt for a private address even over wss. D-150: a warning when the
-		// operator named the mode; only `info` when it is the default, which every plain-http deployment now starts with
-		// and which still serves a host on this machine.
+		// Reachability: a host page served over https cannot open `ws://` to a non-loopback gateway, and Chrome's Local
+		// Network Access may block or prompt for a private address even over wss.
 		const message = `TTK_MCP_APPS is ${settings.defaulted ? 'on by default' : 'on'} but TTK_PUBLIC_URL ` +
 			`(${config.publicUrl.origin}) is not https: an MCP Apps host serves its embed from an https sandbox, which a ` +
 			'browser will not let open ws:// to a non-loopback address; give the gateway an https TTK_PUBLIC_URL the ' +
@@ -206,12 +159,12 @@ export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined 
 	const socketBase = socketOrigin(config.publicUrl);
 
 	/**
-	 * F21: the credential's label, resolved here because only the gateway holds the records it is declared in — by the
-	 * reader the REST mint uses (`holderNameOf`), so an administrator login is labelled the same on both (review B4).
+	 * The credential's label, resolved here because only the gateway holds the records it is declared in — by the
+	 * reader the REST mint uses (`holderNameOf`), so an administrator login is labelled the same on both.
 	 */
 	const holderOf = (input: EmbedTicketInput): string | null => {
 		if (input.holderName !== null) return input.holderName;
-		// Only an API key (an administrator login among them) carries a label, and its owner is `api-key:<id>` (D-068);
+		// Only an API key (an administrator login among them) carries a label, and its owner is `api-key:<id>`;
 		// any other realm has none, even when its subject happens to spell a key id or an administrator's.
 		if (input.access.owner !== `api-key:${input.principal}`) return null;
 		return holderNameOf({ kind: 'api-key', id: input.principal, scopes: input.scopes }, keyRecords());
@@ -228,8 +181,15 @@ export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined 
 		}
 		admitOrigin(input.principal, input.origin);
 		const sessionId = input.sessionId ?? DEFAULT_SESSION_ID;
-		const minted = mintLiveTicket({ registry, tickets, keyRecords }, {
-			principal: { id: input.principal, scopes: input.scopes, holderName: holderOf(input) },
+		const minted = mintLiveTicket({ registry, tickets }, {
+			principal: {
+				id: input.principal,
+				scopes: input.scopes,
+				holderName: holderOf(input),
+				// The credential fingerprint `registerCatalog` binds into the mint, so the socket can re-check the
+				// credential that minted it.
+				credential: input.credential,
+			},
 			sessionId,
 			mode: input.mode,
 			ttlMs: EMBED_TICKET_TTL_MS,
@@ -257,9 +217,9 @@ export function createMcpApps(options: McpAppsOptions): McpAppsDeps | undefined 
 		terminalHtml: embeds.terminalHtml,
 		connectDomains: [socketBase],
 		...(settings.domain === null ? {} : { domain: settings.domain }),
-		// Empty (D-150): no fixed list; the mint above admits by the effective allowed origins instead.
+		// Empty: no fixed list; the mint above admits by the effective allowed origins instead.
 		origins: settings.origins,
-		// Synchronous underneath; a promise because the S0 contract leaves room for a mint that is not.
+		// Synchronous underneath; a promise because the `McpAppsDeps` contract leaves room for a mint that is not.
 		mintTicket: (input) => {
 			try {
 				return Promise.resolve(mint(input));

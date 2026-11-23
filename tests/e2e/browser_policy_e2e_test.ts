@@ -1,26 +1,20 @@
 /**
- * W1 on real Chromium: the deployment allowlist inside the browser (C1, D-095), the secret pin on the frame
- * the keystrokes land in (A2, D-096), download acceptance switched at runtime (A3, E-77), a probing health
- * check (A4), and — only when asked for — a real launch without the sandbox (B3, D-094).
- *
- * Two loopback origins that Chromium treats as different *sites*: `127.0.0.1` (allowed, and the host of
- * every page) and `localhost` (off the allowlist, and the second origin of the frame tests). Nothing here
- * leaves the machine.
- *
- * Browser tier — requires `--allow-run=<resolved chromium>`. The unsandboxed launch additionally needs
- * `BUA_TEST_UNSANDBOXED=1`; it is skipped, loudly, without it.
+ * Browser policy on real Chromium: the allowlist inside the browser (redirects, load-time script navigations,
+ * pop-ups), the secret pin on the frame the keystrokes land in, downloads switched at runtime, a probing health
+ * check, and (only with `BUA_TEST_UNSANDBOXED=1`) a launch without the sandbox. `127.0.0.1` is allowed and hosts
+ * every page; `localhost` is another site, off the allowlist.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import type { EventRecord } from '@tykotech/wire';
 import { readEnv } from '../support/browser_tier.ts';
-import { harness, skipUnlessBrowser } from '../support/harness.ts';
+import { type Harness, harness, pageCdp, poll, skipUnlessBrowser } from '../support/harness.ts';
 import { jsLiteral } from '../support/js_literal.ts';
 
 const ignore = skipUnlessBrowser('browser policy e2e');
 
-const SITE_SECRET = 'Zq8-W1-SITE-SECRET-3vP';
-const ALT_SECRET = 'Zq8-W1-ALT-SECRET-3vP';
-const OAUTH_CODE = 'Zq8-W1-OAUTH-CODE-3vP';
+const SITE_SECRET = 'Zq8-POLICY-SITE-SECRET-3vP';
+const ALT_SECRET = 'Zq8-POLICY-ALT-SECRET-3vP';
+const OAUTH_CODE = 'Zq8-POLICY-OAUTH-CODE-3vP';
 
 interface Servers {
 	/** `http://127.0.0.1:<port>` — the allowed origin. */
@@ -64,10 +58,7 @@ function servers(): Servers {
 			case '/jsredirect':
 				return html(`<script>location.replace(${jsLiteral(to)});</script>`);
 			case '/popup':
-				// `noopener`: measured on this tier, a `window.open` that keeps its opener never loads at all
-				// (the other origin receives no request, the target stays at url ''), with or without an
-				// allowlist — there is nothing for containment to act on. The opener-less form loads, which is
-				// the pop-up a page can actually use to reach another origin.
+				// `noopener`: measured, a `window.open` that keeps its opener never loads another origin at all.
 				return html(
 					`<button id="open" type="button">open</button>` +
 						`<script>document.getElementById('open').addEventListener('click',()=>window.open(${
@@ -122,19 +113,6 @@ interface State {
 	frames: Array<{ id: string; is_oopif: boolean; url: string }>;
 }
 
-type Caller = {
-	call(
-		name: string,
-		args?: Record<string, unknown>,
-	): Promise<{ isError?: boolean; structuredContent?: unknown; content?: unknown }>;
-};
-
-async function structured<T>(h: Caller, name: string, args: Record<string, unknown> = {}): Promise<T> {
-	const result = await h.call(name, args);
-	assert(result.isError !== true, `${name} failed: ${JSON.stringify(result.content)}`);
-	return result.structuredContent as T;
-}
-
 function byId(state: State, id: string): Element {
 	const found = state.interactive_elements.find((element) => element.attrs?.id === id);
 	assert(found !== undefined, `#${id} is not in the element table: ${JSON.stringify(state.interactive_elements)}`);
@@ -142,49 +120,31 @@ function byId(state: State, id: string): Element {
 }
 
 /** Every navigation record the default session's ring holds. */
-function navigations(h: { gateway: { registry: { peek(id: string): unknown } } }): EventRecord[] {
-	const record = h.gateway.registry.peek('default') as {
-		events: { epoch: string; read(cursor: unknown): EventRecord[] };
-	} | undefined;
-	assert(record !== undefined);
-	return record.events.read({ kind: 'cursor', epoch: record.events.epoch, seq: 0 })
-		.filter((event) => event.kind === 'navigation');
-}
-
-/** Polls until `probe` answers, or fails naming what it waited for. */
-async function until<T>(what: string, probe: () => Promise<T | undefined>, timeoutMs = 10_000): Promise<T> {
-	const deadline = Date.now() + timeoutMs;
-	for (;;) {
-		const found = await probe();
-		if (found !== undefined) return found;
-		if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-		await new Promise((resolve) => setTimeout(resolve, 150));
-	}
+function navigations(h: Harness): EventRecord[] {
+	const events = h.gateway.registry.peek('default')!.events;
+	return events.read({ kind: 'cursor', epoch: events.epoch, seq: 0 }).filter((event) => event.kind === 'navigation');
 }
 
 Deno.test({
-	name: 'e2e browser policy (C1): TTK_ALLOWED_DOMAINS contains redirects, load-time script navigations and pop-ups',
+	name:
+		'e2e browser policy (allowlist): TTK_ALLOWED_DOMAINS contains redirects, load-time script navigations and pop-ups',
 	ignore,
 	async fn(t) {
 		const s = servers();
 		try {
 			await using h = await harness({ env: { TTK_ALLOWED_DOMAINS: '127.0.0.1' } });
 
-			// R3 (D-115, E-94) moved this pin: the redirect hop is refused before its request is sent (E0), so the tool
-			// that issued the navigation answers navigation-blocked naming the origin, and the tab keeps the document it
-			// had (M12: `Aborted`) rather than being parked on about:blank after the off-list host was reached.
+			// The pre-request document veto refuses the redirect hop before it is sent; the tab keeps its document.
 			await t.step('a server redirect off the allowlist is refused before it is sent, recorded redacted', async () => {
 				const target = `${s.other}/landing?code=${OAUTH_CODE}`;
 				const answer = await h.callError('browser_navigate', {
 					url: `${s.allowed}/redirect?to=${encodeURIComponent(target)}`,
 				});
-				console.log(`[C1] navigate through an off-allowlist redirect answered: ${answer}`);
 				assertEquals(answer, `Error: navigation-blocked: ${s.other} is not in the server's allowed-domain list`);
-				const state = await structured<State>(h, 'browser_get_state', {});
-				assertEquals(state.url, 'about:blank', 'the tab keeps the document it had (M12)');
+				const state = await h.callStructured<State>('browser_get_state', {});
+				assertEquals(state.url, 'about:blank', 'the tab keeps the document it had');
 
 				const blocked = navigations(h).filter((event) => event.payload.blocked === true);
-				console.log(`[C1] ring: ${JSON.stringify(blocked)}`);
 				assertEquals(blocked.length, 1);
 				assertEquals(blocked[0]?.payload.origin, s.other);
 				assertEquals(blocked[0]?.payload.containment, 'request-blocked');
@@ -199,11 +159,10 @@ Deno.test({
 				await h.call('browser_navigate', {
 					url: `${s.allowed}/jsredirect?to=${encodeURIComponent(`${s.other}/landing`)}`,
 				});
-				const state = await until('the tab to leave the off-allowlist page', async () => {
-					const current = await structured<State>(h, 'browser_get_state', {});
+				await poll('the tab to leave the off-allowlist page', async () => {
+					const current = await h.callStructured<State>('browser_get_state', {});
 					return (current.url ?? '').startsWith(s.other) ? undefined : current;
 				});
-				console.log(`[C1] after a load-time script navigation: url=${state.url}`);
 				const blocked = navigations(h).filter((event) => event.payload.blocked === true);
 				assertEquals(
 					blocked.length,
@@ -212,29 +171,26 @@ Deno.test({
 				);
 			});
 
-			// R3 moved this pin too (M5 holds on Chrome 154): the pop-up's first document request is refused before it
-			// is sent, the never-committed pop-up is closed, and the record is E0's — one record, not E0 plus E3.
+			// The veto is in place before the new target's first request; the never-committed pop-up is closed.
 			await t.step('a window.open to a host off the allowlist never reaches it, and is closed', async () => {
 				await h.callText('browser_navigate', {
 					url: `${s.allowed}/popup?to=${encodeURIComponent(`${s.other}/landing`)}`,
 				});
 				const before = navigations(h).filter((event) => event.payload.blocked === true).length;
-				const state = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
+				const state = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
 				await h.callText('browser_click', { index: byId(state, 'open').index });
-				const record = await until(
+				const record = await poll(
 					'a blocked pop-up record',
 					() => Promise.resolve(navigations(h).filter((event) => event.payload.blocked === true)[before]),
 				);
-				console.log(`[C1] pop-up record: ${JSON.stringify(record)}`);
 				assertEquals(record.payload.blocked, true);
 				assertEquals(record.payload.containment, 'request-blocked');
 				assertEquals(record.payload.committed, false);
 				assertEquals(record.payload.origin, s.other);
 				// Prevention, not containment: the off-allowlist origin received no request at all.
-				console.log(`[C1] the off-allowlist origin saw: ${JSON.stringify(s.otherHits)}`);
 				assertEquals(s.otherHits, []);
-				const tabs = await until('the pop-up to be gone', async () => {
-					const listed = (await structured<{ tabs: Tab[] }>(h, 'browser_list_tabs', {})).tabs;
+				const tabs = await poll('the pop-up to be gone', async () => {
+					const listed = (await h.callStructured<{ tabs: Tab[] }>('browser_list_tabs', {})).tabs;
 					return listed.length === 1 ? listed : undefined;
 				});
 				assertStringIncludes(tabs[0]?.url ?? '', '/popup');
@@ -242,10 +198,10 @@ Deno.test({
 
 			await t.step('a pop-up on the allowlist survives', async () => {
 				await h.callText('browser_navigate', { url: `${s.allowed}/popup?to=${encodeURIComponent(`${s.allowed}/`)}` });
-				const state = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
+				const state = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
 				await h.callText('browser_click', { index: byId(state, 'open').index });
-				const tabs = await until('the allowed pop-up', async () => {
-					const listed = (await structured<{ tabs: Tab[] }>(h, 'browser_list_tabs', {})).tabs;
+				const tabs = await poll('the allowed pop-up', async () => {
+					const listed = (await h.callStructured<{ tabs: Tab[] }>('browser_list_tabs', {})).tabs;
 					return listed.length === 2 ? listed : undefined;
 				});
 				assert(tabs.some((tab) => tab.url.startsWith(s.allowed) && !tab.url.includes('/popup')));
@@ -257,36 +213,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e browser policy (C1): with no allowlist the same redirect and pop-up are left alone',
-	ignore,
-	async fn() {
-		const s = servers();
-		try {
-			await using h = await harness();
-			await h.callText('browser_navigate', {
-				url: `${s.allowed}/redirect?to=${encodeURIComponent(`${s.other}/landing`)}`,
-			});
-			const state = await structured<State>(h, 'browser_get_state', {});
-			assertStringIncludes(state.url ?? '', s.other, 'an empty allowlist is unrestricted (D-020)');
-
-			await h.callText('browser_navigate', {
-				url: `${s.allowed}/popup?to=${encodeURIComponent(`${s.other}/landing`)}`,
-			});
-			const popup = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
-			await h.callText('browser_click', { index: byId(popup, 'open').index });
-			await until('the pop-up to open and stay', async () => {
-				const listed = (await structured<{ tabs: Tab[] }>(h, 'browser_list_tabs', {})).tabs;
-				return listed.some((tab) => tab.url.startsWith(s.other)) ? listed : undefined;
-			});
-			assertEquals(navigations(h).filter((event) => event.payload.blocked === true), []);
-		} finally {
-			await s.close();
-		}
-	},
-});
-
-Deno.test({
-	name: 'e2e browser policy (A2): a <secret> placeholder is pinned to the frame the keystrokes land in',
+	name: 'e2e browser policy (secret pin): a <secret> placeholder is pinned to the frame the keystrokes land in',
 	ignore,
 	async fn(t) {
 		const s = servers();
@@ -297,8 +224,8 @@ Deno.test({
 			});
 			await using h = await harness({ env: { TTK_SECRETS: secrets } });
 			await h.callText('browser_navigate', { url: `${s.allowed}/host` });
-			const state = await until('the out-of-process frame to be captured', async () => {
-				const current = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
+			const state = await poll('the out-of-process frame to be captured', async () => {
+				const current = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
 				return current.interactive_elements.some((element) => element.attrs?.id === 'alt-password')
 					? current
 					: undefined;
@@ -309,13 +236,12 @@ Deno.test({
 			assertEquals(alt.frame_id, oopif.id);
 			const top = byId(state, 'top-password');
 
-			await t.step('the top document’s secret is refused in the other origin’s frame — the old hole', async () => {
+			await t.step('the top document’s secret is refused in the other origin’s frame', async () => {
 				const refused = await h.callError('browser_type', {
 					index: alt.index,
 					text: '<secret>site_password</secret>',
 					state_token: state.state_token,
 				});
-				console.log(`[A2] site secret into the localhost frame: ${refused}`);
 				assertStringIncludes(refused, 'Error: navigation-blocked: ');
 				assertStringIncludes(refused, s.other);
 				assert(!refused.includes(SITE_SECRET));
@@ -327,31 +253,29 @@ Deno.test({
 					text: '<secret>alt_password</secret>',
 					state_token: state.state_token,
 				});
-				const after = await structured<State>(h, 'browser_get_state', {});
+				const after = await h.callStructured<State>('browser_get_state', {});
 				assertStringIncludes(after.page, `altlen:${ALT_SECRET.length}`);
-				const audit = await structured<{ entries: Array<Record<string, unknown>> }>(h, 'browser_audit', {});
+				const audit = await h.callStructured<{ entries: Array<Record<string, unknown>> }>('browser_audit', {});
 				const spend = audit.entries.find((entry) => entry.kind === 'secret-fill');
-				console.log(`[A2] audit: ${JSON.stringify(spend)}`);
 				assertEquals(spend?.origin, s.other);
 				assertEquals(spend?.frame_id, oopif.id);
 				assert(!JSON.stringify(audit).includes(ALT_SECRET));
 			});
 
 			await t.step('without an index the focused field’s frame is the pin', async () => {
-				const fresh = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
+				const fresh = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
 				await h.callText('browser_click', { index: byId(fresh, 'alt-password').index });
 				const refused = await h.callError('browser_type', { text: '<secret>site_password</secret>' });
-				console.log(`[A2] focused frame, top secret: ${refused}`);
 				assertStringIncludes(refused, 'Error: navigation-blocked: ');
 
 				await h.callText('browser_click', { index: byId(fresh, 'top-password').index });
 				await h.callText('browser_type', { text: '<secret>site_password</secret>' });
-				const after = await structured<State>(h, 'browser_get_state', {});
+				const after = await h.callStructured<State>('browser_get_state', {});
 				assertStringIncludes(after.page, `toplen:${SITE_SECRET.length}`);
 			});
 
 			await t.step('a field in the top document still takes the top document’s secret by index', async () => {
-				const fresh = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
+				const fresh = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
 				const result = await h.call('browser_fill', {
 					index: byId(fresh, 'top-password').index,
 					text: '<secret>site_password</secret>',
@@ -367,20 +291,38 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e browser policy (A3, A4): downloads are switched at runtime, and health probes the real browser',
+	name: 'e2e browser policy (no allowlist, downloads, health): nothing is contained; downloads switch at runtime',
 	ignore,
 	async fn(t) {
 		const s = servers();
 		try {
 			await using h = await harness();
+			await t.step('with no allowlist the same redirect and pop-up are left alone', async () => {
+				await h.callText('browser_navigate', {
+					url: `${s.allowed}/redirect?to=${encodeURIComponent(`${s.other}/landing`)}`,
+				});
+				const state = await h.callStructured<State>('browser_get_state', {});
+				assertStringIncludes(state.url ?? '', s.other, 'an empty allowlist is unrestricted');
+
+				await h.callText('browser_navigate', {
+					url: `${s.allowed}/popup?to=${encodeURIComponent(`${s.other}/landing`)}`,
+				});
+				const popup = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
+				await h.callText('browser_click', { index: byId(popup, 'open').index });
+				await poll('the pop-up to open and stay', async () => {
+					const listed = (await h.callStructured<{ tabs: Tab[] }>('browser_list_tabs', {})).tabs;
+					return listed.some((tab) => tab.url.startsWith(s.other)) ? listed : undefined;
+				});
+				assertEquals(navigations(h).filter((event) => event.payload.blocked === true), []);
+			});
+
 			await h.callText('browser_navigate', { url: `${s.allowed}/downloads` });
-			const page = await structured<State>(h, 'browser_get_state', { fields: ['core', 'attrs'] });
+			const page = await h.callStructured<State>('browser_get_state', { fields: ['core', 'attrs'] });
 			const link = byId(page, 'file');
 			type Listing = { files: Array<{ status: string; name: string }> };
 
-			await t.step('A3: accept_downloads=false denies the next download', async () => {
-				const off = await structured<{ applied: Record<string, unknown>; unsupported: string[] }>(
-					h,
+			await t.step('accept_downloads=false denies the next download', async () => {
+				const off = await h.callStructured<{ applied: Record<string, unknown>; unsupported: string[] }>(
 					'browser_set_session_options',
 					{ accept_downloads: false },
 				);
@@ -388,29 +330,26 @@ Deno.test({
 				assertEquals(off.unsupported, []);
 				await h.callText('browser_click', { index: link.index });
 				await new Promise((resolve) => setTimeout(resolve, 1500));
-				const listing = await structured<Listing>(h, 'browser_list_files', {});
-				console.log(`[A3] while denying: ${JSON.stringify(listing.files)}`);
+				const listing = await h.callStructured<Listing>('browser_list_files', {});
 				assertEquals(listing.files.filter((file) => file.status === 'completed'), []);
 			});
 
-			await t.step('A3: accept_downloads=true lets the next one complete', async () => {
-				const on = await structured<{ applied: Record<string, unknown> }>(h, 'browser_set_session_options', {
+			await t.step('accept_downloads=true lets the next one complete', async () => {
+				const on = await h.callStructured<{ applied: Record<string, unknown> }>('browser_set_session_options', {
 					accept_downloads: true,
 				});
 				assertEquals(on.applied.accept_downloads, true);
 				await h.callText('browser_click', { index: link.index });
-				const done = await until('the download to complete', async () => {
-					const listing = await structured<Listing>(h, 'browser_list_files', {});
+				const done = await poll('the download to complete', async () => {
+					const listing = await h.callStructured<Listing>('browser_list_files', {});
 					return listing.files.find((file) => file.status === 'completed');
 				});
-				// The denied attempt keeps its ledger entry as `canceled`, so this one's display name is the
-				// disambiguated `w1 (1).txt` (E-33) — the point is that it completed at all.
+				// The denied attempt keeps its ledger entry, so this one may be `w1 (1).txt`.
 				assertStringIncludes(done.name, 'w1');
 			});
 
-			await t.step('A4: browser_health answers from a real Browser.getVersion', async () => {
-				const health = await structured<{ status: string; sessions: Record<string, number> }>(h, 'browser_health');
-				console.log(`[A4] ${JSON.stringify(health.sessions)}`);
+			await t.step('browser_health answers from a real Browser.getVersion', async () => {
+				const health = await h.callStructured<{ status: string; sessions: Record<string, number> }>('browser_health');
 				assertEquals(health.status, 'ok');
 				assertEquals(health.sessions.browser_ok, 1);
 				assertEquals(health.sessions.browser_unresponsive, 0);
@@ -423,44 +362,27 @@ Deno.test({
 
 const UNSANDBOXED = readEnv('BUA_TEST_UNSANDBOXED') !== undefined;
 if (!ignore && !UNSANDBOXED) {
-	console.error('browser tier: skipping the B3 unsandboxed launch — set BUA_TEST_UNSANDBOXED=1 to run it');
+	console.error('browser tier: skipping the unsandboxed launch — set BUA_TEST_UNSANDBOXED=1 to run it');
 }
 
 Deno.test({
-	name: 'e2e browser policy (B3): TTK_CHROMIUM_NO_SANDBOX launches a working Chromium with --no-sandbox',
+	name: 'e2e browser policy (unsandboxed): TTK_CHROMIUM_NO_SANDBOX launches a working Chromium with --no-sandbox',
 	ignore: ignore || !UNSANDBOXED,
 	async fn() {
 		const s = servers();
 		try {
 			await using h = await harness({ env: { TTK_CHROMIUM_NO_SANDBOX: 'true' } });
 			await h.callText('browser_navigate', { url: `${s.allowed}/` });
-			const health = await structured<{ capabilities: { browser?: { sandboxed: boolean } } }>(h, 'browser_health');
+			const health = await h.callStructured<{ capabilities: { browser?: { sandboxed: boolean } } }>('browser_health');
 			assertEquals(health.capabilities.browser, { sandboxed: false });
 
 			// The browser's own record of how it was started, read through CDP from outside the tool surface.
-			const record = h.gateway.registry.peek('default') as {
-				session: {
-					cdpClient: {
-						send: {
-							Page: { navigate(p: unknown, s: string): Promise<unknown> };
-							Runtime: { evaluate(p: unknown, s: string): Promise<{ result: { value?: unknown } }> };
-						};
-					};
-					sessionManager: { getOrCreateCdpSession(t: unknown, f: boolean): Promise<{ sessionId: string }> };
-					agentFocusTargetId: string | null;
-				};
-			};
-			const cdp = await record.session.sessionManager.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
-			await record.session.cdpClient.send.Page.navigate({ url: 'chrome://version' }, cdp.sessionId);
-			const commandLine = await until('chrome://version to render', async () => {
-				const out = await record.session.cdpClient.send.Runtime.evaluate({
-					expression: "document.getElementById('command_line')?.textContent ?? ''",
-					returnByValue: true,
-				}, cdp.sessionId);
-				const text = String(out.result.value ?? '');
+			const { cdp, page } = await pageCdp(h.gateway);
+			await cdp.sendRaw('Page.navigate', { url: 'chrome://version' }, page);
+			const commandLine = await poll('chrome://version to render', async () => {
+				const text = await h.pageValue<string>("document.getElementById('command_line')?.textContent ?? ''");
 				return text === '' ? undefined : text;
 			});
-			console.log(`[B3] command line carries --no-sandbox: ${commandLine.includes('--no-sandbox')}`);
 			assertStringIncludes(commandLine, '--no-sandbox');
 		} finally {
 			await s.close();

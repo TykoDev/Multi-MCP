@@ -1,21 +1,6 @@
 /**
- * The element record (`report_design.md` §3): every field `browser_get_state` and the locator tools
- * can emit for one interactive element, the `fields` presets that select them, and the two cost
- * levers (`element_limit`, `frames`) that bound the array.
- *
- * Units, stated because getting them wrong is the failure this delivery exists to remove: `bounds`
- * is CSS pixels of the top document with the origin at the **layout viewport**'s top-left, which is
- * `absolutePosition - pageInfo.scroll`; `document_bounds` is page-absolute, exactly
- * `absolutePosition`. Device pixel ratio was divided out exactly once upstream.
- *
- * `bounds` is where the server believes the element is. For an element inside a cross-origin frame
- * it is also where the server clicks. For an element in the top document the server uses live quads
- * and may click elsewhere if the element is transformed. Use `bounds` to draw, to rank and for
- * `near`; use `index` to act (architecture §5.4).
- *
- * Every value-bearing field goes through the one password predicate (`isPasswordField`, owned by
- * `@tykotech/browser`): `input.value` becomes the literal `•••`, `attrs` never carries `value`, and
- * `text` is empty (DD-7, invariant I-14).
+ * The element record: every field `browser_get_state` and the locator tools can emit for one interactive element, the
+ * `fields` presets that select them, and the two cost levers (`element_limit`, `frames`) that bound the array.
  */
 import {
 	type DomRect,
@@ -45,18 +30,7 @@ export const FIELD_NAMES = [
 ] as const;
 export type FieldName = (typeof FIELD_NAMES)[number];
 
-/**
- * The three presets. `minimal` is the five frozen fields alone.
- *
- * `core` is the default and its cost is the number that makes the contract cheap: the plan's gate
- * is at or below roughly 310 B/element on the heaviest recorded capture. The design (§3.2) put
- * `locator` in it on a model that used placeholder locator strings and measured 307; the real
- * candidate — a selector plus a 32-hex-character `frame_id` — costs 118 B/element on
- * `truncation_large`, and with it the default measured **368.4 B/element** (`element_record_test.ts`,
- * A-4). The plan's rule for an overshoot is to cut a field rather than raise the number, so `locator`
- * is opt-in (`fields: ['core', 'locator']`) and `core` measures 250.4 B/element on that capture.
- * Recorded as D-035.
- */
+/** The three presets. `minimal` is the five frozen fields alone. */
 export const FIELD_PRESETS = {
 	minimal: [] as readonly FieldName[],
 	core: ['bounds', 'visible', 'enabled', 'focused', 'frame_id'] as readonly FieldName[],
@@ -75,7 +49,7 @@ export const FIELD_PRESETS = {
 		'locators',
 	] as readonly FieldName[],
 } as const;
-export type FieldPreset = keyof typeof FIELD_PRESETS;
+type FieldPreset = keyof typeof FIELD_PRESETS;
 
 /** Every legal member of a `fields` array: a preset name or a field name. */
 export const FIELD_OPTIONS = ['minimal', 'core', 'full', ...FIELD_NAMES] as const;
@@ -83,9 +57,9 @@ export type FieldOption = (typeof FIELD_OPTIONS)[number];
 
 /**
  * The fields that imply an `element_limit` of {@linkcode IMPLIED_ELEMENT_LIMIT} when none is given,
- * because they are where the array crosses a megabyte on the heaviest recorded page (design §3.2).
+ * because they are where the array crosses a megabyte on the heaviest recorded page.
  */
-export const HEAVY_FIELDS: ReadonlySet<FieldName> = new Set([
+const HEAVY_FIELDS: ReadonlySet<FieldName> = new Set([
 	'document_bounds',
 	'frame',
 	'input',
@@ -96,7 +70,7 @@ export const HEAVY_FIELDS: ReadonlySet<FieldName> = new Set([
 export const IMPLIED_ELEMENT_LIMIT = 500;
 
 /** The `attrs` whitelist, closed at ten keys. `value` is deliberately not one of them. */
-export const ATTRS_WHITELIST = [
+const ATTRS_WHITELIST = [
 	'id',
 	'name',
 	'type',
@@ -112,12 +86,9 @@ export const ATTRS_WHITELIST = [
 export const MASKED_INPUT_VALUE = '•••';
 
 /** `text` is capped here. */
-export const MAX_TEXT_CHARS = 200;
+const MAX_TEXT_CHARS = 200;
 
-/**
- * Resolves a `fields` request to the set of optional fields to emit: the union of everything named.
- * Omitted means `['core']`.
- */
+/** Resolves a `fields` request to the set of optional fields to emit: the union of everything named. */
 export function resolveFields(requested: readonly FieldOption[] | undefined): ReadonlySet<FieldName> {
 	const out = new Set<FieldName>();
 	for (const option of requested ?? ['core']) {
@@ -151,7 +122,7 @@ export interface InputState {
 	checked: boolean | null;
 }
 
-/** One interactive element, as a model addresses it. The first five fields are the frozen 0.1.0 record. */
+/** One interactive element, as a model addresses it. The first five fields are the frozen record. */
 export interface ObservedElement {
 	index: number;
 	tag: string;
@@ -177,13 +148,13 @@ export interface ObservedElement {
 }
 
 /** What the builder needs beyond the node: the scroll to subtract, the indexes, the frame URLs. */
-export interface ElementRecordContext {
+interface ElementRecordContext {
 	readonly fields: ReadonlySet<FieldName>;
 	readonly scroll: { x: number; y: number };
 	/** `null` when no locator field is requested, so the index is never built for nothing. */
 	readonly locators: DocumentIndex | null;
 	readonly frameUrls: ReadonlyMap<string, string>;
-	/** The five-field label, produced by the caller so one function owns it (E-24, E-34). */
+	/** The five-field label, produced by the caller so one function owns it. */
 	readonly labelOf: (node: EnhancedDomTreeNode) => string;
 }
 
@@ -203,7 +174,7 @@ const FORM_TAGS: ReadonlySet<string> = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 const CHECKABLE_TYPES: ReadonlySet<string> = new Set(['checkbox', 'radio']);
 
 /**
- * The `input` field: the live columns E-39 decoded, with the attribute as the fallback when a
+ * The `input` field: the live value columns the capture decodes, with the attribute as the fallback when a
  * capture carried no column, and the password predicate applied before anything is read.
  */
 export function inputStateOf(node: EnhancedDomTreeNode): InputState | undefined {
@@ -220,8 +191,8 @@ export function inputStateOf(node: EnhancedDomTreeNode): InputState | undefined 
 	if (node.nodeName === 'SELECT') {
 		value = null;
 	} else if (isPasswordField(node)) {
-		// DD-7: a consumer may learn that a value is present, never what it is or how long it is.
-		const present = (snapshot?.inputValue ?? attributes['value'] ?? '') !== '';
+		// A consumer may learn that a value is present, never what it is or how long it is.
+		const present = (snapshot?.textValue ?? snapshot?.inputValue ?? attributes['value'] ?? '') !== '';
 		value = present ? MASKED_INPUT_VALUE : '';
 	} else if (node.nodeName === 'TEXTAREA') {
 		value = snapshot?.textValue ?? snapshot?.inputValue ?? null;
@@ -255,7 +226,7 @@ export function textOf(node: EnhancedDomTreeNode): string {
 	return text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}…` : text;
 }
 
-/** Builds one record. The five frozen fields are produced exactly as 0.1.0 produced them. */
+/** Builds one record. The five frozen fields are produced byte for byte in their frozen form. */
 export function buildElementRecord(
 	index: number,
 	node: EnhancedDomTreeNode,

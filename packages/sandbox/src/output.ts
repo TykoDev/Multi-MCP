@@ -1,11 +1,7 @@
 /**
- * A command's output, kept within a fixed size however much it prints: the first half and the last
- * half of the limit, with a line in between saying how much was left out. The middle is read and
- * dropped as it arrives, so a command that prints gigabytes costs time, not memory.
- *
- * The text handed back is UTF-8. A cut never splits a character; bytes that are not UTF-8 become
- * U+FFFD, and so does NUL, which PostgreSQL will not store in text. Terminal colour and cursor codes
- * are removed: they mean nothing to a model or in a thread.
+ * A command's output within a fixed size: the first and last half of the limit with a line counting the cut; the
+ * middle is dropped as it arrives. UTF-8, never split mid-character; invalid bytes and NUL become U+FFFD, and
+ * terminal control codes are removed.
  */
 import { LIMITS } from './limits.ts';
 
@@ -67,7 +63,7 @@ export class OutputCapture {
 		const dropped = this.#total - head.length - tail.length;
 		if (dropped === 0) {
 			return {
-				output: clean(decode(concat(head, tail))),
+				output: clean(decode(concat([head, tail]))),
 				truncated: false,
 				omittedBytes: 0,
 				outputBytes: this.#total,
@@ -90,7 +86,7 @@ export class OutputCapture {
 
 	#tailBytes(): Uint8Array {
 		if (this.#tailLength < this.#tail.length) return this.#tail.slice(0, this.#tailLength);
-		return concat(this.#tail.subarray(this.#tailNext), this.#tail.subarray(0, this.#tailNext));
+		return concat([this.#tail.subarray(this.#tailNext), this.#tail.subarray(0, this.#tailNext)]);
 	}
 }
 
@@ -105,11 +101,29 @@ export function completeLength(bytes: Uint8Array): number {
 	return bytes.length - i >= needed ? bytes.length : i;
 }
 
-function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-	const out = new Uint8Array(a.length + b.length);
-	out.set(a);
-	out.set(b, a.length);
+export function concat(parts: readonly Uint8Array[]): Uint8Array {
+	const out = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+	let at = 0;
+	for (const part of parts) {
+		out.set(part, at);
+		at += part.length;
+	}
 	return out;
+}
+
+/** Output kept whole up to `limit` bytes; `push` answers false from there on, which stops the work. */
+export function collect(limit: number): { push(chunk: Uint8Array): boolean; bytes(): Uint8Array } {
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	return {
+		push: (chunk) => {
+			if (size >= limit) return false;
+			chunks.push(chunk);
+			size += chunk.length;
+			return size < limit;
+		},
+		bytes: () => concat(chunks),
+	};
 }
 
 function decode(bytes: Uint8Array): string {
@@ -118,10 +132,7 @@ function decode(bytes: Uint8Array): string {
 
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
-/**
- * Terminal control sequences: CSI (colours, cursor moves), OSC (titles, links; ended by BEL or
- * ESC \) and the two-byte escapes.
- */
+/** Terminal control sequences: CSI, OSC (ended by BEL or ESC \) and two-byte escapes. */
 const CONTROL = new RegExp(
 	`${ESC}\\[[0-?]*[ -/]*[@-~]|${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)|${ESC}[@-Z\\\\-_]`,
 	'g',

@@ -1,11 +1,11 @@
 /**
- * Simplification pass — `EnhancedDomTreeNode` tree → `SimplifiedNode` tree (DATA-MODEL §6.3) with
- * index assignment per R6.1–R6.4.
+ * Simplification pass — `EnhancedDomTreeNode` tree → `SimplifiedNode` tree, with selector-index
+ * assignment, new-element marking and the wall-clock budget.
  *
- * Only interactive, scrollable, or IFRAME/FRAME elements produce a tag line (§6.4); everything else is
+ * Only interactive, scrollable, or IFRAME/FRAME elements produce a tag line; everything else is
  * a structural pass-through whose children are hoisted to the parent's depth. Display candidates that
  * are suppressed — occluded by paint order, or inside a collapsed SVG — stay in the tree with
- * `shouldDisplay = false` so the flags §6.3 declares (`ignoredByPaintOrder`, `excludedByParent`) are
+ * `shouldDisplay = false` so the flags `SimplifiedNode` declares (`ignoredByPaintOrder`, `excludedByParent`) are
  * observable and so no suppressed node can ever reach the selector map.
  */
 
@@ -15,10 +15,10 @@ import { compoundComponents } from './serialize_compound.ts';
 import { passesCssGate } from './extract_merge.ts';
 
 /**
- * ERRATUM(E-41). `isVisible` conflates two facts — "not rendered at all" (`display:none`,
- * `visibility:hidden`, no layout box) and "rendered but outside the ±1000 px viewport band" — into
- * one boolean, so `browser_get_state {include_hidden: true}` had no way to admit the second class
- * without admitting the first. This predicate separates them from the data the node already carries:
+ * `isVisible` conflates two facts — "not rendered at all" (`display:none`, `visibility:hidden`, no
+ * layout box) and "rendered but outside the ±1000 px viewport band" — into one boolean, and
+ * `browser_get_state {include_hidden: true}` must admit the second class without the first. This
+ * predicate separates them from the data the node already carries:
  * an element that failed *only* the viewport test still passes the CSS gate and still has a box.
  * An element that fails the CSS gate is never emitted under any setting, because it is not clickable
  * and a `visible: false` that conflated the two would be a lie.
@@ -27,7 +27,7 @@ export function isOffscreenOnly(node: EnhancedDomTreeNode): boolean {
 	return node.isVisible === false && node.absolutePosition !== null && passesCssGate(node.snapshotNode);
 }
 
-/** ERRATUM(E-41): the hidden test the walk applies, with the offscreen class optionally admitted. */
+/** The hidden test the walk applies, with the offscreen class optionally admitted. */
 function isHiddenForWalk(node: EnhancedDomTreeNode, includeOffscreen: boolean): boolean {
 	if (node.isVisible !== false) return false;
 	return includeOffscreen ? !isOffscreenOnly(node) : true;
@@ -66,9 +66,9 @@ const INTERACTIVE_TAGS: ReadonlySet<string> = new Set([
 /**
  * AX roles that imply an actionable control, lowercased at the lookup site.
  *
- * ERRATUM(M1-parity-6): `row`, `cell`, `gridcell`, `option`, `iframe` (Chrome spells it `Iframe`) and
- * `dialog` were added against the recorded corpus — 41 of the 67 measured disagreements were elements
- * the reference indexes and this set did not admit. Deliberately still absent, each with a corpus
+ * Calibrated against the recorded corpus: `row`, `cell`, `gridcell`, `option`, `iframe` (Chrome spells
+ * it `Iframe`) and `dialog` are in because the reference indexes such elements. Deliberately absent,
+ * each with a corpus
  * element that is *not* indexed: `image` (`#interactive-svg`), `columnheader`/`rowheader` (the `<th>`s),
  * `rowgroup`, `caption`, `grid`, `table`, `list`, `listitem`, `group` (`<fieldset>`, `<optgroup>`),
  * `region`, `status`, `radiogroup`, `tablist`, `tabpanel`, `menu`, `generic`, `none`.
@@ -124,7 +124,7 @@ const ZERO_ALPHA = /^rgba\([^)]*,\s*0(?:\.0+)?\s*\)$/i;
 /** Upper bound on occlusion candidates considered, for a deterministic O(n·k) filter. */
 const MAX_OCCLUDERS = 200;
 
-/** Nodes visited between wall-clock budget checks (R6.4). */
+/** Nodes visited between wall-clock budget checks. */
 const BUDGET_CHECK_INTERVAL = 256;
 
 /** True when the element, or the AX tree, reports the control as disabled. */
@@ -167,11 +167,9 @@ function inheritsClickAffordance(node: EnhancedDomTreeNode): boolean {
 /**
  * Interactivity predicate.
  *
- * ERRATUM(M1-dom-serialize-9, SETTLED by measurement): no spec section defines interactivity detection
- * — DATA-MODEL §6.3/§6.4 consume `isInteractive` without deriving it. The ordered list below is the
- * corpus-calibrated form (DECISION-REGISTER §9.6 (E-23) item 4); it measured 95.3 % agreement before
- * calibration, with every disagreement traced to a named rule. Still exposed through
- * `SimplifyOptions.isInteractive` so a future corpus can retune it without touching the renderer.
+ * The ordered list below is calibrated against the recorded corpus, with every disagreement traced to
+ * a named rule. It is exposed through `SimplifyOptions.isInteractive` so a future corpus can retune it
+ * without touching the renderer.
  *
  * Ordered rules, first decision wins:
  * 1. non-element → false
@@ -188,8 +186,7 @@ function inheritsClickAffordance(node: EnhancedDomTreeNode): boolean {
  * 12. `cursor: pointer`, not inherited → true
  * 13. otherwise false
  *
- * Rule 4 is corpus-only: nothing in `SPECS/` makes `disabled` an interactivity input, and the reference
- * indexes none of `#r-overnight`, `#ar-cash`, `#sel-disabled`, `#lb-opt-4`, `#v-disabled`.
+ * Rule 4 comes from the corpus: the reference indexes none of `#r-overnight`, `#ar-cash`, `#sel-disabled`, `#lb-opt-4`, `#v-disabled`.
  */
 export function isInteractiveElement(
 	node: EnhancedDomTreeNode,
@@ -197,7 +194,7 @@ export function isInteractiveElement(
 	options: { includeOffscreen?: boolean } = {},
 ): boolean {
 	if (node.nodeType !== ELEMENT_NODE) return false;
-	// ERRATUM(E-41): rule 2 admits the offscreen-only class when asked; the CSS gate still applies.
+	// Rule 2 admits the offscreen-only class when asked; the CSS gate still applies.
 	if (isHiddenForWalk(node, options.includeOffscreen === true)) return false;
 	if (node.snapshotNode?.computedStyles?.['pointer-events'] === 'none') return false;
 	if (isDisabledControl(node)) return false;
@@ -227,7 +224,7 @@ export function isInteractiveElement(
 export interface SimplifyOptions {
 	readonly derived: SerializerDerived;
 	/**
-	 * R6.2 — the previous step's `(sessionId, backendNodeId)` keys. `undefined` (no previous state at
+	 * The previous step's `(sessionId, backendNodeId)` keys. `undefined` (no previous state at
 	 * all) marks nothing new; an explicitly empty set marks everything new.
 	 */
 	readonly previousKeys?: ReadonlySet<string> | undefined;
@@ -236,12 +233,12 @@ export interface SimplifyOptions {
 	/** Interactivity override; defaults to {@linkcode isInteractiveElement}. */
 	readonly isInteractive?: (node: EnhancedDomTreeNode, derived: SerializerDerived) => boolean;
 	/**
-	 * ERRATUM(E-41). Index elements that pass the CSS gate but fail the viewport test, and render
+	 * Index elements that pass the CSS gate but fail the viewport test, and render
 	 * their line, so `include_hidden` can emit them with `visible: false`. Default `false`, which is
 	 * the behaviour every recorded golden was measured against.
 	 */
 	readonly includeOffscreen?: boolean;
-	/** R6.4 — whole-request wall-clock budget in ms. */
+	/** Whole-request wall-clock budget in ms. */
 	readonly budgetMs?: number;
 	/** Clock injection point for the budget; defaults to {@linkcode Date.now}. */
 	readonly now?: () => number;
@@ -250,17 +247,17 @@ export interface SimplifyOptions {
 /** Output of {@linkcode simplifyDomTree}. */
 export interface SimplifyResult {
 	readonly root: SimplifiedNode | null;
-	/** R6.1 — LLM index → node. */
+	/** LLM index → node. */
 	readonly selectorMap: Map<number, EnhancedDomTreeNode>;
-	/** R6.3 — cached reverse map, keyed by {@linkcode selectorKey}. */
+	/** Cached reverse map, keyed by {@linkcode selectorKey}. */
 	readonly reverseMap: Map<string, number>;
-	/** R6.2 — the key set the *next* step compares against. */
+	/** The key set the *next* step compares against. */
 	readonly keys: Set<string>;
-	/** R6.4 — true when the budget elapsed mid-walk; the caller must fail safe. */
+	/** True when the budget elapsed mid-walk; the caller must fail safe. */
 	readonly timedOut: boolean;
 }
 
-/** R6.2/R6.3 map key: `backendNodeId` is only unique within its own session. */
+/** Selector and reverse-map key: `backendNodeId` is only unique within its own session. */
 export function selectorKey(sessionId: string, backendNodeId: number): string {
 	return `${sessionId}:${backendNodeId}`;
 }
@@ -294,10 +291,10 @@ function* walkAll(root: EnhancedDomTreeNode): Generator<EnhancedDomTreeNode> {
 }
 
 /**
- * Pre-pass: the reserved backend-id pool (R6.1) and the occluder set.
+ * Pre-pass: the reserved backend-id pool and the occluder set.
  *
  * Occluders are elements that actually paint something over an area: a resolved paint order, a
- * non-empty page-absolute box, a non-transparent background, and — ERRATUM(E-76) — a pointer that does
+ * non-empty page-absolute box, a non-transparent background, and a pointer that does
  * not pass through them (`pointer-events` other than `none`). The set is sorted by area (largest
  * first, ties broken by `backendNodeId`) and capped at {@linkcode MAX_OCCLUDERS} — a deterministic
  * bound that keeps the filter O(n·k) on pages built entirely out of coloured boxes.
@@ -315,12 +312,12 @@ function collectPrepass(
 		const rect = node.absolutePosition;
 		if (paintOrder === null || rect === null || rect.width <= 0 || rect.height <= 0) continue;
 		if (node.isVisible === false) continue;
-		// ERRATUM(E-76): an element with computed `pointer-events: none` is not an occluder. The pointer
-		// passes through it — Chromium's hit test answers the element underneath (measured, U-2:
+		// An element with computed `pointer-events: none` is not an occluder. The pointer passes through
+		// it — Chromium's hit test answers the element underneath (measured on Chromium:
 		// `pe-none-covered-button`), and so does the click cascade's own occlusion check — so a control under
-		// such a cover is actionable, and filtering it out left `browser_element_at` answering "nothing" for a
-		// point a click would land on. The donor (and its recorded golden for `occlusion_paint_order`) treats
-		// the cover as an occluder; this is a deliberate divergence from that golden. `pointer-events` is
+		// such a cover is actionable, and filtering it out would leave `browser_element_at` answering
+		// "nothing" for a point a click lands on. This deliberately diverges from the recorded reference
+		// golden for `occlusion_paint_order`, which treats the cover as an occluder. `pointer-events` is
 		// inherited, so a cover's descendants drop out with it unless they turn it back on — and one that does
 		// receives the pointer, so it still occludes.
 		if (node.snapshotNode?.computedStyles?.['pointer-events'] === 'none') continue;
@@ -356,14 +353,14 @@ interface WalkContext {
 	readonly usedIndices: Set<number>;
 	readonly deadline: number | null;
 	readonly now: () => number;
-	/** ERRATUM(E-41). */
+	/** Admit offscreen-only elements; see {@linkcode isOffscreenOnly}. */
 	readonly includeOffscreen: boolean;
 	nextSynthetic: number;
 	visited: number;
 	timedOut: boolean;
 }
 
-/** R6.4 — checks the wall-clock budget every {@linkcode BUDGET_CHECK_INTERVAL} nodes. */
+/** Checks the wall-clock budget every {@linkcode BUDGET_CHECK_INTERVAL} nodes. */
 function overBudget(context: WalkContext): boolean {
 	if (context.timedOut) return true;
 	context.visited += 1;
@@ -395,13 +392,11 @@ function isOccluded(node: EnhancedDomTreeNode, context: WalkContext): boolean {
 }
 
 /**
- * R6.1 — the node's `backendNodeId`, or the next free synthetic index above the reserved pool when
- * that id is already taken (OOPIF sessions number their nodes independently).
+ * The node's `backendNodeId`, or the next free synthetic index above the reserved pool when that id
+ * is already taken (OOPIF sessions number their nodes independently).
  *
- * ERRATUM(M1-dom-serialize-12): R6.1 reads "the next integer above `max(reservedBackendIds) + 1` that
- * does not collide", which is ambiguous about whether `max + 1` is the first candidate or the last
- * excluded one. Implemented as "smallest free integer ≥ max(reserved) + 1" — the reading under which
- * the "does not collide" clause still does work (it guards synthetics against each other).
+ * The synthetic index is the smallest free integer ≥ max(reserved) + 1; the "free" check also guards
+ * synthetics against each other.
  */
 function assignIndex(node: EnhancedDomTreeNode, context: WalkContext): number {
 	let index = node.backendNodeId;
@@ -418,7 +413,7 @@ function assignIndex(node: EnhancedDomTreeNode, context: WalkContext): number {
 	return index;
 }
 
-/** Empty simplified node with every §6.3 flag at its default. */
+/** Empty simplified node with every flag at its default. */
 function blankNode(node: EnhancedDomTreeNode, children: SimplifiedNode[]): SimplifiedNode {
 	return {
 		originalNode: node,
@@ -437,7 +432,7 @@ function blankNode(node: EnhancedDomTreeNode, children: SimplifiedNode[]): Simpl
 /**
  * A collapsed `<svg>`'s subtree: nothing renders, and only anchors still consume a selector index.
  *
- * E-23 item 1 records this as an apparent reference defect reproduced deliberately. `svg_children`'s
+ * This reproduces an apparent reference defect deliberately. `svg_children`'s
  * `#svg-link` occupies index 47 in the reference's selector map while having **no token in the visible
  * text**, so the model can never emit an action referencing it; the only observable effect is that the
  * index is consumed, and *not* consuming it would shift every later index on the page. The sibling
@@ -471,8 +466,8 @@ function simplifyNode(node: EnhancedDomTreeNode, context: WalkContext, excluded:
 
 	const tag = context.derived.tagName(node);
 	// A hidden element hides everything beneath it: `isVisible` is the CSS gate plus the viewport test,
-	// and neither applies to a parent without applying to its subtree. ERRATUM(E-41): with
-	// `includeOffscreen` the viewport half is waived and only the CSS gate hides.
+	// and neither applies to a parent without applying to its subtree. With `includeOffscreen` the
+	// viewport half is waived and only the CSS gate hides.
 	const hidden = isHiddenForWalk(node, context.includeOffscreen);
 	const occluded = !excluded && !hidden && isOccluded(node, context);
 	const suppressed = excluded || occluded || hidden;
@@ -481,19 +476,17 @@ function simplifyNode(node: EnhancedDomTreeNode, context: WalkContext, excluded:
 	const interactive = context.interactive(node, context.derived);
 	const scrollable = context.derived.isActuallyScrollable(node);
 	const isFrame = FRAME_TAGS.has(tag);
-	// ERRATUM(M1-parity-7): §6.4's `[544]<svg />` example shows an *interactive* SVG root, and this pass
-	// used to drop a non-interactive one entirely — the reference emits a line for every SVG root
+	// Every SVG root is a candidate, interactive or not: the reference emits a line for each
 	// (`<svg id=plain-svg /> <!-- SVG content collapsed -->`).
 	const candidate = interactive || scrollable || isFrame || isSvg;
 
 	// Index assignment is DOCUMENT order, so it must happen before the subtree is walked. A `<tr>` is
 	// indexed before its `<td>`s, a `<label>` before the `<input>` it wraps, an `<iframe>` before its
 	// content — all four shapes appear in the recorded corpus and all four order the parent first.
-	// ERRATUM(M1-parity-13): this pass used to assign after `simplifyChildren`, i.e. post-order, which
-	// was unobservable only while no container tag was interactive.
+	// Assigning after `simplifyChildren` (post-order) would misnumber every interactive container.
 	const selectorIndex = candidate && !suppressed && interactive ? assignIndex(node, context) : null;
 
-	// SVG survives as a root; everything below it collapses into that one line (§6.4).
+	// SVG survives as a root; everything below it collapses into that one line.
 	const children = isSvg ? [] : simplifyChildren(node, context, suppressed);
 	if (isSvg && !suppressed) reserveCollapsedIndices(node, context);
 	if (!candidate) return children;
@@ -516,8 +509,7 @@ function simplifyNode(node: EnhancedDomTreeNode, context: WalkContext, excluded:
 	}
 
 	const key = selectorKey(node.sessionId, node.backendNodeId);
-	// ERRATUM(M1-dom-serialize-13): R6.2 does not say what step 1 does, where no previous state exists.
-	// `previousKeys === undefined` marks nothing new (starring all ~200 elements of the first page is
+	// On the first step there is no previous state: `previousKeys === undefined` marks nothing new (starring all ~200 elements of the first page is
 	// noise, not signal); an explicitly empty set marks everything new.
 	const isNew = selectorIndex === null
 		? false
@@ -541,9 +533,8 @@ function simplifyNode(node: EnhancedDomTreeNode, context: WalkContext, excluded:
  * Children in render order: shadow roots first (shadow content replaces light content unless slotted,
  * and the LLM reads what it sees), then light children, then the frame's inner document.
  *
- * ERRATUM(M1-dom-serialize-10): `user-agent` shadow roots are skipped — §6.4 names only
- * `Open Shadow` / `Closed Shadow` wrappers, and UA roots hold browser-internal widget structure that
- * no action can address.
+ * `user-agent` shadow roots are skipped — the serializer renders only `Open Shadow` / `Closed Shadow`
+ * wrappers, and UA roots hold browser-internal widget structure that no action can address.
  */
 function simplifyChildren(node: EnhancedDomTreeNode, context: WalkContext, excluded: boolean): SimplifiedNode[] {
 	const result: SimplifiedNode[] = [];
@@ -558,7 +549,7 @@ function simplifyChildren(node: EnhancedDomTreeNode, context: WalkContext, exclu
 	return result;
 }
 
-/** Runs the §6.3 simplification pass over a merged DOM tree. */
+/** Runs the simplification pass over a merged DOM tree. */
 export function simplifyDomTree(root: EnhancedDomTreeNode | null, options: SimplifyOptions): SimplifyResult {
 	const selectorMap = new Map<number, EnhancedDomTreeNode>();
 	const reverseMap = new Map<string, number>();

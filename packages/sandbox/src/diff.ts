@@ -1,16 +1,8 @@
 /**
- * The diff of a checkout: everything that differs from its HEAD commit — the empty initial commit the workspace
- * service made when it created the workspace (a command cannot commit, since `.git` is read-only to it) — whoever
- * changed it: the agent's file tools or the commands it ran.
- *
- * git runs in a cage like any command, with the whole checkout read-only. It stages the working
- * tree into a temporary index, and writes the blobs that takes into a temporary object store; the
- * repository's own objects are read through `GIT_ALTERNATE_OBJECT_DIRECTORIES`. So nothing in the
- * checkout, its `.git` included, changes by being diffed. Untracked files count, except what the
- * repository ignores and the dependency and cache folders in DIFF_EXCLUDES, which no patch wants.
- *
- * The cage prints the file list first (`--name-status -z`), then a separator, then the patch, so
- * one capped stream carries both and the list survives a patch that had to be cut.
+ * The diff of a checkout against HEAD. git runs in a cage with the checkout read-only, staging into a temporary
+ * index and object store (the repository's objects via `GIT_ALTERNATE_OBJECT_DIRECTORIES`), so nothing is changed by
+ * diffing. Untracked files count, except ignored ones and DIFF_EXCLUDES. The file list is printed before the patch,
+ * so it survives a patch that had to be cut.
  */
 import { LIMITS } from './limits.ts';
 import { WORKSPACE } from './cage.ts';
@@ -31,17 +23,14 @@ export const DIFF_SCRATCH = '/tmp/.harbour-diff';
 /** Printed between the file list and the patch: a token git never prints as a status. */
 const SEPARATOR = '=';
 
-/**
- * The script the diff cage runs: no part of it comes from the request. `scratch` is where git stages, a fixed
- * path: the run's /tmp for bwrap, the workspace's home for the Docker backend (D-108), whose /tmp is a small tmpfs.
- */
+/** The diff cage's fixed script; `scratch` is where git stages (/tmp for bwrap, the home for Docker). */
 export function diffScript(scratch: string = DIFF_SCRATCH): string {
 	const SCRATCH = scratch;
 	const git = [
 		'git',
 		"-c safe.directory='*'",
 		'-c core.fsmonitor=false',
-		// R12: a checkout may now come from a remote; no hook of it, or of anything, ever runs in a diff.
+		// A checkout may come from a remote; no hook of it, or of anything, ever runs in a diff.
 		'-c core.hooksPath=/dev/null',
 		'-c core.untrackedCache=false',
 		`-c core.excludesFile=${SCRATCH}/exclude`,
@@ -78,10 +67,7 @@ export interface DiffResult {
 
 const STATUS: Record<string, Change> = { A: 'added', M: 'modified', T: 'modified', D: 'deleted' };
 
-/**
- * Reads what the diff cage printed. `complete` is false when the output was cut at the limit, in
- * which case the patch keeps only whole files.
- */
+/** Reads what the diff cage printed; when cut (`complete` false), the patch keeps only whole files. */
 export function parseDiff(bytes: Uint8Array, complete: boolean): DiffResult {
 	const decoder = new TextDecoder('utf-8', { fatal: false });
 	const files: DiffResult['files'] = [];
@@ -135,10 +121,8 @@ const encoder = new TextEncoder();
 const jsonBytes = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
 
 /**
- * SB-6: the diff cut to at most `max` bytes as JSON. patchBytes bounds the patch's own bytes, but
- * escaping can make it six times longer in a reply (a control byte becomes \u0001), and paths can
- * carry control bytes too. So when the reply would be too long, the file list keeps up to a
- * quarter of the room and the patch keeps whole files in what is left; either cut says truncated.
+ * The diff cut to at most `max` bytes as JSON (escaping can grow it sixfold): the file list keeps up to a quarter
+ * of the room, the patch whole files in the rest; either cut says truncated.
  */
 export function fitDiff(result: DiffResult, max: number): DiffResult {
 	if (jsonBytes(result) <= max) return result;

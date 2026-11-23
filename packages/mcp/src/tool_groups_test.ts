@@ -1,10 +1,6 @@
 /**
  * Tool groups: a grouped connection lists one `use_<group>` entry tool per group instead of the group's tools, and an
- * entry tool opens its group (run 20261028-tool-groups, AC-1 to AC-6).
- *
- * Every case builds its server with the real factory and pins it to one in-memory connection, as stdio does, and reads
- * the list through the real SDK `tools/list`: what is under test is what a client sees, including the pinned-SDK fact
- * that `tools/list` reads the `RegisteredTool.enabled` an entry tool assigns.
+ * entry tool opens its group.
  */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
@@ -26,7 +22,7 @@ const MEMBERS: Readonly<Record<ToolGroup, number>> = {
 	browser: 57,
 	library: 17,
 	sandbox: 12,
-	agent: 7,
+	agent: 6,
 	memory: 4,
 	a2ui: 2,
 };
@@ -36,7 +32,7 @@ const ENTRY_TOOLS = TOOL_GROUPS.map((group) => `use_${group}`);
 interface Options {
 	readonly toolGroups?: boolean;
 	readonly scopes?: readonly Scope[];
-	readonly services?: () => { sandbox?: boolean; agents?: boolean };
+	readonly services?: () => { sandbox?: boolean };
 }
 
 interface Harness {
@@ -52,7 +48,7 @@ interface Harness {
 	[Symbol.asyncDispose](): Promise<void>;
 }
 
-/** Every tool composed and offered, as in `annotations_test.ts`: an owner, every action bound, every switch on. */
+/** Every tool composed and offered, as in `catalog_test.ts`'s annotations table: an owner, every action bound, every switch on. */
 async function connect(options: Options = {}): Promise<Harness> {
 	const dir = join('tests/.scratch', `tool-groups-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
@@ -92,8 +88,6 @@ async function connect(options: Options = {}): Promise<Harness> {
 		...(options.services === undefined ? {} : { services: options.services }),
 		...(options.toolGroups === undefined ? {} : { toolGroups: options.toolGroups }),
 	};
-	// The 2025 era, as a stdio connection that opened with `initialize` gets it: an in-memory server cannot answer the
-	// 2026 `server/discover`, which the transport entry (`serveStdio`) handles in front of the server.
 	const server = await createBuildServer(deps)({ era: 'legacy' }) as McpServer;
 	const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
 	const client = new Client({ name: 'tool-groups', version: '0' });
@@ -142,9 +136,8 @@ Deno.test('tool groups: every shipped tool is pinned to the group its name prefi
 		if (group === undefined) always.push(tool.name);
 		else counts[group]++;
 	}
-	assertEquals(h.composed.length, 102, 'the whole catalog is composed');
+	assertEquals(h.composed.length, 101, 'the whole catalog is composed');
 	assertEquals(counts, MEMBERS);
-	// A tool whose prefix no group claims lands here, so a new one fails this line until somebody places it.
 	assertEquals(always.sort(), ALWAYS_LISTED);
 	assertEquals(toolGroupOf('browser_save_to_share'), 'browser', 'a library-module tool goes by its name');
 });
@@ -154,7 +147,6 @@ Deno.test('tool groups: a grouped connection lists the entry and app-only tools 
 	assertEquals(await h.names(), [...ALWAYS_LISTED, ...ENTRY_TOOLS].sort());
 	const { tools } = await h.client.listTools();
 	for (const tool of tools.filter((listed) => listed.name.startsWith('use_'))) {
-		// Read-only and closed world: opening a group changes what this connection lists, nothing else.
 		assertEquals(tool.annotations, { readOnlyHint: true, openWorldHint: false }, tool.name);
 		assertEquals(tool.inputSchema.required ?? [], [], `${tool.name} takes no arguments`);
 		assert(typeof tool.description === 'string' && tool.description.includes(`${tool.name.slice(4)}`), tool.name);
@@ -181,7 +173,6 @@ Deno.test('tool groups: opening a group lists its tools and announces once', asy
 	await settle();
 	assertEquals(h.announced(), 1, 'one tools/list_changed for the whole group, not one per tool');
 
-	// The client's re-list carries the real tools, with their own schemas and annotations.
 	const { tools } = await h.client.listTools();
 	const listed = new Map(tools.map((tool) => [tool.name, tool]));
 	for (const name of browser) assert(listed.has(name), `${name} is listed once its group is open`);
@@ -189,14 +180,12 @@ Deno.test('tool groups: opening a group lists its tools and announces once', asy
 	assertEquals(listed.get('browser_get_state')!.annotations?.readOnlyHint, true);
 	assert(!listed.has('file_read'), 'only the opened group is listed');
 
-	// Opening it again changes nothing and announces nothing.
 	const second = await h.call('use_browser');
 	assertEquals(opened(second).tools.length, browser.length);
 	assertStringIncludes((second.content as { text: string }[])[0]!.text, 'were already');
 	await settle();
 	assertEquals(h.announced(), 1);
 
-	// Another group announces once more and adds only itself.
 	await h.call('use_memory');
 	await settle();
 	assertEquals(h.announced(), 2);
@@ -221,7 +210,6 @@ Deno.test('tool groups: a server built without the flag lists flat', async () =>
 	const names = await h.names();
 	assertEquals(names, h.composed.map((tool) => tool.name).sort(), 'every composed tool, as before');
 	assert(!names.some((name) => name.startsWith('use_')), 'no entry tool');
-	// Not in this server's catalog at all, so the dispatcher answers as for any unknown name: a protocol error.
 	await assertRejects(() => h.call('use_browser'), Error, 'Tool use_browser not found');
 });
 
@@ -229,7 +217,6 @@ Deno.test("tool groups: an entry tool follows its caller's scopes", async () => 
 	await using h = await connect({ toolGroups: true, scopes: DEFAULT_SCOPES });
 	const held = new Set<Scope>(DEFAULT_SCOPES);
 	const names = await h.names();
-	// The default grant holds browser and library tools, and no sandbox, agent or A2UI grant.
 	assert(names.includes('use_browser') && names.includes('use_library'), names.join(','));
 	for (const absent of ['use_sandbox', 'use_agent', 'use_a2ui']) assert(!names.includes(absent), absent);
 	const expected = TOOL_GROUPS.filter((group) =>
@@ -237,7 +224,6 @@ Deno.test("tool groups: an entry tool follows its caller's scopes", async () => 
 	).map((group) => `use_${group}`);
 	assertEquals(names.filter((name) => name.startsWith('use_')), expected.sort());
 
-	// The index names only tools registered for this caller: nothing behind files:write.
 	const library = opened(await h.call('use_library')).tools.map((tool) => tool.name);
 	assert(library.includes('file_read') && !library.includes('file_write'), library.join(','));
 	const byName = new Map(h.composed.map((tool) => [tool.name, tool]));
@@ -250,13 +236,11 @@ Deno.test("tool groups: an entry tool follows its caller's scopes", async () => 
 Deno.test("tool groups: an entry tool follows its group's availability", async () => {
 	const services = { sandbox: false };
 	await using h = await connect({ toolGroups: true, services: () => ({ ...services }) });
-	// Every sandbox tool is down, so its entry tool is not listed, and a call says why rather than "unknown".
 	assert(!(await h.names()).includes('use_sandbox'));
 	const refused = await h.call('use_sandbox');
 	assert(refused.isError === true);
 	assertStringIncludes((refused.content as { text: string }[])[0]!.text, 'feature-unavailable');
 
-	// The service returns: the entry tool comes back, its members stay behind it until the group is opened.
 	services.sandbox = true;
 	refreshToolAvailability(h.server);
 	let names = await h.names();
@@ -267,7 +251,6 @@ Deno.test("tool groups: an entry tool follows its group's availability", async (
 	names = await h.names();
 	for (const name of sandbox) assert(names.includes(name), name);
 
-	// It goes again: an opened group's members leave with it, and come back with it while the group stays open.
 	services.sandbox = false;
 	refreshToolAvailability(h.server);
 	names = await h.names();
@@ -283,7 +266,6 @@ Deno.test('tool groups: tool_groups and the instructions appear only on a groupe
 	assertEquals(block.tool_groups, [...TOOL_GROUPS]);
 	const instructions = serverInstructions(block);
 	assertStringIncludes(instructions, `call ${ENTRY_TOOLS.join(', ')} to add that group's tools`);
-	// The longest instructions this server can give, every optional sentence present, still fit the bound.
 	const longest = serverInstructions({
 		...block,
 		live_view: {
@@ -303,7 +285,6 @@ Deno.test('tool groups: tool_groups and the instructions appear only on a groupe
 	assertEquals(capabilitiesFor(flat.deps, undefined).tool_groups, undefined);
 	assert(!(flat.client.getInstructions() ?? '').includes('use_'), 'a flat connection is told nothing about groups');
 
-	// A caller that cannot invoke tools is told about no group either.
 	await using viewer = await connect({ toolGroups: true, scopes: ['view:watch'] });
 	assertEquals(capabilitiesFor(viewer.deps, undefined).tool_groups, undefined);
 });

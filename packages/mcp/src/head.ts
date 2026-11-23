@@ -1,49 +1,9 @@
 /**
- * `browser_head` as a cookie-less, server-side HEAD, gated at every hop (SR-HEAD-REDIRECT, D-042).
- *
- * This module is the **only** place this server issues an outbound request of
- * its own. Until the owner decision of 2026-09-09 the tool went through the
- * browser (`Network.loadNetworkResource`, E-43), which followed redirects
- * silently, reported no hop and no final URL, and transferred the whole body
- * for a metadata query (U-4: 32 MiB of 32 MiB). Design §8.2 had rejected a
- * server-side `fetch` on three grounds — credential copying, redirect policy,
- * SSRF — and this module answers each explicitly rather than glossing it:
- *
- * - **No credential is copied.** The request carries no cookie, no
- *   `Authorization`, no forwarded header of any kind: `headers: {}` and
- *   `credentials: 'omit'`. A link behind a login answers as an anonymous
- *   client would see it, and the tool's description says so.
- * - **Redirects are explicit.** `redirect: 'manual'`, and every 3xx is walked
- *   by this code, hop by hop, with a cap, each hop gated before it is issued.
- * - **SSRF is a deny, not a hope.** Every hop passes `assertNavigable` against
- *   `TTK_ALLOWED_DOMAINS`, then a literal-address deny that no allowlist suffix
- *   can lift, then `Deno.permissions.query` for the exact `host:port`. Nothing
- *   is resolved through DNS to inspect it: rebinding makes that check unsound,
- *   so a public name that resolves privately is the operator's allowlist
- *   responsibility, and the documentation states it.
- *
- * **Both shipped images grant outbound net since D-151** (owner-approved; the
- * slim binary always did), so in a container the tool is offered and the
- * checks above are what bound it — with `TTK_ALLOWED_DOMAINS` empty by
- * default, the literal-address deny is the only address check that applies, and a name
- * that resolves to a private address (a compose service, a LAN host) is
- * reached. An operator who wants it bounded sets the allowlist, or scopes
- * `--allow-net` back in a compose `command:` override, which hides the tool
- * again. The local `deno task` matrices grant loopback only, so there the tool
- * stays hidden. The process never calls `Deno.permissions.request` — it runs under
- * `DENO_NO_PROMPT` — and a `NotCapable` from the runtime is a coded result,
- * never a crash.
- *
- * ## Two egress paths, and this one refuses rather than diverge (SR3-M2)
- *
- * This request is the **process's**, so it follows the process proxy
- * environment; the browser's is Chromium's, and follows whatever
- * `TTK_BROWSER_ARGS` tells it. When those are configured separately the tool
- * would answer about a different network path from the one the browser uses,
- * which is a wrong answer wearing a correct one's shape. {@linkcode
- * headRoutingRefusal} refuses in exactly that case, and the reasoning — including
- * the measurement that Deno proxies this fetch even when `--allow-env` does not
- * let the process read the variable — is recorded there.
+ * `browser_head` as a cookie-less, server-side HEAD, gated at every hop — the only outbound request this server makes
+ * of its own.
+ * No credential is copied (`credentials: 'omit'`, no headers); redirects are walked by hand with a cap; every hop
+ * passes `assertNavigable`, a literal-address deny no allowlist lifts, and a permission query. Nothing is resolved
+ * through DNS to inspect it: rebinding makes that unsound, so private names are the allowlist's job.
  */
 import { assertNavigable, canonicalHost, originOf, ToolError } from './errors.ts';
 import { navigationTarget } from './events.ts';
@@ -52,10 +12,10 @@ import { navigationTarget } from './events.ts';
 export const HEAD_MAX_HOPS = 10;
 
 /** Per-hop budget. The tree's wait convention (`WAIT_FOR_DEFAULT_TIMEOUT_MS`) is 10 s; one request gets the same. */
-export const HEAD_HOP_TIMEOUT_MS = 10_000;
+const HEAD_HOP_TIMEOUT_MS = 10_000;
 
 /** Whole-walk budget: three full hops' worth, so a slow chain cannot hold a tool call open indefinitely. */
-export const HEAD_TOTAL_TIMEOUT_MS = 30_000;
+const HEAD_TOTAL_TIMEOUT_MS = 30_000;
 
 /** Header values are server-chosen text; each is capped here and at most this many are considered. */
 const HEADER_VALUE_CAP = 512;
@@ -64,26 +24,15 @@ const FILENAME_CAP = 255;
 /** A `Location` longer than a URL argument may be is a lure, not a redirect. */
 const LOCATION_CAP = 2048;
 
-/**
- * Walks in flight at once, process-wide (security pre-engagement m4). Without a
- * bound one principal could hold thirty seconds' worth of sockets to every
- * allowlisted host at once and use this server as an existence scanner. A
- * waiter's time counts against the overall budget, so the failure is still
- * `timeout`.
- */
-export const HEAD_MAX_IN_FLIGHT = 4;
+/** Walks in flight at once, process-wide. */
+const HEAD_MAX_IN_FLIGHT = 4;
 let inFlight = 0;
 
-/** Only these statuses, and only with a `Location`, are hops (m3). 300 and 304 are answers. */
+/** Only these statuses, and only with a `Location`, are hops. 300 and 304 are answers. */
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-/**
- * Why an outbound request failed, as a closed vocabulary (security
- * pre-engagement M3). The runtime's own message can carry the full URL it
- * dialled — after a redirect that is upstream-authored text — so it is
- * classified here and never forwarded.
- */
-export const HEAD_FAILURE_REASONS = [
+/** Why an outbound request failed, as a closed vocabulary. */
+const HEAD_FAILURE_REASONS = [
 	'dns',
 	'refused',
 	'reset',
@@ -93,38 +42,35 @@ export const HEAD_FAILURE_REASONS = [
 	'proxy',
 	'unknown',
 ] as const;
-export type HeadFailureReason = (typeof HEAD_FAILURE_REASONS)[number];
+type HeadFailureReason = (typeof HEAD_FAILURE_REASONS)[number];
 
 /** What `browser_head` returns: metadata only, never a header echo, never a body. */
-export interface HeadResult {
+interface HeadResult {
 	readonly status: number;
 	readonly content_type: string | null;
 	/** `null` when the final response carried no `Content-Length` — never a guess. */
 	readonly content_length: number | null;
 	/** From `Content-Disposition`, decoded and sanitised, or `null`. */
 	readonly filename: string | null;
-	/** Origin plus path of the final response. No query, no fragment (SECURITY-AUTH §8.3). */
+	/** Origin plus path of the final response. No query, no fragment: either can carry a token. */
 	readonly final_url: string;
 	/** Redirects followed. `0` when the first response was final. */
 	readonly hops: number;
 }
 
 /** Injected so the unit tier can drive the walk without the network; production passes nothing. */
-export interface HeadOptions {
+interface HeadOptions {
 	readonly fetch?: typeof fetch;
 	readonly permissions?: { query(desc: Deno.NetPermissionDescriptor): Promise<{ state: Deno.PermissionState }> };
 	readonly hopTimeoutMs?: number;
-	readonly totalTimeoutMs?: number;
 	readonly maxHops?: number;
-	/** A10: the calling tool's cancellation; it ends the wait for a slot and the request in flight. */
+	/** The calling tool's cancellation; it ends the wait for a slot and the request in flight. */
 	readonly signal?: AbortSignal;
 }
 
 /**
- * Issues the HEAD walk. Every hop, including the first, is gated in this order:
- * allowlist, literal-address deny, permission query. The order matters: a
- * refused host produces no request and no permission lookup, and a permission
- * refusal is only ever reported for a host the policy already allowed.
+ * Issues the HEAD walk. Every hop, including the first, is gated in this order: allowlist, literal-address deny,
+ * permission query.
  */
 export async function headWalk(
 	rawUrl: string,
@@ -134,7 +80,7 @@ export async function headWalk(
 	const doFetch = options.fetch ?? fetch;
 	const permissions = options.permissions ?? Deno.permissions;
 	const maxHops = options.maxHops ?? HEAD_MAX_HOPS;
-	const deadline = AbortSignal.timeout(options.totalTimeoutMs ?? HEAD_TOTAL_TIMEOUT_MS);
+	const deadline = AbortSignal.timeout(HEAD_TOTAL_TIMEOUT_MS);
 	const overall = options.signal === undefined ? deadline : AbortSignal.any([deadline, options.signal]);
 	options.signal?.throwIfAborted();
 
@@ -153,9 +99,8 @@ export async function headWalk(
 			let response: Response;
 			try {
 				const signal = AbortSignal.any([overall, AbortSignal.timeout(options.hopTimeoutMs ?? HEAD_HOP_TIMEOUT_MS)]);
-				// The one outbound request this server makes. `headers: {}` is the
-				// whole credential policy: nothing of the caller's, nothing of the
-				// browser's, nothing of this process's is forwarded.
+				// The one outbound request this server makes. `headers: {}` is the whole credential policy: nothing
+				// of the caller's, nothing of the browser's, nothing of this process's is forwarded.
 				response = await doFetch(url.href, {
 					method: 'HEAD',
 					redirect: 'manual',
@@ -178,9 +123,8 @@ export async function headWalk(
 			if (hops > maxHops) {
 				throw new ToolError('browser-error', `the redirect chain exceeded ${maxHops} hops`);
 			}
-			// Parsed before it is gated, so a malformed value is never echoed: the
-			// text is the upstream's. Whitespace inside is what two joined `Location`
-			// headers look like (m2), and that is not a redirect either.
+			// Parsed before it is gated, so a malformed value is never echoed: the text is the upstream's. Whitespace
+			// inside is what two joined `Location` headers look like, and that is not a redirect either.
 			const trimmed = location.trim();
 			const next = trimmed.length > LOCATION_CAP || /\s/.test(trimmed) ? null : URL.parse(trimmed, url);
 			if (next === null) {
@@ -202,14 +146,7 @@ async function acquireSlot(overall: AbortSignal): Promise<void> {
 	inFlight += 1;
 }
 
-/**
- * The policy gate for one hop: allowlist first, then the literal-address deny.
- *
- * `assertNavigable` already refuses non-http(s) schemes and off-allowlist hosts
- * and names only the host. Userinfo is refused here because WHATWG parsing
- * keeps it (`http://user:pw@host/` parses with `username` set) and a credential
- * inside a URL is exactly what the cookie-less policy exists to exclude.
- */
+/** The policy gate for one hop: allowlist first, then the literal-address deny. */
 export function gateHop(rawUrl: string, allowedDomains: readonly string[]): URL {
 	let url: URL;
 	try {
@@ -230,9 +167,8 @@ export function gateHop(rawUrl: string, allowedDomains: readonly string[]): URL 
 			`${url.origin} is a loopback, private or link-local address; name that exact host in TTK_ALLOWED_DOMAINS to allow it`,
 		);
 	}
-	// A non-default port needs an exact `host:port` entry (m5): the allowlist
-	// predicate ignores ports, and a bare-host grant covers every port, so
-	// without this rule an allowlisted name would offer every service behind it.
+	// A non-default port needs an exact `host:port` entry: the allowlist predicate ignores ports, and a bare-host
+	// grant covers every port, so without this rule an allowlisted name would offer every service behind it.
 	if (
 		url.port !== '' && !allowedDomains.some((entry) => entry.trim().toLowerCase() === `${url.hostname}:${url.port}`)
 	) {
@@ -245,17 +181,8 @@ export function gateHop(rawUrl: string, allowedDomains: readonly string[]): URL 
 }
 
 /**
- * Whether a hostname is a literal loopback, private, link-local, CGNAT,
- * unspecified or reserved address, or `localhost`, **and** is not named exactly
- * in the allowlist.
- *
- * Exact, never suffix: `localhost` in the list does not admit `a.localhost`,
- * and no `example.com` entry admits any address at all. WHATWG parsing has
- * already folded decimal, hex, octal and short IPv4 spellings to a dotted quad
- * and IPv6 to its compressed lower-case form, so the comparison here is on the
- * canonical text (measured, `build/evidence/b1_12_sr_head_egress_probe.log`).
- * A mapped or NAT64 IPv6 address embeds an IPv4 in its low 32 bits, and that
- * IPv4 is judged by the same table — `[::ffff:7f00:1]` is `127.0.0.1`.
+ * Whether a hostname is a literal loopback, private, link-local, CGNAT, unspecified or reserved address, or
+ * `localhost`, **and** is not named exactly in the allowlist.
  */
 export function isForbiddenLiteralHost(hostname: string, allowedDomains: readonly string[]): boolean {
 	const host = canonicalHost(hostname) ?? hostname.toLowerCase();
@@ -269,13 +196,7 @@ export function isForbiddenLiteralHost(hostname: string, allowedDomains: readonl
 	return v4 === null ? false : isForbiddenIpv4(v4);
 }
 
-/**
- * Whether this process may open a socket to the hop's exact `host:port`.
- *
- * `Deno.permissions.query` answers `granted` for a `host:port` descriptor when
- * the grant names the bare host or that host and port (measured); `prompt` is
- * a refusal under `DENO_NO_PROMPT`. `request` is never called.
- */
+/** Whether this process may open a socket to the hop's exact `host:port`. */
 async function assertGranted(url: URL, permissions: NonNullable<HeadOptions['permissions']>): Promise<void> {
 	const descriptor = `${url.hostname}:${portOf(url)}`;
 	let state: Deno.PermissionState;
@@ -295,17 +216,8 @@ async function assertGranted(url: URL, permissions: NonNullable<HeadOptions['per
 }
 
 /**
- * Whether the deployment can offer `browser_head` at all: an outbound grant
- * beyond loopback, **proven** through the permissions API at startup.
- *
- * Unscoped `--allow-net` proves it outright. Otherwise each allowlist entry is
- * queried at `:443` and `:80`, and one granted entry is enough. This cannot
- * list the tool falsely — nothing but a real grant answers `granted` — and an
- * environment boolean was rejected for exactly that reason: an operator could
- * set it without widening the CMD and every call would then fail. The one
- * false negative — a grant on a host the allowlist does not literally name —
- * keeps the tool hidden, which is fail-closed, and the operator's fix is to
- * name the host.
+ * Whether the deployment can offer `browser_head` at all: an outbound grant beyond loopback, **proven** through the
+ * permissions API at startup.
  */
 export async function probeEgressGrant(
 	allowedDomains: readonly string[],
@@ -322,10 +234,9 @@ export async function probeEgressGrant(
 	for (const entry of allowedDomains) {
 		const host = canonicalHost(entry);
 		if (host === null) continue;
-		// "Beyond loopback" literally: a private or loopback literal on the
-		// allowlist proves nothing here, because the shipped matrices already
-		// grant `127.0.0.1` for the browser connection and that grant is not an
-		// election of outbound net (security pre-engagement M4).
+		// "Beyond loopback" literally: a private or loopback literal on the allowlist proves nothing here, because
+		// the shipped matrices already grant `127.0.0.1` for the browser connection and that grant is not an election
+		// of outbound net.
 		if (isForbiddenLiteralHost(host, [])) continue;
 		if (await granted({ name: 'net', host: `${host}:443` })) return true;
 		if (await granted({ name: 'net', host: `${host}:80` })) return true;
@@ -333,13 +244,7 @@ export async function probeEgressGrant(
 	return false;
 }
 
-/**
- * The Chromium flags that decide where the **browser's** traffic goes.
- *
- * `--proxy-bypass-list` is here although it configures no proxy of its own: it
- * is only meaningful where one is configured, so its presence is evidence that
- * an operator made an explicit routing decision for the browser.
- */
+/** The Chromium flags that decide where the **browser's** traffic goes. */
 export const CHROMIUM_PROXY_FLAGS = [
 	'--proxy-server',
 	'--proxy-pac-url',
@@ -348,14 +253,7 @@ export const CHROMIUM_PROXY_FLAGS = [
 	'--proxy-bypass-list',
 ] as const;
 
-/**
- * The proxy flag `TTK_BROWSER_ARGS` gives Chromium, by **name only**, or `null`.
- *
- * The value is deliberately never returned and never logged. A `--proxy-server`
- * value can carry userinfo (`http://user:pw@proxy:3128`), and DD-7 forbids
- * returning a secret or anything derived from one — so the divergence is named
- * by the flag that causes it, which is what the operator edits anyway.
- */
+/** The proxy flag `TTK_BROWSER_ARGS` gives Chromium, by **name only** (a value can carry credentials), or `null`. */
 export function browserProxyFlag(browserArgs: readonly string[]): string | null {
 	for (const arg of browserArgs) {
 		const name = arg.split('=', 1)[0]?.trim() ?? '';
@@ -365,43 +263,9 @@ export function browserProxyFlag(browserArgs: readonly string[]): string | null 
 }
 
 /**
- * Why `browser_head` must refuse in this deployment, or `null` when it may run
- * (SR3-M2, D-049).
- *
- * ## The measurement this rests on
- *
- * `browser_head` is a server-side `fetch`, and Deno's `fetch` honours
- * `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` **whether or not `--allow-env` names
- * them** — measured, `build/evidence/b4_3_sr3_m2_proxy_probe.log`: under an
- * `--allow-env` grant shaped like the shipped container's, which does not name
- * them, the request was still proxied while `Deno.env.get('HTTP_PROXY')` threw
- * `NotCapable`. So on the shipped surface the process is routed by a
- * configuration it is **not permitted to read**. Reading it would mean widening
- * `--allow-env` in every shipped matrix, which this delivery does not do, and
- * which would additionally grant the process a variable that can carry proxy
- * credentials.
- *
- * ## So the check is on the side the server *can* see, and it fails closed
- *
- * The browser's route is configured in `TTK_BROWSER_ARGS`, which this process
- * owns. When that names any proxy flag, the two paths are configured
- * **separately** and the server cannot show they agree — so the tool refuses
- * rather than answering about a network path the browser does not use. No
- * equivalence test is attempted between a Chromium `--proxy-server` list and the
- * `HTTP_PROXY` family: they are different configuration languages, and a clever
- * comparison that was wrong once would be worse than a refusal that is always
- * right about what it claims.
- *
- * The remedy in the message is a configuration where the divergence cannot
- * arise: give the **process** the proxy environment and give Chromium no proxy
- * flag, so both follow one setting, or bound both with a network-level egress
- * control and leave neither configured here.
- *
- * **What this does not catch, stated rather than implied.** A proxy configured
- * outside both — a system or desktop proxy setting Chromium picks up with no
- * flag — is invisible to this process and is a deployment concern the
- * network-level control covers. The check refuses the divergence the server can
- * prove, and says nothing about the one it cannot see.
+ * Why `browser_head` must refuse in this deployment, or `null` when it may run.
+ * Deno's `fetch` follows the `HTTP(S)_PROXY` environment even when the process may not read it, so once
+ * `TTK_BROWSER_ARGS` routes Chromium through a proxy the two egress paths cannot be shown to agree: refuse.
  */
 export function headRoutingRefusal(browserArgs: readonly string[]): string | null {
 	const flag = browserProxyFlag(browserArgs);
@@ -414,7 +278,7 @@ export function headRoutingRefusal(browserArgs: readonly string[]): string | nul
 		`paths with a network-level egress control and configure neither here.`;
 }
 
-/** The allowlist entries that are private or loopback literals — an operator warning at startup (M4). */
+/** The allowlist entries that are private or loopback literals — an operator warning at startup. */
 export function privateLiteralEntries(allowedDomains: readonly string[]): string[] {
 	return allowedDomains.filter((entry) => {
 		const host = canonicalHost(entry);
@@ -447,25 +311,15 @@ function mapFetchFailure(cause: unknown, url: URL): ToolError {
 		return new ToolError('timeout', `${url.origin} did not answer within the head request budget`);
 	}
 	if (cause instanceof ToolError) return cause;
-	// The message names the origin, which the caller (or, after a hop, the
-	// allowlist) chose, and a closed reason; the runtime's own text can carry
-	// the full URL it dialled, so it is classified and never forwarded.
+	// The message names the origin, which the caller (or, after a hop, the allowlist) chose, and a closed reason; the
+	// runtime's own text can carry the full URL it dialled, so it is classified and never forwarded.
 	return new ToolError('browser-error', `the request to ${url.origin} failed: ${failureReason(cause)}`);
 }
 
-/** K-8 / R3-3: how many errors of a `cause` chain {@linkcode failureReason} reads, the top one included. */
+/** How many errors of a `cause` chain {@linkcode failureReason} reads, the top one included. */
 export const FAILURE_CAUSE_DEPTH = 5;
 
-/**
- * Classifies a runtime failure into {@linkcode HEAD_FAILURE_REASONS}.
- *
- * K-8 / review R3-3: Deno 2.9.7's `fetch` rejects with a bare `TypeError: fetch failed` and puts what happened in
- * `cause` (`tcp connect error: Connection refused`, `invalid peer certificate: UnknownIssuer`, a DNS lookup error), so
- * the top message alone classified a refused connection, an untrusted certificate and a failed lookup all as
- * `protocol`. The text read is `name: message` of the error and of up to {@linkcode FAILURE_CAUSE_DEPTH} − 1 causes
- * under it, joined — classified only, never forwarded (it can name the URL that was dialled). The specific reasons are
- * tested before `protocol`, so the generic top message no longer wins.
- */
+/** Classifies a runtime failure into {@linkcode HEAD_FAILURE_REASONS}. */
 export function failureReason(cause: unknown): HeadFailureReason {
 	const parts: string[] = [];
 	let current: unknown = cause;
@@ -512,16 +366,7 @@ function parseLength(value: string | undefined): number | null {
 	return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-/**
- * The filename a `Content-Disposition` names, or `null`.
- *
- * Decodes the RFC 5987 `filename*=charset''percent-encoded` form this
- * repository's own `attachmentDisposition` emits (UTF-8 and ISO-8859-1 only),
- * falling back to the quoted or token `filename=`. The result is a bare file
- * name: any path is reduced to its last segment, control characters and quotes
- * are dropped, and it is capped — the server chose the text and this tool
- * reports it, it does not trust it.
- */
+/** The filename a `Content-Disposition` names, or `null`. */
 export function dispositionFilename(header: string | undefined): string | null {
 	if (header === undefined) return null;
 	let name: string | null = null;
@@ -634,6 +479,9 @@ export function isForbiddenIpv6(bytes: Uint8Array): boolean {
 	const allZeroUpTo = (n: number): boolean => bytes.subarray(0, n).every((byte) => byte === 0);
 	// :: and ::1
 	if (allZeroUpTo(15) && (b(15) === 0 || b(15) === 1)) return true;
+	// ::a.b.c.d (::/96) — the deprecated IPv4-compatible form (RFC 4291 §2.5.5.1), judged as the IPv4 it embeds:
+	// `http://[::127.0.0.1]/` normalises to `[::7f00:1]`, and a stack that still honours the form dials loopback.
+	if (allZeroUpTo(12)) return isForbiddenIpv4(embeddedIpv4(bytes));
 	// ::ffff:a.b.c.d — mapped IPv4, judged as the IPv4 it embeds
 	if (allZeroUpTo(10) && b(10) === 0xff && b(11) === 0xff) return isForbiddenIpv4(embeddedIpv4(bytes));
 	// ::ffff:0:a.b.c.d — the deprecated SIIT form, likewise
@@ -651,6 +499,11 @@ export function isForbiddenIpv6(bytes: Uint8Array): boolean {
 	) {
 		return isForbiddenIpv4(embeddedIpv4(bytes));
 	}
+	// 64:ff9b:1::/48 — local-use NAT64 (RFC 8215). Refused whole: it is never a public destination, and where
+	// its translator puts the IPv4 depends on a prefix length this code cannot know, so it cannot be judged.
+	if (
+		b(0) === 0x00 && b(1) === 0x64 && b(2) === 0xff && b(3) === 0x9b && b(4) === 0x00 && b(5) === 0x01
+	) return true;
 	// fe80::/10 link-local
 	if (b(0) === 0xfe && (b(1) & 0xc0) === 0x80) return true;
 	// fc00::/7 unique local

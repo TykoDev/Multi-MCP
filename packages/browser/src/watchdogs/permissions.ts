@@ -1,6 +1,6 @@
 /**
  * @module
- * `PermissionsWatchdog` — browser-wide permission grants on connect (ARCHITECTURE.md §6.5).
+ * `PermissionsWatchdog` — browser-wide permission grants on connect.
  *
  * > on `BrowserConnectedEvent`, grants `profile.permissions` (default `clipboardReadWrite`,
  * > `notifications`) browser-wide via `Browser.grantPermissions`; failures are logged, non-fatal.
@@ -10,7 +10,7 @@
  * removes the class. The point of it being non-fatal is that the grant is an ergonomic improvement,
  * not a precondition: a Chrome build that refuses one of the permission names, or a remote/cloud
  * endpoint that does not expose `Browser.grantPermissions` at all, must still yield a working
- * session. `BrowserConnectedEvent` is awaited by `start()` (§6.9 note), so throwing here would fail
+ * session. `BrowserConnectedEvent` is awaited by `start()`, so throwing here would fail
  * the whole start for a nicety.
  *
  * No origin and no `browserContextId` are sent — both are optional in CDP and omitting them is what
@@ -69,7 +69,7 @@ export class PermissionsWatchdog extends BaseWatchdog {
 			return true;
 		} catch (error) {
 			this.#lastError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-			this.logger.warn('browser-wide permission grant failed; continuing without it (non-fatal, §6.5)', {
+			this.logger.warn('browser-wide permission grant failed; continuing without it (non-fatal)', {
 				permissions,
 				error,
 			});

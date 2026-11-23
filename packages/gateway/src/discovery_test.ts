@@ -1,5 +1,5 @@
 /**
- * The gateway's wiring of R14 (D-122) and R15 (D-123): the identity it hands the MCP factory, built from
+ * The gateway's wiring of server identity and secret providers: the identity it hands the MCP factory, built from
  * `TTK_PUBLIC_URL` and never from the request's Host, and the `secretProvider` key of the admin diagnostics.
  */
 import { assertEquals } from '@std/assert';
@@ -63,7 +63,7 @@ async function gatewayWith(env: Record<string, string>, secrets: Record<string, 
 	};
 }
 
-Deno.test('R14 (D-122): the gateway reports its public URL as the website and serves the icon it names', async () => {
+Deno.test('discovery: the gateway reports its public URL as the website and serves the icon it names', async () => {
 	await using g = await gatewayWith({
 		TTK_PUBLIC_URL: 'https://mcp.example.test/base/',
 		TTK_ALLOWED_HOSTS: '127.0.0.1,mcp.example.test',
@@ -83,9 +83,9 @@ Deno.test('R14 (D-122): the gateway reports its public URL as the website and se
 	assertEquals((other.serverInfo as Record<string, unknown>).websiteUrl, 'https://mcp.example.test');
 });
 
-Deno.test('B3: a public URL on a wildcard bind address advertises no website and no icon', async () => {
+Deno.test('discovery: a public URL on a wildcard bind address advertises no website and no icon', async () => {
 	// The container binds 0.0.0.0 and, with TTK_PUBLIC_URL unset, derives its public URL from the bind: a client told
-	// to follow http://0.0.0.0:8787 is told nothing it can reach. Omitted, as on stdio, rather than wrong.
+	// to follow http://0.0.0.0:8787 is told nothing it can reach.
 	const wildcards: Record<string, string>[] = [
 		{ TTK_HOST: '0.0.0.0' },
 		{ TTK_PUBLIC_URL: 'http://0.0.0.0:8787' },
@@ -101,7 +101,7 @@ Deno.test('B3: a public URL on a wildcard bind address advertises no website and
 	}
 });
 
-Deno.test('R15 (D-123): the admin diagnostics name the secret provider, and null without one', async () => {
+Deno.test('discovery: the admin diagnostics name the secret provider, and null without one', async () => {
 	{
 		await using g = await gatewayWith({});
 		assertEquals((await g.diagnostics()).secretProvider, null);

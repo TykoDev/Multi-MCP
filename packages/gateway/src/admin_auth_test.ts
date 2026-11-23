@@ -1,6 +1,6 @@
-import { assert, assertEquals, assertNotEquals } from '@std/assert';
+import { assert, assertEquals, assertNotEquals, assertThrows } from '@std/assert';
 import { join } from '@std/path';
-import { generateAdminUser, hashPassword, parseAdminUser, verifyPassword } from './admin_auth.ts';
+import { generateAdminUser, hashPassword, readAdminUser, verifyPassword } from './admin_auth.ts';
 import { createGatewayApp } from './app.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
 import { loadConfig } from './config.ts';
@@ -34,16 +34,13 @@ Deno.test('admin_auth: generate and parse admin user record', async () => {
 	assert(password.length >= 16);
 	assert(record.scopes?.includes('admin'));
 
-	const serialized = JSON.stringify(record);
-	const parsed = parseAdminUser(serialized);
-	assertNotEquals(parsed, null);
-	assertEquals(parsed?.username, 'superadmin');
+	const parsed = readAdminUser(JSON.stringify(record));
+	assertEquals(parsed.username, 'superadmin');
 
-	const valid = await verifyPassword(password, parsed!);
+	const valid = await verifyPassword(password, parsed);
 	assertEquals(valid, true);
 
-	const invalid = parseAdminUser('not valid json');
-	assertEquals(invalid, null);
+	assertThrows(() => readAdminUser('not valid json'), Error, 'not valid JSON');
 });
 
 Deno.test('admin_auth: verifier chain with admin user and sessions', async () => {
@@ -75,7 +72,7 @@ Deno.test('admin_auth: verifier chain with admin user and sessions', async () =>
 
 	const resolved = await verifier.resolve(token);
 	assertEquals(resolved?.id, principal?.id);
-	assertEquals(verifier.stillAuthorized(resolved!), true);
+	assert(verifier.currentScopes(resolved!) !== null);
 
 	// Logout / session close
 	assertEquals(await verifier.closeSession(token), true);
@@ -181,7 +178,7 @@ Deno.test('admin_auth: gateway auth and diagnostics endpoints', async () => {
 		});
 		assertEquals(logoutRes.status, 204);
 
-		// 7. Verify token no longer works
+		// 7. Verify the token is refused
 		const afterLogout = await gateway.app.request('http://127.0.0.1:8787/api/v1/auth/me', {
 			headers: { Host: '127.0.0.1', 'Authorization': `Bearer ${loginBody.token}` },
 		});
@@ -192,7 +189,7 @@ Deno.test('admin_auth: gateway auth and diagnostics endpoints', async () => {
 	}
 });
 
-Deno.test('AC31 / RV-14: hasAdminUser counts enabled accounts holding admin, not accounts', async () => {
+Deno.test('hasAdminUser counts enabled accounts holding admin, not accounts', async () => {
 	const dir = join('tests/.scratch', `rv14-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
 	// The diagnostics reader is an admin API key, so the answer is about the accounts alone.
@@ -230,7 +227,8 @@ Deno.test('AC31 / RV-14: hasAdminUser counts enabled accounts holding admin, not
 			hasAdminUser: false,
 			userCount: 1,
 		});
-		// A disabled administrator administers nothing (the store refuses to disable the last one, so the file says so).
+		// A disabled administrator administers nothing (the store refuses to disable the last one, so the file says
+		// so).
 		const now = new Date().toISOString();
 		await Deno.writeTextFile(
 			join(dir, 'users.json'),

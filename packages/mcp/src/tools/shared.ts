@@ -1,10 +1,6 @@
 /**
- * The plumbing every handler module shares: session resolution, event dispatch, the one index
- * resolver, and the live page-identity read.
- *
- * Internal to `tools/` — nothing here is exported from `packages/mcp/mod.ts`. A helper that lands
- * here is one that at least two handler modules need; a helper used by one module lives in that
- * module.
+ * The plumbing every handler module shares: session resolution, event dispatch, the one index resolver, and the live
+ * page-identity read.
  */
 import type { BrowserSession, EnhancedDomTreeNode } from '@tykotech/browser';
 import type { TargetId } from '@tykotech/cdp';
@@ -12,33 +8,16 @@ import { ToolError } from '../errors.ts';
 import { DEFAULT_SESSION_ID, type SessionRecord } from '../registry.ts';
 import type { ToolContext } from '../types.ts';
 
-export interface SessionArgs {
+interface SessionArgs {
 	session_id?: string | undefined;
 }
 
-/**
- * What a caller may do despite a held dialog (B3.2).
- *
- * One value, and one caller: `browser_handle_dialog`, which *is* the remedy and would otherwise
- * refuse itself. The session-closing tools need no exemption because they never reach this function —
- * they go straight to the registry, deliberately, so that giving up on a wedged page works while a
- * human holds the lock too.
- */
-export type DialogExemption = 'answer';
+/** What a caller may do despite a held dialog. */
+type DialogExemption = 'answer';
 
 /**
- * Resolves the target session, refuses mutation while a human holds it, and refuses mutation while a
- * JavaScript dialog is holding the page (B3.2, §8 `dialog-open`).
- *
- * **The dialog check is here rather than in each handler** for the same reason `assertUnlocked` is:
- * every mutating tool passes through this function, so a tool added later is covered by construction
- * rather than by its author remembering. It fires only while manual dialog handling is armed — with
- * no `dialog` subscriber the watchdog answers every dialog by its own policy and nothing is ever held
- * (E-53), so a deployment that never subscribes pays nothing and sees no behaviour change.
- *
- * What it replaces is a hang. A held dialog blocks the CDP channel for its target, so a
- * `browser_click` during the hold used to sit until the 20 s expiry and then surface as a `timeout`
- * that named nothing the caller could act on. Now it is immediate and carries the `dialog_id`.
+ * Resolves the target session, refuses mutation while a human holds it, and refuses mutation while a JavaScript
+ * dialog is holding the page (`dialog-open`).
  */
 export async function target(
 	ctx: ToolContext,
@@ -46,7 +25,7 @@ export async function target(
 	mutates: boolean,
 	exemption?: DialogExemption,
 ): Promise<SessionRecord> {
-	// R8 (D-128): the caller's access rides every lookup; `shared` mode ignores it.
+	// The caller's access rides every lookup; `shared` mode ignores it.
 	const record = await ctx.registry.resolve(args.session_id, ctx.access);
 	if (mutates) {
 		ctx.registry.assertUnlocked(record);
@@ -55,12 +34,7 @@ export async function target(
 	return record;
 }
 
-/**
- * Refuses when a dialog is being held open for a caller to answer.
- *
- * The oldest held dialog is the one named: dialogs are answered in the order they were raised, and
- * naming the newest would send the caller to answer one that is not at the front of the queue.
- */
+/** Refuses when a dialog is being held open for a caller to answer. */
 export function assertNoHeldDialog(record: SessionRecord): void {
 	const pending = record.popups?.pendingDialogs ?? [];
 	const held = pending[0];
@@ -75,8 +49,8 @@ export function assertNoHeldDialog(record: SessionRecord): void {
 	);
 }
 
-/** A10: the shared abort race, re-exported for the handler modules. */
-export { untilAborted } from '../cancel.ts';
+/** The shared abort race, re-exported for the handler modules. */
+export { untilAborted } from '../errors.ts';
 
 /** Dispatches a core event and surfaces handler failures as tool errors. */
 export async function dispatch<T>(
@@ -96,20 +70,7 @@ export async function dispatch<T>(
 	}
 }
 
-/**
- * The one index resolver in the product (G-1, invariant I-1).
- *
- * Three outcomes, deliberately not two. The caller's `state_token` names the table it read the index
- * from; the server holds at most one table of its own. Before B1.4 every miss was `unknown-index`,
- * which told a client nothing about whether to retry the index or re-read the page.
- *
- * - **no table at all** — `element-not-found`, `reason: 'no-state'`, `state_token: null`. Nothing is
- *   resolvable until a `browser_get_state` succeeds.
- * - **a different table** — `element-not-found`, `reason: 'stale-token'`, carrying the token the
- *   server actually holds. The page moved; the index may be fine against the new table.
- * - **this table, no such index** — `unknown-index`, unchanged wording and unchanged meaning, so a
- *   client that already matches on it keeps working.
- */
+/** The one index resolver in the product. */
 export function nodeAt(session: BrowserSession, index: number, expectedToken?: string): EnhancedDomTreeNode {
 	const state = session.cachedBrowserState;
 	const held = state?.stateToken ?? null;
@@ -143,7 +104,7 @@ export function heldToken(record: SessionRecord): string | null {
 	return record.session.cachedBrowserState?.stateToken ?? null;
 }
 
-export function tabTargets(session: BrowserSession): Set<string> {
+function tabTargets(session: BrowserSession): Set<string> {
 	return new Set(session.tabs.map((tab) => String(tab.tabId)));
 }
 
@@ -151,24 +112,12 @@ export function assertTab(session: BrowserSession, tabId: string): TargetId {
 	if (!tabTargets(session).has(tabId)) {
 		throw new ToolError('unknown-tab', `no tab with id ${tabId}`);
 	}
-	// The short form is what the model was given; the session resolves either
-	// spelling, so it is passed through unchanged (`@tykotech/browser`
-	// `findTargetIdsByTabId`).
+	// The short form is what the model was given; the session resolves either spelling, so it is passed through
+	// unchanged (`@tykotech/browser` `findTargetIdsByTabId`).
 	return tabId as TargetId;
 }
 
-/**
- * Reads the page identity a navigation actually produced.
- *
- * ERRATUM(E-13). These handlers used to answer from
- * `session.cachedBrowserState`, which is only ever written by
- * `getBrowserStateSummary`. On the first navigation of a session that cache is
- * null, so the tool reported `title: ''`; on every later one it still held the
- * *previous* page, so the tool confidently reported the URL and title the
- * browser had just left. A DOM-less state request is the cheap live read: it
- * skips the DOM build and the network-stability wait, and answers from
- * `location.href` and the live title.
- */
+/** Reads the page identity a navigation actually produced. */
 export async function identify(record: SessionRecord, fallbackUrl: string): Promise<{ url: string; title: string }> {
 	try {
 		const state = await record.session.getBrowserStateSummary({ includeDom: false });
@@ -179,16 +128,10 @@ export async function identify(record: SessionRecord, fallbackUrl: string): Prom
 	}
 }
 
-/**
- * Resolves a session **without creating one**.
- *
- * The file tools are reads over what a browser already did. `resolve` would mint the default session
- * on a stale or mistyped id and hand the caller a blank browser with no files in it, which is a worse
- * answer than "no such session".
- */
+/** Resolves a session **without creating one**. */
 export function peekSession(ctx: ToolContext, sessionId: string | undefined): SessionRecord {
 	const id = sessionId ?? DEFAULT_SESSION_ID;
-	// R8 (D-128): in `owner` mode another owner's session is not found, and `default` is the caller's own.
+	// In `owner` mode another owner's session is not found, and `default` is the caller's own.
 	const record = ctx.registry.peekFor(sessionId, ctx.access);
 	if (record === undefined) {
 		// A read-only tool never launches a browser, so "the default session, created on first use" (the parameter's own

@@ -1,5 +1,5 @@
 /**
- * Typed error taxonomy for `@tykotech/bus` (AGENTS.md §3: never throw strings).
+ * Typed error taxonomy for `@tykotech/bus`: nothing here throws a string.
  *
  * Every error thrown by this package derives from {@linkcode BusError} so callers can discriminate
  * bus-infrastructure failures from handler-domain failures without string matching.
@@ -15,7 +15,7 @@ export class BusError extends Error {
 
 /**
  * Thrown at registration time when an event name is already taken by a different class, or when it
- * overlaps an existing name by substring containment (ARCHITECTURE.md §4.1).
+ * overlaps an existing name by substring containment.
  */
 export class EventNameCollisionError extends BusError {
 	constructor(
@@ -79,7 +79,7 @@ export class NoHandlerResultError extends BusError {
 
 /**
  * Thrown by the circuit breaker when the injected connection policy never reports a successful
- * reconnect within the reconnect wait budget (ARCHITECTURE.md §4.6).
+ * reconnect within the reconnect wait budget.
  */
 export class ConnectionError extends BusError {
 	constructor(readonly eventType: string, readonly waitedMs: number) {

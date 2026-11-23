@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { assert, assertEquals } from '@std/assert';
 import { BrowserMemoryCache, dumpBrowser, type DumpClient, footprintOf, parseMemorySize } from './browser_memory.ts';
 
 const event = (pid: number, footprint: string) => ({
@@ -45,6 +45,22 @@ Deno.test('browser memory: one memory-infra trace, a dump, the end; a browser al
 	assertEquals(await dumpBrowser(client), { private_bytes: 0xa00000 + 0x100000, processes: 2 });
 	assertEquals(client.calls, ['Tracing.start', 'Tracing.requestMemoryDump', 'Tracing.end']);
 	assertEquals(await dumpBrowser(fakeClient([], { refuse: true })), null);
+});
+
+Deno.test('browser memory: a browser that closes mid-dump ends the wait at once, leaving no timer', async () => {
+	// Tracing ends but never completes, as when the session or the gateway closes the browser during a dump.
+	let close!: () => void;
+	const client: DumpClient = {
+		sendRaw: <T>(method: string) =>
+			Promise.resolve((method === 'Tracing.requestMemoryDump' ? { success: true } : {}) as T),
+		on: (() => () => {}) as never,
+		closed: new Promise<void>((resolve) => close = resolve),
+	};
+	const dump = dumpBrowser(client, 60_000);
+	close();
+	const started = performance.now();
+	assertEquals(await dump, null);
+	assert(performance.now() - started < 5_000, 'not the 60 s timeout');
 });
 
 Deno.test('browser memory: figures are cached per session, one dump in flight, a slow dump answers with the last one', async () => {

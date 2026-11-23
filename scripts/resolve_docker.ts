@@ -1,4 +1,4 @@
-/** Resolves the absolute Docker CLI grant for the optional-service test tier (D-066). */
+/** Resolves the absolute Docker CLI grant for the optional-service test tier. */
 import { DELIMITER, join, resolve } from '@std/path';
 
 if (import.meta.main) {

@@ -1,7 +1,6 @@
 /**
- * `PopupsWatchdog` contract (ARCHITECTURE.md §6.4; COMPLETIONS-CRITERIA.md §3.2 watchdog row 4:
- * "alert/confirm/beforeunload accepted, prompt dismissed; two 0.5 s-capped attempts; message
- * surfaced in BrowserStateSummary").
+ * `PopupsWatchdog` contract: alert/confirm/beforeunload accepted, prompt dismissed; two 0.5 s-capped
+ * attempts; message surfaced in BrowserStateSummary.
  *
  * Real bus, real `CdpClient`, real CDP frames over `ChromeFixture`: the dialog arrives as an actual
  * `Page.javascriptDialogOpening` frame on the wire and the answer is asserted as an actual
@@ -76,7 +75,7 @@ async function harness(): Promise<Harness> {
 	const opened: DialogOpenedEvent[] = [];
 	bus.on(DialogOpenedEvent, (event) => void opened.push(event), { wrap: null });
 
-	// The §7.4 step-7 replay: pre-existing tabs are announced after connect, which is what arms us.
+	// The connect-time replay: pre-existing tabs are announced after connect, which is what arms us.
 	await bus.dispatch(new TabCreatedEvent({ targetId: page.targetId, url: PAGE }));
 
 	const settle = async (): Promise<void> => {
@@ -129,12 +128,12 @@ Deno.test('popups: the disposition table is accept-everything-but-prompt', () =>
 	assertEquals(normalizeDialogType('prompt'), 'prompt');
 });
 
-Deno.test('popups: the message rendering is the `[type] message` of §6.4/§5.3', () => {
+Deno.test('popups: the message rendering is `[type] message`', () => {
 	assertEquals(formatPopupMessage('alert', 'saved!'), '[alert] saved!');
 	assertEquals(formatPopupMessage('beforeunload', ''), '[beforeunload] ');
 });
 
-Deno.test('popups: the two-attempt 0.5 s cap is the speced pair', () => {
+Deno.test('popups: the dialog answer is two attempts capped at 0.5 s each', () => {
 	assertEquals(DIALOG_HANDLE_TIMEOUT_MS, 500);
 	assertEquals(DIALOG_HANDLE_ATTEMPTS, 2);
 	assertEquals(MAX_RETAINED_POPUP_MESSAGES, 100);
@@ -149,7 +148,7 @@ Deno.test('popups: LISTENS_TO is TabCreatedEvent, and arming is idempotent acros
 	assertEquals(PopupsWatchdog.LISTENS_TO.map((cls) => cls.eventName), ['TabCreatedEvent']);
 	assertEquals(h.watchdog.armed, true);
 
-	// Ten more tabs must not mean ten answers per dialog (ERRATUM(M1-watchdogs-rest-5)).
+	// Ten more tabs must not mean ten answers per dialog: one listener, routed by sessionId.
 	for (let index = 0; index < 10; index++) {
 		await h.bus.dispatch(new TabCreatedEvent({ targetId: `T${index}`, url: PAGE }));
 	}
@@ -191,8 +190,8 @@ Deno.test('popups: the message reaches BrowserStateSummary through DialogOpenedE
 	await using h = await harness();
 	await h.openDialog('confirm', 'delete everything?');
 
-	// §5.3's `closedPopupMessages` is assembled by DOMWatchdog from this event
-	// (ERRATUM(M1-watchdogs-rest-6)); the rendering is shared so the two cannot drift.
+	// The summary's `closedPopupMessages` is assembled by DOMWatchdog from this event; the rendering
+	// is shared so the two cannot drift.
 	assertEquals(h.opened.length, 1);
 	assertEquals(h.opened[0]?.dialogType, 'confirm');
 	assertEquals(h.opened[0]?.message, 'delete everything?');
@@ -205,7 +204,7 @@ Deno.test('popups: the message reaches BrowserStateSummary through DialogOpenedE
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-53) — the manual hold
+// the manual hold
 // ---------------------------------------------------------------------------
 
 /** Emits a dialog frame without waiting for it to be answered, and waits until it is held. */
@@ -219,11 +218,11 @@ async function openHeld(h: Harness, type: string, message: string): Promise<stri
 	return pending.dialogId;
 }
 
-Deno.test('E-53: manual handling is OFF by default, and off is the pre-erratum path exactly', async () => {
+Deno.test('popups: manual handling is OFF by default, and off answers every dialog by policy', async () => {
 	await using h = await harness();
 	assertEquals(h.watchdog.manualHandling, false);
 	await h.openDialog('prompt', 'your name?');
-	// Answered immediately by policy, with no id and no hold — byte for byte what 0.1.0 did.
+	// Answered immediately by policy, with no id and no hold.
 	assertEquals(h.sent('Page.handleJavaScriptDialog').length, 1);
 	assertEquals(h.sent('Page.handleJavaScriptDialog')[0]?.params.accept, false);
 	assertEquals(h.watchdog.pendingDialogs, []);
@@ -231,7 +230,7 @@ Deno.test('E-53: manual handling is OFF by default, and off is the pre-erratum p
 	assertEquals(h.watchdog.dialogs[0]?.dialogId, undefined);
 });
 
-Deno.test('E-53: an armed watchdog HOLDS a dialog, and a caller can accept it with prompt text', async () => {
+Deno.test('popups: an armed watchdog HOLDS a dialog, and a caller can accept it with prompt text', async () => {
 	await using h = await harness();
 	h.watchdog.setManualHandling(true, 5_000);
 	const dialogId = await openHeld(h, 'prompt', 'your name?');
@@ -245,8 +244,8 @@ Deno.test('E-53: an armed watchdog HOLDS a dialog, and a caller can accept it wi
 
 	const answers = h.sent('Page.handleJavaScriptDialog');
 	assertEquals(answers.length, 1);
-	// The policy would have DISMISSED a prompt. The caller's answer overrode it, and the caller's text
-	// reached the page — neither of which was reachable before this erratum.
+	// The policy would have DISMISSED a prompt. The caller's answer overrides it, and the caller's text
+	// reaches the page.
 	assertEquals(answers[0]?.params.accept, true);
 	assertEquals(answers[0]?.params.promptText, 'Ada');
 	assertEquals(h.watchdog.dialogs[0]?.answeredByCaller, true);
@@ -254,7 +253,7 @@ Deno.test('E-53: an armed watchdog HOLDS a dialog, and a caller can accept it wi
 	assertEquals(h.watchdog.pendingDialogs, [], 'the hold is released once answered');
 });
 
-Deno.test('E-53: a caller can DISMISS a confirm, which the automatic policy would have accepted', async () => {
+Deno.test('popups: a caller can DISMISS a confirm, which the automatic policy would have accepted', async () => {
 	await using h = await harness();
 	h.watchdog.setManualHandling(true, 5_000);
 	const dialogId = await openHeld(h, 'confirm', 'delete everything?');
@@ -265,7 +264,7 @@ Deno.test('E-53: a caller can DISMISS a confirm, which the automatic policy woul
 	assertEquals(h.sent('Page.handleJavaScriptDialog')[0]?.params.promptText, undefined);
 });
 
-Deno.test('E-53: an unknown or already-answered id answers false rather than throwing', async () => {
+Deno.test('popups: an unknown or already-answered id answers false rather than throwing', async () => {
 	await using h = await harness();
 	h.watchdog.setManualHandling(true, 5_000);
 	assertEquals(h.watchdog.answerDialog('d99', { accept: true }), false);
@@ -275,7 +274,7 @@ Deno.test('E-53: an unknown or already-answered id answers false rather than thr
 	assertEquals(h.watchdog.answerDialog(dialogId, { accept: true }), false, 'the same id cannot be answered twice');
 });
 
-Deno.test('E-53: disarming releases a held dialog to the policy rather than freezing the page', async () => {
+Deno.test('popups: disarming releases a held dialog to the policy rather than freezing the page', async () => {
 	await using h = await harness();
 	h.watchdog.setManualHandling(true, 5_000);
 	await openHeld(h, 'prompt', 'your name?');
@@ -291,7 +290,7 @@ Deno.test('E-53: disarming releases a held dialog to the policy rather than free
 	assertEquals(h.watchdog.pendingDialogs, []);
 });
 
-Deno.test('E-53: the hold is BOUNDED — it expires into the policy and says so', async () => {
+Deno.test('popups: the hold is BOUNDED — it expires into the policy and says so', async () => {
 	await using h = await harness();
 	// The expiry is the safety property that makes arming safe at all — an unanswered dialog blocks
 	// the CDP channel for the whole target — so it is proven by letting it happen, at a hold short
@@ -310,7 +309,7 @@ Deno.test('E-53: the hold is BOUNDED — it expires into the policy and says so'
 	assertEquals(h.watchdog.dialogs[0]?.answeredByCaller, false);
 });
 
-Deno.test('E-53: the hold cap is 20 s — long enough for a round trip, short enough not to wedge a tab', () => {
+Deno.test('popups: the hold cap is 20 s — long enough for a round trip, short enough not to wedge a tab', () => {
 	assertEquals(DIALOG_MANUAL_TIMEOUT_MS, 20_000);
 });
 
@@ -370,13 +369,11 @@ Deno.test('popups: an answer that never returns is capped at 0.5 s per attempt',
 	/**
 	 * Resolves once Chrome has received attempt `count`.
 	 *
-	 * ERRATUM(LAST-3): the sync point was one `Browser.getVersion()` round trip, on the reasoning
-	 * that a round trip is long enough for the answer to have crossed in the other direction. That is
-	 * not a happens-before, it is a wall-clock guess: the answer is written by an async handler a bus
-	 * dispatch and a socket read away, so on a loaded machine it lands *after* the round trip it was
-	 * racing and `attempt 1 is in flight` reads 0 — about one run in forty, measured. The dialog
-	 * frame and the answer travel in opposite directions on one socket and nothing orders them, so
-	 * the wait has to end on the arrival itself.
+	 * A `Browser.getVersion()` round trip is not a sync point: it is a wall-clock guess, not a
+	 * happens-before. The answer is written by an async handler a bus dispatch and a socket read away,
+	 * so on a loaded machine it can land *after* such a round trip (about one run in forty, measured).
+	 * The dialog frame and the answer travel in opposite directions on one socket and nothing orders
+	 * them, so the wait has to end on the arrival itself.
 	 */
 	const attemptReaches = (count: number): Promise<void> =>
 		new Promise<void>((resolve, reject) => {

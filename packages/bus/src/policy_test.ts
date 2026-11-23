@@ -20,7 +20,7 @@ class PolLifecycleEvent extends BaseEvent<void> {}
 
 /**
  * A hand-driven {@linkcode ConnectionPolicy}: the seam `@tykotech/browser` fills with the CDP client's real
- * state in M1. Nothing is faked here that the bus would otherwise own — the policy *is* the input.
+ * state. Nothing is faked here that the bus would otherwise own — the policy *is* the input.
  */
 class ManualConnectionPolicy implements ConnectionPolicy {
 	connected = true;

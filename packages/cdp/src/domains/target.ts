@@ -1,7 +1,7 @@
 /**
  * CDP `Target` domain — discovery, attach/detach, browser contexts.
  *
- * Drives the SessionManager contract in SPECS/ARCHITECTURE.md §7.3: push-based discovery via
+ * Drives the SessionManager: push-based discovery via
  * `setDiscoverTargets`, flat-session attach via `attachToTarget({flatten: true})`, cascading
  * OOPIF/worker attach via per-session `setAutoAttach`.
  */

@@ -1,23 +1,13 @@
 /**
- * Review R1-1 (D-123, S-10): a secret-bearing value that is not the JSON it should be refuses the start naming the
- * variable and the kind of fault — a fixed phrase, a position at most — and never any part of the value.
- *
- * V8's `JSON.parse` message quotes its input: the whole of it when it is short (`Unexpected token 'h', "hunter2-…" is
- * not valid JSON`), its first characters otherwise, and the offending character either way. An operator who stores a
- * bare key where a JSON record list belongs — in a file, inline, or in Vault or 1Password behind a `*_REF` — would
- * have it printed to stderr and the container log by the refusal meant to protect it. Every source of every secret
- * JSON is driven here: inline, `*_FILE`, `*_REF` (both providers), and the key-file reload's parser.
+ * A secret-bearing value that is not the JSON it should be refuses the start naming the variable and the kind of fault
+ * — a fixed phrase, a position at most — and never any part of the value.
  */
 import { assert, assertMatch, assertThrows } from '@std/assert';
 import { ConfigError, loadConfig, parseApiKeys } from './config.ts';
 import type { SecretFetch } from './secret_providers.ts';
 import { resolveSecrets } from './secrets.ts';
 
-/**
- * Values an operator could plausibly put where JSON belongs. Each carries a sentinel that can only reach a message by
- * being copied there: a bare token (short, quoted whole by V8), a long one (quoted by prefix), and malformed JSON
- * whose fault lies before or after the secret.
- */
+/** Values an operator could plausibly put where JSON belongs. */
 const SENTINEL = 'Q7SENTINEL';
 const NOT_JSON: readonly string[] = [
 	`${SENTINEL}-pw`,
@@ -75,7 +65,7 @@ const SOURCES: ReadonlyArray<[source: 'inline' | 'file' | 'vault' | '1password',
 ];
 
 for (const logical of ['TTK_API_KEYS', 'TTK_SECRETS'] as const) {
-	Deno.test(`R1-1: ${logical} that is not JSON is refused without quoting it — inline, file and provider`, async () => {
+	Deno.test(`secret parsing: ${logical} that is not JSON is refused without quoting it — inline, file and provider`, async () => {
 		for (const value of NOT_JSON) {
 			for (const [source, suffix] of SOURCES) {
 				let error: ConfigError;
@@ -99,14 +89,14 @@ for (const logical of ['TTK_API_KEYS', 'TTK_SECRETS'] as const) {
 	});
 }
 
-Deno.test('R1-1: the key-file reload parser refuses a non-JSON file without quoting it', () => {
+Deno.test('secret parsing: the key-file reload parser refuses a non-JSON file without quoting it', () => {
 	for (const value of NOT_JSON) {
 		const error = assertThrows(() => parseApiKeys(value, 'TTK_API_KEYS_FILE'), ConfigError);
 		assertClean(error.message, value);
 	}
 });
 
-Deno.test('R1-1: valid JSON of the wrong shape names the fault and still never the value', () => {
+Deno.test('secret parsing: valid JSON of the wrong shape names the fault and still never the value', () => {
 	const shapes = [
 		`"${SENTINEL}-a-json-string"`,
 		`["${SENTINEL}"]`,
@@ -125,7 +115,7 @@ Deno.test('R1-1: valid JSON of the wrong shape names the fault and still never t
 	}
 });
 
-Deno.test('R1-1: the administrator seed, inline and from its file, is refused the same way', async () => {
+Deno.test('secret parsing: the administrator seed, inline and from its file, is refused the same way', async () => {
 	for (const value of NOT_JSON) {
 		const inline = assertThrows(() => loadConfig({ TTK_ADMIN_USER: value }), ConfigError);
 		assertClean(inline.message, value);

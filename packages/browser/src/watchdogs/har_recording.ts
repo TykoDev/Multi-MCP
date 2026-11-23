@@ -1,6 +1,6 @@
 /**
  * @module
- * `HarRecordingWatchdog` ○ — HTTP Archive capture (ARCHITECTURE.md §6.13).
+ * `HarRecordingWatchdog` ○ — HTTP Archive capture.
  *
  * > **conditional: `recordHarPath`** — captures `Network.*` request/response/timing events (+ bodies
  * > when `recordHarContent='embed'`) and writes HAR 1.2 JSON on stop.
@@ -18,14 +18,13 @@
  * `Network.ResourceTiming` is relative to `requestTime` and is absent for cached and failed requests.
  * HAR marks `blocked`/`dns`/`connect`/`ssl` optional (`-1` = "does not apply") but requires
  * `send`/`wait`/`receive`, and requires `time` to be the sum of the non-negative phases. When Chrome
- * gave us no timing breakdown the whole measured duration is therefore attributed to `wait`: the sum
+ * gives no timing breakdown the whole measured duration is therefore attributed to `wait`: the sum
  * invariant holds *and* the duration survives, where zeroing everything would silently report
  * every cached request as instantaneous.
  *
- * ## The two mode fields the spec leaves undefined (ERRATUM(M1-watchdogs-rest-10))
+ * ## The two mode fields
  *
- * DATA-MODEL.md §5.2 lists `recordHarContent: 'embed'|'attach'|'omit'` and
- * `recordHarMode: 'full'|'minimal'` with defaults and no semantics. Implemented as:
+ * `recordHarContent: 'embed'|'attach'|'omit'` and `recordHarMode: 'full'|'minimal'` mean:
  *
  * - `content` — `embed`: body inline in `content.text` (`encoding:'base64'` for binary);
  *   `attach`: body written to `<harPath>.content/<requestId>.<ext>` and referenced from the custom
@@ -57,10 +56,10 @@ export const HAR_VERSION = '1.2';
 /** `log.creator.name`. */
 export const HAR_CREATOR_NAME = 'bua';
 
-/** `log.creator.version` — kept equal to `packages/core/deno.json`'s `version` by the contract test. */
-// ERRATUM(E-44). Moved with the nine-file 0.2.0 bump (G-9, B1.13). It appears in
-// the `creator.version` field of every emitted HAR, and `har_recording_test.ts`
-// already required it to track the package version.
+/**
+ * `log.creator.version` — kept equal to `packages/browser/deno.json`'s `version` by the contract test.
+ * It appears in the `creator.version` field of every emitted HAR.
+ */
 export const HAR_CREATOR_VERSION = '0.2.0';
 
 /** The single synthetic page every entry references. */
@@ -75,16 +74,15 @@ export const HAR_UNKNOWN = -1;
 /**
  * Cap on one `Network.getResponseBody` call.
  *
- * ERRATUM(M1-watchdogs-rest-12): §6.13 states the body capture with no budget, and an entry is only
- * complete once its body fetch settles. Without a cap, one slow body defers that entry behind the
- * 60 s CDP request timeout — and if `BrowserStopEvent` arrives first the entry is lost from the HAR
- * entirely. Observed as a flaky "the stylesheet is missing" under load before the cap existed. A
- * capped fetch degrades the entry to "no body", which is what `recordHarContent: 'omit'` produces
- * anyway; an uncapped one degrades the whole document.
+ * An entry is only complete once its body fetch settles. Without a cap, one slow body defers that
+ * entry behind the 60 s CDP request timeout — and if `BrowserStopEvent` arrives first the entry is
+ * lost from the HAR entirely (under load: a flaky "the stylesheet is missing"). A capped fetch
+ * degrades the entry to "no body", which is what `recordHarContent: 'omit'` produces anyway; an
+ * uncapped one degrades the whole document.
  */
 export const HAR_BODY_TIMEOUT_MS = 5_000;
 
-/** The conditional-attachment predicate (ARCHITECTURE.md §6.13). */
+/** The conditional-attachment predicate (`recordHarPath` set). */
 export function shouldAttachHarRecordingWatchdog(profile: Pick<BrowserProfile, 'recordHarPath'>): boolean {
 	return profile.recordHarPath !== null;
 }
@@ -351,7 +349,7 @@ export class HarRecordingWatchdog extends BaseWatchdog {
 	/**
 	 * Resolves when every in-flight body fetch has settled. Tests await this, never a sleep.
 	 *
-	 * ERRATUM(CANCEL-3): this drain is the part of the stop handler that can outlast its budget, and it
+	 * This drain is the part of the stop handler that can outlast its budget, and it
 	 * is worth stating the arithmetic because it is not close. Each body fetch is capped at
 	 * {@linkcode HAR_BODY_TIMEOUT_MS} (5 s), the listeners are still armed while draining so newly
 	 * finished requests keep joining `#inflight`, and the guard allows 10 rounds — up to 50 s against
@@ -359,7 +357,7 @@ export class HarRecordingWatchdog extends BaseWatchdog {
 	 * the fetches inside a round are already running and already capped, and abandoning the round would
 	 * not cancel them.
 	 *
-	 * `budget` defaults to unbudgeted so a direct call keeps the old behaviour.
+	 * `budget` defaults to unbudgeted so a direct call is never cut short.
 	 */
 	async whenIdle(budget: HandlerBudget = handlerBudget(undefined)): Promise<void> {
 		for (let guard = 0; guard < 10 && this.#inflight.size > 0; guard++) {
@@ -376,17 +374,16 @@ export class HarRecordingWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Writes the HAR. Registered before `BrowserSession`'s own stop handler (E-16), so the body
+	 * Writes the HAR. Registered before `BrowserSession`'s own stop handler, so the body
 	 * fetches this awaits still have a socket.
 	 *
-	 * ERRATUM(CANCEL-3): the deliberate asymmetry, and it is the **opposite** of the one
-	 * ERRATUM(CANCEL-2) chose for the storage state. There, the write is skipped when the budget is
-	 * spent, because a good file already exists on disk and a partial overwrite would destroy it. Here
-	 * nothing exists yet: `recordHarPath` is a location the caller named and the document is the
-	 * watchdog's entire deliverable, so skipping the write means the user asked for a HAR and silently
-	 * received nothing. The drain is what gets abandoned — it is the unbounded part — and the write is
-	 * one small `Deno.writeTextFile` over a fresh path that can corrupt nothing, which is the same
-	 * trade `launched.close()` gets in ERRATUM(KILL-1).
+	 * The deliberate asymmetry, and it is the **opposite** of the one `StorageStateWatchdog` makes.
+	 * There, the write is skipped when the budget is spent, because a good file already exists on disk
+	 * and a partial overwrite would destroy it. Here nothing exists yet: `recordHarPath` is a location
+	 * the caller named and the document is the watchdog's entire deliverable, so skipping the write
+	 * means the user asked for a HAR and silently received nothing. The drain is what gets abandoned —
+	 * it is the unbounded part — and the write is one small `Deno.writeTextFile` over a fresh path that
+	 * can corrupt nothing, which is the same trade `LocalBrowserWatchdog` makes for `launched.close()`.
 	 */
 	async onBrowserStopEvent(_event: BrowserStopEvent, context?: HandlerContext): Promise<void> {
 		if (this.path === null) return;
@@ -535,7 +532,7 @@ export class HarRecordingWatchdog extends BaseWatchdog {
 		try {
 			// Mapped to a non-rejecting promise before the race: `withTimeout` leaves the loser running,
 			// and a CDP call rejecting after its cap expired would be an unhandled rejection.
-			// Bare `this.cdp` on purpose (ERRATUM(E-52) allowlist): body capture runs from the
+			// Bare `this.cdp` on purpose: body capture runs from the
 			// `Network.loadingFinished` listener, which has no dispatch and no context to bind. Its bound is
 			// `HAR_BODY_TIMEOUT_MS` below, and `disarm()` drops the listener.
 			const call = this.cdp.send.Network.getResponseBody({ requestId: entry.requestId }, entry.sessionId)

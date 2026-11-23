@@ -1,8 +1,8 @@
 /**
  * Typed error taxonomy for `@tykotech/cdp`.
  *
- * Contract: AGENTS.md §3 ("Never throw strings"), SPECS/ARCHITECTURE.md §7.1,
- * SPECS/COMPLETIONS-CRITERIA.md §3.1 (`CdpRequestTimeoutError`, never a hang).
+ * Nothing here throws a string, and a request that outlives its budget rejects with
+ * `CdpRequestTimeoutError` rather than hanging.
  *
  * Every error thrown by this package descends from {@linkcode CdpError}, so a consumer can bracket
  * the whole transport with a single `instanceof` check and still discriminate on the subclass.
@@ -37,7 +37,7 @@ export interface CdpProtocolErrorInit {
  * The browser answered a request with a CDP `error` payload.
  *
  * This is the browser saying "no" — it is *not* a transport fault, so `@tykotech/browser`'s reconnect
- * policy (SPECS/ARCHITECTURE.md §7.4) MUST NOT treat it as a socket drop.
+ * policy MUST NOT treat it as a socket drop.
  */
 export class CdpProtocolError extends CdpError {
 	override readonly name: string = 'CdpProtocolError';
@@ -69,7 +69,7 @@ export interface CdpRequestTimeoutErrorInit {
 }
 
 /**
- * A request outlived its per-request budget (default 60 s — SPECS/ARCHITECTURE.md §8).
+ * A request outlived its per-request budget (default 60 s).
  *
  * The socket is deliberately left open: a single unanswered command does not prove the browser is
  * dead, and tearing the connection down here would fight `@tykotech/browser`'s reconnect policy.
@@ -103,8 +103,7 @@ export interface CdpFrameTooLargeErrorInit {
 /**
  * An inbound frame exceeded the 200 MB budget and was dropped before `JSON.parse` ran.
  *
- * Screenshots and `DOMSnapshot.captureSnapshot` payloads are the realistic offenders
- * (SPECS/ARCHITECTURE.md §7.1).
+ * Screenshots and `DOMSnapshot.captureSnapshot` payloads are the realistic offenders.
  */
 export class CdpFrameTooLargeError extends CdpError {
 	override readonly name: string = 'CdpFrameTooLargeError';
@@ -137,7 +136,7 @@ export interface CdpConnectionClosedErrorInit {
 /**
  * The socket closed (or was already closed) while a request was outstanding.
  *
- * `intentional` is the discriminator M1's reconnect policy needs: SPECS/ARCHITECTURE.md §7.4 only
+ * `intentional` is the discriminator the browser layer's reconnect policy needs: it only
  * auto-reconnects when the stop was *not* intentional.
  */
 export class CdpConnectionClosedError extends CdpError {
@@ -164,8 +163,7 @@ export class CdpConnectionClosedError extends CdpError {
 }
 
 /**
- * Coerce an unknown thrown/abort value into an `Error`, so nothing ever escapes as a bare string
- * (AGENTS.md §3).
+ * Coerce an unknown thrown/abort value into an `Error`, so nothing ever escapes as a bare string.
  */
 export function toCdpError(value: unknown, fallbackMessage: string): Error {
 	if (value instanceof Error) return value;

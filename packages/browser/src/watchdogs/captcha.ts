@@ -1,6 +1,6 @@
 /**
  * @module
- * `CaptchaWatchdog` ○ — vendor captcha-solver bridge (ARCHITECTURE.md §6.14).
+ * `CaptchaWatchdog` ○ — vendor captcha-solver bridge.
  *
  * > **conditional: `captchaSolver`, default on** — listens for vendor `BrowserUse.captchaSolver*`
  * > CDP events (emitted only by cloud proxy browsers; harmless elsewhere), re-broadcasts them as bus
@@ -12,10 +12,10 @@
  * 1. **Re-broadcast.** `BrowserUse.captchaSolverStarted` / `…Finished` are a *vendor* CDP domain
  *    (`@tykotech/cdp` `src/domains/browser_use.ts`): a cloud proxy browser emits them, a stock Chromium
  *    never does, and subscribing to a method nobody sends is free. They become
- *    `CaptchaSolverStartedEvent` / `CaptchaSolverFinishedEvent` (DATA-MODEL.md §5.1.7) so that
+ *    `CaptchaSolverStartedEvent` / `CaptchaSolverFinishedEvent` so that
  *    everything downstream — history, telemetry, the web client — sees one event vocabulary.
- * 2. **The wait.** {@linkcode CaptchaWatchdog.waitIfCaptchaSolving} is what AGENT-RUNTIME.md §4
- *    Phase 0 calls *before every step*: if a solve is in flight the step blocks until it finishes,
+ * 2. **The wait.** {@linkcode CaptchaWatchdog.waitIfCaptchaSolving} is what the agent step loop
+ *    calls *before every step*: if a solve is in flight the step blocks until it finishes,
  *    then the step timer is reset and an `ActionResult` narrates the wait. Without it the agent would
  *    photograph a captcha overlay, reason about it, and act on a page that has since changed.
  *
@@ -39,23 +39,23 @@ import { BaseWatchdog, type WatchdogHost } from './base.ts';
 // constants
 // ---------------------------------------------------------------------------
 
-/** Hard ceiling on the pre-step wait (ARCHITECTURE.md §6.14: "timeout ≤ 120 s"). */
+/** Hard ceiling on the pre-step wait: 120 s. */
 export const CAPTCHA_WAIT_TIMEOUT_MS = 120_000;
 
-/** Env override, in **seconds**, per the `TIMEOUT_<name>` convention (AGENT-RUNTIME.md §4 Phase 0). */
+/** Env override, in **seconds**, per the `TIMEOUT_<name>` convention. */
 export const CAPTCHA_WAIT_TIMEOUT_ENV = 'TIMEOUT_CaptchaSolverWait';
 
 /** Vendor name used when the payload omits one. */
 export const UNKNOWN_CAPTCHA_VENDOR = 'unknown';
 
-/** The conditional-attachment predicate (ARCHITECTURE.md §6.14; default `true`, DATA-MODEL §5.2). */
+/** The conditional-attachment predicate (`captchaSolver`, default `true`). */
 export function shouldAttachCaptchaWatchdog(profile: Pick<BrowserProfile, 'captchaSolver'>): boolean {
 	return profile.captchaSolver;
 }
 
 /**
  * The effective wait budget: explicit override, else the env var (seconds), else the default —
- * always clamped to `≤ 120 s`, because §6.14 states the ceiling and not a configurable maximum.
+ * always clamped to `≤ 120 s`, because 120 s is a fixed ceiling, not a configurable maximum.
  */
 export function resolveCaptchaWaitTimeoutMs(
 	explicitMs?: number | undefined,
@@ -152,7 +152,7 @@ export class CaptchaWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The M2 seam (AGENT-RUNTIME.md §4 Phase 0). Blocks while a vendor captcha solve is in flight.
+	 * The pre-step seam the agent step loop calls. Blocks while a vendor captcha solve is in flight.
 	 *
 	 * Returns immediately with `{ waited: false, result: 'unknown' }` when nothing is solving — the
 	 * overwhelmingly common case, and the reason this is cheap enough to call before every step.

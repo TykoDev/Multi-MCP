@@ -1,12 +1,11 @@
 /**
- * The A2A surface the gateway mounts (D-104 – D-107): guarded event streams (A6, AC13), the card, the extended card
- * and the HTTP+JSON binding (A11, AC18), the push gate (N1), and durable agent state wired to the data directory (B1).
+ * The A2A surface the gateway mounts: guarded event streams, the card, the extended card and the HTTP+JSON binding, the
+ * push gate, and durable agent state wired to the data directory.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { Hono } from 'hono';
 import { AgentRuntime } from '@tykotech/agents';
 import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import { SessionRegistry } from '@tykotech/mcp';
 import { A2UI_CATALOG_ID } from '@tykotech/wire';
 import { A2A_STREAM_ENDED, A2uiStore, StreamGuard } from './a2ui.ts';
@@ -20,10 +19,9 @@ import {
 	type ExpansionServices,
 	pushGrantProven,
 } from './expansion.ts';
-import { createLogger } from './logger.ts';
+import { fakeSession, quiet } from './support_test.ts';
 
 const ORIGIN = 'http://127.0.0.1:8787';
-const quiet = (): ReturnType<typeof createLogger> => createLogger({ level: 'error', write: (): void => {} });
 
 /** Reads a stream until it ends or `ms` passes. */
 async function drain(body: ReadableStream<Uint8Array>, ms = 2_000): Promise<{ text: string; ended: boolean }> {
@@ -54,19 +52,6 @@ function events(text: string): Record<string, unknown>[] {
 	return text.split('\n\n').filter((frame) => frame.startsWith('data: ')).map((frame) => JSON.parse(frame.slice(6)));
 }
 
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'a2a-binding-test' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
-
 /** A registry whose first browser launch waits for the test, so a tool-calling task stays running. */
 function blockedRegistry(): { registry: SessionRegistry; release(): void } {
 	let release: () => void = (): void => {};
@@ -80,7 +65,7 @@ const message = (tool = 'browser_list_sessions'): Record<string, unknown> => ({
 	parts: [{ data: { tool, arguments: {} } }],
 });
 
-// --- A6: guarded A2A streams (AC13) ----------------------------------------------------------------------------
+// --- guarded A2A streams ----------------------------------------------------------------------------------------
 
 function principalApp(principal: Principal): Hono<{ Variables: AppVariables }> {
 	const app = new Hono<{ Variables: AppVariables }>();
@@ -107,10 +92,9 @@ function harness(streams: StreamGuard): { app: Hono<{ Variables: AppVariables }>
 		tools: [],
 		streams,
 		publish: () => ({}),
-		// D-143 (S0): the members a hand-built services object needs beyond what these streams exercise.
+		// The members a hand-built services object needs beyond what these streams exercise.
 		taskableTools: () => [],
-		actionNames: ['cancelTask', 'permissionDecision'],
-		acp: false,
+		invocableTools: () => [],
 		modelProviders: { default: null, providers: [] },
 		close: async (): Promise<void> => {
 			streams.closeAll();
@@ -132,7 +116,7 @@ function rpcBody(id: number, method: string, params: Record<string, unknown>): R
 	};
 }
 
-Deno.test('A6 / AC13: an A2A stream whose caller stops being authorized ends with a terminal JSON-RPC error', async () => {
+Deno.test('A2A stream: an A2A stream whose caller stops being authorized ends with a terminal JSON-RPC error', async () => {
 	const { app, services, authorized } = harness(new StreamGuard({ revalidateMs: 10 }));
 	try {
 		const response = await app.request('/a2a', rpcBody(9, 'SendStreamingMessage', { message: message() }));
@@ -156,7 +140,7 @@ Deno.test('A6 / AC13: an A2A stream whose caller stops being authorized ends wit
 	}
 });
 
-Deno.test('A6 / AC13: an A2A stream ends at its lifetime with a terminal error, on both bindings', async () => {
+Deno.test('A2A stream: an A2A stream ends at its lifetime with a terminal error, on both bindings', async () => {
 	const { app, services } = harness(new StreamGuard({ lifetimeMs: 50 }));
 	try {
 		const task = services.runtime.submit('api-key:viewer', viewer.scopes, message());
@@ -176,7 +160,7 @@ Deno.test('A6 / AC13: an A2A stream ends at its lifetime with a terminal error, 
 	}
 });
 
-Deno.test('A6 / AC13: rotating the key behind an open A2A stream ends it with the terminal error at once', async () => {
+Deno.test('A2A stream: rotating the key behind an open A2A stream ends it with the terminal error at once', async () => {
 	const alice = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const rotated = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([alice.record]) });
@@ -216,7 +200,7 @@ Deno.test('A6 / AC13: rotating the key behind an open A2A stream ends it with th
 	}
 });
 
-// --- A11: card, extended card, HTTP+JSON binding (AC18) --------------------------------------------------------
+// --- card, extended card, HTTP+JSON binding --------------------------------------------------------------------
 
 async function gatewayWith(keys: { record: unknown }[]): Promise<ReturnType<typeof createGatewayApp>> {
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify(keys.map((key) => key.record)) });
@@ -244,7 +228,7 @@ function call(
 	}));
 }
 
-Deno.test('A11 / AC18: the card lists both bindings, the extended card, and push only when offered', async () => {
+Deno.test('A2A binding: the card lists both bindings, the extended card, and push only when offered', async () => {
 	const gateway = await gatewayWith([]);
 	try {
 		const card = await (await call(gateway, '/.well-known/agent-card.json', undefined, { version: null })).json();
@@ -259,7 +243,7 @@ Deno.test('A11 / AC18: the card lists both bindings, the extended card, and push
 	}
 });
 
-Deno.test('A11 / AC18: GetExtendedAgentCard lists only the tools this caller may invoke as a task', async () => {
+Deno.test('A2A binding: GetExtendedAgentCard lists only the tools this caller may invoke as a task', async () => {
 	const plain = await generateApiKey('plain', ['mcp:invoke', 'agent:invoke']);
 	const evaluator = await generateApiKey('evaluator', ['mcp:invoke', 'agent:invoke', 'evaluate']);
 	const agentOnly = await generateApiKey('agent-only', ['agent:invoke']);
@@ -294,7 +278,7 @@ Deno.test('A11 / AC18: GetExtendedAgentCard lists only the tools this caller may
 	}
 });
 
-Deno.test('A11 / AC18: the HTTP+JSON binding round-trips send, get, list, cancel and stream on the same handlers', async () => {
+Deno.test('A2A binding: the HTTP+JSON binding round-trips send, get, list, cancel and stream on the same handlers', async () => {
 	const alice = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const bob = await generateApiKey('bob', ['mcp:invoke', 'agent:invoke']);
 	const gateway = await gatewayWith([alice, bob]);
@@ -317,22 +301,48 @@ Deno.test('A11 / AC18: the HTTP+JSON binding round-trips send, get, list, cancel
 		})).json();
 		assertEquals(viaRpc.result.id, task.id);
 
-		const problem = async (response: Response, status: number, type: string): Promise<void> => {
+		// A2A 1.0 §11.6: a google.rpc.Status body with the §5.4 status, and an ErrorInfo for every A2A-specific error.
+		const rpcError = async (response: Response, status: number, rpc: string, reason?: string) => {
 			assertEquals(response.status, status);
-			assertEquals((await response.json()).type, `https://tykotech.eu/problems/${type}`);
+			const { error } = await response.json();
+			assertEquals([error.code, error.status], [status, rpc]);
+			assertEquals(
+				error.details,
+				reason === undefined
+					? []
+					: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason, domain: 'a2a-protocol.org' }],
+			);
+			return error.message as string;
 		};
-		await problem(await call(gateway, `/a2a/v1/tasks/${task.id}:cancel`, alice.key, { body: {} }), 409, 'conflict');
-		await problem(await call(gateway, `/a2a/v1/tasks/${task.id}`, bob.key), 404, 'not-found');
-		await problem(await call(gateway, '/a2a/v1/tasks?pageSize=1000', alice.key), 400, 'invalid-request');
-		await problem(await call(gateway, '/a2a/v1/tasks', alice.key, { version: null }), 400, 'invalid-request');
-		await problem(await call(gateway, '/a2a/v1/nowhere', alice.key), 404, 'not-found');
-		await problem(
+		const ended = 'Task cannot be canceled: it has already ended (completed)';
+		const cancel = await call(gateway, `/a2a/v1/tasks/${task.id}:cancel`, alice.key, { body: {} });
+		assertEquals(await rpcError(cancel, 400, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'), ended);
+		await rpcError(await call(gateway, `/a2a/v1/tasks/${task.id}`, bob.key), 404, 'NOT_FOUND', 'TASK_NOT_FOUND');
+		await rpcError(await call(gateway, '/a2a/v1/tasks?pageSize=1000', alice.key), 400, 'INVALID_ARGUMENT');
+		await rpcError(
+			await call(gateway, '/a2a/v1/tasks', alice.key, { version: null }),
+			400,
+			'FAILED_PRECONDITION',
+			'VERSION_NOT_SUPPORTED',
+		);
+		await rpcError(await call(gateway, '/a2a/v1/nowhere', alice.key), 404, 'NOT_FOUND');
+		await rpcError(
 			await call(gateway, `/a2a/v1/tasks/${task.id}/pushNotificationConfigs`, alice.key, {
 				body: { url: 'https://hooks.example.com/x' },
 			}),
 			400,
-			'invalid-request',
+			'FAILED_PRECONDITION',
+			'PUSH_NOTIFICATION_NOT_SUPPORTED',
 		);
+		// The same refusal, in the same words, over JSON-RPC and on the web app's own route.
+		const rpcCancel = await (await call(gateway, '/a2a', alice.key, {
+			body: { jsonrpc: '2.0', id: 2, method: 'CancelTask', params: { id: task.id } },
+		})).json();
+		assertEquals([rpcCancel.error.code, rpcCancel.error.message], [-32002, ended]);
+		assertEquals(rpcCancel.error.data[0].reason, 'TASK_NOT_CANCELABLE');
+		const webCancel = await call(gateway, `/api/v1/agent/tasks/${task.id}/cancel`, alice.key, { body: {} });
+		assertEquals(webCancel.status, 400);
+		assertEquals((await webCancel.json()).detail, ended);
 
 		const stream = await call(gateway, '/a2a/v1/message:stream', alice.key, { body: { message: message() } });
 		assertEquals(stream.headers.get('content-type'), 'text/event-stream');
@@ -345,7 +355,7 @@ Deno.test('A11 / AC18: the HTTP+JSON binding round-trips send, get, list, cancel
 	}
 });
 
-Deno.test('A11: a running task is cancelled over the HTTP+JSON binding', async () => {
+Deno.test('A2A binding: a running task is cancelled over the HTTP+JSON binding', async () => {
 	const alice = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([alice.record]) });
 	const verifier = new VerifierChain({ config, allowAnonymous: false });
@@ -366,7 +376,7 @@ Deno.test('A11: a running task is cancelled over the HTTP+JSON binding', async (
 	}
 });
 
-// --- A11 / N1: the push gate ----------------------------------------------------------------------------------
+// --- the push gate --------------------------------------------------------------------------------------------
 
 /** A permissions API that grants exactly `granted` (and everything when it holds the bare `net`). */
 function permissions(granted: string[]): Pick<Deno.Permissions, 'querySync'> {
@@ -379,7 +389,7 @@ function permissions(granted: string[]): Pick<Deno.Permissions, 'querySync'> {
 	};
 }
 
-Deno.test('A11 / N1: push is offered only for a non-empty host list with a proven grant for every host', () => {
+Deno.test('A2A push: push is offered only for a non-empty host list with a proven grant for every host', () => {
 	assertEquals(pushGrantProven([], permissions(['net'])), false, 'an empty list offers nothing, even with full net');
 	assertEquals(pushGrantProven(['hooks.example.com'], permissions(['net'])), true);
 	assertEquals(pushGrantProven(['hooks.example.com'], permissions(['hooks.example.com:443'])), true);
@@ -394,7 +404,7 @@ Deno.test('A11 / N1: push is offered only for a non-empty host list with a prove
 	assertEquals(pushGrantProven(['hooks.example.com']), false);
 });
 
-Deno.test('A11 / N1: the gateway wires the gate into the card and the address classifier into every delivery', async () => {
+Deno.test('A2A push: the gateway wires the gate into the card and the address classifier into every delivery', async () => {
 	const registry = new SessionRegistry();
 	const lines: string[] = [];
 	const logger = {
@@ -402,18 +412,18 @@ Deno.test('A11 / N1: the gateway wires the gate into the card and the address cl
 		warn: (line: string): void => void lines.push(`warn ${line}`),
 	};
 	const config = loadConfig({ TTK_A2A_PUSH_ALLOWED_HOSTS: 'hooks.example.com' }).expansion;
-	const withheld = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, undefined, {
+	const withheld = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, {
 		logger,
 		permissions: permissions([]),
 	});
 	const fetched: string[] = [];
-	const offered = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, undefined, {
+	const offered = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, {
 		logger,
 		permissions: permissions(['hooks.example.com:443']),
-		// B-6: a scoped grant needs the resolver proven; this probe answers that it is.
+		// A scoped grant needs the resolver proven; this probe answers that it is.
 		resolverProbe: () => Promise.resolve(true),
 		push: {
-			// The operator's host now resolves to loopback: the gateway's classifier must refuse the delivery.
+			// The operator's host resolves to loopback: the gateway's classifier must refuse the delivery.
 			resolve: () => Promise.resolve(['127.0.0.1']),
 			fetch: (input) => {
 				fetched.push(String(input));
@@ -422,7 +432,7 @@ Deno.test('A11 / N1: the gateway wires the gate into the card and the address cl
 		},
 	});
 	try {
-		await new Promise((resolve) => setTimeout(resolve, 0)); // let the one-time resolver probe settle (B-6)
+		await new Promise((resolve) => setTimeout(resolve, 0)); // let the one-time resolver probe settle
 		assertEquals(withheld.runtime.supportsPush, false);
 		assert(lines.some((line) => line.startsWith('warn') && line.includes('no outbound net grant')), lines.join('\n'));
 		assertEquals(offered.runtime.supportsPush, true);
@@ -450,7 +460,7 @@ Deno.test('A11 / N1: the gateway wires the gate into the card and the address cl
 	}
 });
 
-Deno.test('B-6: under a scoped grant, push stays unoffered until the DNS resolver is proven permitted', async () => {
+Deno.test('A2A push: under a scoped grant, push stays unoffered until the DNS resolver is proven permitted', async () => {
 	const registry = new SessionRegistry();
 	const lines: string[] = [];
 	const logger = {
@@ -460,7 +470,7 @@ Deno.test('B-6: under a scoped grant, push stays unoffered until the DNS resolve
 	const config = loadConfig({ TTK_A2A_PUSH_ALLOWED_HOSTS: 'hooks.example.com' }).expansion;
 	let settle: (ok: boolean) => void = () => {};
 	const probed: string[] = [];
-	const scoped = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, undefined, {
+	const scoped = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, {
 		logger,
 		permissions: permissions(['hooks.example.com:443']),
 		resolverProbe: (host) => {
@@ -468,7 +478,7 @@ Deno.test('B-6: under a scoped grant, push stays unoffered until the DNS resolve
 			return new Promise((resolve) => settle = resolve);
 		},
 	});
-	const unscoped = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, undefined, {
+	const unscoped = createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, {
 		logger,
 		permissions: permissions(['net']),
 		resolverProbe: () => Promise.reject(new Error('an unscoped grant covers the resolver: never probed')),
@@ -496,14 +506,14 @@ Deno.test('B-6: under a scoped grant, push stays unoffered until the DNS resolve
 	}
 });
 
-// --- B1: durable agent state wired to the data directory ------------------------------------------------------
+// --- durable agent state wired to the data directory ---------------------------------------------------------
 
-Deno.test('B1 / AC4: tasks and surfaces persist under <TTK_DATA_DIR>/agents and come back with the next instance', async () => {
+Deno.test('agent state: tasks and surfaces persist under <TTK_DATA_DIR>/agents and come back with the next instance', async () => {
 	const dataDir = `tests/.scratch/agents-${crypto.randomUUID()}`;
 	const registry = new SessionRegistry();
 	const config = loadConfig({}).expansion;
 	const build = (): ExpansionServices =>
-		createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, undefined, { dataDir });
+		createExpansionServices(config, { registry, version: 'test' }, undefined, undefined, { dataDir });
 	const first = build();
 	let second: ExpansionServices | undefined;
 	try {

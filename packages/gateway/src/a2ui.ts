@@ -1,6 +1,6 @@
+/** Principal-bound A2UI state and authenticated REST adapter; durable with a data directory. */
 import { expansionOwner, type Principal } from './auth.ts';
 import { EVENT_STREAM_LIFETIME_MS, EVENT_STREAM_REVALIDATE_MS } from './eventstream.ts';
-/** Principal-bound A2UI state and authenticated REST adapter (D-067); durable with a data directory (B1, D-104). */
 import {
 	A2UI_CATALOG_ID,
 	A2UI_MAX_BYTES,
@@ -16,35 +16,23 @@ import {
 } from '@tykotech/wire';
 import { DurableJsonFile } from '@tykotech/agents';
 import type { Context, Hono } from 'hono';
-import * as z from 'zod';
 import type { AppVariables } from './app.ts';
 import { HttpProblem, problemResponse } from './problem.ts';
 
 export type A2uiBinding =
 	| { kind: 'cancelTask'; taskId: string }
-	| { kind: 'permissionDecision'; requestId: string; optionId: string }
-	/** E-4: an operator-configured tool action, named by the button's event. */
+	/** An operator-configured tool action, named by the button's event. */
 	| { kind: 'toolAction'; name: string };
 export interface A2uiStoreOptions {
 	cancelTask?: (principal: string, scopes: ReadonlySet<string>, taskId: string) => Promise<Record<string, unknown>>;
-	permissionDecision?: (
-		principal: string,
-		scopes: ReadonlySet<string>,
-		requestId: string,
-		optionId: string,
-	) => Promise<Record<string, unknown>>;
-	/** E-4: runs the configured tool action `name` with the context resolved from server state. */
+	/** Runs the configured tool action `name` with the context resolved from server state. */
 	toolAction?: (
 		principal: string,
 		scopes: ReadonlySet<string>,
 		name: string,
 		context: Readonly<Record<string, unknown>>,
 	) => Promise<Record<string, unknown>>;
-	/**
-	 * B1 / G5: `<TTK_DATA_DIR>/agents/surfaces.json`. Absent keeps surfaces in memory only, as before. Action
-	 * registrations are never written: they are one-shot authority bound to live targets, so a restored surface has
-	 * none until it is republished, and the SPA shows its buttons disabled.
-	 */
+	/** `<TTK_DATA_DIR>/agents/surfaces.json`. Absent keeps surfaces in memory only. */
 	persistPath?: string;
 	/** Persistence failures; never surface content. */
 	logger?: { warn(message: string): void };
@@ -55,7 +43,7 @@ interface OwnedSurface {
 	actions: Map<string, A2uiBinding>;
 }
 
-/** B1: `surfaces.json`. `revision` is the global counter, so a restart never re-issues an old revision. */
+/** `surfaces.json`. `revision` is the global counter, so a restart never re-issues an old revision. */
 interface SurfacesDocument {
 	version: 1;
 	revision: number;
@@ -63,10 +51,10 @@ interface SurfacesDocument {
 }
 
 /**
- * A stored surface re-validated as if it were being published now, or `null` (skipped, never trusted). Review R2-9:
- * its identity and theme pass the same `createSurface` schema a publish does (the closed D-111 theme included), its
- * components the component schema and the tree check, and the snapshot is rebuilt from the known keys only, so
- * nothing else a hand-edited file carries reaches a client.
+ * A stored surface re-validated as if it were being published now, or `null` (skipped, never trusted): its identity and
+ * theme pass the same `createSurface` schema a publish does (the closed theme included), its components the component
+ * schema and the tree check, and the snapshot is rebuilt from the known keys only, so nothing else a hand-edited file
+ * carries reaches a client.
  */
 function storedSurface(value: unknown): { owner: string; snapshot: A2uiSurface } | null {
 	try {
@@ -122,8 +110,8 @@ interface SurfaceWatcher {
 }
 
 /** Surface watchers in the whole store and per owner; the embed stream is also capped per principal upstream. */
-export const A2UI_MAX_WATCHERS = 64;
-export const A2UI_MAX_WATCHERS_PER_OWNER = 8;
+const A2UI_MAX_WATCHERS = 64;
+const A2UI_MAX_WATCHERS_PER_OWNER = 8;
 
 /** Owns surfaces, one-shot action registrations and bounded snapshot subscriptions. */
 export class A2uiStore {
@@ -141,7 +129,7 @@ export class A2uiStore {
 		this.#restore();
 	}
 
-	/** B1: the document follows a committed change within 250 ms. */
+	/** The document follows a committed change within 250 ms. */
 	#changed(): void {
 		if (!this.#closed) this.#file?.schedule(() => this.#document());
 	}
@@ -154,7 +142,7 @@ export class A2uiStore {
 			surfaces: [...this.#surfaces.values()].map(({ owner, snapshot }) => ({ owner, snapshot })),
 		};
 	}
-	/** B1 / G5: loads `surfaces.json`, re-validating every surface and applying today's caps; actions start empty. */
+	/** Loads `surfaces.json`, re-validating every surface and applying today's caps; actions start empty. */
 	#restore(): void {
 		const file = this.#file;
 		const raw = file?.read();
@@ -224,7 +212,7 @@ export class A2uiStore {
 					revision: ++this.#revision,
 					components: [],
 					dataModel: {},
-					// D-111: the closed theme travels with the surface; the SPA maps it onto kit tokens.
+					// The closed theme travels with the surface; the SPA maps it onto kit tokens.
 					...(message.createSurface.theme === undefined ? {} : { theme: message.createSurface.theme }),
 					...(message.createSurface.workspaceId === undefined
 						? {}
@@ -257,28 +245,6 @@ export class A2uiStore {
 		this.#changed();
 		return { surface: structuredClone(owned.snapshot) };
 	}
-	/**
-	 * Attaches an owned surface to a coding workspace, or detaches it with `null`, as a new revision; components, data
-	 * and theme stay as they are. The id is only a label the control plane groups by — it grants nothing, so it is
-	 * checked for shape (a UUID, as `sandbox_create` issues) and not looked up. Registered actions are dropped like on
-	 * every other revision: they were authorized against the previous one.
-	 */
-	attach(principal: string, surfaceId: string, workspaceId: unknown): Record<string, unknown> {
-		if (this.#closed) throw new HttpProblem('invalid-request', 'A2UI store is closed');
-		if (workspaceId !== null && !z.uuid().safeParse(workspaceId).success) {
-			throw new HttpProblem('invalid-request', 'workspaceId must be a workspace id (a UUID) or null');
-		}
-		const owned = this.#owned(principal, surfaceId);
-		const snapshot = structuredClone(owned.snapshot);
-		if (workspaceId === null) delete snapshot.workspaceId;
-		else snapshot.workspaceId = workspaceId as string;
-		snapshot.revision = ++this.#revision;
-		owned.snapshot = snapshot;
-		owned.actions.clear();
-		this.#emit(principal);
-		this.#changed();
-		return { surface: structuredClone(snapshot) };
-	}
 	/** Registers an action after the trusted runtime has verified the referenced target. */
 	registerAction(principal: string, surfaceId: string, componentId: string, name: string, binding: A2uiBinding): void {
 		const owned = this.#owned(principal, surfaceId);
@@ -301,8 +267,8 @@ export class A2uiStore {
 		return { removed: true, surfaceId };
 	}
 	/**
-	 * D-111: the document of one `Html` component on an owned surface, for the sandboxed route. Any other owner, a
-	 * missing surface or component, and a component of another kind all read as not found.
+	 * The document of one `Html` component on an owned surface, for the sandboxed route. Any other owner, a missing
+	 * surface or component, and a component of another kind all read as not found.
 	 */
 	html(principal: string, surfaceId: string, componentId: string): string {
 		const component = this.#owned(principal, surfaceId).snapshot.components.find((value) => value.id === componentId);
@@ -315,8 +281,7 @@ export class A2uiStore {
 	}
 	/**
 	 * Watches one owned surface: `onChange` receives a fresh snapshot each time its revision moves, and `null` once it
-	 * is deleted (or the store closes), after which the watch is over. Read-only — a watcher gains no action
-	 * authority. Throws `not-found` for a surface the owner does not have and `rate-limited` past the watcher caps.
+	 * is deleted (or the store closes), after which the watch is over. Read-only — a watcher gains no action authority.
 	 */
 	watch(principal: string, surfaceId: string, onChange: (surface: A2uiSurface | null) => void): () => void {
 		const current = this.#owned(principal, surfaceId);
@@ -425,17 +390,14 @@ export class A2uiStore {
 		if (binding.kind === 'cancelTask' && this.options.cancelTask) {
 			return await this.options.cancelTask(principal, scopes, binding.taskId);
 		}
-		if (binding.kind === 'permissionDecision' && this.options.permissionDecision) {
-			return await this.options.permissionDecision(principal, scopes, binding.requestId, binding.optionId);
-		}
 		if (binding.kind === 'toolAction' && this.options.toolAction) {
 			return await this.options.toolAction(principal, scopes, binding.name, context);
 		}
 		throw new HttpProblem('invalid-request', 'A2UI action backend unavailable');
 	}
 	/**
-	 * Releases subscriptions and owner state. B1: with a data directory the surfaces are written first, so they
-	 * come back after a restart; the returned promise settles once that write has landed.
+	 * Releases subscriptions and owner state. With a data directory the surfaces are written first, so they come back
+	 * after a restart; the returned promise settles once that write has landed.
 	 */
 	close(): Promise<void> {
 		const final = this.#closed || this.#file === undefined ? undefined : structuredClone(this.#document());
@@ -459,16 +421,15 @@ export class A2uiStore {
 const BYE = new TextEncoder().encode('event: bye\ndata: {"reason":"stream-expired"}\n\n');
 
 /**
- * Why a guarded stream was ended by the guard rather than by its source: the principal's re-check failed, the
- * lifetime ran out, or the server is shutting down.
+ * Why a guarded stream was ended by the guard rather than by its source: the principal's re-check failed, the lifetime
+ * ran out, or the server is shutting down.
  */
 export type StreamEndReason = 'unauthorized' | 'expired' | 'shutdown';
 
 /**
- * A6 (D-106): the terminal event of a guarded A2A stream — a JSON-RPC error carrying the request's id (or, on the
- * HTTP+JSON binding, the bare error object), so an A2A client sees the stream fail and resubscribes, where an
- * `event: bye` would have been an unnamed SSE event it ignores. `-32000` is in JSON-RPC's implementation-defined
- * server range and is not one of A2A's own codes; `data.reason` names the cause.
+ * The terminal event of a guarded A2A stream — a JSON-RPC error carrying the request's id (or, on the HTTP+JSON
+ * binding, the bare error object), so an A2A client sees the stream fail and resubscribes, where an `event: bye` would
+ * be an unnamed SSE event it ignores.
  */
 export const A2A_STREAM_ENDED = -32000;
 export function a2aStreamFarewell(rpcId: string | number | null | undefined): (reason: StreamEndReason) => Uint8Array {
@@ -493,17 +454,7 @@ export interface StreamGuardOptions {
 	readonly lifetimeMs?: number;
 }
 
-/**
- * GW-3: bounds the A2UI and agent-task event streams the way `eventstream.ts` bounds a session stream.
- *
- * Both were opened once and then stood on that one authorization decision for as long as the client held them:
- * after a key rotation the old key's open A2UI stream kept receiving the owner's surfaces, and an expired OAuth
- * token streamed indefinitely. A long-lived stream **is** a cached decision, and §2.1 allows none, so each one
- * re-earns it every {@linkcode EVENT_STREAM_REVALIDATE_MS} (the gateway's 300 s horizon) and ends outright at
- * {@linkcode EVENT_STREAM_LIFETIME_MS}; the client reconnects and presents its credential again. The timers are
- * unref'd and live outside `pull`, so a consumer that stops reading is bounded as well. `revalidateAll` lets the
- * gateway apply a key reload or a logout immediately instead of at the next tick.
- */
+/** Bounds the A2UI and agent-task event streams the way `eventstream.ts` bounds a session stream. */
 export class StreamGuard {
 	readonly #open = new Set<{ check(): void; end(): void }>();
 	readonly revalidateMs: number;
@@ -517,11 +468,8 @@ export class StreamGuard {
 		return this.#open.size;
 	}
 	/**
-	 * Wraps an SSE body. `authorized` re-checks the principal behind it — credential still in force **and** the
-	 * route's scope still held; `false` (or a throw) ends the stream with a `bye` and releases `source`.
-	 *
-	 * `farewell` (A6) replaces the `bye` with the stream's own terminal event — an A2A stream's JSON-RPC error. A
-	 * stream whose source ends on its own (its task finished) ends without one, as before.
+	 * Wraps an SSE body. `authorized` re-checks the principal behind it — credential still in force **and** the route's
+	 * scope still held; `false` (or a throw) ends the stream with a `bye` and releases `source`.
 	 */
 	wrap(
 		source: ReadableStream<Uint8Array>,
@@ -585,17 +533,12 @@ export class StreamGuard {
 	}
 }
 
-/**
- * D-111: the policy an agent's `Html` document is served under. `sandbox` with no tokens gives the document an
- * opaque origin with no scripts, forms, pop-ups or top navigation even when it is opened directly rather than
- * framed; `default-src 'none'` leaves it no network at all (inline styles and `data:` images and fonts only); and
- * `frame-ancestors 'self'` lets only the control plane frame it.
- */
-export const A2UI_HTML_CSP =
+/** The policy an agent's `Html` document is served under. */
+const A2UI_HTML_CSP =
 	"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'";
 
-/** Every header the `Html` route sets, so the route and its test read one definition. */
-export const A2UI_HTML_HEADERS: Readonly<Record<string, string>> = {
+/** Every header the `Html` route sets. */
+const A2UI_HTML_HEADERS: Readonly<Record<string, string>> = {
 	'content-type': 'text/html; charset=utf-8',
 	'content-security-policy': A2UI_HTML_CSP,
 	'x-content-type-options': 'nosniff',
@@ -605,18 +548,13 @@ export const A2UI_HTML_HEADERS: Readonly<Record<string, string>> = {
 
 /** Optional wiring for {@linkcode attachA2uiRoutes}; the gateway passes both. */
 export interface A2uiRouteOptions {
-	/** GW-3: the guard that bounds `GET /api/v1/a2ui/events`; a private one on the default horizons otherwise. */
+	/** The guard that bounds `GET /api/v1/a2ui/events`; a private one on the default horizons otherwise. */
 	readonly streams?: StreamGuard;
 	/**
-	 * GW-3: true while the principal's credential is in force and still holds `agent:invoke`. Without one only
-	 * the lifetime applies and the scope is re-read from the principal as it was at open.
+	 * True while the principal's credential is in force and still holds `agent:invoke`. Without one only the lifetime
+	 * applies and the scope is re-read from the principal as it was at open.
 	 */
 	readonly authorized?: (principal: Principal) => boolean;
-	/**
-	 * D-143 (addendum B): what `GET /api/v1/a2ui/actions` lists — the gateway passes `ExpansionServices.actionNames`
-	 * (built-ins plus the configured names, sorted). The built-ins alone when nothing is passed.
-	 */
-	readonly actionNames?: readonly string[];
 }
 
 /** Attach behind the gateway's host/auth/rate middleware, never as a public mount. */
@@ -629,8 +567,8 @@ export function attachA2uiRoutes(
 ): void {
 	const streams = options.streams ?? new StreamGuard();
 	const authorized = options.authorized ?? ((principal: Principal): boolean => principal.scopes.has('agent:invoke'));
-	// GW-6: each route names its own scope. The former wildcard gate chose `agent:invoke` for any path *ending*
-	// in `/actions`, so `DELETE /api/v1/a2ui/surfaces/actions` deleted a surface without `a2ui:publish`.
+	// Each route names its own scope. A wildcard gate keyed on the path would choose `agent:invoke` for any path
+	// *ending* in `/actions`, so `DELETE /api/v1/a2ui/surfaces/actions` would delete a surface without `a2ui:publish`.
 	const requires =
 		(scope: 'agent:invoke' | 'a2ui:publish') =>
 		async (ctx: Context<{ Variables: AppVariables }>, next: () => Promise<void>): Promise<Response | void> => {
@@ -686,7 +624,7 @@ export function attachA2uiRoutes(
 		requires('a2ui:publish'),
 		(ctx) => respond(ctx, async () => ctx.json(publish(expansionOwner(ctx.get('principal')), await read(ctx.req.raw)))),
 	);
-	// D-111: an `Html` component is served only here, owner-bound, under A2UI_HTML_CSP, for an `<iframe sandbox>`.
+	// An `Html` component is served only here, owner-bound, under A2UI_HTML_CSP, for an `<iframe sandbox>`.
 	app.get(
 		'/api/v1/a2ui/surfaces/:surfaceId/html/:componentId',
 		requires('agent:invoke'),
@@ -701,26 +639,6 @@ export function attachA2uiRoutes(
 					{ headers: A2UI_HTML_HEADERS },
 				)),
 	);
-	// A surface's workspace: `{ workspaceId: <uuid> | null }`, nothing else. Publishing is the scope that changes a surface.
-	app.patch(
-		'/api/v1/a2ui/surfaces/:id',
-		requires('a2ui:publish'),
-		(ctx) =>
-			respond(ctx, async () => {
-				const body = await read(ctx.req.raw);
-				if (
-					body === null || typeof body !== 'object' || Array.isArray(body) ||
-					Object.keys(body).join() !== 'workspaceId'
-				) throw new HttpProblem('invalid-request', 'Expected { "workspaceId": <workspace id> | null }');
-				return ctx.json(
-					store.attach(
-						expansionOwner(ctx.get('principal')),
-						ctx.req.param('id') ?? '',
-						(body as { workspaceId: unknown }).workspaceId,
-					),
-				);
-			}),
-	);
 	app.delete(
 		'/api/v1/a2ui/surfaces/:id',
 		requires('a2ui:publish'),
@@ -731,17 +649,9 @@ export function attachA2uiRoutes(
 		respond(ctx, () => {
 			const principal = ctx.get('principal');
 			const response = store.stream(expansionOwner(principal));
-			// GW-3: re-checked on the gateway's horizon and bounded by a lifetime, like the session event stream.
+			// Re-checked on the gateway's horizon and bounded by a lifetime, like the session event stream.
 			return new Response(streams.wrap(response.body!, () => authorized(principal)), { headers: response.headers });
 		}));
-	// D-143 (addendum B): the action names a surface may bind, under the read scope every other A2UI read uses. Names
-	// only — a reader holding `agent:invoke` but not `mcp:invoke` must not learn which tool sits behind a button.
-	const actionNames = options.actionNames ?? ['cancelTask', 'permissionDecision'];
-	app.get(
-		'/api/v1/a2ui/actions',
-		requires('agent:invoke'),
-		(ctx) => respond(ctx, () => ctx.json({ names: actionNames })),
-	);
 	app.post(
 		'/api/v1/a2ui/actions',
 		requires('agent:invoke'),

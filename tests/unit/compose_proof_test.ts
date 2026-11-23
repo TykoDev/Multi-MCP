@@ -1,6 +1,6 @@
 /**
- * R3-4 / K-6: the Compose proofs' guards (`tests/support/compose_proof.ts`), held in the unit tier. The proofs
- * themselves need Docker and run by hand (`deno task test:compose --tag <t>`, `deno task test:agents:compose --tag <t>`);
+ * The Compose proofs' guards (`tests/support/compose_proof.ts`), held in the unit tier. The proofs
+ * themselves need Docker and run by hand (`deno task test:compose --tag <t>`);
  * what decides whether they touch the operator's images or secrets is here, and is checked without Docker.
  */
 import { assert, assertEquals, assertThrows } from '@std/assert';
@@ -16,7 +16,7 @@ import {
 	writeSyntheticAdmin,
 } from '../support/compose_proof.ts';
 
-Deno.test('R3-4: the deployed tags are the release version and every tag the shipped compose files name', async () => {
+Deno.test('compose proof: the deployed tags are the release version and every tag the shipped compose files name', async () => {
 	const tags = await deployedTags();
 	const { version } = JSON.parse(await Deno.readTextFile('deno.json'));
 	assert(tags.has(version), `deno.json version ${version}`);
@@ -25,7 +25,7 @@ Deno.test('R3-4: the deployed tags are the release version and every tag the shi
 	assert(!tags.has('8787'), [...tags].join());
 });
 
-Deno.test('R3-4: --tag is required, well formed, single, and never a deployed tag', () => {
+Deno.test('compose proof: --tag is required, well formed, single, and never a deployed tag', () => {
 	const deployed = new Set(['0.2.0']);
 	assertEquals(proofTag(['--tag', 'verify-fxc'], deployed), 'verify-fxc');
 	assertEquals(proofTag(['--tag=verify-int'], deployed), 'verify-int');
@@ -48,14 +48,14 @@ Deno.test('R3-4: --tag is required, well formed, single, and never a deployed ta
 	}
 });
 
-Deno.test('R3-4: the synthetic admin record is one the gateway accepts, and holds no password', async () => {
+Deno.test('compose proof: the synthetic admin record is one the gateway accepts, and holds no password', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const dir = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'compose-proof-' });
 	try {
 		const path = join(dir, 'admin-user.json');
 		await writeSyntheticAdmin(path);
 		const raw = await Deno.readTextFile(path);
-		// The gateway's own parser, the one that refuses startup on a malformed record (C6 / D-099).
+		// The gateway's own parser, the one that refuses startup on a malformed record.
 		const record = readAdminUser(raw);
 		assertEquals(record.username, 'compose-admin');
 		assertEquals(Object.keys(JSON.parse(raw)).sort(), ['hash', 'iterations', 'salt', 'username']);
@@ -68,7 +68,7 @@ Deno.test('R3-4: the synthetic admin record is one the gateway accepts, and hold
 	}
 });
 
-Deno.test('R3-4: a path is inside the scratch folder only when it really is', () => {
+Deno.test('compose proof: a path is inside the scratch folder only when it really is', () => {
 	const scratch = resolve('tests/.scratch/sandbox-compose-x');
 	assert(isInside(scratch, join(scratch, 'admin-user.json')));
 	assert(isInside(scratch, join(scratch, 'nested', 'keys.json')));
@@ -94,7 +94,7 @@ function resolved(scratch: string, over: Partial<ComposeConfig> = {}): ComposeCo
 	};
 }
 
-Deno.test('R3-4: the resolved stack runs only the tag and mounts only the scratch folder', () => {
+Deno.test('compose proof: the resolved stack runs only the tag and mounts only the scratch folder', () => {
 	const scratch = resolve('tests/.scratch/sandbox-compose-x');
 	const expected = {
 		scratch,
@@ -103,7 +103,7 @@ Deno.test('R3-4: the resolved stack runs only the tag and mounts only the scratc
 	};
 	assertIsolated(resolved(scratch), expected);
 	const refusals: [ComposeConfig, string][] = [
-		// The fixture before R3-4: the shipped file's images and the checkout's own admin record.
+		// An unisolated stack: the shipped file's images and the checkout's own admin record.
 		[
 			resolved(scratch, { services: { ...resolved(scratch).services, sandbox: { image: 'tykotech-sandbox:0.2.0' } } }),
 			'not tykotech-sandbox:verify-fxc',

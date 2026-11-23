@@ -1,9 +1,8 @@
 /**
  * CDP `Runtime` domain — expression evaluation, function calls on remote objects, bindings.
  *
- * Used for the `getEventListeners` census and JS fallback paths in the DOM layer
- * (SPECS/DATA-MODEL.md §6.1), iframe scroll, ARIA/framework dropdown handling
- * (SPECS/ARCHITECTURE.md §6.10), and the `Runtime.evaluate('1+1')` health probe (§6.11).
+ * Used for the `getEventListeners` census and JS fallback paths in the DOM layer, iframe scroll,
+ * ARIA/framework dropdown handling and the `Runtime.evaluate('1+1')` health probe.
  */
 
 import type {

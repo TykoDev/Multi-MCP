@@ -1,10 +1,4 @@
-/**
- * The audit ledger's contract (design §6.5, SEC-08).
- *
- * Every test here is a deny path or a shape assertion, because the ledger is a *disclosure* surface:
- * it records which credential was spent where and by whom, so what it may not carry and who may read
- * it are the two facts worth pinning.
- */
+/** The audit ledger's contract. */
 import { assert, assertEquals } from '@std/assert';
 import { AUDIT_RING_CAPACITY, AuditLedger, expressionDigest } from './audit.ts';
 
@@ -29,17 +23,13 @@ Deno.test('audit: a secret-fill entry carries the NAME and nothing that could be
 	});
 	assertEquals(entry.secret, 'bank_password');
 	assertEquals(entry.kind, 'secret-fill');
-	// The shape has no field a value could go in, which is the control: `expression_bytes` and
-	// `expression_digest` are the two length-ish fields and neither is defined on this kind.
 	assertEquals(entry.expression_bytes, undefined);
 	assertEquals(entry.expression_digest, undefined);
 	assert(!JSON.stringify(led.read({ principal: 'p1' })).includes(SENTINEL));
 });
 
-Deno.test('audit: a seeded secret value appears nowhere in the serialized ledger (SEC-08)', () => {
+Deno.test('audit: a seeded secret value appears nowhere in the serialized ledger', () => {
 	const led = ledger();
-	// The producer is given every field it may set, with the sentinel as the secret's *name* only —
-	// the value never reaches this module at all, and this asserts the shape cannot smuggle one.
 	led.append({
 		session_id: 's1',
 		principal: 'p1',
@@ -52,8 +42,6 @@ Deno.test('audit: a seeded secret value appears nowhere in the serialized ledger
 	});
 	const serialized = JSON.stringify(led.read({ principal: 'p1', all: true }));
 	assert(!serialized.includes(SENTINEL), serialized);
-	// Not a prefix and not a length either: on a field a caller knows to be a credential, the first
-	// characters and the character count are as disclosing as the value (E-38's rule, applied here).
 	assert(!serialized.includes(SENTINEL.slice(0, 6)), serialized);
 	assert(!serialized.includes(`"length":${SENTINEL.length}`), serialized);
 });
@@ -88,7 +76,7 @@ Deno.test('audit: the digest is stable, 16 hex characters, and distinguishes two
 	assert(/^[0-9a-f]{16}$/.test(a), a);
 });
 
-Deno.test('audit: a read under mcp:invoke returns only the caller’s own entries (SEC-08)', () => {
+Deno.test('audit: a read under mcp:invoke returns only the caller’s own entries', () => {
 	const led = ledger();
 	for (const principal of ['alice', 'bob', 'alice']) {
 		led.append({ session_id: 's1', principal, kind: 'evaluate', frame_id: 'F', origin: 'https://a.example', ok: true });
@@ -98,8 +86,6 @@ Deno.test('audit: a read under mcp:invoke returns only the caller’s own entrie
 	assertEquals(own.entries.length, 2);
 	assertEquals(new Set(own.entries.map((entry) => entry.principal)), new Set(['alice']));
 
-	// The admin read is the *other* half: a filter that never widened would be indistinguishable
-	// from one that never narrowed.
 	const all = led.read({ principal: 'alice', all: true });
 	assertEquals(all.scope, 'all');
 	assertEquals(all.entries.length, 3);
@@ -107,8 +93,6 @@ Deno.test('audit: a read under mcp:invoke returns only the caller’s own entrie
 
 Deno.test('audit: the filter runs before the page, so a short page cannot count another principal', () => {
 	const led = ledger();
-	// Ten of bob's, then one of alice's. A page of 5 applied before the filter would answer alice
-	// zero entries and leak, by its emptiness, that someone else had written ten.
 	for (let i = 0; i < 10; i++) {
 		led.append({ session_id: 's', principal: 'bob', kind: 'evaluate', frame_id: 'F', origin: 'https://a.example' });
 	}
@@ -136,7 +120,7 @@ Deno.test('audit: the ring evicts oldest-first and reports what it dropped', () 
 	assertEquals(read.entries.map((entry) => entry.frame_id), ['F2', 'F3', 'F4']);
 });
 
-Deno.test('audit: the default capacity is 200 (IR-6), not the 50 SEC-08 proposed', () => {
+Deno.test('audit: the default capacity is 200, not the lifecycle ring’s 50', () => {
 	assertEquals(AUDIT_RING_CAPACITY, 200);
 	const led = ledger();
 	for (let i = 0; i < AUDIT_RING_CAPACITY + 1; i++) {
@@ -161,26 +145,15 @@ Deno.test('audit: the producer cannot choose audit_id or at', () => {
 	assert(!entry.at.startsWith('1999'));
 });
 
-Deno.test('audit: the module writes no file — there is no filesystem API to reach (SEC-08)', async () => {
+Deno.test('audit: the module writes no file — there is no filesystem API to reach', async () => {
 	const source = await Deno.readTextFile(new URL('./audit.ts', import.meta.url));
-	// Every `Deno.` reference, not a denylist of the four write calls thought of today: a module that
-	// reaches the runtime API at all is one a later edit can persist through.
 	const reached = [...source.matchAll(/\bDeno\.[A-Za-z]+/g)].map((match) => match[0]);
 	assertEquals(reached, [], `audit.ts must not reach the runtime API: ${reached.join(', ')}`);
 	assert(!source.includes('localStorage'), 'audit.ts must not reach browser-style storage either');
 });
 
-/**
- * I-FH-5 and C-9: the third kind's exact key set.
- *
- * The control is the *shape*: a `read-frame-html` row says that a cross-origin document was read,
- * from which frame, of which origin and how much came back — and there is no field a byte of it
- * could go in. Asserted as an exact key set rather than as "no HTML appears", because the second
- * would pass for a row that grew an `html_digest`: a digest of a document is a confirmation oracle
- * for a page an attacker can guess, which is SEC-08's argument applied to a second kind of content,
- * and a prefix is where the interesting markup is (SEC-FH-6).
- */
-Deno.test('audit: a read-frame-html entry is exactly {identity, frame, origin, size, ok} (I-FH-5, C-9)', () => {
+/** The third kind's exact key set. */
+Deno.test('audit: a read-frame-html entry is exactly {identity, frame, origin, size, ok}', () => {
 	const led = ledger();
 	const entry = led.append({
 		session_id: 's1',
@@ -196,13 +169,10 @@ Deno.test('audit: a read-frame-html entry is exactly {identity, frame, origin, s
 		['at', 'audit_id', 'frame_id', 'kind', 'ok', 'origin', 'principal', 'result_bytes', 'session_id'],
 	);
 	assertEquals(entry.kind, 'read-frame-html');
-	// No caller expression exists on this path, and the ledger's own shape says so: the non-goal
-	// "no arbitrary JavaScript input to browser_get_html" is visible in what the row cannot carry.
 	assertEquals(entry.expression_bytes, undefined);
 	assertEquals(entry.expression_digest, undefined);
 	assertEquals(entry.secret, undefined);
 	assertEquals(entry.index, undefined);
-	// `ok` is always true here: a refusal writes no row, because nothing privileged happened.
 	assertEquals(entry.ok, true);
 });
 
@@ -214,9 +184,6 @@ Deno.test('audit: a document read into the ledger discloses its size and its ori
 		principal: 'p1',
 		kind: 'read-frame-html',
 		frame_id: 'F-CHILD',
-		// The producer is given everything it may set. The URL's path and query are already gone by
-		// the time a value reaches here — `originOf` strips them at the handler — and the origin is
-		// what the row is allowed to name.
 		origin: 'https://login.example.com',
 		result_bytes: new TextEncoder().encode(document).length,
 		ok: true,
@@ -225,8 +192,5 @@ Deno.test('audit: a document read into the ledger discloses its size and its ori
 	assert(!serialized.includes(SENTINEL), 'a document byte reached the ledger');
 	assert(!serialized.includes(SENTINEL.slice(0, 6)), 'a document prefix reached the ledger');
 	assert(!serialized.includes('<html'), 'document markup reached the ledger');
-	// The size is permitted with its own argument: the principal that wrote the row has already
-	// received the document, so its size discloses nothing to that principal, and another principal
-	// sees the row only under `admin` (SEC-08).
 	assert(serialized.includes(`"result_bytes":${new TextEncoder().encode(document).length}`), serialized);
 });

@@ -1,6 +1,6 @@
 {
 	"name": "svg_collapse",
-	"pins": "§6.4 'SVG root survives; svg children collapsed' — every <svg> root keeps its line and its collapsed-content comment, interactive or not, and everything below it (including an interactive child) is dropped",
+	"pins": "'SVG root survives; svg children collapsed' — every <svg> root keeps its line and its collapsed-content comment, interactive or not, and everything below it (including an interactive child) is dropped",
 	"tree": {
 		"tag": "HTML",
 		"children": [

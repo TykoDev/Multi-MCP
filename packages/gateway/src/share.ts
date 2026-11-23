@@ -1,12 +1,5 @@
-/**
- * The file share over HTTP (D-075): what the MCP tools cannot carry — binary and large files, streamed both ways.
- *
- * `GET /api/v1/share?path=` lists, `GET /api/v1/share/file?path=` downloads as an attachment, `PUT` on the same
- * path uploads a raw body of at most 64 MiB into a temporary file that is renamed into place, `POST
- * /api/v1/share/mkdir` and `/move` take JSON, `DELETE /api/v1/share?path=` removes. Reads take `files:read`,
- * everything else `files:write`. Every path goes through the store's one resolver, so the rules are the tools'.
- */
-import type { Context, Hono } from 'hono';
+/** The file share over HTTP: what the MCP tools cannot carry — binary and large files, streamed both ways. */
+import type { Context, Hono, Next } from 'hono';
 import { LIBRARY_LIMITS, LibraryError, type LibraryStore } from '@tykotech/mcp';
 import type { Principal } from './auth.ts';
 import type { Scope } from './config.ts';
@@ -55,7 +48,8 @@ export function attachShareRoutes(
 	app: Hono<{ Variables: { principal: Principal; requestId: string } }>,
 	store: LibraryStore | null,
 ): void {
-	const require = (c: Context, scope: Scope): Response | null => {
+	/** Route middleware: the scope, then the share itself. */
+	const needs = (scope: Scope) => async (c: Context, next: Next): Promise<Response | void> => {
 		const principal = c.get('principal') as Principal | undefined;
 		if (principal === undefined) return problemResponse('unauthenticated', c.get('requestId'));
 		if (!principal.scopes.has(scope)) {
@@ -64,13 +58,11 @@ export function attachShareRoutes(
 		if (store === null) {
 			return problemResponse('persistence-required', c.get('requestId'), 'the file share needs TTK_DATA_DIR');
 		}
-		return null;
+		await next();
 	};
 	const pathOf = (c: Context): string => c.req.query('path') ?? '';
 
-	app.get('/api/v1/share', async (c: Context) => {
-		const denied = require(c, 'files:read');
-		if (denied !== null) return denied;
+	app.get('/api/v1/share', needs('files:read'), async (c: Context) => {
 		try {
 			return c.json(await store!.list(pathOf(c)));
 		} catch (cause) {
@@ -78,9 +70,7 @@ export function attachShareRoutes(
 		}
 	});
 
-	app.get('/api/v1/share/file', async (c: Context) => {
-		const denied = require(c, 'files:read');
-		if (denied !== null) return denied;
+	app.get('/api/v1/share/file', needs('files:read'), async (c: Context) => {
 		try {
 			const { path, absolute, size } = await store!.locate(pathOf(c));
 			if (size > LIBRARY_LIMITS.restFileBytes) {
@@ -101,16 +91,16 @@ export function attachShareRoutes(
 		}
 	});
 
-	app.put('/api/v1/share/file', async (c: Context) => {
-		const denied = require(c, 'files:write');
-		if (denied !== null) return denied;
+	app.put('/api/v1/share/file', needs('files:write'), async (c: Context) => {
 		const declared = Number(c.req.header('content-length') ?? '0');
 		if (declared > LIBRARY_LIMITS.restFileBytes) {
 			return problemResponse('payload-too-large', c.get('requestId'), 'the upload is over 64 MiB');
 		}
 		let target: Awaited<ReturnType<LibraryStore['uploadTarget']>>;
 		try {
-			target = await store!.uploadTarget(pathOf(c));
+			// A declared length past the disk budget is refused before a byte is read; `commit` admits the real size,
+			// so an undeclared or understated body is held to the budget as well.
+			target = await store!.uploadTarget(pathOf(c), Number.isFinite(declared) && declared > 0 ? declared : 0);
 		} catch (cause) {
 			return shareProblem(c, cause);
 		}
@@ -146,9 +136,7 @@ export function attachShareRoutes(
 		}
 	});
 
-	app.delete('/api/v1/share', async (c: Context) => {
-		const denied = require(c, 'files:write');
-		if (denied !== null) return denied;
+	app.delete('/api/v1/share', needs('files:write'), async (c: Context) => {
 		try {
 			await store!.remove(pathOf(c), c.req.query('recursive') === 'true');
 			return c.body(null, 204);
@@ -157,9 +145,7 @@ export function attachShareRoutes(
 		}
 	});
 
-	app.post('/api/v1/share/mkdir', async (c: Context) => {
-		const denied = require(c, 'files:write');
-		if (denied !== null) return denied;
+	app.post('/api/v1/share/mkdir', needs('files:write'), async (c: Context) => {
 		try {
 			const body = await c.req.json().catch(() => null) as { path?: unknown } | null;
 			return c.json({ ...await store!.mkdir(body?.path) }, 201);
@@ -168,9 +154,7 @@ export function attachShareRoutes(
 		}
 	});
 
-	app.post('/api/v1/share/move', async (c: Context) => {
-		const denied = require(c, 'files:write');
-		if (denied !== null) return denied;
+	app.post('/api/v1/share/move', needs('files:write'), async (c: Context) => {
 		try {
 			const body = await c.req.json().catch(() => null) as { from?: unknown; to?: unknown } | null;
 			return c.json({ ...await store!.move(body?.from, body?.to) });

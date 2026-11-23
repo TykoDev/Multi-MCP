@@ -15,7 +15,7 @@ import {
 } from './domains.ts';
 import { CdpFixtureServer } from './testing/cdp_fixture.ts';
 
-/** The D-CDP2 domain set, verbatim from DECISION-REGISTER.md, plus `Overlay` (E-46, B2.2). */
+/** The 14 core domains plus `Overlay`. */
 const REQUIRED_DOMAINS = [
 	'Target',
 	'Page',
@@ -34,7 +34,7 @@ const REQUIRED_DOMAINS = [
 	'Overlay',
 ] as const;
 
-/** Methods the rest of the system is speced to call (ARCHITECTURE §6/§7, DATA-MODEL §5.1/§6). */
+/** Methods the rest of the system calls. */
 const REQUIRED_METHODS = [
 	'Target.attachToTarget',
 	'Target.setDiscoverTargets',
@@ -113,7 +113,7 @@ const REQUIRED_EVENTS = [
 	'BrowserUse.captchaSolverFinished',
 ] as const satisfies readonly CdpEventName[];
 
-Deno.test('cdp domains: exactly the 14 D-CDP2 domains plus Overlay (E-46) plus the optional vendor BrowserUse', () => {
+Deno.test('cdp domains: exactly the 14 core domains plus Overlay plus the optional vendor BrowserUse', () => {
 	assertEquals(CDP_DOMAINS.length, 16);
 	assertEquals(CDP_VENDOR_DOMAINS, ['BrowserUse']);
 
@@ -121,23 +121,23 @@ Deno.test('cdp domains: exactly the 14 D-CDP2 domains plus Overlay (E-46) plus t
 	const vendor = new Set<string>(CDP_VENDOR_DOMAINS);
 	assertEquals(required.size, 15);
 	for (const domain of REQUIRED_DOMAINS) {
-		assert(CDP_DOMAINS.includes(domain), `missing D-CDP2 domain ${domain}`);
+		assert(CDP_DOMAINS.includes(domain), `missing required domain ${domain}`);
 	}
-	// Nothing beyond the 15 + the declared vendor domain — D-CDP2 covers "only what the system uses".
+	// Nothing beyond the 15 + the declared vendor domain: only what the system uses is typed.
 	for (const domain of CDP_DOMAINS) {
 		assert(required.has(domain) || vendor.has(domain), `undeclared domain ${domain}`);
 	}
 });
 
 /**
- * E-46 (B2.2, architecture §8.2). The `Overlay` domain has 31 commands; exactly the three highlight
+ * The `Overlay` domain has 31 commands; exactly the three highlight
  * commands plus the lifecycle pair are typed. `setInspectMode` consumes clicks in inspect mode and
  * would silently break the input path; the debug-border and diagnostic setters paint into every
- * screencast frame and every screenshot. The lifecycle pair is present because U-7 measured that
- * `highlightRect` refuses until `Overlay.enable` has run (`build/evidence/b2_2_u7_overlay_probe.log`).
- * A method added here without a decision fails this test rather than arriving unnoticed.
+ * screencast frame and every screenshot. The lifecycle pair is present because, measured on Chromium,
+ * `highlightRect` refuses until `Overlay.enable` has run.
+ * A method added there fails this test rather than arriving unnoticed.
  */
-Deno.test('cdp domains: Overlay types exactly the three highlight commands plus enable/disable, and nothing else (E-46)', () => {
+Deno.test('cdp domains: Overlay types exactly the three highlight commands plus enable/disable, and nothing else', () => {
 	assertEquals([...CDP_DOMAIN_METHODS.Overlay].sort(), [
 		'disable',
 		'enable',

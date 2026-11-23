@@ -1,6 +1,6 @@
 import { LIMITS } from './limits.ts';
 
-/** Which backend runs a sandbox's commands (D-108): bubblewrap cages, or a container per workspace. */
+/** Which backend runs a sandbox's commands: bubblewrap cages, or a container per workspace. */
 export type SandboxBackend = 'bwrap' | 'docker';
 
 /** Operations available to an authenticated sandbox client. */
@@ -33,13 +33,9 @@ export class SandboxClientError extends Error {
 	}
 }
 
-/** SB-6: a little more than the service ever sends (LIMITS.responseBytes, which a diff is cut to). */
+/** A little more than the service ever sends (LIMITS.responseBytes, which a diff is cut to). */
 const MAX_RESPONSE_BYTES = LIMITS.responseBytes + 1024 * 1024;
-/**
- * SB-10: longer than the service's worst case for one call, so its own answer (a timeout, a kill)
- * arrives first: a full queue wait, the longest command, and the housekeeping cages around it
- * (emptying /tmp, measuring before and after, restoring permissions), with a minute to spare.
- */
+/** Longer than the service's worst case for one call (queue, command, housekeeping), so its own answer comes first. */
 const DEADLINE_MS = LIMITS.maxWaitMs + LIMITS.maxTimeoutMs + 4 * LIMITS.choreTimeoutMs + 60_000;
 const SERVICE_ERRORS = new Set([
 	'invalid_request',
@@ -50,7 +46,7 @@ const SERVICE_ERRORS = new Set([
 	'method_not_allowed',
 	'run_busy',
 	'no_repository',
-	// D-076: live sessions.
+	// Live sessions.
 	'no_session',
 	'session_open',
 	'session_ended',
@@ -61,13 +57,13 @@ const SERVICE_ERRORS = new Set([
 	'internal',
 	'cage_failed',
 	'diff_timeout',
-	// D-077: a caged file operation (a workspace with a live session) that ran out of time or failed.
+	// A caged file operation (a workspace with a live session) that ran out of time or failed.
 	'file_timeout',
 	'file_failed',
 	'disk_full',
 	'over_budget',
 	'cancelled',
-	// R12: a clone that ran and failed (the remote refused, the ref is unknown, the transfer broke), or ran out of time.
+	// A clone that ran and failed (the remote refused, the ref is unknown, the transfer broke), or ran out of time.
 	'clone_failed',
 	'clone_timeout',
 ]);
@@ -127,19 +123,12 @@ export class SandboxClient {
 		this.#fetch = options.fetch ?? fetch;
 	}
 
-	/**
-	 * D-108: the backend the service said it runs on its last health answer (`/healthz` → `{ok, backend}`), or null
-	 * before the first answer and for a service too old to say. Only the two known names are ever kept.
-	 */
+	/** The backend from the last `/healthz` (only the two known names), or null. */
 	get backend(): SandboxBackend | null {
 		return this.#backend;
 	}
 
-	/**
-	 * R12 (design §2.19): whether the service offers `clone` (git hosts or remotes configured), from its last health
-	 * answer (`/healthz` → `{ok, backend, clone}`, additive to D-110); null before the first answer and for a service
-	 * too old to say. The gateway offers `sandbox_clone` only when this is `true`.
-	 */
+	/** Whether the service offers `clone`, from the last `/healthz`, or null; gates `sandbox_clone`. */
 	get clone(): boolean | null {
 		return this.#clone;
 	}

@@ -1,34 +1,11 @@
-/**
- * R8: the opt-in stateful 2025-era transport.
- *
- * Driven over real HTTP against a real gateway, with the JSON-RPC written by
- * hand — the SDK client speaks whichever era it negotiates, and the thing under
- * test is precisely what a *legacy* client sees: an `Mcp-Session-Id` coming
- * back, subsequent calls routing to the same session, and a standalone stream
- * that exists at all.
- *
- * The browser is not involved, so this is a unit-tier suite: the registry's
- * launcher is replaced with a fake session, exactly as `gateway_test.ts` does.
- */
+/** The stateful 2025-era transport. */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import { generateApiKey } from './auth.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
 import { type RunningGateway, startGateway } from './server.ts';
 import { SESSION_HEADER, wantsStatefulSession } from './stateful.ts';
-
-/** A browser session stand-in: this suite never touches a page. */
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		eventBus: new EventBus({ name: 'stateful-test' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
+import { fakeSession } from './support_test.ts';
 
 interface Fixture {
 	url: string;
@@ -87,27 +64,27 @@ function rpc(
 	});
 }
 
-const LEGACY_INITIALIZE = {
+const INITIALIZE_2025 = {
 	jsonrpc: '2.0',
 	id: 1,
 	method: 'initialize',
 	params: {
 		protocolVersion: '2025-06-18',
 		capabilities: {},
-		clientInfo: { name: 'legacy-client', version: '1' },
+		clientInfo: { name: 'client-2025', version: '1' },
 	},
 };
 
 // --- routing ----------------------------------------------------------------
 
 Deno.test('stateful: routing picks the mount from what the client declared', () => {
-	// The body a router sees is the *parsed* one, passed separately; the request
-	// only has to be a POST with the right headers.
+	// The body a router sees is the *parsed* one, passed separately; the request only has to be a POST with the right
+	// headers.
 	const post = (headers: Record<string, string> = {}) =>
 		new Request('http://x/mcp', { method: 'POST', headers, body: '{}' });
 
 	// A 2025 initialize opts in...
-	assertEquals(wantsStatefulSession(post(), LEGACY_INITIALIZE), true);
+	assertEquals(wantsStatefulSession(post(), INITIALIZE_2025), true);
 	// ...a 2026 one does not.
 	assertEquals(
 		wantsStatefulSession(post(), { method: 'initialize', params: { protocolVersion: '2026-07-28' } }),
@@ -120,7 +97,7 @@ Deno.test('stateful: routing picks the mount from what the client declared', () 
 	// A GET is a standalone stream, which only the stateful world has.
 	assertEquals(wantsStatefulSession(new Request('http://x/mcp'), undefined), true);
 	// A batch is judged by its first message, as the transport would.
-	assertEquals(wantsStatefulSession(post(), [LEGACY_INITIALIZE]), true);
+	assertEquals(wantsStatefulSession(post(), [INITIALIZE_2025]), true);
 	// A body that is not an initialize at all cannot opt in.
 	assertEquals(wantsStatefulSession(post(), 'nonsense'), false);
 	assertEquals(wantsStatefulSession(post(), undefined), false);
@@ -131,7 +108,7 @@ Deno.test('stateful: routing picks the mount from what the client declared', () 
 Deno.test('stateful: a 2025 client is given a session it can keep using', async () => {
 	await using f = await fixture();
 
-	const initialized = await rpc(f, LEGACY_INITIALIZE);
+	const initialized = await rpc(f, INITIALIZE_2025);
 	assertEquals(initialized.status, 200);
 	const sessionId = initialized.headers.get(SESSION_HEADER);
 	assert(sessionId !== null && sessionId !== '', 'no Mcp-Session-Id came back');
@@ -158,14 +135,14 @@ Deno.test('stateful: a 2025 client is given a session it can keep using', async 
 	assertStringIncludes(await after.text(), 'Session not found');
 });
 
-/** The JSON-RPC result of a response the legacy mount may have framed as SSE. */
+/** The JSON-RPC result of a response the stateful mount may have framed as SSE. */
 async function resultOf(response: Response): Promise<Record<string, unknown>> {
 	const body = await response.text();
 	const line = body.includes('data: ') ? body.slice(body.lastIndexOf('data: ') + 6).split('\n')[0] ?? '' : body;
 	return (JSON.parse(line) as { result?: Record<string, unknown> }).result ?? {};
 }
 
-Deno.test('stateful: a 2025 client gets the file tools and their embedded bytes (E-33)', async () => {
+Deno.test('stateful: a 2025 client gets the file tools and their embedded bytes', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const dir = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'stateful-files-' });
 	const payload = new Uint8Array(2048).map((_, index) => (index * 11) % 256);
@@ -189,7 +166,7 @@ Deno.test('stateful: a 2025 client gets the file tools and their embedded bytes 
 	}];
 	const session = fakeSession();
 	try {
-		// D-150: `owner` is the default; the session is created below with no caller, so it is shared here.
+		// `owner` is the default; the session is created below with no caller, so it is shared here.
 		await using f = await fixture(
 			{ TTK_SESSION_OWNERSHIP: 'shared' },
 			() =>
@@ -206,7 +183,7 @@ Deno.test('stateful: a 2025 client gets the file tools and their embedded bytes 
 		// The session must exist before a file can be read from it.
 		await f.gateway.registry.resolve(undefined);
 
-		const initialized = await rpc(f, LEGACY_INITIALIZE);
+		const initialized = await rpc(f, INITIALIZE_2025);
 		const sessionId = initialized.headers.get(SESSION_HEADER);
 		assert(sessionId !== null && sessionId !== '');
 		await initialized.body?.cancel();
@@ -216,8 +193,8 @@ Deno.test('stateful: a 2025 client gets the file tools and their embedded bytes 
 		assertStringIncludes(catalog, 'browser_list_files');
 		assertStringIncludes(catalog, 'browser_get_file');
 
-		// The content blocks are what a 2025-era client actually has to parse: an
-		// embedded blob resource, base64, over the era's own envelope.
+		// The content blocks are what a 2025-era client actually has to parse: an embedded blob resource, base64, over
+		// the era's own envelope.
 		const called = await rpc(f, {
 			jsonrpc: '2.0',
 			id: 3,
@@ -250,8 +227,8 @@ Deno.test('stateful: an unknown session id is refused rather than silently creat
 
 Deno.test('stateful: two clients get two independent sessions', async () => {
 	await using f = await fixture();
-	const first = await rpc(f, LEGACY_INITIALIZE);
-	const second = await rpc(f, LEGACY_INITIALIZE);
+	const first = await rpc(f, INITIALIZE_2025);
+	const second = await rpc(f, INITIALIZE_2025);
 	const a = first.headers.get(SESSION_HEADER);
 	const b = second.headers.get(SESSION_HEADER);
 	await first.body?.cancel();
@@ -263,8 +240,8 @@ Deno.test('stateful: two clients get two independent sessions', async () => {
 
 Deno.test('stateful: the modern client is untouched by the option', async () => {
 	await using f = await fixture();
-	// A 2026-era initialize gets no session header: it went to the stateless
-	// mount, which is the whole point of routing on the declared revision.
+	// A 2026-era initialize gets no session header: it went to the stateless mount, which is the whole point of routing
+	// on the declared revision.
 	const response = await rpc(f, {
 		jsonrpc: '2.0',
 		id: 1,
@@ -277,17 +254,15 @@ Deno.test('stateful: the modern client is untouched by the option', async () => 
 
 Deno.test('stateful: the mount does not exist unless it is switched on', async () => {
 	await using f = await fixture({ TTK_MCP_STATEFUL: 'false' });
-	const response = await rpc(f, LEGACY_INITIALIZE);
-	// Served by the stateless mount, so no session is minted. The call still
-	// works — the default path serves both eras — it is only *sessions* that
-	// are off.
+	const response = await rpc(f, INITIALIZE_2025);
+	// Served by the stateless mount, so no session is minted.
 	assertEquals(response.headers.get(SESSION_HEADER), null);
 	await response.body?.cancel();
 });
 
 Deno.test('stateful: shutdown closes the sessions it opened', async () => {
 	const f = await fixture();
-	const opened = await rpc(f, LEGACY_INITIALIZE);
+	const opened = await rpc(f, INITIALIZE_2025);
 	const sessionId = opened.headers.get(SESSION_HEADER);
 	assert(sessionId !== null);
 	await opened.body?.cancel();
@@ -297,7 +272,7 @@ Deno.test('stateful: shutdown closes the sessions it opened', async () => {
 	await f.gateway.finished;
 });
 
-// --- D-080: the standalone stream carries resource changes -----------------------
+// --- the standalone stream carries resource changes -----------------------
 
 Deno.test('stateful: the standalone stream carries list_changed, and updated only for subscribed URIs', async () => {
 	const { createBuildServer, resourceUris, SessionRegistry } = await import('@tykotech/mcp');
@@ -333,7 +308,7 @@ Deno.test('stateful: the standalone stream carries list_changed, and updated onl
 			auth,
 		);
 	try {
-		const init = await post(LEGACY_INITIALIZE);
+		const init = await post(INITIALIZE_2025);
 		const session = init.headers.get(SESSION_HEADER)!;
 		const capabilities = (await resultOf(init)).capabilities as { resources?: { subscribe?: boolean } };
 		assertEquals(capabilities.resources?.subscribe, true, 'resources.subscribe is advertised');
@@ -387,21 +362,6 @@ Deno.test('stateful: the standalone stream carries list_changed, and updated onl
 		await mount.close();
 		await registry.shutdown('test');
 	}
-});
-
-Deno.test('C8: TTK_MCP_STATEFUL with TTK_CLUSTER_KV is refused at startup, naming both variables', () => {
-	// A transport session lives in one process; the cluster routes a request to the node holding its *browser*
-	// session, so a 2025-era client's next request could reach a node that never saw its Mcp-Session-Id.
-	const error = assertThrows(
-		() => loadConfig({ TTK_MCP_STATEFUL: 'true', TTK_CLUSTER_KV: 'tests/.scratch/kv', TTK_NODE_URL: 'http://n1:8787' }),
-		ConfigError,
-	);
-	assertStringIncludes(error.message, 'TTK_MCP_STATEFUL');
-	assertStringIncludes(error.message, 'TTK_CLUSTER_KV');
-	// Either alone is a valid configuration.
-	assertEquals(loadConfig({ TTK_MCP_STATEFUL: 'true' }).mcpStateful, true);
-	assertEquals(loadConfig({ TTK_CLUSTER_KV: 'tests/.scratch/kv' }).cluster?.kvPath, 'tests/.scratch/kv');
-	assertEquals(loadConfig({ TTK_MCP_STATEFUL: 'false', TTK_CLUSTER_KV: 'tests/.scratch/kv' }).mcpStateful, false);
 });
 
 // --- change push: a restart, a scope change, a revoked credential -------------------------------------------------
@@ -488,7 +448,7 @@ Deno.test('push: after a restart the session is restored for its principal and t
 	const before = f.make();
 	let after: ReturnType<typeof f.make> | undefined;
 	try {
-		const init = await f.request(before, READ, LEGACY_INITIALIZE);
+		const init = await f.request(before, READ, INITIALIZE_2025);
 		const session = init.headers.get(SESSION_HEADER)!;
 		await init.body?.cancel();
 		await before.close();
@@ -520,7 +480,7 @@ Deno.test('push: a request carrying other scopes rebuilds the session; its open 
 	const f = await pushFixture();
 	const mount = f.make();
 	try {
-		const init = await f.request(mount, READ, LEGACY_INITIALIZE);
+		const init = await f.request(mount, READ, INITIALIZE_2025);
 		const session = init.headers.get(SESSION_HEADER)!;
 		await init.body?.cancel();
 		assert(!(await f.tools(mount, READ, session)).includes('browser_evaluate'));
@@ -545,7 +505,7 @@ Deno.test('push: a credential change rebuilds sessions whose scopes moved, and c
 	const f = await pushFixture({ currentScopes: () => held });
 	const mount = f.make();
 	try {
-		const init = await f.request(mount, READ, LEGACY_INITIALIZE);
+		const init = await f.request(mount, READ, INITIALIZE_2025);
 		const session = init.headers.get(SESSION_HEADER)!;
 		await init.body?.cancel();
 		const stream = await f.stream(mount, READ, session);
@@ -569,9 +529,8 @@ Deno.test('push: a credential change rebuilds sessions whose scopes moved, and c
 	}
 });
 
-Deno.test('TTK_MCP_STATEFUL: on by default, off by default in a cluster, refused only when named there', () => {
+Deno.test('TTK_MCP_STATEFUL: on by default, off when named false', () => {
 	assertEquals(loadConfig({}).mcpStateful, true);
-	assertEquals(loadConfig({ TTK_CLUSTER_KV: 'tests/.scratch/kv', TTK_NODE_URL: 'http://n1:8787' }).mcpStateful, false);
 	assertEquals(loadConfig({ TTK_MCP_STATEFUL: 'false' }).mcpStateful, false);
 });
 
@@ -579,7 +538,7 @@ Deno.test('TTK_MCP_STATEFUL: on by default, off by default in a cluster, refused
 
 /** A 2025 session on a real gateway, with `notifications/initialized` sent, and its `tools/list` names. */
 async function groupedSession(f: Fixture) {
-	const initialized = await rpc(f, LEGACY_INITIALIZE);
+	const initialized = await rpc(f, INITIALIZE_2025);
 	const session = initialized.headers.get(SESSION_HEADER);
 	assert(session !== null, 'no Mcp-Session-Id came back');
 	await initialized.body?.cancel();

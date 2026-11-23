@@ -1,13 +1,4 @@
-/**
- * The live browser view: ticket minting, the WebSocket, the screencast pump,
- * and human input injection.
- *
- * This is the piece the donor project reserved but never built (its
- * `/sessions/:id/live` returned 501); the frame producer is vendored, the
- * transport and the input path are ours.
- *
- * See SPECS/ARCHITECTURE.md §3.3 and SPECS/API-CONTRACT.md §5.
- */
+/** The live browser view: ticket minting, the WebSocket, the screencast pump, and human input injection. */
 import type { Context, Hono } from 'hono';
 import {
 	assertNavigable,
@@ -37,10 +28,15 @@ import type { TargetId } from '@tykotech/cdp';
 import { ulid } from '@std/ulid';
 import { decodeBase64 } from '@std/encoding/base64';
 import type { ApiKeyRecord, Config } from './config.ts';
-import { expansionOwner, holderNameOf, type Principal } from './auth.ts';
+import { ANONYMOUS_OWNER, expansionOwner, holderNameOf, type Principal } from './auth.ts';
 import type { Logger } from './logger.ts';
 import { problemResponse } from './problem.ts';
-import { type EventStreamRegistry, PRODUCING_EVENT_KINDS } from './eventstream.ts';
+import {
+	EVENT_STREAM_LIFETIME_MS,
+	EVENT_STREAM_REVALIDATE_MS,
+	type EventStreamRegistry,
+	PRODUCING_EVENT_KINDS,
+} from './eventstream.ts';
 import { effectiveOrigins, originAllowed, type OriginOverlay } from './origins.ts';
 import { SocketEventPump } from './socketevents.ts';
 import { clampTicketTtl, TICKET_TTL_MS, type TicketRecord, type TicketStore, type ViewMode } from './tickets.ts';
@@ -59,63 +55,34 @@ import type { AppVariables } from './app.ts';
 const TABS_COALESCE_MS = 150;
 /** Above this much unflushed data a viewer is too slow to receive a new frame. */
 const BACKPRESSURE_BYTES = 1024 * 1024;
-/**
- * How far outside the last-known viewport a pointer may still land (B1.11).
- *
- * A margin rather than a hard edge: the cached page info lags a resize, and
- * refusing a legitimate click during that window would be worse than accepting
- * one a few pixels out.
- */
+/** How far outside the last-known viewport a pointer may still land. */
 const OUT_OF_RANGE_MARGIN_PX = 64;
 
 /** Ping cadence. */
 const PING_INTERVAL_MS = 15_000;
 
-/**
- * How long a socket may stay silent before it is closed as unresponsive — in two tiers (B6.1, F1).
- *
- * The keep-alive is an application-level JSON `ping`, not a WebSocket control frame: a standard
- * `WebSocket` has no `ping()` to send and no `pong` event to receive, so **the peer's browser does
- * not answer it automatically**. Until 0.2.0 the bookkeeping below was refreshed only by an inbound
- * message, which in practice meant only by a client that was *driving*. A viewer that merely watched
- * — the live view's whole purpose, and ADM's stated workflow — sent nothing for 45 seconds and was
- * closed every time.
- *
- * So a client now answers with `{type:'pong'}`, and the deadline depends on whether this one ever
- * has:
- *
- * - **`PONG_GRACE_MS`** until the first pong arrives. A socket that has never ponged may be a 0.1.0
- *   consumer, a non-browser client, or a page that simply watches; none of them can be told apart
- *   from a dead one, so all of them are given a long, forgiving window.
- * - **`PONG_TIMEOUT_MS`** after it. A client that has ponged once has *proven* it answers on the
- *   15-second cadence, so silence for three intervals means the socket is genuinely gone and the
- *   per-principal connection slot it holds should be freed rather than parked for five minutes.
- *
- * The tier matters because those slots are capped (`SPECS/API-CONTRACT.md` §7): holding a half-open
- * socket 6.6× longer would make a client's own reconnect loop far likelier to exhaust its budget.
- */
+/** How long a socket may stay silent before it is closed as unresponsive — in two tiers. */
 export const PONG_GRACE_MS = 300_000;
 export const PONG_TIMEOUT_MS = 45_000;
 
 /**
- * How long this socket may stay silent before it is reaped, given what it has
- * shown it can do. Exported so the tier is asserted against the shipped values
- * rather than against a copy of the rule in a test.
+ * How long this socket may stay silent before it is reaped, given what it has shown it can do. Exported so the tier is
+ * asserted against the shipped values rather than against a copy of the rule in a test.
  */
 export function pongDeadlineMs(pongCapable: boolean): number {
 	return pongCapable ? PONG_TIMEOUT_MS : PONG_GRACE_MS;
 }
 
 /**
- * The screencast's bound at `scale: 1` (B2.3, D-A6). `frame_scale` is computed against these two
- * numbers and the frame's own `deviceWidth/deviceHeight`, never inferred from the JPEG.
+ * The screencast's bound at `scale: 1`. `frame_scale` is computed against these two numbers and the frame's own
+ * `deviceWidth/deviceHeight`, never inferred from the JPEG.
  */
 export const CAST_MAX_WIDTH = 1280;
 export const CAST_MAX_HEIGHT = 720;
 /** Chromium's compositor rate the `max_fps` ceiling is expressed against (`everyNthFrame`). */
 const CAST_COMPOSITOR_FPS = 60;
 
-/** The effective screencast settings, after clamping (B2.3 `live.quality`). */
+/** The effective screencast settings, after clamping (`live.quality`). */
 export interface CastQuality {
 	readonly scale: number;
 	readonly jpegQuality: number;
@@ -123,9 +90,8 @@ export interface CastQuality {
 }
 
 /**
- * The factor a frame of a `w × h` CSS-px viewport is scaled by under a `maxW × maxH` bound: the
- * smaller of the two ratios, and never above 1 because Chromium does not upscale. Exported so the
- * gateway, the tests and the acceptance row share one arithmetic (AC-P0-38).
+ * The factor a frame of a `w × h` CSS-px viewport is scaled by under a `maxW × maxH` bound: the smaller of the two
+ * ratios, and never above 1 because Chromium does not upscale.
  */
 export function frameScaleFor(w: number, h: number, maxW = CAST_MAX_WIDTH, maxH = CAST_MAX_HEIGHT): number {
 	if (!(w > 0) || !(h > 0)) return 1;
@@ -149,13 +115,7 @@ export function clampQuality(
 	};
 }
 
-/**
- * Folds a client's `modifiers` into the CDP bitmask.
- *
- * An array is accepted as well as the bitmask (B1.11), folded through the very
- * table the agent's own typing path uses. An empty array is legal and means no
- * modifiers.
- */
+/** Folds a client's `modifiers` into the CDP bitmask. */
 export function modifierBits(modifiers: number | readonly string[] | undefined): number {
 	if (modifiers === undefined) return 0;
 	if (typeof modifiers === 'number') return modifiers;
@@ -167,28 +127,13 @@ export function modifierBits(modifiers: number | readonly string[] | undefined):
 	return bits;
 }
 
-/**
- * Resolves one live-view key into the spec CDP actually needs.
- *
- * **This is the B1.11 repair.** The Live-View path forwarded `{key, code?}` and
- * set no `windowsVirtualKeyCode`, so every keystroke a human sent arrived at the
- * page with `event.keyCode === 0`: a page that switches on `keyCode` — which is
- * most pages with a keyboard shortcut, and every `Enter`-to-submit handler that
- * predates `key` — saw nothing it recognised. The tables that fix it already
- * existed and were already used by the agent's own typing path; the socket
- * simply never reached them, so a human and a tool pressing the same key sent
- * the page two different events.
- *
- * `null` means the name resolves to no key, which is answered rather than
- * dispatched: a key the server cannot describe would otherwise be dispatched
- * with `keyCode` 0 and *look* delivered.
- */
+/** Resolves one live-view key into the spec CDP actually needs. */
 export function resolveKeySpec(key: string, override?: number): KeySpec | null {
 	const named = keySpecForName(key);
 	const spec = named ?? ([...key].length === 1 ? keySpecForCharacter(key) : null);
 	if (spec === null) {
-		// A client that knows the code may still name a key this server's tables do
-		// not: it says so explicitly rather than being guessed at.
+		// A client that knows the code may still name a key this server's tables do not: it says so explicitly rather
+		// than being guessed at.
 		return override === undefined
 			? null
 			: { key, code: '', windowsVirtualKeyCode: override, text: null, shift: false, location: 0 };
@@ -202,33 +147,18 @@ export interface CastRegistryDeps {
 	readonly logger: Logger;
 }
 
-/**
- * The frame streams, one per session.
- *
- * Separate from route registration because two things need it at two different
- * times: the recorder is built early (the MCP handler takes it as a dependency)
- * while the live-view routes must be registered *after* the auth middleware, or
- * they would answer before a principal exists.
- */
+/** The frame streams, one per session. */
 export interface CastRegistry {
 	/** The shared cast for a session, created on first use. */
 	castFor(record: SessionRecord): SessionCast;
-	/**
-	 * Attaches a raw frame consumer to a session's screencast (R7).
-	 *
-	 * The recorder uses this rather than opening a second screencast: Chrome
-	 * produces one frame stream per target, and a second subscriber acking the
-	 * same frame would race CDP's one-un-acked-frame flow control. It also means
-	 * a recording follows tab switches for free, because the cast does.
-	 */
+	/** Attaches a raw frame consumer to a session's screencast. */
 	subscribe(sessionId: string, onFrame: (jpegBase64: string) => void): Promise<() => void>;
 }
 
 export function createCastRegistry(deps: CastRegistryDeps): CastRegistry {
 	const { config, registry, logger } = deps;
-	// One screencast per *session*, not per viewer: Chrome produces a single
-	// frame stream per target, and a second subscriber acking the same frame is
-	// a race over CDP's one-un-acked-frame flow control. Viewers fan out from it.
+	// One screencast per *session*, not per viewer: Chrome produces a single frame stream per target, and a second
+	// subscriber acking the same frame is a race over CDP's one-un-acked-frame flow control. Viewers fan out from it.
 	const casts = new Map<string, SessionCast>();
 
 	const castFor = (record: SessionRecord): SessionCast => {
@@ -252,8 +182,8 @@ export function createCastRegistry(deps: CastRegistryDeps): CastRegistry {
 			if (record === undefined) throw new Error(`no session with id ${sessionId}`);
 			// A frames-only subscriber: it wants pixels, not tab lists.
 			const detach = castFor(record).attach({ onFrame: (jpeg) => onFrame(jpeg), onEvent: () => {} });
-			// The cast starts its screencast lazily on first attach; give it a
-			// moment so `start` does not report success before any frame can flow.
+			// The cast starts its screencast lazily on first attach; give it a moment so `start` does not report
+			// success before any frame can flow.
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			return detach;
 		},
@@ -269,61 +199,55 @@ export interface LiveViewDeps {
 	readonly casts: CastRegistry;
 	/** The shared per-principal connection ceiling, held with the event streams. */
 	readonly connections?: EventStreamRegistry;
-	/**
-	 * This build's version, as it reaches a viewer's `meta` message.
-	 *
-	 * **It was a hard-coded `'0.1.0'` here** and therefore not the package version
-	 * at all: `PKG_VERSION` reaches the wire twice — the `McpServer` identity and
-	 * this field — and one of the two never moved. A client reading `meta.version`
-	 * to decide what the socket supports would have been told 0.1.0 forever.
-	 * `SPECS/COMPLETIONS-CRITERIA.md` records that nothing enforces version
-	 * agreement; this makes the second of the two values real, and `units_test.ts`
-	 * asserts the nine `deno.json` files and `VERSION` all agree (AC-GATE-12).
-	 */
+	/** This build's version, as it reaches a viewer's `meta` message. */
 	readonly version?: string;
-	/**
-	 * The per-token origin overlay (B1.10).
-	 *
-	 * The ticket response echoes the **effective** list and the overlay's own
-	 * health, for the same reason SEC-18 requires it to echo the granted TTL: a
-	 * client must not have to assume its request was granted, and a degraded
-	 * overlay must be visible to the caller rather than indistinguishable from an
-	 * empty one.
-	 */
+	/** The per-token origin overlay. */
 	readonly origins?: OriginOverlay;
-	/**
-	 * The API-key records in force **right now**, for the `holder_name` a ticket
-	 * publishes.
-	 *
-	 * A function rather than an array since SR2-M3: the record set is reloadable
-	 * from the key file, so a snapshot taken at attach time would keep naming a
-	 * holder whose credential had since been revoked or relabelled. Defaults to
-	 * the startup configuration, which is what a caller that has no verifier —
-	 * every test that builds this route directly — should see.
-	 */
+	/** The API-key records in force **right now**, for the `holder_name` a ticket publishes. */
 	readonly keyRecords?: () => readonly ApiKeyRecord[];
+	/**
+	 * The scopes the minting credential still holds, narrowed from `scopes`, or `null` once it is gone —
+	 * `VerifierChain.authorizeTask`, the re-check the MCP Apps embed sockets make (`embed_streams.ts`).
+	 */
+	readonly authorize?: (owner: string, scopes: ReadonlySet<string>, credential: string | undefined) =>
+		| ReadonlySet<string>
+		| null;
+	/** Overrides for tests: the re-check horizon and the cap on a socket that cannot be re-checked. */
+	readonly revalidateMs?: number;
+	readonly lifetimeMs?: number;
+}
+
+/** What {@linkcode attachLiveView} hands back: the hook the gateway's credentials-changed listener calls. */
+export interface LiveViewHandle {
+	/**
+	 * Re-checks every open viewer at once — a key reload, a logout or a narrowed account must not wait for the next
+	 * {@linkcode EVENT_STREAM_REVALIDATE_MS} tick.
+	 */
+	revalidateAll(): void;
 }
 
 /**
- * Who a live ticket is minted for (F21): the principal id the per-principal ceilings count, its scopes, and the
- * `holder_name` its lock message shows, resolved by the caller, which holds the full principal and the key records.
- * S0 seam: the REST route fills it from its `Principal`; W7's embed mint fills it from `EmbedTicketInput`.
+ * Who a live ticket is minted for: the principal id the per-principal ceilings count, its scopes, and the `holder_name`
+ * its lock message shows, resolved by the caller, which holds the full principal and the key records.
  */
 export interface LiveTicketHolder {
 	readonly id: string;
 	readonly scopes: ReadonlySet<Scope>;
 	readonly holderName: string | null;
+	/**
+	 * The fingerprint of the credential minting the ticket (`Principal.credential`), stamped on the ticket so the
+	 * socket can re-check it. Absent where the caller has none to give.
+	 */
+	readonly credential?: string | undefined;
 }
 
-/** What {@linkcode mintLiveTicket} reads (design §2.0 item 13). */
+/** What {@linkcode mintLiveTicket} reads. */
 export interface MintLiveTicketDeps {
 	readonly registry: SessionRegistry;
 	readonly tickets: TicketStore;
-	/** The key records in force. Kept in the contract's shape; unread since F21 moved the holder name to the caller. */
-	readonly keyRecords: () => readonly ApiKeyRecord[];
 }
 
-/** One live-ticket request, already parsed off its transport (design §2.0 item 13). */
+/** One live-ticket request, already parsed off its transport. */
 export interface MintLiveTicketInput {
 	readonly principal: LiveTicketHolder;
 	/** `default` for the default session, which need not exist yet. */
@@ -334,7 +258,7 @@ export interface MintLiveTicketInput {
 	readonly ttlMs?: number;
 	/** The origin to bind redemption to, or `null`; it must be an exact `scheme://host[:port]` origin. */
 	readonly origin: string | null;
-	/** The caller's session access (R8): the session is looked up with it and the ticket carries it. */
+	/** The caller's session access: the session is looked up with it and the ticket carries it. */
 	readonly access?: SessionAccess;
 }
 
@@ -344,16 +268,14 @@ export type MintLiveTicketResult =
 	| { ok: false; slug: 'forbidden-scope' | 'invalid-request' | 'unknown-session'; detail: string };
 
 /**
- * The live-ticket mint, off its HTTP route (design §2.0 item 13). S0 extraction, behaviour identical to
- * `POST /api/v1/live/ticket`: the route keeps body parsing and the response, and W7's MCP Apps embed mints through
- * the same checks (mode ceiling from the scopes, TTL clamp by mode, origin binding above the default TTL, an
- * existing session). The session is looked up through `access` (R8, D-128) — in `owner` mode another owner's session
- * is `unknown-session` — and the ticket carries it, so the upgrade resolves the session as the minter would have.
+ * The live-ticket mint, off its HTTP route, behaving exactly as `POST /api/v1/live/ticket`: the route keeps body
+ * parsing and the response, and the MCP Apps embed mints through the same checks (mode ceiling from the scopes, TTL
+ * clamp by mode, origin binding above the default TTL, an existing session).
  */
 export function mintLiveTicket(deps: MintLiveTicketDeps, input: MintLiveTicketInput): MintLiveTicketResult {
 	const { principal } = input;
-	// The mode is the principal's ceiling, narrowed on request (B2.3, SEC-18): `mode: "view"`
-	// (or `"watch"`) mints a ticket that can never take control, even for a principal that could.
+	// The mode is the principal's ceiling, narrowed on request: `mode: "view"` (or `"watch"`) mints a ticket that can
+	// never take control, even for a principal that could.
 	const wantsView = input.mode === 'view' || input.mode === 'watch';
 	const canControl = principal.scopes.has('view:control');
 	const canWatch = principal.scopes.has('view:watch') || canControl;
@@ -365,8 +287,8 @@ export function mintLiveTicket(deps: MintLiveTicketDeps, input: MintLiveTicketIn
 		return { ok: false, slug: 'forbidden-scope', detail: 'the view:control scope is required' };
 	}
 
-	// A TTL is a request, clamped by the mode's ceiling (view 300 s, control 60 s) and always echoed
-	// as granted. Above the 30 s default the ticket must be origin-bound.
+	// A TTL is a request, clamped by the mode's ceiling (view 300 s, control 60 s) and always echoed as granted. Above
+	// the 30 s default the ticket must be origin-bound.
 	if (input.ttlMs !== undefined && Number.isNaN(input.ttlMs)) {
 		return { ok: false, slug: 'invalid-request', detail: 'ttl_seconds must be a number' };
 	}
@@ -388,8 +310,8 @@ export function mintLiveTicket(deps: MintLiveTicketDeps, input: MintLiveTicketIn
 		};
 	}
 
-	// A ticket for a session that does not exist would fail at upgrade, by
-	// which point the client has no useful error channel.
+	// A ticket for a session that does not exist would fail at upgrade, by which point the client has no useful error
+	// channel.
 	if (input.sessionId !== 'default' && deps.registry.peekFor(input.sessionId, input.access) === undefined) {
 		return { ok: false, slug: 'unknown-session', detail: `no session ${input.sessionId}` };
 	}
@@ -399,15 +321,57 @@ export function mintLiveTicket(deps: MintLiveTicketDeps, input: MintLiveTicketIn
 		holderName: principal.holderName,
 		origin: originBound,
 		access: input.access,
+		// The socket re-earns these against the credential, rather than standing on the mint for its whole life.
+		scopes: principal.scopes,
+		credential: principal.credential,
 	});
 	return { ok: true, record, mode };
 }
 
-export function attachLiveView(deps: LiveViewDeps): void {
+/**
+ * What a live ticket's credential may do **now** — the scopes it still holds, `null` once it is gone, or `'unchecked'`
+ * when nothing can re-check it: no verifier was wired, or the ticket carries no credential fingerprint (an MCP Apps
+ * embed mint from a tool context that carries none, such as stdio) and is not the anonymous loopback principal, which
+ * is re-checked by owner alone.
+ */
+export function liveTicketScopesNow(
+	ticket: TicketRecord,
+	authorize: LiveViewDeps['authorize'],
+): ReadonlySet<string> | null | 'unchecked' {
+	const owner = ticket.access?.owner;
+	if (authorize === undefined || owner === undefined) return 'unchecked';
+	if (ticket.credential === undefined && owner !== ANONYMOUS_OWNER) return 'unchecked';
+	try {
+		return authorize(owner, ticket.scopes ?? new Set(), ticket.credential);
+	} catch {
+		// A verifier that cannot answer is not an answer that the credential still stands.
+		return null;
+	}
+}
+
+/**
+ * The mode `scopes` allows a viewer minted in `minted` mode: never wider than the ticket, narrowed to `watch` once
+ * `view:control` is gone, and `null` once neither view scope remains.
+ */
+export function liveModeAllowed(minted: ViewMode, scopes: ReadonlySet<string>): ViewMode | null {
+	if (minted === 'control' && scopes.has('view:control')) return 'control';
+	return scopes.has('view:watch') || scopes.has('view:control') ? 'watch' : null;
+}
+
+export function attachLiveView(deps: LiveViewDeps): LiveViewHandle {
 	const { app, config, registry, tickets, logger, casts, connections, origins } = deps;
 	const keyRecords = deps.keyRecords ?? (() => config.apiKeys);
 	const version = deps.version ?? '0.0.0-unknown';
 	const castFor = (record: SessionRecord) => casts.castFor(record);
+	/** Every open viewer, so a credential change can reach each one without waiting for its own timer. */
+	const open = new Set<Viewer>();
+	/** Viewer seats taken by an upgrade whose socket has not opened yet. */
+	const pendingSeats = new WeakMap<SessionRecord, number>();
+	const releaseSeat = (record: SessionRecord): void => {
+		const left = (pendingSeats.get(record) ?? 1) - 1;
+		if (left <= 0) pendingSeats.delete(record);
+		else pendingSeats.set(record, left);
+	};
 
 	// --- ticket minting ----------------------------------------------------
 	app.post('/api/v1/live/ticket', async (c: Context) => {
@@ -423,8 +387,8 @@ export function attachLiveView(deps: LiveViewDeps): void {
 		}
 		const sessionId = typeof body.session_id === 'string' && body.session_id !== '' ? body.session_id : 'default';
 
-		// `mode: "view"` (or `"watch"`) narrows the ticket below the principal's ceiling (B2.3, SEC-18); anything
-		// else that is not `"control"` is refused here, before the scope checks, as it always was.
+		// `mode: "view"` (or `"watch"`) narrows the ticket below the principal's ceiling; anything else that is not
+		// `"control"` is refused here, before the scope checks.
 		const requestedMode = body.mode === 'view' || body.mode === 'watch' || body.mode === 'control'
 			? body.mode
 			: undefined;
@@ -432,21 +396,20 @@ export function attachLiveView(deps: LiveViewDeps): void {
 			return problemResponse('invalid-request', requestId, 'mode must be "view" or "control"');
 		}
 
-		// `ttl_seconds` reaches the mint as milliseconds; a value that is not a finite number reaches it as `NaN`, which
-		// the mint refuses after the scope checks, the order this route has always answered in.
+		// `ttl_seconds` reaches the mint as milliseconds; a value that is not a finite number reaches it as `NaN`,
+		// which the mint refuses after the scope checks, so a caller without the scope learns that first.
 		const ttlMs = body.ttl_seconds === undefined
 			? undefined
 			: typeof body.ttl_seconds === 'number' && Number.isFinite(body.ttl_seconds)
 			? body.ttl_seconds * 1000
 			: Number.NaN;
-		// The origin a longer-lived ticket is bound to: the request's own `Origin` header, else an explicit `origin`
-		// in the body. The mint validates it.
+		// The origin a longer-lived ticket is bound to: the request's own `Origin` header, else an explicit `origin` in
+		// the body. The mint validates it.
 		const requestOrigin = c.req.header('origin') ?? null;
 		const bodyOrigin = typeof body.origin === 'string' ? body.origin : null;
-		// Review R1-3: a body `origin` binds the ticket exactly as an `Origin` header does, but the front's per-token
-		// narrowing (B1.10) reads only the header — so a credential whose overlay excludes an origin could still bind a
-		// ticket to it by naming it here instead. Narrowed the same way, with the front's own refusal. Only ever
-		// narrower: a credential with no overlay entry is unchanged, and the header (judged at the front) still wins.
+		// A body `origin` binds the ticket exactly as an `Origin` header does, but the front's per-token narrowing
+		// reads only the header — so a credential whose overlay excludes an origin could otherwise bind a ticket to it
+		// by naming it here instead.
 		if (requestOrigin === null && bodyOrigin !== null) {
 			const declared = origins?.forToken(principal.id) ?? [];
 			if (declared.length > 0 && !originAllowed(bodyOrigin, effectiveOrigins(config.allowedOrigins, declared))) {
@@ -454,13 +417,18 @@ export function attachLiveView(deps: LiveViewDeps): void {
 			}
 		}
 
-		const minted = mintLiveTicket({ registry, tickets, keyRecords }, {
-			principal: { id: principal.id, scopes: principal.scopes, holderName: holderNameOf(principal, keyRecords()) },
+		const minted = mintLiveTicket({ registry, tickets }, {
+			principal: {
+				id: principal.id,
+				scopes: principal.scopes,
+				holderName: holderNameOf(principal, keyRecords()),
+				credential: principal.credential,
+			},
 			sessionId,
 			mode: requestedMode,
 			ttlMs,
 			origin: requestOrigin ?? bodyOrigin,
-			// R8 (D-128): the caller's access, which the mint looks the session up with and stamps on the ticket.
+			// The caller's access, which the mint looks the session up with and stamps on the ticket.
 			access: { owner: expansionOwner(principal), admin: principal.scopes.has('admin') },
 		});
 		if (!minted.ok) return problemResponse(minted.slug, requestId, minted.detail);
@@ -471,12 +439,12 @@ export function attachLiveView(deps: LiveViewDeps): void {
 			session_id: sessionId,
 			expires_in: Math.round((record.expiresAt - Date.now()) / 1000),
 			mode,
-			// Echoed as granted (SEC-18): a client must not assume its request was honoured.
+			// Echoed as granted: a client must not assume its request was honoured.
 			ttl_seconds: Math.round(record.ttlMs / 1000),
 			origin_bound: record.originBound,
 			holder_name: record.holderName,
-			// The effective list, not the requested one, and the overlay's own
-			// health beside it: a caller must not have to assume either.
+			// The effective list, not the requested one, and the overlay's own health beside it: a caller must not have
+			// to assume either.
 			allowed_origins: effectiveOrigins(config.allowedOrigins, declared),
 			overlay_status: origins?.status ?? 'absent',
 		}, 201);
@@ -488,12 +456,12 @@ export function attachLiveView(deps: LiveViewDeps): void {
 		const sessionId = c.req.param('sessionId') ?? '';
 		const ticket = new URL(c.req.url).searchParams.get('ticket') ?? '';
 
-		// F2: a request that is not an upgrade is answered before the ticket is looked at, so it cannot burn one.
+		// A request that is not an upgrade is answered before the ticket is looked at, so it cannot burn one.
 		if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
 			return new Response('expected a WebSocket upgrade', { status: 426 });
 		}
 
-		// The upgrade's own `Origin` header is what a bound ticket is checked against (B2.3, SEC-18).
+		// The upgrade's own `Origin` header is what a bound ticket is checked against.
 		const redemption = tickets.redeem(ticket, sessionId, c.req.header('origin') ?? null);
 		if (!redemption.ok) {
 			const slug = redemption.reason === 'consumed'
@@ -508,58 +476,82 @@ export function attachLiveView(deps: LiveViewDeps): void {
 
 		let record: SessionRecord;
 		try {
-			// R8 (D-128): resolved with the minter's access, as the ticket recorded it — in `owner` mode `default` is the
-			// minter's own default and another owner's session is unknown; a ticket minted with no access finds nothing.
+			// Resolved with the minter's access, as the ticket recorded it — in `owner` mode `default` is the minter's
+			// own default and another owner's session is unknown; a ticket minted with no access finds nothing.
 			record = await registry.resolve(sessionId === 'default' ? undefined : sessionId, redemption.record.access);
 		} catch {
 			return problemResponse('unknown-session', requestId, `no session ${sessionId}`);
 		}
 
-		if (record.viewers.size >= config.limits.maxViewersPerSession) {
+		// The minting decision is re-earned at the upgrade, not trusted for the life of the ticket — as the MCP Apps
+		// embed sockets do.
+		const scopesNow = liveTicketScopesNow(redemption.record, deps.authorize);
+		const mode = scopesNow === 'unchecked'
+			? redemption.record.mode
+			: scopesNow === null
+			? null
+			: liveModeAllowed(redemption.record.mode, scopesNow);
+		if (mode === null) {
+			return problemResponse('forbidden-scope', requestId, 'the credential that minted this ticket no longer may');
+		}
+
+		// Judged on the open viewers *and* the seats reserved by upgrades not yet open, and reserved below in the same
+		// synchronous step.
+		if (record.viewers.size + (pendingSeats.get(record) ?? 0) >= config.limits.maxViewersPerSession) {
 			return problemResponse('rate-limited', requestId, 'too many viewers on this session');
 		}
-		// The per-principal ceiling API-CONTRACT §7 has published since 0.1.0,
-		// enforced for the first time and shared with the event streams — two
-		// independent ceilings would disagree about what one principal may hold.
-		// Reserved **synchronously**, here rather than in the socket's `onopen`,
-		// because a check whose increment lands a task later admits every
-		// concurrent upgrade that raced it.
+		// The per-principal connection ceiling, shared with the event streams — two independent ceilings would disagree
+		// about what one principal may hold.
 		if (connections !== undefined && !connections.admitPrincipal(redemption.record.principal)) {
 			return problemResponse('rate-limited', requestId, 'too many live connections for this principal', {
 				'retry-after': '5',
 			});
 		}
 
-		// A reservation taken above must not outlive a failed upgrade: an upgrade
-		// that throws would otherwise hold one of the principal's eight slots for
-		// the life of the process, and eight such requests would lock the
-		// principal out of both transports with nothing attached.
+		// A reservation taken above must not outlive a failed upgrade: an upgrade that throws would otherwise hold one
+		// of the principal's eight slots for the life of the process, and eight such requests would lock the principal
+		// out of both transports with nothing attached.
+		pendingSeats.set(record, (pendingSeats.get(record) ?? 0) + 1);
 		let upgraded: { socket: WebSocket; response: Response };
 		try {
 			upgraded = Deno.upgradeWebSocket(c.req.raw);
 		} catch (cause) {
 			connections?.releasePrincipal(redemption.record.principal);
+			releaseSeat(record);
 			throw cause;
 		}
 		const { socket, response } = upgraded;
+		const minted = redemption.record;
 		const viewer = new Viewer({
 			socket,
 			version,
-			mode: redemption.record.mode,
-			principal: redemption.record.principal,
-			holderName: redemption.record.holderName,
+			mode,
+			principal: minted.principal,
+			holderName: minted.holderName,
 			record,
 			registry,
 			config,
 			logger,
 			cast: castFor(record),
-			...(connections === undefined
-				? {}
-				: { onRelease: () => connections.releasePrincipal(redemption.record.principal) }),
+			scopesNow: () => liveTicketScopesNow(minted, deps.authorize),
+			revalidateMs: deps.revalidateMs ?? EVENT_STREAM_REVALIDATE_MS,
+			lifetimeMs: deps.lifetimeMs ?? EVENT_STREAM_LIFETIME_MS,
+			onSeat: () => releaseSeat(record),
+			onOpen: (self) => open.add(self),
+			onRelease: () => {
+				open.delete(viewer);
+				connections?.releasePrincipal(minted.principal);
+			},
 		});
 		viewer.start();
 		return response;
 	});
+
+	return {
+		revalidateAll(): void {
+			for (const viewer of [...open]) viewer.recheck();
+		},
+	};
 }
 
 interface ViewerOptions {
@@ -568,7 +560,7 @@ interface ViewerOptions {
 	readonly version: string;
 	readonly mode: ViewMode;
 	readonly principal: string;
-	/** The credential's label, for the `lock` message (B2.3). */
+	/** The credential's label, for the `lock` message. */
 	readonly holderName: string | null;
 	readonly record: SessionRecord;
 	readonly registry: SessionRegistry;
@@ -577,12 +569,35 @@ interface ViewerOptions {
 	readonly cast: SessionCast;
 	/** Releases this connection's per-principal slot. Runs once, on the single close path. */
 	readonly onRelease?: () => void;
+	/** What the minting credential may do now ({@linkcode liveTicketScopesNow}). Absent keeps the minted mode. */
+	readonly scopesNow?: () => ReadonlySet<string> | null | 'unchecked';
+	/** The re-check interval, and the life of a socket whose credential cannot be re-checked. */
+	readonly revalidateMs?: number;
+	readonly lifetimeMs?: number;
+	/** Returns the seat the upgrade reserved. Runs once: at open, when the seat becomes a viewer, or at close. */
+	readonly onSeat?: () => void;
+	/** Runs once the socket is open and registered, so credential changes can reach it. */
+	readonly onOpen?: (viewer: Viewer) => void;
 }
+
+/** The largest text frame a viewer may send, in UTF-16 code units, before it is closed with 1009. */
+export const MAX_VIEWER_FRAME_CHARS = 64 * 1024;
+
+/**
+ * The WebSocket close for a viewer whose credential may no longer watch: the code and reason the MCP Apps embed sockets
+ * close with (`embed_streams.ts`); no `bye` precedes it, because the live view's `bye` reasons are a closed wire enum
+ * and none of them means this.
+ */
+const UNAUTHORIZED_CLOSE = { code: 4001, reason: 'unauthorized' } as const;
 
 /** One attached live-view connection. */
 class Viewer implements LiveViewerHandle {
 	readonly id = ulid();
-	readonly mode: ViewMode;
+	/**
+	 * Not readonly: a credential that loses `view:control` while the socket is open narrows it to `watch` (and its lock
+	 * is released). It never widens.
+	 */
+	mode: ViewMode;
 	readonly principal: string;
 	readonly holderName: string | null;
 	readonly #socket: WebSocket;
@@ -597,20 +612,26 @@ class Viewer implements LiveViewerHandle {
 	#subscriber: CastSubscriber | null = null;
 	#release: (() => void) | null = null;
 	#ping: ReturnType<typeof setInterval> | null = null;
-	/** This socket's event subscription, or `null` while it has none (B1.8). */
+	/** This socket's event subscription, or `null` while it has none. */
 	#events: SocketEventPump | null = null;
 	#lastPongAt = Date.now();
-	/**
-	 * Whether this socket has ever answered a `ping` (B6.1, F1).
-	 *
-	 * Latches true on the first `pong` and never returns to false: the point is
-	 * to remember that this peer *is able* to answer, so that later silence can be
-	 * read as death rather than as watching. See PONG_GRACE_MS.
-	 */
+	/** Whether this socket has ever answered a `ping`. */
 	#pongCapable = false;
 	#seq = 0;
 	/** Frames skipped because this viewer's socket was behind. */
 	dropped = 0;
+	readonly #scopesNow: () => ReadonlySet<string> | null | 'unchecked';
+	readonly #revalidateMs: number;
+	readonly #lifetimeMs: number;
+	#seat: (() => void) | null;
+	readonly #onOpened: ((viewer: Viewer) => void) | null;
+	/** The credential re-check and the lifetime cap; both cleared on the one close path. */
+	#recheckTimer: ReturnType<typeof setInterval> | null = null;
+	#lifetimeTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Set once this viewer has been told to end; a late `onopen` then closes instead of attaching. */
+	#ending = false;
+	/** One hit test in flight per viewer; `live.hover` arrives at pointer rate and the rest are dropped. */
+	#hovering = false;
 
 	constructor(options: ViewerOptions) {
 		this.mode = options.mode;
@@ -624,16 +645,61 @@ class Viewer implements LiveViewerHandle {
 		this.#version = options.version;
 		this.#release = options.onRelease ?? null;
 		this.#logger = options.logger.with({ viewer: this.id, session: options.record.id });
+		this.#scopesNow = options.scopesNow ?? (() => 'unchecked');
+		this.#revalidateMs = options.revalidateMs ?? EVENT_STREAM_REVALIDATE_MS;
+		this.#lifetimeMs = options.lifetimeMs ?? EVENT_STREAM_LIFETIME_MS;
+		this.#seat = options.onSeat ?? null;
+		this.#onOpened = options.onOpen ?? null;
 	}
 
 	start(): void {
 		this.#socket.binaryType = 'arraybuffer';
 		this.#socket.onopen = () => this.#onOpen();
 		this.#socket.onmessage = (event) => this.#onMessage(event);
-		// Disconnect is detected here, never via `request.signal`: on Deno that
-		// signal fires when a response is delivered, not when the peer goes away.
+		// Disconnect is detected here, never via `request.signal`: on Deno that signal fires when a response is
+		// delivered, not when the peer goes away.
 		this.#socket.onclose = () => this.#onClose();
 		this.#socket.onerror = () => this.#onClose();
+		// An open socket is a cached authorization decision, so it re-earns it on the gateway's horizon (and from
+		// `revalidateAll` on every credential change).
+		this.#recheckTimer = setInterval(() => this.recheck(), this.#revalidateMs);
+		Deno.unrefTimer(this.#recheckTimer);
+		if (this.#scopesNow() === 'unchecked') {
+			this.#lifetimeTimer = setTimeout(() => this.#terminate(1000, 'stream-expired'), this.#lifetimeMs);
+			Deno.unrefTimer(this.#lifetimeTimer);
+		}
+	}
+
+	/**
+	 * Re-checks what the minting credential may do now. Gone, or holding neither view scope: the socket closes
+	 * ({@linkcode UNAUTHORIZED_CLOSE}).
+	 */
+	recheck(): void {
+		if (this.#ending) return;
+		const scopes = this.#scopesNow();
+		if (scopes === 'unchecked') return;
+		const allowed = scopes === null ? null : liveModeAllowed(this.mode, scopes);
+		if (allowed === null) {
+			this.#logger.info('live viewer closed: the credential that opened it no longer may watch');
+			this.#terminate(UNAUTHORIZED_CLOSE.code, UNAUTHORIZED_CLOSE.reason);
+			return;
+		}
+		if (allowed !== this.mode) {
+			this.#logger.info('live viewer narrowed to watch: the credential that opened it no longer may control');
+			this.mode = allowed;
+			this.#registry.releaseControl(this.#record, this.id);
+		}
+	}
+
+	/** Closes the socket with `code` and no `bye` (the reasons here are not in the live view's `bye` enum). */
+	#terminate(code: number, reason: string): void {
+		if (this.#ending) return;
+		this.#ending = true;
+		// Control goes at once rather than when the close handshake completes: input is refused from this moment.
+		this.#registry.releaseControl(this.#record, this.id);
+		try {
+			this.#socket.close(code, reason);
+		} catch { /* already closing, or not yet open: `#onOpen` sees `#ending` */ }
 	}
 
 	send(message: unknown): void {
@@ -642,7 +708,10 @@ class Viewer implements LiveViewerHandle {
 	}
 
 	close(reason: string): void {
-		this.#emit({ type: 'bye', reason: reason as ServerMsg extends { reason: infer R } ? R : never });
+		// The registry closes for reasons the wire's `bye` does not name (`browser-crashed`, already sent as an `error`
+		// frame): to a viewer those are a closed session, so the message stays inside the contract.
+		const bye = reason === 'server-shutdown' || reason === 'idle-timeout' ? reason : 'session-closed';
+		this.#emit({ type: 'bye', reason: bye });
 		try {
 			this.#socket.close(1000, reason);
 		} catch { /* already closing */ }
@@ -653,10 +722,19 @@ class Viewer implements LiveViewerHandle {
 	}
 
 	#onOpen(): void {
+		if (this.#ending) {
+			// Ended before it opened (a credential change raced the upgrade): it never becomes a viewer.
+			try {
+				this.#socket.close(UNAUTHORIZED_CLOSE.code, UNAUTHORIZED_CLOSE.reason);
+			} catch { /* already closing */ }
+			return;
+		}
 		this.#registry.addViewer(this.#record, this);
-		// The viewport the frames are of: the cast's last frame when it has one, else the cached page
-		// info, else the screencast bound itself. `frame_scale` is computed against the same numbers
-		// every frame is (B2.3, D-A6), never read off a JPEG.
+		// The reserved seat becomes this entry in `record.viewers`.
+		this.#releaseSeat();
+		this.#onOpened?.(this);
+		// The viewport the frames are of: the cast's last frame when it has one, else the cached page info, else the
+		// screencast bound itself.
 		const known = this.#cast.lastSize;
 		const viewport = {
 			w: known?.w ?? this.#record.session.cachedBrowserState?.pageInfo.viewportWidth ?? CAST_MAX_WIDTH,
@@ -676,9 +754,9 @@ class Viewer implements LiveViewerHandle {
 
 		this.#subscriber = {
 			onFrame: (jpeg, size) => this.#onFrame(jpeg, size),
-			// `quality` and `viewport` are messages a 0.1.0 client never saw. They are unsolicited, so
-			// they flow only to a socket that opted in with `events.subscribe`; the reply to this
-			// socket's own `live.quality` goes through the handler directly.
+			// `quality` and `viewport` are unsolicited, and a client that predates them may not handle them, so they
+			// flow only to a socket that opted in with `events.subscribe`; the reply to this socket's own
+			// `live.quality` goes through the handler directly.
 			onEvent: (message) => {
 				if ((message.type === 'quality' || message.type === 'viewport') && this.#events === null) return;
 				this.#emit(message);
@@ -688,11 +766,13 @@ class Viewer implements LiveViewerHandle {
 
 		this.#ping = setInterval(() => this.#heartbeat(), PING_INTERVAL_MS);
 		Deno.unrefTimer(this.#ping);
+		// A credential change between the upgrade and the open reached no open-set entry; judge it here.
+		this.recheck();
 	}
 
 	#heartbeat(): void {
-		// Two tiers, chosen by whether this socket has ever proven it can answer.
-		// See PONG_GRACE_MS: a silent socket is not evidence of a dead one.
+		// Two tiers, chosen by whether this socket has ever proven it can answer. See PONG_GRACE_MS: a silent socket is
+		// not evidence of a dead one.
 		const deadline = pongDeadlineMs(this.#pongCapable);
 		if (Date.now() - this.#lastPongAt > deadline) {
 			this.#logger.warn('live viewer unresponsive; closing', {
@@ -702,15 +782,14 @@ class Viewer implements LiveViewerHandle {
 			this.close('idle-timeout');
 			return;
 		}
-		// G-6: it goes through `#emit` now, so it is typed as the union member it
-		// has always been in practice rather than an untyped frame beside it.
+		// Through `#emit`, so it is typed as a member of the server-message union.
 		this.#emit({ type: 'ping' });
 	}
 
 	#onFrame(jpegBase64: string, size: { w: number; h: number; targetId: string; scale: number }): void {
 		if (this.#socket.readyState !== WebSocket.OPEN) return;
-		// Drop rather than queue: a slow viewer must never become backpressure on
-		// the CDP reader (the frame is still acked upstream).
+		// Drop rather than queue: a slow viewer must never become backpressure on the CDP reader (the frame is still
+		// acked upstream).
 		if (this.#socket.bufferedAmount > BACKPRESSURE_BYTES) {
 			this.dropped += 1;
 			return;
@@ -733,23 +812,32 @@ class Viewer implements LiveViewerHandle {
 
 	async #onMessage(event: MessageEvent): Promise<void> {
 		this.#lastPongAt = Date.now();
+		if (this.#ending) return;
+		// The size is judged before anything parses the frame. Binary frames carry nothing a client sends, so they stay
+		// ignored, but not at any size.
+		const size = typeof event.data === 'string'
+			? event.data.length
+			: event.data instanceof ArrayBuffer
+			? event.data.byteLength
+			: 0;
+		if (size > MAX_VIEWER_FRAME_CHARS) {
+			this.#logger.warn('live viewer sent an oversized frame; closing', { size });
+			this.#terminate(1009, 'frame-too-large');
+			return;
+		}
 		if (typeof event.data !== 'string') return;
 
 		let message: ClientMsg;
 		try {
 			message = ClientMsgSchema.parse(JSON.parse(event.data));
 		} catch {
-			// `bad-message` is kept — an existing client's handling of it does not
-			// change — and gains the half of "malformed" it was missing.
+			// `bad-message` with `reason: 'schema'`: the code a client already handles, and the reason saying which
+			// kind of malformed it was.
 			this.#emit({ type: 'error', code: 'bad-message', message: 'unrecognised message', reason: 'schema' });
 			return;
 		}
 
-		// The keep-alive answer (B6.1, F1). It has already refreshed `#lastPongAt`
-		// above, as any inbound frame does; what it adds is the *evidence* that
-		// this peer answers pings, which tightens its deadline from the grace
-		// window to the three-interval one. Deliberately silent: a reply to a
-		// keep-alive would be a keep-alive loop.
+		// The keep-alive answer.
 		if (message.type === 'pong') {
 			this.#pongCapable = true;
 			return;
@@ -771,22 +859,17 @@ class Viewer implements LiveViewerHandle {
 			return;
 		}
 
-		// **`events.subscribe` needs no lock and no control mode.** Reading what
-		// happened to a session is what watching *is*; the lock guards mutation.
-		// What it does need is the content boundary, and that is enforced in
-		// `socketevents.ts` by filtering through `WS_EVENT_KINDS` rather than here,
-		// so a second transport cannot forget it.
+		// **`events.subscribe` needs no lock and no control mode.** Reading what happened to a session is what watching
+		// *is*; the lock guards mutation.
 		if (message.type === 'events.subscribe') {
-			// A second subscribe replaces the first rather than opening a second
-			// pump: two cursors interleaved into one ordered stream would destroy
-			// the ordering that is the contract.
+			// A second subscribe replaces the first rather than opening a second pump: two cursors interleaved into one
+			// ordered stream would destroy the ordering that is the contract.
 			this.#events?.stop();
 			this.#events = SocketEventPump.open({
 				ring: this.#record.events,
 				send: (outbound) => this.#emit(outbound),
-				// Backpressure gaps rather than queues: while the socket is behind,
-				// the pump stops reading and the ring turns over under a stationary
-				// cursor, so the next successful read leads with a `gap`.
+				// Backpressure gaps rather than queues: while the socket is behind, the pump stops reading and the ring
+				// turns over under a stationary cursor, so the next successful read leads with a `gap`.
 				ready: () => this.#socket.readyState === WebSocket.OPEN && this.#socket.bufferedAmount <= BACKPRESSURE_BYTES,
 				producing: PRODUCING_EVENT_KINDS,
 				...(message.kinds === undefined ? {} : { kinds: message.kinds }),
@@ -802,19 +885,22 @@ class Viewer implements LiveViewerHandle {
 			return;
 		}
 
-		// **`live.hover` needs no lock either** (B2.1). It reads what is under a
-		// point through the browser's own hit test — the same read
-		// `browser_element_at` performs — and answers this socket alone. The
-		// record is the `core` preset, built by the tool's own builder so the
-		// password predicate has already run; nothing is written to the ring.
+		// **`live.hover` needs no lock either.** It reads what is under a point through the browser's own hit test —
+		// the same read `browser_element_at` performs — and answers this socket alone.
 		if (message.type === 'live.hover') {
-			await this.#hover(message.id, message.x, message.y);
+			// One hit test in flight per viewer.
+			if (this.#hovering) return;
+			this.#hovering = true;
+			try {
+				await this.#hover(message.id, message.x, message.y);
+			} finally {
+				this.#hovering = false;
+			}
 			return;
 		}
 
-		// **`live.keyframe` needs nothing** (B2.3): it asks for the frame the server already holds,
-		// answered to this socket alone. A cache lookup, not a capture, except in the cold window
-		// right after a retarget.
+		// **`live.keyframe` needs nothing**: it asks for the frame the server already holds, answered to this socket
+		// alone. A cache lookup, not a capture, except in the cold window right after a retarget.
 		if (message.type === 'live.keyframe') {
 			if (this.#subscriber !== null && !this.#cast.keyframe(this.#subscriber)) {
 				this.#emit({
@@ -826,9 +912,8 @@ class Viewer implements LiveViewerHandle {
 			return;
 		}
 
-		// **`live.quality` needs control mode, not the lock** (B2.3): the stream is shared by every
-		// viewer of the session, so a watch-only ticket may not change what everyone receives. The
-		// effective values are the reply, and other opted-in viewers learn of the change too.
+		// **`live.quality` needs control mode, not the lock**: the stream is shared by every viewer of the session, so
+		// a watch-only ticket may not change what everyone receives.
 		if (message.type === 'live.quality') {
 			if (this.mode !== 'control') {
 				this.#emit({ type: 'error', code: 'not-holder', message: 'this viewer is watch-only' });
@@ -844,11 +929,9 @@ class Viewer implements LiveViewerHandle {
 			return;
 		}
 
-		// **`live.highlight` needs control mode, not the lock** (B2.2). The outline
-		// is drawn on the screen every viewer of the session watches, so a
-		// watch-only ticket may not paint it; but it is not page input, so holding
-		// the lock is not required. Best-effort and silent by contract: an overlay
-		// failure draws nothing and answers nothing.
+		// **`live.highlight` needs control mode, not the lock.** The outline is drawn on the screen every viewer of the
+		// session watches, so a watch-only ticket may not paint it; but it is not page input, so holding the lock is
+		// not required.
 		if (message.type === 'live.highlight') {
 			if (this.mode !== 'control') {
 				this.#emit({ type: 'error', code: 'not-holder', message: 'this viewer is watch-only' });
@@ -873,6 +956,9 @@ class Viewer implements LiveViewerHandle {
 
 		try {
 			await this.#dispatchInput(message);
+			// What `browser_get_session` reports as `last_input_at`: an agent waiting out `human-has-control` reads it to
+			// tell a person at work from one who took control and walked away.
+			this.#record.lastInputAt = Date.now();
 		} catch (cause) {
 			this.#logger.warn(`live input failed: ${cause instanceof Error ? cause.message : String(cause)}`);
 			this.#emit({ type: 'error', code: 'internal', message: 'the browser refused that input' });
@@ -890,15 +976,14 @@ class Viewer implements LiveViewerHandle {
 				frame_id: answer.element === null ? null : answer.hit.frameId,
 			});
 		} catch (cause) {
-			// A disconnected session or a mid-navigation read answers "nothing here"
-			// rather than an error: a hover is a best-effort read at pointer rate,
-			// and a client that got an error per pixel would learn nothing from it.
+			// A disconnected session or a mid-navigation read answers "nothing here" rather than an error: a hover is a
+			// best-effort read at pointer rate, and a client that got an error per pixel would learn nothing from it.
 			this.#logger.debug(`live hover failed: ${cause instanceof Error ? cause.message : String(cause)}`);
 			this.#emit({ type: 'hover', id, element: null, frame_id: null });
 		}
 	}
 
-	/** R3 (F22): the browser refused a navigation's document request before sending it (E0). Origin only. */
+	/** The browser refused a navigation's document request before sending it. Origin only. */
 	#emitNavigationBlocked(origin: string): void {
 		this.#emit({
 			type: 'error',
@@ -907,7 +992,7 @@ class Viewer implements LiveViewerHandle {
 		});
 	}
 
-	/** Answers a well-formed input this server could not carry out (B1.11). */
+	/** Answers a well-formed input this server could not carry out. */
 	#reject(reason: WsErrorReason, message: string): void {
 		this.#logger.warn(`live input rejected (${reason}): ${message}`);
 		this.#emit({ type: 'error', code: 'input-rejected', message, reason });
@@ -918,10 +1003,8 @@ class Viewer implements LiveViewerHandle {
 		const client = session.cdpClient;
 		const manager = session.sessionManager;
 		const focus = session.agentFocusTargetId;
-		// **G-7, the one genuinely silent drop.** These three branches used to
-		// return with no error, no answer and no log: a viewer that had taken
-		// control typed into a void and had no way to learn it. Each now says
-		// which of the three it was.
+		// Each of these three branches answers with its reason: returning silently would leave a viewer that has taken
+		// control typing into a void with no way to learn it.
 		if (client === null || manager === null) {
 			this.#reject('session-not-connected', 'this session has no browser connection right now');
 			return;
@@ -930,11 +1013,7 @@ class Viewer implements LiveViewerHandle {
 			this.#reject('no-focused-tab', 'this session has no focused tab to send input to');
 			return;
 		}
-		// Coordinates are caller-supplied numbers, and the only bound on them today
-		// is the schema's "is a number". A pointer event dispatched far outside the
-		// viewport lands nowhere and reports nothing, which reads to a human as the
-		// browser having ignored them. Checked only when a viewport is known, and
-		// with a margin, because the cache lags a resize.
+		// Coordinates are caller-supplied numbers, and the schema bounds them only as numbers.
 		if (message.type === 'input.mouse' || message.type === 'input.wheel') {
 			const page = this.#record.session.cachedBrowserState?.pageInfo;
 			if (page !== undefined && page !== null) {
@@ -986,9 +1065,8 @@ class Viewer implements LiveViewerHandle {
 					this.#reject('unsupported-key', `no key named ${JSON.stringify(message.key.slice(0, 32))}`);
 					return;
 				}
-				// Every field the page's own `KeyboardEvent` is built from, including
-				// the `windowsVirtualKeyCode` this path never sent. The client's own
-				// values win where it supplied them.
+				// Every field the page's own `KeyboardEvent` is built from, including the `windowsVirtualKeyCode` this
+				// path never sent. The client's own values win where it supplied them.
 				const base = {
 					key: message.key,
 					code: message.code ?? spec.code,
@@ -998,13 +1076,11 @@ class Viewer implements LiveViewerHandle {
 					...(message.autoRepeat === undefined ? {} : { autoRepeat: message.autoRepeat }),
 					...(modifiers === 0 ? {} : { modifiers }),
 				};
-				// A chord suppresses insertion: Ctrl+A selects, it does not type an
-				// 'a'. The agent's own path makes the same choice from the same
-				// predicate, which is what keeps the two reproducible from each other.
+				// A chord suppresses insertion: Ctrl+A selects, it does not type an 'a'. The agent's own path makes the
+				// same choice from the same predicate, which is what keeps the two reproducible from each other.
 				const text = suppressesText(modifiers) ? undefined : message.text ?? spec.text ?? undefined;
-				// `rawKeyDown` rather than `keyDown` when no text is inserted: Chrome
-				// derives `keypress` from a `keyDown` carrying text, and a `keyDown`
-				// with none still produces one for some keys.
+				// `rawKeyDown` rather than `keyDown` when no text is inserted: Chrome derives `keypress` from a
+				// `keyDown` carrying text, and a `keyDown` with none still produces one for some keys.
 				const downType = text === undefined ? 'rawKeyDown' : 'keyDown';
 				if (message.kind === 'press') {
 					await client.send.Input.dispatchKeyEvent({
@@ -1027,18 +1103,12 @@ class Viewer implements LiveViewerHandle {
 				return;
 			}
 			case 'input.composition': {
-				// R13. `imeSetComposition` drives the in-progress state the page
-				// renders; the commit is an `insertText`, which is what ends the
-				// composition and fires `compositionend`. A cancel is an empty
-				// composition, per the CDP contract.
+				// `imeSetComposition` drives the in-progress state the page renders; the commit is an `insertText`,
+				// which is what ends the composition and fires `compositionend`.
 				if (message.kind === 'commit') {
-					// `insertText` while a composition is active is what *commits*
-					// it: Chrome ends the composition and fires `compositionend`
-					// carrying the inserted text, which is the event a page's own
-					// IME handling listens for. Clearing the composition first
-					// would end it with empty data and then insert separately —
-					// the page would see a cancel followed by an unexplained
-					// insertion, which is not what happened.
+					// `insertText` while a composition is active is what *commits* it: Chrome ends the composition and
+					// fires `compositionend` carrying the inserted text, which is the event a page's own IME handling
+					// listens for.
 					if (message.text !== '') {
 						await client.send.Input.insertText({ text: message.text }, cdp.sessionId);
 						return;
@@ -1064,9 +1134,8 @@ class Viewer implements LiveViewerHandle {
 				return;
 			}
 			case 'navigate': {
-				// The same policy the MCP tool enforces, from the same function: a
-				// human taking control is not a way around the deployment's egress
-				// rules, and two copies of that rule would eventually disagree.
+				// The same policy the MCP tool enforces, from the same function: a human taking control is not a way
+				// around the deployment's egress rules, and two copies of that rule would eventually disagree.
 				let url: URL;
 				try {
 					url = assertNavigable(message.url, this.#config.allowedDomains);
@@ -1078,20 +1147,12 @@ class Viewer implements LiveViewerHandle {
 					});
 					return;
 				}
-				// Through the session's own event rather than a raw `Page.navigate`:
-				// that is what runs the browser layer's pre-navigation veto, waits
-				// for the load, and dispatches `NavigationCompleteEvent` — which is
-				// how the *other* viewers watching this session learn the page
-				// changed. A raw CDP call navigates silently and leaves every other
-				// viewer's address bar showing the previous page.
-				//
-				// R3 (F22): a redirect hop the browser refused before sending it (E0) fails the navigation with
-				// `net::ERR_ABORTED`, whose message carries the requested URL into `live input failed: …`. It is
-				// answered instead with the existing `navigation-blocked` code naming the origin only, and nothing is
-				// logged here — the registry already logged the block, by origin, throttled.
+				// Through the session's own event rather than a raw `Page.navigate`: that is what runs the browser
+				// layer's pre-navigation veto, waits for the load, and dispatches `NavigationCompleteEvent` — which is
+				// how the *other* viewers watching this session learn the page changed.
 				const targetId = session.agentFocusTargetId;
 				const since = this.#registry.now();
-				// Review R2-2: only this navigation's own chain — the one that began at `url` — before the tab committed.
+				// Only this navigation's own chain — the one that began at `url` — before the tab committed.
 				const refused = (): string | null =>
 					blockedSince(this.#record, targetId ?? session.agentFocusTargetId, since, url.href);
 				try {
@@ -1113,13 +1174,9 @@ class Viewer implements LiveViewerHandle {
 					this.#emit({ type: 'error', code: 'bad-message', message: `unknown tab ${message.tabId}` });
 					return;
 				}
-				// ERRATUM(E-15). This used to call `Target.activateTarget` with the
-				// four-character tab id a viewer is shown, which CDP does not
-				// resolve — and even had it worked, raw activation leaves
-				// `agentFocusTargetId` pointing at the old tab, so the screencast
-				// would have kept streaming the page the human just navigated away
-				// from. Going through the session's own event moves focus, which
-				// the cast follows.
+				// Through the session's own event rather than `Target.activateTarget`: CDP does not resolve the
+				// four-character tab id a viewer is shown, and raw activation leaves `agentFocusTargetId` pointing at
+				// the old tab, so the screencast would keep streaming the page the human just navigated away from.
 				await session.eventBus.dispatch(new SwitchTabEvent({ targetId: message.tabId as TargetId }))
 					.eventResult({ raiseIfAny: true });
 				return;
@@ -1128,12 +1185,23 @@ class Viewer implements LiveViewerHandle {
 	}
 
 	#onClose(): void {
+		this.#ending = true;
 		if (this.#ping !== null) {
 			clearInterval(this.#ping);
 			this.#ping = null;
 		}
-		// The one deregistration path for the subscription too: disconnect is
-		// detected here and never through `request.signal` (REJ-005).
+		if (this.#recheckTimer !== null) {
+			clearInterval(this.#recheckTimer);
+			this.#recheckTimer = null;
+		}
+		if (this.#lifetimeTimer !== null) {
+			clearTimeout(this.#lifetimeTimer);
+			this.#lifetimeTimer = null;
+		}
+		// A socket that closed before it opened still holds its reserved seat; this returns it (a no-op after open).
+		this.#releaseSeat();
+		// The one deregistration path for the subscription too: disconnect is detected here and never through
+		// `request.signal`, which on Deno fires when the response is delivered.
 		this.#events?.stop();
 		this.#events = null;
 		this.#detach?.();
@@ -1144,78 +1212,35 @@ class Viewer implements LiveViewerHandle {
 		this.#release = null;
 		this.#registry.removeViewer(this.#record, this.id);
 	}
+
+	/** Returns the upgrade's seat reservation, exactly once. */
+	#releaseSeat(): void {
+		const seat = this.#seat;
+		this.#seat = null;
+		seat?.();
+	}
 }
 
-/**
- * The only URL form the live-view socket carries: origin plus path.
- *
- * SR1-A5. Until this change the socket broadcast `event.url` verbatim — the
- * full navigation URL, query and fragment included — to every connection minted
- * on `view:watch`, while the same process's `navigation` event records were
- * already carrying origin plus path because `SPECS/SECURITY-AUTH.md` §8.3
- * forbids source URLs on the wire "(which may carry tokens)". An OAuth implicit
- * fragment or a magic-link query reached a watcher that holds no `mcp:invoke`.
- *
- * One rule now holds for **every** URL the socket emits — `state.url` and each
- * `TabInfo.url` alike — because a rule that covered one field and not the other
- * would leak the same secret through the tab list instead. It is deliberately
- * the same derivation `navigationTarget()` performs for the event records, so
- * there is one definition of what a URL is reduced to and not two.
- *
- * A URL that does not parse reduces to the empty string rather than passing
- * through: the raw string is the one thing that must not reach the socket.
- */
+/** The only URL form the live-view socket carries: origin plus path. */
 export function viewUrl(url: string): string {
 	const target = navigationTarget(url);
 	return `${target.origin}${target.path}`;
 }
 
-/**
- * A title with the navigation URL's query and fragment removed — when the title
- * *is* that URL.
- *
- * **Found by SR1-A5's own pinning test, after `state.url` and `TabInfo.url` were
- * already redacted.** Chromium supplies a page with no `<title>` — and a page
- * whose title has not loaded yet — with a fallback title that is its URL,
- * **query and fragment included**. So the very redaction this change exists to
- * make cost nothing was still handing the whole URL to a `view:watch` holder
- * through the field beside it. A rule that covered two of three URL-bearing
- * fields is not a rule.
- *
- * It is deliberately narrow: the query is cut **only** when the title parses as
- * the URL the browser is actually on. A page that titles itself with somebody
- * else's URL is publishing its own content, which is what a title has always
- * been and is not this server disclosing a navigation it performed. What is
- * removed here is exactly the part the server knows and the watcher was never
- * granted.
- */
+/** A title with the navigation URL's query and fragment removed — when the title *is* that URL. */
 export function viewTitle(title: string, url: string): string {
 	const cut = title.search(/[?#]/);
 	if (cut === -1) return title;
-	// Chromium's fallback carries **no scheme**, so one is assumed for the parse
-	// and both sides are compared without it: `app.example/x` and
-	// `https://app.example/x` are the same page, and a scheme-sensitive
-	// comparison would have quietly matched nothing on every https page — which
-	// is to say, on every page where this matters.
+	// Chromium's fallback carries **no scheme**, so one is assumed for the parse and both sides are compared without
+	// it: `app.example/x` and `https://app.example/x` are the same page, and a scheme-sensitive comparison would
+	// quietly match nothing on every https page — which is to say, on every page where this matters.
 	const bare = (value: string) => value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
 	const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(title) ? title : `http://${title}`;
 	const reduced = viewUrl(candidate);
 	return reduced !== '' && bare(reduced) === bare(viewUrl(url)) ? title.slice(0, cut) : title;
 }
 
-/**
- * The tab list as viewers see it, with focus resolved on the full target id (E-14).
- *
- * Exported so the SR1-A5 redaction can be asserted on the value a socket would
- * actually receive rather than on the helper it happens to call.
- */
-/**
- * Flattens a `Page.FrameTree` into the address-row list, top document first (B3.3).
- *
- * Exported so the SR1-A5 redaction can be asserted on the value a socket would actually receive,
- * exactly as it is for {@linkcode tabsOf}. `parent_id` comes from the tree's own shape rather than
- * from `Frame.parentId`, which CDP omits on the root and does not always populate on children.
- */
+/** Flattens a `Page.FrameTree` into the address-row list, top document first. */
 export function framesOfTree(
 	node: { frame: { id: string; url: string; name?: string }; childFrames?: unknown },
 	parentId: string | null = null,
@@ -1223,8 +1248,8 @@ export function framesOfTree(
 	const out: StateFrame[] = [{
 		frame_id: node.frame.id,
 		parent_id: parentId,
-		// SR1-A5: origin plus path, never the query or the fragment. A frame URL
-		// carries a token exactly as readily as a top-level one.
+		// Origin plus path, never the query or the fragment. A frame URL carries a token exactly as readily as a
+		// top-level one.
 		url: viewUrl(node.frame.url),
 		name: node.frame.name ?? '',
 	}];
@@ -1235,14 +1260,15 @@ export function framesOfTree(
 	return out;
 }
 
+/** The tab list as viewers see it, with focus resolved on the full target id. */
 export function tabsOf(session: BrowserSession): TabInfo[] {
 	const focus = session.agentFocusTargetId;
 	return session.tabs.map((tab) => ({
 		tabId: String(tab.tabId),
-		// SR1-A5: origin plus path, never the query or fragment. See `viewUrl`.
+		// Origin plus path, never the query or fragment. See `viewUrl`.
 		url: viewUrl(tab.url),
-		// And the same for a title that *is* the URL, which is what Chromium gives
-		// a page with no `<title>`. See `viewTitle`.
+		// And the same for a title that *is* the URL, which is what Chromium gives a page with no `<title>`. See
+		// `viewTitle`.
 		title: viewTitle(tab.title, tab.url),
 		focused: tab.targetId === focus,
 	}));
@@ -1261,19 +1287,7 @@ interface SessionCastOptions {
 	readonly onEmpty: () => void;
 }
 
-/**
- * The session's frame stream, shared by every viewer watching it.
- *
- * JPEG rather than PNG (an order of magnitude smaller per frame), and every
- * frame is acked: Chrome delivers at most one un-acked frame, so a missed ack
- * silently ends the stream rather than merely slowing it.
- *
- * It also follows the session. A screencast is bound to one CDP target, so when
- * focus moves — because the model called `browser_switch_tab`, because the page
- * opened a popup, or because the human switched tabs in the view — the stream
- * has to be torn down and restarted on the new target, or every viewer keeps
- * watching a tab nobody is on.
- */
+/** The session's frame stream, shared by every viewer watching it. */
 class SessionCast {
 	readonly #options: SessionCastOptions;
 	readonly #subscribers = new Set<CastSubscriber>();
@@ -1282,20 +1296,14 @@ class SessionCast {
 	#tabsTimer: ReturnType<typeof setTimeout> | null = null;
 	/** The most recent frame, replayed to anything that attaches later and to `live.keyframe`. */
 	#lastFrame: { data: string; size: { w: number; h: number; targetId: string; scale: number } } | null = null;
-	/** The viewport of the last frame, so a change can be announced (B2.3 `viewport`). */
+	/** The viewport of the last frame, so a change can be announced (`viewport`). */
 	#lastSize: { w: number; h: number } | null = null;
-	/** The effective screencast settings (B2.3 `live.quality`); `scale` bounds the frame, not the page. */
+	/** The effective screencast settings (`live.quality`); `scale` bounds the frame, not the page. */
 	#quality: CastQuality;
 	#target: TargetId | null = null;
 	/** Serializes retargeting so two focus changes cannot interleave. */
 	#pending: Promise<void> = Promise.resolve();
-	/**
-	 * Serialises `state` broadcasts (B3.3), separately from the screencast queue.
-	 *
-	 * Each carries a frame list read from the browser, so each is asynchronous; without a chain, two
-	 * navigations in quick succession could publish their address rows in the order their reads
-	 * happened to finish rather than the order the page moved.
-	 */
+	/** Serialises `state` broadcasts, separately from the screencast queue. */
 	#stateChain: Promise<void> = Promise.resolve();
 	#stopped = false;
 
@@ -1323,28 +1331,13 @@ class SessionCast {
 		};
 	}
 
-	/** `frame_scale` for a viewport under the current bound (D-A6). */
+	/** `frame_scale` for a viewport under the current bound. */
 	frameScaleFor(w: number, h: number): number {
 		const { maxWidth, maxHeight } = this.bound;
 		return frameScaleFor(w, h, maxWidth, maxHeight);
 	}
 
-	/**
-	 * Answers one subscriber with the current frame (B2.3 `live.keyframe`).
-	 *
-	 * **From the cache, and only from the cache — A-3's contingency, taken on the measurement.** The
-	 * plan's rule was: if the cold-cache `Page.captureScreenshot` fallback measures worse than a
-	 * screencast round trip on a heavy page, keyframe answers from the cache alone and reports a
-	 * not-ready code for the post-retarget window rather than paying an unbounded cost. Measured on
-	 * this rig against the tall fixture at 1920x993 (`build/evidence/b2_3_liveview_probe.log`): the
-	 * cached answer averages **1 ms** and the capture averages **1341 ms** (417, 1608, 1698, 1330,
-	 * 1653) — three orders of magnitude, on a path a viewer can drive at will and which would block the
-	 * CDP session every other viewer's frames share. So the capture is not built.
-	 *
-	 * The cache is cold only in the window right after a retarget, and it fills as soon as the page
-	 * paints; `false` here is answered with `error{code:'not-ready'}` rather than a wait, so a client
-	 * knows to expect the next ordinary frame instead of assuming its request was lost.
-	 */
+	/** Answers one subscriber with the current frame (`live.keyframe`). */
 	keyframe(subscriber: CastSubscriber): boolean {
 		if (this.#lastFrame === null) return false;
 		subscriber.onFrame(this.#lastFrame.data, this.#lastFrame.size);
@@ -1352,8 +1345,8 @@ class SessionCast {
 	}
 
 	/**
-	 * Applies a `live.quality` request (B2.3): clamps it, restarts the screencast under the new bound
-	 * when something changed, and tells every subscriber the effective values. Returns them.
+	 * Applies a `live.quality` request: clamps it, restarts the screencast under the new bound when something changed,
+	 * and tells every subscriber the effective values. Returns them.
 	 */
 	async setQuality(
 		requested: { scale?: number | undefined; jpeg_quality?: number | undefined; max_fps?: number | undefined },
@@ -1363,14 +1356,13 @@ class SessionCast {
 			next.maxFps !== this.#quality.maxFps;
 		this.#quality = next;
 		if (changed) {
-			// The cached frame was encoded under the previous bound, so it is no longer an answer to
-			// `live.keyframe`: a viewer would receive a frame whose `scale` contradicts the one just
-			// granted. It is dropped rather than re-labelled, and the next paint refills it.
+			// The cached frame was encoded under the previous bound, so it is not an answer to `live.keyframe`: a
+			// viewer would receive a frame whose `scale` contradicts the one just granted.
 			this.#lastFrame = null;
 		}
 		if (changed && this.#target !== null) {
-			// A restart, serialised behind any retarget in flight: `stop` clears the target so the next
-			// `retarget` starts the screencast again under the new bound.
+			// A restart, serialised behind any retarget in flight: `stop` clears the target so the next `retarget`
+			// starts the screencast again under the new bound.
 			const restart = new Promise<void>((resolve) => {
 				this.#enqueue(async () => {
 					await this.#stop();
@@ -1391,12 +1383,7 @@ class SessionCast {
 			this.#watchTargets();
 			this.#enqueue(() => this.#retarget());
 		} else if (this.#lastFrame !== null) {
-			// A second subscriber gets the current screen at once. Chrome emits a
-			// screencast frame only when the page *paints*, and `startScreencast`
-			// is not re-issued for an existing stream — so without this, anything
-			// attaching to a settled page sees nothing at all until something
-			// happens to change it. For a viewer that is a blank canvas; for a
-			// recorder it is a video file with no frames in it.
+			// A second subscriber gets the current screen at once.
 			const frame = this.#lastFrame;
 			queueMicrotask(() => {
 				if (this.#subscribers.has(subscriber)) subscriber.onFrame(frame.data, frame.size);
@@ -1417,13 +1404,7 @@ class SessionCast {
 		};
 	}
 
-	/**
-	 * Subscribes to the session's own events.
-	 *
-	 * A live view that only ever showed what was true at connect time would be a
-	 * screenshot with extra steps: tabs open and close, the model navigates, and
-	 * a watching human has to see that happen.
-	 */
+	/** Subscribes to the session's own events. */
 	#watchSession(): void {
 		const bus = this.#options.record.session.eventBus;
 		const broadcast = (message: ServerMsg) => this.#broadcast(message);
@@ -1443,10 +1424,8 @@ class SessionCast {
 				guard((event: AgentFocusChangedEvent) => {
 					this.#enqueue(() => this.#retarget());
 					broadcast({ type: 'tabs', tabs: tabsOf(session) });
-					// SR1-A5: origin plus path, never the query or the fragment — on the
-					// title as well, which Chromium fills with the URL when a page has
-					// none. See `viewUrl` and `viewTitle`. B3.3 adds the frame list, which
-					// is why this goes through `#broadcastState` rather than `broadcast`.
+					// Origin plus path, never the query or the fragment — on the title as well, which Chromium fills
+					// with the URL when a page has none. See `viewUrl` and `viewTitle`.
 					this.#broadcastState(
 						viewUrl(event.url),
 						viewTitle(tabTitle(session, event.targetId), event.url),
@@ -1465,8 +1444,8 @@ class SessionCast {
 			bus.on(
 				NavigationCompleteEvent,
 				guard((event: NavigationCompleteEvent) => {
-					// SR1-A5: origin plus path on both fields. See `viewUrl` and `viewTitle`.
-					// B3.3: and the frame list, read live once the navigation has completed.
+					// Origin plus path on both fields (see `viewUrl` and `viewTitle`), and the frame list, read live
+					// once the navigation has completed.
 					this.#broadcastState(
 						viewUrl(event.url),
 						viewTitle(tabTitle(session, event.targetId), event.url),
@@ -1477,17 +1456,7 @@ class SessionCast {
 		);
 	}
 
-	/**
-	 * Follows Chrome's own view of the targets.
-	 *
-	 * The session's events cover what the *session* did. They do not cover what
-	 * a page did to itself: a popup opened by `window.open` fires
-	 * `TabCreatedEvent` while its URL is still empty and then navigates on its
-	 * own, and an in-page `location =` changes a tab's URL and title with no
-	 * session event at all. Both are exactly what a watching human needs to see,
-	 * so the raw CDP signal is the one to follow — coalesced, because Chrome
-	 * emits several of these per navigation.
-	 */
+	/** Follows Chrome's own view of the targets. */
 	#watchTargets(): void {
 		const session = this.#options.record.session;
 		const client = session.cdpClient;
@@ -1505,8 +1474,8 @@ class SessionCast {
 			this.#tabsTimer = null;
 			this.#enqueue(async () => {
 				const session = this.#options.record.session;
-				// Resync first: the map's titles lag the browser (E-17), and a tab
-				// listing whose titles are wrong is the one a human squints at.
+				// Resync first: the map's titles lag the browser, and a tab listing whose titles are wrong is the one a
+				// human squints at.
 				await session.sessionManager?.resyncTargets().catch(() => {});
 				this.#broadcast({ type: 'tabs', tabs: tabsOf(session) });
 			});
@@ -1528,20 +1497,7 @@ class SessionCast {
 		});
 	}
 
-	/**
-	 * Broadcasts one `state` message with the focused tab's frame list (B3.3).
-	 *
-	 * **On its own chain, not `#enqueue`'s.** The screencast queue holds retargets — a `stopScreencast`
-	 * and a `startScreencast` against a target that may be mid-navigation — and putting the address
-	 * row behind that would delay the URL a human is reading by however long the stream takes to
-	 * repoint. This chain guarantees the one thing that actually matters: that two navigations in
-	 * quick succession cannot publish their `state` messages out of order, which an unchained
-	 * fire-and-forget read would allow.
-	 *
-	 * The frame read never fails the message. `frames` is omitted when the tree cannot be read, which
-	 * the schema documents as "not known" rather than "no frames" — a URL and title with no frame list
-	 * is strictly better than no address row at all.
-	 */
+	/** Broadcasts one `state` message with the focused tab's frame list. */
 	#broadcastState(url: string, title: string): void {
 		this.#stateChain = this.#stateChain
 			.then(async () => {
@@ -1553,25 +1509,7 @@ class SessionCast {
 			});
 	}
 
-	/**
-	 * The focused tab's frame list, or `null` when it cannot be read right now.
-	 *
-	 * Live `Page.getFrameTree` reads — no DOM capture. `browser_get_frames` pays for a capture
-	 * because it reports composed bounds; an address row does not need them, and a capture on every
-	 * navigation would be a cost the live view has never paid.
-	 *
-	 * **One read is not enough, and that was measured rather than assumed.** A frame in its own
-	 * renderer process is *entirely absent* from the page session's tree: against a real OOPIF the
-	 * page tree returned the top document alone, with no child and no placeholder
-	 * (build/evidence/b3_3_oopif_frame_tree_probe.log). The frame's own target answers a tree rooted
-	 * at it, and — this is the part that makes the splice possible — CDP populates `parentId` there,
-	 * pointing at the host frame. So the list is the page tree plus every `iframe` target whose root
-	 * parents into a frame already known.
-	 *
-	 * Growing the set by rounds rather than in one pass does two jobs at once: it keeps iframe
-	 * targets belonging to *other tabs* out (their parents never join the set), and it admits an
-	 * OOPIF nested inside another OOPIF, whose parent only becomes known once the outer one is read.
-	 */
+	/** The focused tab's frame list, or `null` when it cannot be read right now. */
 	async #readFrames(): Promise<StateFrame[] | null> {
 		const session = this.#options.record.session;
 		const client = session.cdpClient;
@@ -1586,13 +1524,13 @@ class SessionCast {
 			const { frameTree } = await client.send.Page.getFrameTree({}, cdp.sessionId);
 			frames = framesOfTree(frameTree as Tree);
 		} catch {
-			// The target may have gone between the navigation and this read. Not an
-			// error a viewer needs to see: the next navigation reads it again.
+			// The target may have gone between the navigation and this read. Not an error a viewer needs to see: the
+			// next navigation reads it again.
 			return null;
 		}
 
-		// Read each out-of-process frame's own tree once, then attach the ones
-		// whose parent is in the set, repeating while the set grows.
+		// Read each out-of-process frame's own tree once, then attach the ones whose parent is in the set, repeating
+		// while the set grows.
 		const pending: Array<{ tree: Tree; parentId: string }> = [];
 		for (const [targetId, target] of manager.targets) {
 			if (target.type !== 'iframe') continue;
@@ -1603,8 +1541,8 @@ class SessionCast {
 				const parentId = tree.frame.parentId;
 				if (parentId !== undefined) pending.push({ tree, parentId });
 			} catch {
-				// A frame that detached between the target listing and this read is
-				// simply not in the list. One missing frame must not cost the others.
+				// A frame that detached between the target listing and this read is simply not in the list. One missing
+				// frame must not cost the others.
 			}
 		}
 
@@ -1652,8 +1590,8 @@ class SessionCast {
 			const h = frame.metadata?.deviceHeight ?? 0;
 			const size = { w, h, targetId: focus as string, scale: this.frameScaleFor(w, h) };
 			this.#lastFrame = { data: frame.data, size };
-			// The viewport changed (or this is the first frame): announce it with the recomputed
-			// scale, so a client that opted in never has to infer a resize from the JPEG.
+			// The viewport changed (or this is the first frame): announce it with the recomputed scale, so a client
+			// that opted in never has to infer a resize from the JPEG.
 			if (this.#lastSize === null || this.#lastSize.w !== w || this.#lastSize.h !== h) {
 				this.#lastSize = { w, h };
 				this.#broadcast({ type: 'viewport', w, h, frame_scale: size.scale });
@@ -1663,8 +1601,8 @@ class SessionCast {
 					subscriber.onFrame(frame.data, size);
 				} catch { /* one bad viewer must not stop the stream */ }
 			}
-			// Ack unconditionally, including for frames a viewer dropped: flow
-			// control belongs to CDP, not to any one viewer's bandwidth.
+			// Ack unconditionally, including for frames a viewer dropped: flow control belongs to CDP, not to any one
+			// viewer's bandwidth.
 			client.send.Page.screencastFrameAck({ sessionId: frame.sessionId }, sessionId).catch((error: unknown) => {
 				this.#options.logger.warn(`screencast ack failed: ${String(error)}`);
 			});

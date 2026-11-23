@@ -1,11 +1,10 @@
 /**
  * @module
- * `PopupsWatchdog` — automatic JavaScript-dialog handling (ARCHITECTURE.md §6.4).
+ * `PopupsWatchdog` — automatic JavaScript-dialog handling.
  *
- * > auto-handles JS dialogs (`alert`/`confirm`/`prompt`/`beforeunload`): registers
- * > `Page.javascriptDialogOpening` per new tab, records `"[type] message"` into the session's
- * > closed-popup list (surfaced in `BrowserStateSummary`), then accepts (alert/confirm/beforeunload)
- * > or dismisses (prompt) with two 0.5 s-capped attempts.
+ * It auto-handles JS dialogs (`alert`/`confirm`/`prompt`/`beforeunload`): it listens for
+ * `Page.javascriptDialogOpening`, records `"[type] message"` (surfaced in `BrowserStateSummary`),
+ * then accepts (alert/confirm/beforeunload) or dismisses (prompt) with two 0.5 s-capped attempts.
  *
  * ## Why this one fails loudly
  *
@@ -15,23 +14,19 @@
  * So: two attempts, each capped hard at {@linkcode DIALOG_HANDLE_TIMEOUT_MS}, and an
  * `logger.error` when both fail — never a silent swallow.
  *
- * ## One registration, routed by sessionId (ERRATUM(M1-watchdogs-rest-5))
+ * ## One registration, routed by sessionId
  *
- * §6.4 says "registers `Page.javascriptDialogOpening` **per new tab**", which describes the Python
- * cdp-use registry: single-slot per CDP method, so a per-target registration clobbers the previous
- * one and the design is forced. `@tykotech/cdp`'s registry is multi-listener (ARCHITECTURE.md §7.2), where
- * registering per tab would deliver N callbacks for one dialog and answer it N times. This watchdog
- * therefore keeps **one** global listener routed by `sessionId` — the same "one global handler routed
- * by sessionId" rule §7.2 makes normative for `SessionManager` — armed from the first
- * `TabCreatedEvent` (which §7.4 step 7 replays for tabs that predate the connection) and re-armed
- * when the client instance changes across a reconnect.
+ * `@tykotech/cdp`'s registry is multi-listener, so registering per tab would deliver N callbacks for
+ * one dialog and answer it N times. This watchdog therefore keeps **one** global listener routed by
+ * `sessionId` — the same "one global handler routed by sessionId" rule `SessionManager` follows —
+ * armed from the first `TabCreatedEvent` (which is replayed for tabs that predate the connection)
+ * and re-armed when the client instance changes across a reconnect.
  *
- * ## Where the message surfaces (ERRATUM(M1-watchdogs-rest-6))
+ * ## Where the message surfaces
  *
- * §6.4 says "the session's closed-popup list". `BrowserSession` has no such list; the list that
- * reaches `BrowserStateSummary.closedPopupMessages` (DATA-MODEL.md §5.3) is `DOMWatchdog`'s, fed by
- * `DialogOpenedEvent`. So this watchdog dispatches `DialogOpenedEvent` (§5.1.7) — that is the
- * surfacing path — and additionally keeps its own copy, bounded and drainable, for embedders that
+ * `BrowserSession` keeps no closed-popup list; the list that reaches
+ * `BrowserStateSummary.closedPopupMessages` is `DOMWatchdog`'s, fed by `DialogOpenedEvent`. So this
+ * watchdog dispatches `DialogOpenedEvent` — that is the surfacing path — and additionally keeps its own copy, bounded and drainable, for embedders that
  * want the raw record without a state build.
  */
 
@@ -43,7 +38,7 @@ import { withTimeout } from '../browser/reconnect.ts';
 import { BaseWatchdog } from './base.ts';
 
 // ---------------------------------------------------------------------------
-// constants (ARCHITECTURE.md §6.4 — load-bearing, DECISION-REGISTER rule §2.5)
+// constants (load-bearing: changing one needs real-browser evidence)
 // ---------------------------------------------------------------------------
 
 /** Cap on one `Page.handleJavaScriptDialog` call ("two 0.5 s-capped attempts"). */
@@ -55,8 +50,7 @@ export const DIALOG_HANDLE_ATTEMPTS = 2;
 /**
  * Bound on the retained message list.
  *
- * ERRATUM(M1-watchdogs-rest-7): §6.4 states no bound, and nothing drains this watchdog's own copy in
- * the default wiring (`DOMWatchdog` drains its own). A page that alerts in a loop would otherwise
+ * Nothing drains this watchdog's own copy in the default wiring (`DOMWatchdog` drains its own). A page that alerts in a loop would otherwise
  * grow it without limit for the lifetime of the session. Oldest entries are dropped; the messages
  * that matter to the agent already left via `DialogOpenedEvent` at the moment they were handled.
  */
@@ -66,13 +60,13 @@ export const MAX_RETAINED_POPUP_MESSAGES = 100;
 // pure helpers
 // ---------------------------------------------------------------------------
 
-/** The `"[type] message"` rendering of §6.4, shared with `BrowserStateSummary` (§5.3). */
+/** The `"[type] message"` rendering, shared with `BrowserStateSummary`. */
 export function formatPopupMessage(dialogType: DialogType, message: string): string {
 	return `[${dialogType}] ${message}`;
 }
 
 /**
- * Accept alert/confirm/beforeunload, dismiss prompt (§6.4).
+ * Accept alert/confirm/beforeunload, dismiss prompt.
  *
  * An unrecognised type accepts: an unanswered dialog blocks the CDP channel, so the failure mode of
  * guessing wrong (a form submits) is strictly cheaper than the failure mode of not answering.
@@ -81,7 +75,7 @@ export function shouldAcceptDialog(dialogType: DialogType): boolean {
 	return dialogType !== 'prompt';
 }
 
-/** Chrome's dialog kind, narrowed to the §5.1.7 union; anything unknown reads as `alert`. */
+/** Chrome's dialog kind, narrowed to the `DialogType` union; anything unknown reads as `alert`. */
 export function normalizeDialogType(raw: string): DialogType {
 	return (DIALOG_TYPES as readonly string[]).includes(raw) ? raw as DialogType : 'alert';
 }
@@ -91,8 +85,7 @@ export function normalizeDialogType(raw: string): DialogType {
 // ---------------------------------------------------------------------------
 
 /**
- * How long a dialog is held open for a caller to answer while manual handling is armed —
- * ERRATUM(E-53).
+ * How long a dialog is held open for a caller to answer while manual handling is armed.
  *
  * Bounded, and the bound is not a nicety. An unanswered JavaScript dialog blocks the **whole CDP
  * channel for that target**: every screencast frame, every state read and every other action on that
@@ -103,7 +96,7 @@ export function normalizeDialogType(raw: string): DialogType {
  */
 export const DIALOG_MANUAL_TIMEOUT_MS = 20_000;
 
-/** A dialog held open for a caller to answer — ERRATUM(E-53). */
+/** A dialog held open for a caller to answer. */
 export interface PendingDialog {
 	readonly dialogId: string;
 	readonly dialogType: DialogType;
@@ -124,11 +117,11 @@ export interface HandledDialog {
 	/** `false` when both attempts failed — the CDP channel for that target is probably wedged. */
 	readonly handled: boolean;
 	readonly attempts: number;
-	/** ERRATUM(E-53): the id this dialog was announced under; `''` on the automatic path. */
+	/** The id this dialog was announced under; `''` on the automatic path. */
 	readonly dialogId?: string;
-	/** ERRATUM(E-53): true when a manual hold expired and the automatic policy answered instead. */
+	/** True when a manual hold expired and the automatic policy answered instead. */
 	readonly autoFallback?: boolean;
-	/** ERRATUM(E-53): true when a caller answered it through {@linkcode PopupsWatchdog.answerDialog}. */
+	/** True when a caller answered it through {@linkcode PopupsWatchdog.answerDialog}. */
 	readonly answeredByCaller?: boolean;
 }
 
@@ -141,11 +134,11 @@ export class PopupsWatchdog extends BaseWatchdog {
 	readonly #pending = new Set<Promise<unknown>>();
 	#unsubscribe: (() => void) | null = null;
 	#armedClient: CdpClient | null = null;
-	/** ERRATUM(E-53). Manual handling is off unless a consumer of `dialog` events armed it. */
+	/** Manual handling is off unless a consumer of `dialog` events armed it. */
 	#manual = false;
 	#holdMs: number = DIALOG_MANUAL_TIMEOUT_MS;
 	#dialogSeq = 0;
-	/** Dialogs currently held open, by id — ERRATUM(E-53). */
+	/** Dialogs currently held open, by id. */
 	readonly #held = new Map<string, {
 		readonly info: PendingDialog;
 		readonly answer: (answer: { accept: boolean; promptText?: string } | null) => void;
@@ -175,9 +168,9 @@ export class PopupsWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Arms or disarms manual dialog handling — ERRATUM(E-53).
+	 * Arms or disarms manual dialog handling.
 	 *
-	 * Off by default, and off is byte-for-byte the pre-erratum behaviour: every dialog is answered
+	 * Off by default, and off means every dialog is answered
 	 * immediately by {@linkcode shouldAcceptDialog}'s policy and nothing is ever held. It is armed
 	 * only while something is actually listening for `dialog` events, because a hold with no listener
 	 * is a session that stops for 20 s for nobody.
@@ -198,18 +191,18 @@ export class PopupsWatchdog extends BaseWatchdog {
 		for (const [, entry] of [...this.#held]) entry.answer(null);
 	}
 
-	/** True while dialogs are held for a caller rather than answered by policy (E-53). */
+	/** True while dialogs are held for a caller rather than answered by policy. */
 	get manualHandling(): boolean {
 		return this.#manual;
 	}
 
-	/** Dialogs currently held open and awaiting an answer, oldest first (E-53). */
+	/** Dialogs currently held open and awaiting an answer, oldest first. */
 	get pendingDialogs(): readonly PendingDialog[] {
 		return [...this.#held.values()].map((entry) => entry.info);
 	}
 
 	/**
-	 * Answers one held dialog — ERRATUM(E-53), the `browser_handle_dialog` entry point.
+	 * Answers one held dialog — the `browser_handle_dialog` entry point.
 	 *
 	 * Returns `false` when no dialog is held under that id, which is the ordinary race rather than a
 	 * fault: the hold may have expired, the page may have gone, or another caller may have answered
@@ -237,8 +230,8 @@ export class PopupsWatchdog extends BaseWatchdog {
 	// -- handlers ----------------------------------------------------------------------------------
 
 	/**
-	 * Arms the listener. Idempotent per client instance, so the replayed `TabCreatedEvent`s of §7.4
-	 * step 7 and every later tab all land on the same single registration.
+	 * Arms the listener. Idempotent per client instance, so the `TabCreatedEvent`s replayed on connect
+	 * and every later tab all land on the same single registration.
 	 */
 	onTabCreatedEvent(_event: TabCreatedEvent, _context?: HandlerContext): void {
 		this.arm();
@@ -279,7 +272,7 @@ export class PopupsWatchdog extends BaseWatchdog {
 		const dialogType = normalizeDialogType(params.type);
 		const policy = shouldAcceptDialog(dialogType);
 		const targetId = sessionId === undefined ? null : this.host.sessionManager?.sessionTargets.get(sessionId) ?? null;
-		// ERRATUM(E-53). The id is minted before the announcement, because the announcement is what
+		// The id is minted before the announcement, because the announcement is what
 		// makes the dialog addressable; a consumer that receives the event and immediately answers
 		// must find the hold already registered.
 		const dialogId = this.#manual ? `d${++this.#dialogSeq}` : '';
@@ -294,7 +287,7 @@ export class PopupsWatchdog extends BaseWatchdog {
 					dialogType,
 					message: params.message,
 					url: params.url,
-					// `Page.javascriptDialogOpening` carries no frameId; §5.1.7 marks the field optional.
+					// `Page.javascriptDialogOpening` carries no frameId; the event's field is optional.
 					frameId: null,
 					dialogId,
 				}),
@@ -330,8 +323,7 @@ export class PopupsWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Registers one held dialog and returns the promise its answer (or its expiry) settles —
-	 * ERRATUM(E-53).
+	 * Registers one held dialog and returns the promise its answer (or its expiry) settles.
 	 *
 	 * The timer is cleared on every exit, so a test under `sanitizeOps` never sees a pending op, and
 	 * the map entry is removed before the promise settles so a second `answerDialog` for the same id
@@ -374,11 +366,11 @@ export class PopupsWatchdog extends BaseWatchdog {
 			// and a CDP call rejecting after its cap expired would be an unhandled rejection.
 			let settled: Promise<unknown>;
 			try {
-				// Bare `this.cdp` on purpose (ERRATUM(E-52) allowlist): this runs from Chrome's
+				// Bare `this.cdp` on purpose, not `cdpFor(context)`: this runs from Chrome's
 				// `Page.javascriptDialogOpening` listener, which has no dispatch and no context to bind — and an
 				// unanswered dialog blocks the whole CDP channel for that target, so it must not be skippable.
 				// `promptText` is only meaningful on an accepted `prompt`; Chromium ignores it otherwise.
-				// It is the caller's own text and is never recorded here or announced anywhere (SEC-08).
+				// It is the caller's own text and is never recorded here or announced anywhere.
 				settled = this.cdp.send.Page.handleJavaScriptDialog(
 					promptText === undefined ? { accept } : { accept, promptText },
 					sessionId,

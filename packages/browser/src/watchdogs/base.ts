@@ -1,12 +1,11 @@
 /**
  * @module
- * `BaseWatchdog` — the shared attach/detach contract every watchdog of ARCHITECTURE.md §6 extends.
+ * `BaseWatchdog` — the shared attach/detach contract every watchdog extends.
  *
- * Contract owners: SPECS/ARCHITECTURE.md §4.5 (`on<EventName>` auto-registration, `LISTENS_TO` /
- * `EMITS` declarations asserted at registration), §4.6/§4.7 (handlers are wrapped by the bus's
- * circuit breaker and repair hook — a watchdog never implements either itself), §6 (the 14
- * watchdogs), AGENTS.md §3 ("subscribe in `attach()`, unsubscribe in `detach()`, never hold the bus
- * across a CDP disconnect").
+ * Every `on<EventName>` method is auto-registered and `LISTENS_TO` / `EMITS` are asserted at
+ * registration; handlers are wrapped by the bus's circuit breaker and repair hook, so a watchdog never
+ * implements either itself. House rule: subscribe in `attach()`, unsubscribe in `detach()`, never
+ * hold the bus across a CDP disconnect.
  *
  * ## What a subclass gets
  *
@@ -32,8 +31,7 @@
  *   watchdog needs. `cdp`/`sessions` throw {@linkcode CdpDisconnectedError} rather than handing back
  *   `null`, so a handler that runs anyway gets a typed failure instead of a `TypeError`.
  * - **A handler reaches CDP through {@linkcode BaseWatchdog.cdpFor}, never through
- *   {@linkcode BaseWatchdog.cdp}** — ERRATUM(E-52/E-56); see `cdpFor`'s own note and
- *   `packages/core/scripts/cdp_facade_gate.ts`.
+ *   {@linkcode BaseWatchdog.cdp}**; see `cdpFor`'s own note.
  * - Optional setup/teardown hooks are named {@linkcode BaseWatchdog.afterAttach} and
  *   {@linkcode BaseWatchdog.beforeDetach} — **deliberately not** `onAttach`/`onDetach`, because
  *   `registerHandlers` treats every `on<Capital…>` method as a handler for an event of that name and
@@ -65,17 +63,17 @@ export interface WatchdogHost {
 	readonly sessionManager: SessionManager | null;
 	/** The endpoint this session is attached to, `null` before start. */
 	readonly cdpUrl: string | null;
-	/** `true` when this process owns the browser subprocess (launch mode, D-BROWSER1). */
+	/** `true` when this process owns the browser subprocess (launch mode). */
 	readonly isLocal: boolean;
 }
 
-/** Thrown for attach/detach misuse; never a bare string (AGENTS.md §3). */
+/** Thrown for attach/detach misuse; never a bare string. */
 export class WatchdogError extends BrowserError {
 	override readonly name: string = 'WatchdogError';
 }
 
 /**
- * Base class for the 14 watchdogs of ARCHITECTURE.md §6.
+ * Base class for the 14 watchdogs.
  *
  * Attach order is significant (LocalBrowserWatchdog must exist before `BrowserLaunchEvent` is
  * dispatched); ordering is the session's job, not the base class's.
@@ -124,8 +122,7 @@ export abstract class BaseWatchdog {
 	 *
 	 * Reserved for work that is not running inside a bus dispatch (`afterAttach` listeners, monitor
 	 * timers) and for the two SecurityWatchdog containment handlers that must not be cancellable.
-	 * Everything reached from a handler goes through {@linkcode BaseWatchdog.cdpFor} instead;
-	 * `packages/core/scripts/cdp_facade_gate.ts` holds that as a closed set.
+	 * Everything reached from a handler goes through {@linkcode BaseWatchdog.cdpFor} instead.
 	 */
 	protected get cdp(): CdpClient {
 		const client = this.host.cdpClient;
@@ -136,14 +133,14 @@ export abstract class BaseWatchdog {
 	}
 
 	/**
-	 * The live CDP client with `context`'s abort signal pre-bound to every command — ERRATUM(E-52).
+	 * The live CDP client with `context`'s abort signal pre-bound to every command.
 	 *
 	 * ## What this is for
 	 *
 	 * The bus gives each handler an `AbortSignal` and rejects its dispatch at `timeoutSec`, but it
-	 * cannot *stop* the handler: 53 of the 54 handlers audited never read the signal, so a handler that
-	 * blew its budget kept issuing CDP traffic against a browser the system had already given up on,
-	 * and nothing observed it. Filesystem escapes were caught by Deno's op sanitizer; CDP escapes are
+	 * cannot *stop* the handler: almost no handler reads the signal, so without this a handler that
+	 * blows its budget keeps issuing CDP traffic against a browser the system has already given up on,
+	 * and nothing observes it. Filesystem escapes are caught by Deno's op sanitizer; CDP escapes are
 	 * audited by nothing.
 	 *
 	 * A call made through this accessor after the budget blows is rejected by `@tykotech/cdp`'s
@@ -153,7 +150,7 @@ export abstract class BaseWatchdog {
 	 * ## Why a facade and not a check
 	 *
 	 * A lint rule for "this handler takes side effects" needs interprocedural analysis through several
-	 * layers of helpers, and any approximation becomes another check that cannot fire (§9.45). A
+	 * layers of helpers, and any approximation becomes another check that cannot fire. A
 	 * type-level requirement is impossible: TypeScript accepts a lower-arity function wherever a
 	 * higher-arity one is expected, so a handler may always simply omit the `context` parameter. What
 	 * *is* enforceable is a syntactic one — "no watchdog handler references bare `this.cdp`" — and this
@@ -183,8 +180,8 @@ export abstract class BaseWatchdog {
 	 * Subscribes every `on<EventName>` method to the session's bus.
 	 *
 	 * Handlers are wrapped by the bus-level {@linkcode HandlerWrapper} (the circuit breaker + repair
-	 * hook of §4.6/§4.7) — a watchdog never re-implements either. Attaching twice throws, matching the
-	 * D-BUS1 rule that duplicate registration is an error.
+	 * hook) — a watchdog never re-implements either. Attaching twice throws, matching the bus rule
+	 * that duplicate registration is an error.
 	 */
 	attach(): void {
 		if (this.#detach !== null) throw new WatchdogError(`${this.name} is already attached`);

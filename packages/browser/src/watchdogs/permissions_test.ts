@@ -1,6 +1,6 @@
 /**
- * `PermissionsWatchdog` contract (ARCHITECTURE.md §6.5; COMPLETIONS-CRITERIA.md §3.2 watchdog row 5:
- * "default grants (clipboardReadWrite, notifications) on connect; failure non-fatal").
+ * `PermissionsWatchdog` contract: default grants (clipboardReadWrite, notifications) on connect;
+ * failure is non-fatal.
  *
  * Real bus, real `CdpClient`, real CDP frames over `ChromeFixture`. The failure test is the one that
  * matters: `BrowserConnectedEvent` is awaited by `start()`, so a throwing grant handler would fail
@@ -59,7 +59,7 @@ Deno.test('permissions: LISTENS_TO is exactly BrowserConnectedEvent', async () =
 	assertEquals(h.bus.handlerCount(BrowserConnectedEvent), 1);
 });
 
-Deno.test('permissions: connect grants the §5.2 defaults browser-wide', async () => {
+Deno.test('permissions: connect grants the profile defaults browser-wide', async () => {
 	await using h = await harness();
 	await h.bus.dispatch(new BrowserConnectedEvent({ cdpUrl: h.fixture.wsUrl }));
 

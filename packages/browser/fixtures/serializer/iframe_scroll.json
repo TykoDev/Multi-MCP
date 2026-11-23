@@ -1,6 +1,6 @@
 {
 	"name": "iframe_scroll",
-	"pins": "§6.4 frame marker as the reference writes it — |scroll element[idx] with no closing bar, the literal (scroll) and no src — plus the '… (N more elements below - scroll to reveal):' hint block, ≤10 and sorted by pages",
+	"pins": "frame marker as the reference writes it — |scroll element[idx] with no closing bar, the literal (scroll) and no src — plus the '… (N more elements below - scroll to reveal):' hint block, ≤10 and sorted by pages",
 	"options": { "maxHiddenElementHints": 2 },
 	"tree": {
 		"tag": "HTML",

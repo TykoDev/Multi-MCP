@@ -1,12 +1,12 @@
 /**
- * Real Chromium: scoped SPA rendering, input reactivity, bounded actions and narrow-screen layout. Surfaces render under
- * their workspace (Sessions › Workspaces, over an in-memory sandbox); the Agents chat shows one task per conversation,
- * and the Tasks tab its run history.
+ * Real Chromium: the shipped SPA renders A2UI surfaces safely (Agents › Surfaces, over an in-memory sandbox), binds
+ * inputs, runs only registered actions on an owned task, and fits narrow screens; the Agents chat lists your tasks and
+ * shows one task per conversation.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { A2UI_CATALOG_ID } from '@tykotech/wire';
 import { startFakeSandbox } from '../support/fake_sandbox.ts';
-import { type Harness, harness, imageOf, skipUnlessBrowser } from '../support/harness.ts';
+import { type Harness, harness, skipUnlessBrowser } from '../support/harness.ts';
 
 async function evaluate<T>(h: Harness, sessionId: string, expression: string): Promise<T> {
 	const result = (await h.call('browser_evaluate', { session_id: sessionId, expression })).structuredContent as {
@@ -33,7 +33,7 @@ const HTML_DOCUMENT = '<h1 style="color:#2a9d8f">Agent report</h1>' +
 	'<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" onerror="globalThis.a2uiHtmlRan = true">';
 
 /**
- * Makes one frame's requests carry the harness bearer, the way a cookie session (B4) makes the SPA's do, and
+ * Makes one frame's requests carry the harness bearer, the way a cookie session makes the SPA's do, and
  * reloads it. A sandboxed frame is its own target (Chromium isolates it), so the headers go on that target.
  * Test plumbing only: `Network.setExtraHTTPHeaders` is outside the product's CDP surface; the product never sends it.
  */
@@ -85,8 +85,8 @@ Deno.test({
 			}; document.querySelector('button').click(); true`,
 		);
 		await wait(h, driver, 'location.hash === "#/sessions"');
-		// Surfaces live with their workspace: the suite watches them on its page.
-		await evaluate(h, driver, `location.hash = '#/workspaces/${WORKSPACE_ID}/surfaces'; true`);
+		// Surfaces render on Agents › Surfaces: the suite watches them there.
+		await evaluate(h, driver, `location.hash = '#/agents/surfaces'; true`);
 		await wait(h, driver, '!!document.querySelector(".ws-surfaces")');
 		await publish(h, { version: 'v0.9', createSurface: { surfaceId: 'ui-fixture', catalogId: A2UI_CATALOG_ID } });
 		await publish(h, {
@@ -164,10 +164,6 @@ Deno.test({
 					assertEquals(layout.overflow, false);
 					assertEquals(layout.status, true);
 					await evaluate(h, driver, `document.querySelector('main.main').scrollTop=400;true`);
-					const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-					assert(shot);
-					await Deno.mkdir('tests/.scratch', { recursive: true });
-					await Deno.writeFile(`tests/.scratch/a2ui-${width}.png`, shot.bytes);
 				}
 			},
 		);
@@ -235,7 +231,7 @@ Deno.test({
 				assertEquals(target.availableActions, []);
 			},
 		);
-		await t.step('D-111: the v0.9 basic catalog renders on the kit; a theme stays on its surface', async () => {
+		await t.step('the v0.9 basic catalog renders on the kit; a theme stays on its surface', async () => {
 			await publish(h, {
 				version: 'v0.9',
 				createSurface: {
@@ -383,17 +379,9 @@ Deno.test({
 				await h.callText('browser_set_viewport', { session_id: driver, width, height: 900 });
 				const overflow = await evaluate<boolean>(h, driver, 'document.documentElement.scrollWidth > innerWidth');
 				assertEquals(overflow, false, `no horizontal scroll at ${width} px`);
-				await evaluate(
-					h,
-					driver,
-					`document.querySelector('section[aria-label="Agent surface catalog"]').scrollIntoView(); true`,
-				);
-				const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(shot);
-				await Deno.writeFile(`tests/.scratch/a2ui-catalog-${width}.png`, shot.bytes);
 			}
 		});
-		await t.step('AC5: Html is served under the sandbox CSP and its script does not run in the frame', async () => {
+		await t.step('Html is served under the sandbox CSP and its script does not run in the frame', async () => {
 			const response = await h.fetch('/api/v1/a2ui/surfaces/catalog/html/frame');
 			assertEquals(response.status, 200);
 			assertEquals(await response.text(), HTML_DOCUMENT);
@@ -420,7 +408,7 @@ Deno.test({
 				if (frame === undefined) await new Promise((resolve) => setTimeout(resolve, 200));
 			}
 			assert(frame !== undefined, 'the Html frame is in the page, pointed at its route');
-			// The frame authenticates like the SPA that framed it: by the HttpOnly sign-in cookie (D-097). No credential is
+			// The frame authenticates like the SPA that framed it: by the HttpOnly sign-in cookie. No credential is
 			// injected here, so the document below can only have come through the cookie path.
 			// Read inside the frame with the browser's own tools (CDP evaluates regardless of the frame's sandbox).
 			let inside: { ran: boolean; heading: string; origin: string } | undefined;
@@ -438,356 +426,60 @@ Deno.test({
 			// Rendered (the heading is there), inert (neither the script nor the error handler ran), and opaque-origin.
 			assertEquals(inside, { ran: false, heading: 'Agent report', origin: 'null' });
 			assertEquals(await evaluate<unknown[]>(h, driver, 'globalThis.a2uiPosted'), [], 'nothing reached the parent');
-			await evaluate(
-				h,
-				driver,
-				`document.querySelector('section[aria-label="Agent surface catalog"] iframe').scrollIntoView(); true`,
-			);
-			const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-			assert(shot);
-			await Deno.writeFile('tests/.scratch/a2ui-html-frame.png', shot.bytes);
 		});
 		await t.step(
-			'F-01: a fresh render settles the target select and the submit without the select being touched',
+			'the composer settles on a fresh render: without a provider nothing can be sent, and it says why',
 			async () => {
 				await evaluate(
 					h,
 					driver,
-					// The rail items are icon buttons; their name is the accessible label, not text content.
 					`Array.from(document.querySelectorAll('button')).find(b=>b.getAttribute('aria-label')==='Agents').click(); true`,
 				);
 				await wait(h, driver, '!!document.getElementById("agent-prompt")');
 				assertEquals(await evaluate<string>(h, driver, 'location.hash'), '#/agents', 'a new task starts empty');
-				// This gateway has no providers file and no ACP bridge (`harness()` builds its config with no
-				// `modelProviders`, and `loadConfig` never reads `TTK_MODEL_PROVIDERS_FILE` from `env`), so the settled
-				// state is "nothing to send to", named — not the "Loading the targets…" the composer starts on, and not a
-				// select that reads as chosen while the submit says otherwise. The reachable-provider case (submit enabled
-				// on a fresh render) is proved over a stubbed providers answer in `task_composer_test.ts`.
-				await wait(
+				// This gateway has no providers file, so the settled state is "nothing to send to", named.
+				await wait(h, driver, `document.querySelector('.ag-reason').textContent !== ''`);
+				const state = await evaluate<{ disabled: boolean; reason: string; options: Array<[string, boolean]> }>(
 					h,
 					driver,
-					`document.querySelector('.ag-composer button[type=submit]').getAttribute('data-tip') !== 'Loading the targets…'`,
-				);
-				const state = await evaluate<{
-					disabled: boolean;
-					tip: string | null;
-					options: Array<{ disabled: boolean; tip: string | null; hidden: string }>;
-					retryHidden: boolean;
-					chosen: boolean;
-				}>(
-					h,
-					driver,
-					`({disabled:document.querySelector('.ag-composer button[type=submit]').disabled,tip:document.querySelector('.ag-composer button[type=submit]').getAttribute('data-tip'),options:Array.from(document.querySelectorAll('#agent-target wa-option')).map((o)=>({disabled:o.hasAttribute('disabled'),tip:o.getAttribute('data-tip'),hidden:(o.querySelector('.sr-only')||{textContent:''}).textContent})),retryHidden:document.querySelector('.ag-target-retry').hidden,chosen:!!document.getElementById('agent-target').value})`,
+					`({disabled:document.querySelector('.ag-composer button[type=submit]').disabled,reason:document.querySelector('.ag-reason').textContent,options:Array.from(document.querySelectorAll('#agent-target option')).map((o)=>[o.textContent,o.disabled])})`,
 				);
 				assertEquals(state, {
 					disabled: true,
-					tip: 'No coding agent or model provider is available',
-					options: [
-						{ disabled: true, tip: 'No ACP agent configured', hidden: ' — No ACP agent configured' },
-						// The suite's in-memory sandbox makes SlopLord a target; without a provider it cannot run.
-						{
-							disabled: true,
-							tip: 'Needs the coding sandbox and a reachable model provider',
-							hidden: ' — Needs the coding sandbox and a reachable model provider',
-						},
-					],
-					retryHidden: true,
-					chosen: false,
+					reason: 'No agent or model provider is available',
+					// The suite's in-memory sandbox makes SlopLord a target; without a provider it cannot run.
+					options: [['SlopLord (coding) — Needs the coding sandbox and a reachable model provider', true]],
 				});
 			},
 		);
-		await t.step(
-			'F4: the composer offers three kinds; Run tool with browser_navigate renders a url field and submits a tool task',
-			async () => {
-				await h.callText('browser_set_viewport', { session_id: driver, width: 1280, height: 900 });
-				const tabs = await evaluate<string[]>(
-					h,
-					driver,
-					`Array.from(document.querySelectorAll('.ag-composer .ag-kinds [role=tab]')).map((b) => b.textContent.trim())`,
-				);
-				assertEquals(tabs, ['Ask agent', 'Run tool', 'Delegate']);
-				assertEquals(
-					await evaluate<number>(h, driver, `document.querySelectorAll('.ag-composer [role=tablist]').length`),
-					1,
-				);
-				await evaluate(h, driver, `document.querySelectorAll('.ag-composer .ag-kinds [role=tab]')[1].click(); true`);
-				await wait(h, driver, `!!document.querySelector('#agent-tool wa-option[value="browser_navigate"]')`);
-				// The excluded set is never offered (D-141: a task cannot run them).
-				assertEquals(
-					await evaluate<string[]>(
-						h,
-						driver,
-						`Array.from(document.querySelectorAll('#agent-tool wa-option')).map((o) => o.getAttribute('value')).filter((v) => /^(browser_run_task|agent_run_tool|browser_live_ticket|browser_file_link|a2ui_delete)$/.test(v))`,
-					),
-					[],
-				);
-				await evaluate(
-					h,
-					driver,
-					`const s = document.getElementById('agent-tool'); s.value = 'browser_navigate'; s.dispatchEvent(new Event('change', { bubbles: true })); true`,
-				);
-				await wait(h, driver, `!!document.getElementById('task-arg-url')`);
-				await evaluate(
-					h,
-					driver,
-					`const u = document.getElementById('task-arg-url'); u.value = ${
-						JSON.stringify(h.site.page('index'))
-					}; u.dispatchEvent(new Event('input', { bubbles: true }));
-					document.querySelector('.ag-composer button[type=submit]').click(); true`,
-				);
-				// A request is a task of its own: the chat moves to it, and shows that one task with its id.
-				await wait(h, driver, `location.hash.startsWith('#/agents/chat/')`);
-				await wait(h, driver, `!!document.querySelector('.ag-turn[data-kind="tool"]')`);
-				const tasks = await h.fetch('/api/v1/agent/tasks');
-				const created = ((await tasks.json()).tasks as Array<{ id: string; metadata?: { kind?: string } }>).filter((
-					task,
-				) => task.metadata?.kind === 'tool');
-				assert(created.length >= 1, 'the tool task was accepted with metadata.kind = tool');
-				const shown = decodeURIComponent(
-					(await evaluate<string>(h, driver, 'location.hash')).slice('#/agents/chat/'.length),
-				);
-				assert(created.some((task) => task.id === shown), 'the chat shows the task it created');
-				assertEquals(await evaluate<number>(h, driver, `document.querySelectorAll('.ag-turn').length`), 1);
-				assertEquals(
-					await evaluate<string>(h, driver, `document.querySelector('.ag-task-bar .ag-task-id').textContent`),
-					shown,
-				);
-				const chat = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(chat);
-				await Deno.writeFile('tests/.scratch/agents-chat-1280.png', chat.bytes);
-				// The earlier wait-task is not in this conversation: every task keeps its own.
-				assertEquals(
-					await evaluate<boolean>(
-						h,
-						driver,
-						`document.querySelector('.ag-thread').textContent.includes('browser_wait_for')`,
-					),
-					false,
-				);
-				// Back to the first kind: the prompt is still there, with its id.
-				await evaluate(h, driver, `document.querySelectorAll('.ag-composer .ag-kinds [role=tab]')[0].click(); true`);
-				await wait(
-					h,
-					driver,
-					`!!document.getElementById('agent-prompt') && !document.getElementById('agent-prompt').closest('[hidden]')`,
-				);
-			},
-		);
-		await t.step('Tasks: the list holds every task, and a task opens its run history with the tool call', async () => {
-			const toolTask = decodeURIComponent(
-				(await evaluate<string>(h, driver, 'location.hash')).slice('#/agents/chat/'.length),
-			);
+		await t.step('the chat lists your tasks, and a task opens as its conversation', async () => {
+			const tasks = (await (await h.fetch('/api/v1/agent/tasks')).json()).tasks as Array<{ id: string }>;
+			assert(tasks.length >= 1, 'the cancelled wait task is listed');
+			const taskId = tasks[0]!.id;
+			await wait(h, driver, `document.querySelectorAll('.ag-tasks .ag-task').length === ${tasks.length}`);
 			await evaluate(
 				h,
 				driver,
-				`Array.from(document.querySelectorAll('.ag-task-bar button')).find((b) => b.textContent.trim() === 'Run history').click(); true`,
+				`document.querySelector('.ag-task[href$="${encodeURIComponent(taskId)}"]').click(); true`,
 			);
-			await wait(h, driver, `location.hash === '#/agents/tasks/' + ${JSON.stringify(encodeURIComponent(toolTask))}`);
-			await wait(h, driver, `document.querySelectorAll('.tk-timeline .tk-entry').length >= 4`);
-			const view = await evaluate<{ rows: number; selected: string | null; kinds: string[]; facts: boolean }>(
-				h,
-				driver,
-				`({
-					rows: document.querySelectorAll('.rx-tree wa-tree-item').length,
-					selected: document.querySelector('.rx-tree wa-tree-item[selected]')?.getAttribute('data-key') ?? null,
-					kinds: Array.from(document.querySelectorAll('.tk-timeline .tk-entry')).map((e) => e.className.replace('tk-entry ', '')),
-					facts: document.querySelector('.rx-viewer').textContent.includes(${JSON.stringify(toolTask)}),
-				})`,
-			);
-			assert(view.rows >= 2, `every task is listed (${view.rows})`);
-			assertEquals(view.selected, `task:${toolTask}`);
-			assertEquals(view.kinds.slice(0, 4), ['received', 'state', 'tool_call', 'tool_result']);
-			assert(view.facts, 'the overview names the task id');
-			await evaluate(
-				h,
-				driver,
-				`document.querySelector('.tk-entry.tool_call details')?.setAttribute('open', ''); true`,
-			);
-			assert(
-				await evaluate<boolean>(h, driver, `document.querySelector('.tk-entry.tool_call').textContent.includes('url')`),
-				'the tool call shows its arguments',
-			);
-			for (const width of [1280, 390]) {
-				await h.callText('browser_set_viewport', { session_id: driver, width, height: 900 });
-				const overflow = await evaluate<boolean>(h, driver, 'document.documentElement.scrollWidth > innerWidth');
-				assertEquals(overflow, false, `no horizontal scroll at ${width} px`);
-				const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(shot);
-				await Deno.writeFile(`tests/.scratch/agents-tasks-${width}.png`, shot.bytes);
-			}
-			await h.callText('browser_set_viewport', { session_id: driver, width: 1280, height: 900 });
-		});
-		await t.step('F4: the builder publishes a Status card from its template and it renders as a surface', async () => {
-			await evaluate(h, driver, `location.hash = '#/workspaces/${WORKSPACE_ID}/surfaces'; true`);
-			await wait(h, driver, '!!document.querySelector(".ws-surface")');
-			// Surfaces exist, so the one "New surface" action is in the Surfaces header, not in an empty state.
-			assertEquals(
-				await evaluate<number>(
-					h,
-					driver,
-					`Array.from(document.querySelectorAll('button')).filter((b) => b.textContent.trim() === 'New surface').length`,
-				),
-				1,
-			);
-			await evaluate(
-				h,
-				driver,
-				`Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === 'New surface').click(); true`,
-			);
-			await wait(h, driver, `document.querySelector('wa-drawer.ag-builder')?.open === true`);
-			assertEquals(
-				await evaluate<string[]>(
-					h,
-					driver,
-					`Array.from(document.querySelectorAll('.ag-builder-tabs wa-tab')).map((t) => t.textContent.trim())`,
-				),
-				['Template', 'Edit', 'Preview', 'Advanced'],
-			);
-			assertEquals(
-				await evaluate<number>(h, driver, `document.querySelectorAll('.ag-templates .ag-template').length`),
-				5,
-			);
-			assert(
-				await evaluate<boolean>(h, driver, `!!document.getElementById('a2ui-publish')`),
-				'the raw JSON textarea keeps its id',
-			);
-			await evaluate(h, driver, `document.getElementById('ag-template-status').click(); true`);
-			await wait(
-				h,
-				driver,
-				`!!document.getElementById('ag-surface-id') && document.querySelector('.ag-builder-tabs').active === 'edit'`,
-			);
-			await evaluate(
-				h,
-				driver,
-				`const id = document.getElementById('ag-surface-id'); id.value = 'built-status'; id.dispatchEvent(new Event('input', { bubbles: true })); true`,
-			);
-			// The preview is the real renderer over the current values.
-			await evaluate(h, driver, `document.querySelector('.ag-builder-tabs wa-tab[panel="preview"]').click(); true`);
-			await wait(h, driver, `!!document.querySelector('.ag-builder .ag-preview .a2ui-surface')`);
+			await wait(h, driver, `!!document.querySelector('.ag-turn[data-task="${taskId}"]')`);
+			assertEquals(await evaluate<number>(h, driver, `document.querySelectorAll('.ag-turn').length`), 1);
 			assert(
 				await evaluate<boolean>(
 					h,
 					driver,
-					`document.querySelector('.ag-builder .ag-preview .a2ui-surface').textContent.includes('Build finished')`,
+					`document.querySelector('.ag-task.active')?.getAttribute('aria-current') === 'page'`,
 				),
+				'the open task is marked in the list',
 			);
-			await evaluate(
-				h,
-				driver,
-				`Array.from(document.querySelectorAll('wa-drawer.ag-builder button')).find((b) => b.textContent.trim() === 'Publish').click(); true`,
-			);
-			await wait(
-				h,
-				driver,
-				`Array.from(document.querySelectorAll('.ws-surface')).some((s) => s.textContent.includes('built-status') && !!s.querySelector('.a2ui-surface'))`,
-			);
-			await wait(h, driver, `!document.querySelector('wa-drawer.ag-builder')`);
-			const list = await h.fetch('/api/v1/a2ui/surfaces');
-			const built = (await list.json()).surfaces.find((surface: { surfaceId: string }) =>
-				surface.surfaceId === 'built-status'
-			) as { workspaceId?: string; components: Array<{ id: string; component: string; text?: string }> } | undefined;
-			assert(built !== undefined, 'the surface was published');
-			assertEquals(built.workspaceId, WORKSPACE_ID, 'the builder creates the surface in the open workspace');
-			assertEquals(built.components.find((c) => c.id === 'title')?.text, 'Build finished');
-			assertEquals(built.components.find((c) => c.id === 'root')?.component, 'Card');
 			for (const width of [1280, 390]) {
 				await h.callText('browser_set_viewport', { session_id: driver, width, height: 900 });
 				const overflow = await evaluate<boolean>(h, driver, 'document.documentElement.scrollWidth > innerWidth');
 				assertEquals(overflow, false, `no horizontal scroll at ${width} px`);
-				const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(shot);
-				await Deno.writeFile(`tests/.scratch/workspace-surfaces-${width}.png`, shot.bytes);
 			}
-		});
-		await t.step(
-			'workspace tabs switch in place; the task icon counts the workspace’s tasks and opens them',
-			async () => {
-				// A task that touched this workspace (its tool call names it).
-				const response = await h.fetch('/a2a', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json', 'A2A-Version': '1.0' },
-					body: JSON.stringify({
-						jsonrpc: '2.0',
-						id: 'ws-task',
-						method: 'SendMessage',
-						params: {
-							message: {
-								messageId: crypto.randomUUID(),
-								role: 'ROLE_USER',
-								parts: [{ data: { tool: 'sandbox_list', arguments: { workspace_id: WORKSPACE_ID } } }],
-							},
-						},
-					}),
-				});
-				const wsTask = ((await response.json()).result.task as { id: string }).id;
-				await h.callText('browser_set_viewport', { session_id: driver, width: 1280, height: 900 });
-				// The Surfaces tab is on screen (the route named it); Files & shell is one click away, without a navigation.
-				const tabs = await evaluate<
-					{ current: string | null; filesHidden: boolean; surfacesHidden: boolean; badge: string }
-				>(
-					h,
-					driver,
-					`({ current: document.querySelector('.ws-tabs [aria-current="page"]')?.dataset.tab ?? null,
-					filesHidden: document.querySelector('.ws-view[data-view="files"]').hidden,
-					surfacesHidden: document.querySelector('.ws-view[data-view="surfaces"]').hidden,
-					badge: document.querySelector('.ws-tab-count').textContent })`,
-				);
-				assertEquals(tabs.current, 'surfaces');
-				assertEquals([tabs.filesHidden, tabs.surfacesHidden], [true, false]);
-				assert(Number(tabs.badge) >= 3, `the Surfaces tab counts the workspace's surfaces (${tabs.badge})`);
-				await evaluate(
-					h,
-					driver,
-					`globalThis.__sameScreen = true; document.querySelector('.ws-tabs [data-tab="files"]').click(); true`,
-				);
-				assertEquals(
-					await evaluate<{ hash: string; same: boolean; files: boolean }>(
-						h,
-						driver,
-						`({ hash: location.hash, same: globalThis.__sameScreen === true && !!document.querySelector('.ws-tree'),
-						files: !document.querySelector('.ws-view[data-view="files"]').hidden })`,
-					),
-					{ hash: `#/workspaces/${WORKSPACE_ID}`, same: true, files: true },
-				);
-				const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(shot);
-				await Deno.writeFile('tests/.scratch/workspace-tabs-files.png', shot.bytes);
-				// The task icon: the count of tasks that touched the workspace, and a click opens them, the newest selected.
-				await wait(
-					h,
-					driver,
-					`!document.querySelector('.ws-tasks').hidden && document.querySelector('.ws-task-count').textContent === '1'`,
-				);
-				await evaluate(h, driver, `document.querySelector('.ws-tasks').click(); true`);
-				await wait(
-					h,
-					driver,
-					`location.hash === ${JSON.stringify(`#/agents/tasks/${wsTask}?workspace=${WORKSPACE_ID}`)}`,
-				);
-				await wait(
-					h,
-					driver,
-					`document.querySelectorAll('.rx-tree wa-tree-item').length === 1 && !!document.querySelector('.tk-filter')`,
-				);
-				assertStringIncludes(
-					await evaluate<string>(h, driver, `document.querySelector('.tk-filter').textContent`),
-					'a2ui-demo',
-				);
-				const filtered = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(filtered);
-				await Deno.writeFile('tests/.scratch/agents-tasks-workspace.png', filtered.bytes);
-				// Clearing the filter shows every task again.
-				await evaluate(h, driver, `document.querySelector('.tk-filter button').click(); true`);
-				await wait(
-					h,
-					driver,
-					`!location.hash.includes('workspace=') && document.querySelectorAll('.rx-tree wa-tree-item').length > 1`,
-				);
-			},
-		);
-		await t.step("C12: System reports Chromium's sandbox and the coding sandbox as two tiles", async () => {
 			await h.callText('browser_set_viewport', { session_id: driver, width: 1280, height: 900 });
+		});
+		await t.step("System reports Chromium's sandbox and the coding sandbox as on", async () => {
 			await evaluate(
 				h,
 				driver,
@@ -797,18 +489,11 @@ Deno.test({
 			const tiles = await evaluate<Record<string, string>>(
 				h,
 				driver,
-				`Object.fromEntries(Array.from(document.querySelectorAll('.sys-cap')).map((tile) =>
-					[tile.getAttribute('data-tip').split(' · ')[0], tile.className]))`,
+				`Object.fromEntries(Array.from(document.querySelectorAll('.sys-cap')).map((tile) => [tile.dataset.name, tile.className]))`,
 			);
 			// The harness launches Chromium with its sandbox (TTK_CHROMIUM_NO_SANDBOX unset), and diagnostics say so.
 			assertEquals(tiles['Sandboxed Chromium'], 'sys-cap on');
 			assertEquals(tiles['Coding sandbox'], 'sys-cap on', 'the in-memory sandbox answers its health check');
-			for (const width of [1280, 390]) {
-				await h.callText('browser_set_viewport', { session_id: driver, width, height: 900 });
-				const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-				assert(shot);
-				await Deno.writeFile(`tests/.scratch/system-${width}.png`, shot.bytes);
-			}
 		});
 		// End UI polling before teardown, and join each browser's profile cleanup rather than
 		// spending the shared gateway shutdown budget on two concurrent Windows removals.

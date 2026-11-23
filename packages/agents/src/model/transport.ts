@@ -1,28 +1,148 @@
 /**
- * D-143 W2 (backend §2.2): the one HTTP transport under both provider clients. Every outbound provider call is a
- * `fetch` from this process (no SDK, G8), bounded the same way whichever wire format sits on top: `redirect: 'error'`
- * (the configured URL is the only one ever dialled, D-145), {@linkcode PROVIDER_CALL_TIMEOUT_MS} per call, a
- * {@linkcode PROVIDER_BODY_LIMIT} on the response, a `content-type` check before parsing, and one retry after
- * {@linkcode PROVIDER_RETRY_DELAY_MS} for 429 and 5xx only.
- *
- * A failure is a {@linkcode ModelProviderError} that carries the status class and nothing of the body: a provider's
- * 401 body may quote the key it was sent, so the body is never read into an error, a log line or a task message.
+ * The built-in model agent's provider contract and the one HTTP transport under both clients. Every provider call is
+ * a `fetch` from this process with `redirect: 'error'` (the saved `base_url` is the only host ever dialled), a
+ * per-call timeout, a capped body, a `content-type` check, and one retry for 429/5xx. A failure carries the status
+ * class and never the body: a 401 body may quote the key it was sent.
  */
-import { AgentError } from '../util.ts';
-import type { ModelBounds, ModelClientSettings, ModelProviderClient } from './types.ts';
-import { redactable, redactor } from './redact.ts';
+import { AgentError, delay, readCapped } from '../util.ts';
+
+// --- the loop–client contract ----------------------------------------------------------------------------------
+
+/** One MCP tool as the provider sees it: its name, description and JSON Schema input, nothing of its scope. */
+export interface ModelTool {
+	readonly name: string;
+	readonly description: string;
+	readonly inputSchema: Record<string, unknown>;
+}
+
+/** A tool call the model asked for, with the provider's own id so its result can be matched back. */
+export interface ToolCall {
+	readonly id: string;
+	readonly name: string;
+	readonly arguments: Record<string, unknown>;
+	/** Set when the arguments were not a JSON object: the loop answers the call with an error, never invokes it. */
+	readonly argumentsError?: string;
+}
+
+export interface ToolResultMessage {
+	readonly id: string;
+	readonly text: string;
+	readonly isError: boolean;
+}
+
+/** The transcript in a wire-neutral shape; each client maps it to its provider's own format. */
+export type ModelMessage =
+	| { readonly role: 'system'; readonly text: string }
+	| { readonly role: 'user'; readonly text: string }
+	| { readonly role: 'assistant'; readonly text: string; readonly toolCalls: ToolCall[] }
+	| { readonly role: 'tool'; readonly results: ToolResultMessage[] };
+
+/** One complete assistant turn (non-streaming): the loop acts only on a whole turn. */
+export interface ModelTurn {
+	readonly text: string;
+	readonly toolCalls: ToolCall[];
+	readonly stop: 'end' | 'tool_use' | 'length' | 'refusal' | 'other';
+	readonly usage: { readonly input: number; readonly output: number };
+}
+
+/** The per-provider loop bounds (`max_steps`, `max_output_tokens`, `token_budget`). */
+export interface ModelBounds {
+	readonly maxSteps: number;
+	readonly maxOutputTokens: number;
+	readonly tokenBudget: number;
+}
+
+/** A configured provider, ready to dial. Its settings (key included) stay inside the client. */
+export interface ModelProviderClient {
+	readonly id: string;
+	readonly kind: 'openai' | 'anthropic';
+	readonly models: readonly string[];
+	readonly defaultModel: string;
+	/** Absent (a test fake): the loop's defaults. */
+	readonly bounds?: ModelBounds;
+	/** Strips this provider's key out of text the loop emits; the key never leaves the client. */
+	readonly redact?: (text: string) => string;
+	/** The provider's model ids, for the control plane's picker. */
+	listModels?(signal: AbortSignal): Promise<string[]>;
+	complete(
+		input: {
+			readonly model: string;
+			readonly messages: ModelMessage[];
+			readonly tools: ModelTool[];
+			readonly maxOutputTokens: number;
+		},
+		signal: AbortSignal,
+	): Promise<ModelTurn>;
+}
+
+/**
+ * What a client is built from — structurally a subset of the gateway's `ModelProviderSettings`. `apiKey` goes into
+ * one request header and into the redactor, nowhere else.
+ */
+export interface ModelClientSettings {
+	readonly id: string;
+	/** Trailing slash stripped; {@linkcode providerEndpoint} resolves each call's URL from it. */
+	readonly baseUrl: string;
+	readonly models: readonly string[];
+	readonly defaultModel: string;
+	readonly apiKey: string | null;
+	/** Operator headers, already refused the credential names at parse; the key header is set after them. */
+	readonly headers?: Readonly<Record<string, string>>;
+	/** OpenAI only: which output-token parameter the wire takes; `max_tokens` by default. */
+	readonly maxTokensParam?: 'max_tokens' | 'max_completion_tokens';
+	readonly maxSteps?: number;
+	readonly maxOutputTokens?: number;
+	readonly tokenBudget?: number;
+}
+
+// --- redaction -------------------------------------------------------------------------------------------------
+
+/**
+ * The shortest secret that is redacted: splitting ordinary text on a short token would mangle output that merely
+ * contains it, and the providers-file parser warns about such a key.
+ */
+export const REDACTION_MIN_LENGTH = 16;
+export const REDACTED = '[REDACTED]';
+
+/** The secrets among `candidates` long enough to be redacted. */
+export function redactable(candidates: Iterable<string | null | undefined>): string[] {
+	return [...candidates].filter((candidate): candidate is string =>
+		typeof candidate === 'string' && candidate.length >= REDACTION_MIN_LENGTH
+	);
+}
+
+/** Replaces every occurrence of every secret with {@linkcode REDACTED}; the identity with no secrets. */
+export function redactor(secrets: readonly string[]): (text: string) => string {
+	if (secrets.length === 0) return (text: string): string => text;
+	// Longest first, so a secret that contains another is replaced whole.
+	const ordered = [...secrets].sort((a, b) => b.length - a.length);
+	return (text: string): string => {
+		let out = text;
+		for (const secret of ordered) if (out.includes(secret)) out = out.split(secret).join(REDACTED);
+		return out;
+	};
+}
+
+/** Redacts every string inside a JSON value by redacting its serialized form and parsing it back. */
+export function redactJson(value: unknown, redact: (text: string) => string): unknown {
+	const json = JSON.stringify(value);
+	if (json === undefined) return value;
+	const clean = redact(json);
+	return clean === json ? value : JSON.parse(clean);
+}
+
+// --- the transport ---------------------------------------------------------------------------------------------
 
 /** The status class or transport failure of a provider call. `malformed` covers content-type, size and shape. */
 export type ModelProviderErrorKind = '4xx' | '5xx' | 'timeout' | 'network' | 'malformed';
 
-/** Per call, the same bound a tool call has (`TOOL_CALL_BOUND_MS` in `runtime.ts`, pinned equal by test). */
+/** Per call, the same bound a tool call has (`TOOL_CALL_BOUND_MS`, pinned equal by test). */
 export const PROVIDER_CALL_TIMEOUT_MS = 120_000;
 /** Before the single retry of a 429 or 5xx answer. */
 export const PROVIDER_RETRY_DELAY_MS = 2_000;
-/** The most of a response body that is read; a provider answering more is `malformed`, never buffered. */
+/** The most of a response body that is read; more is `malformed`, never buffered. */
 export const PROVIDER_BODY_LIMIT = 4 * 1024 * 1024;
 
-/** Backend §2.1 defaults for the loop bounds a settings object leaves unset. */
 export const DEFAULT_MODEL_BOUNDS: ModelBounds = { maxSteps: 24, maxOutputTokens: 4096, tokenBudget: 400_000 };
 
 const KIND_TEXT: Record<ModelProviderErrorKind, string> = {
@@ -33,11 +153,7 @@ const KIND_TEXT: Record<ModelProviderErrorKind, string> = {
 	malformed: 'Model provider answered with an unreadable response',
 };
 
-/**
- * ERRATUM(E-120): the failure text names the HTTP status, and for the two an operator can fix in the provider's settings,
- * what to check. A status is no secret (the body still never travels); "answered 4xx" alone left a wrong `base_url`
- * (404) indistinguishable from a wrong key (401/403) or a wrong model name (400).
- */
+/** Names the HTTP status (no secret), and what to check for the two an operator can fix. */
 function failureText(kind: ModelProviderErrorKind, status: number | undefined): string {
 	if ((kind !== '4xx' && kind !== '5xx') || status === undefined) return KIND_TEXT[kind];
 	const hint = status === 404
@@ -49,15 +165,9 @@ function failureText(kind: ModelProviderErrorKind, status: number | undefined): 
 }
 
 /**
- * ERRATUM(E-120): the URL one provider call goes to — `resource` (`chat/completions`, `messages`, `embeddings`) under
- * the API's version root. Providers publish their base URL in two conventions: with the version (`https://api.openai.com/v1`,
- * `http://127.0.0.1:8000/v1`) and without it, as the SDKs take it (`https://api.minimax.io/anthropic` — the Anthropic
- * SDK appends `/v1/messages`). Appending only `/messages` and `/chat/completions` sent both of the latter to a 404.
- *
- * - `anthropic`: `/v1` is added unless the path already ends in it — the Messages API has no other version root.
- * - `openai`: `/v1` is added only to a bare origin. A path is kept as written, because OpenAI-compatible APIs version
- *   their roots freely (`/api/v1`, `/openai/v1`, `/v1beta/openai`); a bare origin is a server's root, where vLLM,
- *   llama.cpp, Ollama, LiteLLM and OpenAI itself all serve under `/v1`.
+ * The URL one provider call goes to — `resource` under the API's version root. `anthropic` adds `/v1` unless the path
+ * already ends in it (SDK-style base URLs omit it); `openai` adds `/v1` only to a bare origin, because compatible APIs
+ * version their roots freely (`/api/v1`, `/v1beta/openai`).
  */
 export function providerEndpoint(kind: 'openai' | 'anthropic', baseUrl: string, resource: string): string {
 	const root = baseUrl.replace(/\/+$/, '');
@@ -66,15 +176,11 @@ export function providerEndpoint(kind: 'openai' | 'anthropic', baseUrl: string, 
 	return `${root}${versioned ? '' : '/v1'}/${resource}`;
 }
 
-/**
- * A provider call that failed, by class only. `AgentError` so the runtime reports `message` as the task's failure
- * text; `-32603` because the fault is the backend's, not the caller's. The body is never attached.
- */
+/** A provider call that failed, by class only; `-32603` because the fault is the backend's. Never carries a body. */
 export class ModelProviderError extends AgentError {
 	constructor(
 		public readonly kind: ModelProviderErrorKind,
 		public readonly retryable: boolean,
-		/** The HTTP status for `4xx`/`5xx`, for a logger line; never a body. */
 		public readonly status?: number,
 	) {
 		super(-32603, failureText(kind, status));
@@ -82,26 +188,15 @@ export class ModelProviderError extends AgentError {
 	}
 }
 
-/** What both client factories take. `fetch` is injected by tests; the two bounds are overridable for tests only. */
+/** What both client factories take; `fetch` and the two bounds are overridden by tests only. */
 export interface ModelClientOptions {
 	readonly settings: ModelClientSettings;
 	readonly fetch?: typeof fetch;
-	/** Tests: shorten the retry wait. Production never passes it. */
 	readonly retryDelayMs?: number;
-	/** Tests: shorten the per-call bound. Production never passes it. */
 	readonly callTimeoutMs?: number;
 }
 
-/** The loop bounds from settings, defaults filled in. */
-export function boundsOf(settings: ModelClientSettings): ModelBounds {
-	return {
-		maxSteps: settings.maxSteps ?? DEFAULT_MODEL_BOUNDS.maxSteps,
-		maxOutputTokens: settings.maxOutputTokens ?? DEFAULT_MODEL_BOUNDS.maxOutputTokens,
-		tokenBudget: settings.tokenBudget ?? DEFAULT_MODEL_BOUNDS.tokenBudget,
-	};
-}
-
-/** Operator headers lower-cased, then the fixed ones, then the credential header — so nothing can displace the key. */
+/** Operator headers lower-cased, then the fixed ones, then the credential header — nothing can displace the key. */
 export function requestHeaders(
 	settings: ModelClientSettings,
 	credential: Record<string, string>,
@@ -113,12 +208,12 @@ export function requestHeaders(
 	return { ...headers, ...credential };
 }
 
-/** D-158: `headers` for a GET, which carries no body to describe. */
+/** `headers` for a GET, which carries no body to describe. */
 export function withoutContentType(headers: Record<string, string>): Record<string, string> {
 	return Object.fromEntries(Object.entries(headers).filter(([name]) => name !== 'content-type'));
 }
 
-/** The fields every client shares; each client adds `kind` and `complete`. */
+/** The fields every client shares; each client adds `kind`, `complete` and `listModels`. */
 export function clientBase(
 	settings: ModelClientSettings,
 ): Pick<ModelProviderClient, 'id' | 'models' | 'defaultModel' | 'bounds' | 'redact'> {
@@ -126,72 +221,19 @@ export function clientBase(
 		id: settings.id,
 		models: [...settings.models],
 		defaultModel: settings.defaultModel,
-		bounds: boundsOf(settings),
+		bounds: {
+			maxSteps: settings.maxSteps ?? DEFAULT_MODEL_BOUNDS.maxSteps,
+			maxOutputTokens: settings.maxOutputTokens ?? DEFAULT_MODEL_BOUNDS.maxOutputTokens,
+			tokenBudget: settings.tokenBudget ?? DEFAULT_MODEL_BOUNDS.tokenBudget,
+		},
 		redact: redactor(redactable([settings.apiKey])),
 	};
 }
 
-function isRetryable(status: number): boolean {
-	return status === 429 || status >= 500;
-}
-
-/** Waits `ms`, or throws the signal's reason first: a cancel during the retry wait ends the task at once. */
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		if (signal.aborted) {
-			reject(signal.reason);
-			return;
-		}
-		const timer = setTimeout(() => {
-			signal.removeEventListener('abort', abort);
-			resolve();
-		}, ms);
-		const abort = (): void => {
-			clearTimeout(timer);
-			reject(signal.reason);
-		};
-		signal.addEventListener('abort', abort, { once: true });
-	});
-}
-
-/** Reads at most {@linkcode PROVIDER_BODY_LIMIT} bytes; one more is `malformed`, and the rest is never buffered. */
-async function readBody(response: Response): Promise<Uint8Array> {
-	const declared = Number(response.headers.get('content-length') ?? '0');
-	if (Number.isFinite(declared) && declared > PROVIDER_BODY_LIMIT) {
-		await response.body?.cancel().catch(() => {});
-		throw new ModelProviderError('malformed', false, response.status);
-	}
-	if (response.body === null) return new Uint8Array();
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			size += value.byteLength;
-			if (size > PROVIDER_BODY_LIMIT) throw new ModelProviderError('malformed', false, response.status);
-			chunks.push(value);
-		}
-	} finally {
-		await reader.cancel().catch(() => {});
-		reader.releaseLock();
-	}
-	const bytes = new Uint8Array(size);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.length;
-	}
-	return bytes;
-}
-
 /**
- * One provider call: POSTs `body` as JSON — or, with `body` `undefined`, GETs (D-158: the model list) — and returns
- * the parsed JSON object of a 2xx answer. A 429 or 5xx is retried
- * once after the delay; a 4xx, a timeout, a network fault (a refused redirect among them) and a malformed answer are
- * thrown at once. The caller's `signal` ends the call immediately with its own reason, so a cancelled task is
- * reported as cancelled and never as a provider failure.
+ * One provider call: POSTs `body` as JSON (or GETs when it is `undefined`) and returns the parsed object of a 2xx
+ * answer. A 429 or 5xx is retried once; anything else fails at once. The caller's `signal` ends the call with its own
+ * reason, so a cancelled task is reported as cancelled, never as a provider failure.
  */
 export async function providerRequest(
 	url: string,
@@ -210,28 +252,32 @@ export async function providerRequest(
 			response = await dial(url, { ...init, headers, redirect: 'error', signal: bound });
 		} catch {
 			if (signal.aborted) throw signal.reason;
-			if (bound.aborted) throw new ModelProviderError('timeout', false);
-			// A refused redirect, a closed port, a TLS fault: all `TypeError`s from fetch, none carrying a body.
-			throw new ModelProviderError('network', false);
+			// A refused redirect, a closed port, a TLS fault: none carries a body.
+			throw new ModelProviderError(bound.aborted ? 'timeout' : 'network', false);
 		}
+		const malformed = new ModelProviderError('malformed', false, response.status);
 		if (!response.ok) {
-			// The body of an error answer is never read: a 401 body may quote the credential it was sent.
 			await response.body?.cancel().catch(() => {});
-			const retryable = isRetryable(response.status);
+			const retryable = response.status === 429 || response.status >= 500;
 			if (retryable && attempt === 0) {
 				await delay(options.retryDelayMs ?? PROVIDER_RETRY_DELAY_MS, signal);
 				continue;
 			}
 			throw new ModelProviderError(response.status >= 500 ? '5xx' : '4xx', retryable, response.status);
 		}
-		const type = response.headers.get('content-type') ?? '';
-		if (!/^application\/json\b/i.test(type.trim())) {
+		const declared = Number(response.headers.get('content-length') ?? '0');
+		if (
+			!/^application\/json\b/i.test((response.headers.get('content-type') ?? '').trim()) ||
+			(Number.isFinite(declared) && declared > PROVIDER_BODY_LIMIT)
+		) {
 			await response.body?.cancel().catch(() => {});
-			throw new ModelProviderError('malformed', false, response.status);
+			throw malformed;
 		}
 		let bytes: Uint8Array;
 		try {
-			bytes = await readBody(response);
+			bytes = response.body === null ? new Uint8Array() : await readCapped(response.body, PROVIDER_BODY_LIMIT, () => {
+				throw malformed;
+			});
 		} catch (error) {
 			if (signal.aborted) throw signal.reason;
 			if (error instanceof ModelProviderError) throw error;
@@ -241,32 +287,30 @@ export async function providerRequest(
 		try {
 			parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 		} catch {
-			throw new ModelProviderError('malformed', false, response.status);
+			throw malformed;
 		}
-		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-			throw new ModelProviderError('malformed', false, response.status);
-		}
-		return parsed as Record<string, unknown>;
+		const answer = plain(parsed);
+		if (answer === undefined) throw malformed;
+		return answer;
 	}
 }
 
-/** `value` as a plain object, or `undefined`; the clients map responses defensively and answer `malformed`. */
+/** `value` as a plain object, or `undefined`. */
 export function plain(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
-/** A usage count as the provider reported it, or 0 when it reported nothing usable. */
+/** A usage count as reported, or 0 when nothing usable was. */
 export function count(value: unknown): number {
 	return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
 }
 
-/** D-158: the most model ids a provider's list may name; a longer list is cut, never refused. */
+/** The most model ids a provider's list may name; a longer list is cut, never refused. */
 export const MODEL_LIST_LIMIT = 500;
 
 /**
- * D-158: the model ids in a `GET …/models` answer — `{ data: [{ id }] }`, the shape OpenAI, every OpenAI-compatible
- * server and Anthropic share. Ids are trimmed, at most 256 characters, de-duplicated and sorted; anything else in an
- * entry is ignored. A body without a `data` array is `malformed`.
+ * The model ids in a `GET …/models` answer (`{ data: [{ id }] }`): trimmed, at most 256 characters, de-duplicated and
+ * sorted. A body without a `data` array is `malformed`.
  */
 export function modelIdsOf(body: Record<string, unknown>): string[] {
 	if (!Array.isArray(body.data)) throw new ModelProviderError('malformed', false);

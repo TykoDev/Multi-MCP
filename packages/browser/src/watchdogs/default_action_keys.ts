@@ -3,11 +3,8 @@
  * Keyboard synthesis tables — the Windows virtual-key codes, `code` values and modifier bitfield that
  * `Input.dispatchKeyEvent` needs to look like a real keyboard.
  *
- * Contract owner: SPECS/ARCHITECTURE.md §6.10 ("typing (per-char keyDown/char/keyUp **with VK codes**,
- * framework-event triggering, clear strategies, special-input direct value assignment)",
- * "sendKeys combos"); parity risk **R5** in SPECS/ROADMAP.md §"Input-synthesis fidelity" and the
- * COMPLETIONS-CRITERIA.md §4 row "Input synthesis (per-char keys, VK codes, React value-tracker
- * defeat, occlusion)".
+ * Serves per-character typing (keyDown/char/keyUp **with VK codes**) and `sendKeys` combos, where
+ * input-synthesis fidelity decides whether a real site reacts at all.
  *
  * ## Why the VK code is load-bearing
  *
@@ -254,13 +251,12 @@ export function parseKeyCombo(combo: string): KeyCombo {
 	}
 
 	const named = keySpecForName(keyToken);
-	// ERRATUM(E-51). An explicit `shift` modifier used to leave the key spec unshifted, so
-	// `shift+k` reached the page as `KeyboardEvent.key === 'k'` while a human holding Shift and
-	// pressing K produces `'K'` — a divergence between the tool path and the Live View path on
-	// exactly the field §10 says must be reproducible, and one that any handler switching on `e.key`
-	// would act on. Letters only: the shifted form of a punctuation key is layout-dependent, and it is
-	// already reachable by writing the character itself (`?` rather than `shift+/`), which is how
-	// SHIFTED_PUNCTUATION is keyed. `Shift+T` was always correct and is unchanged.
+	// An explicit `shift` modifier upper-cases a letter key: a human holding Shift and pressing K
+	// produces `KeyboardEvent.key === 'K'`, so `shift+k` must too, or the tool path and the Live View
+	// path diverge on a field that must be reproducible and that any handler switching on `e.key` acts
+	// on. Letters only: the shifted form of a punctuation key is layout-dependent, and it is already
+	// reachable by writing the character itself (`?` rather than `shift+/`), which is how
+	// SHIFTED_PUNCTUATION is keyed.
 	const shifted = (modifiers & MODIFIER_BITS.shift) !== 0 && /^[a-z]$/.test(keyToken)
 		? keyToken.toUpperCase()
 		: keyToken;

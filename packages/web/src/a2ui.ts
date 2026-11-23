@@ -1,31 +1,16 @@
 /**
- * DOM-only renderer for the A2UI catalog (D-067, D-111): no markup strings and no URL the page would fetch on its
- * own. Every value reaches the page as text, an attribute, or a media URL the shared schema has already confined.
+ * DOM-only renderer for the A2UI catalog: no markup strings and no URL the page would fetch on its own. Every value
+ * reaches the page as text, an attribute, or a media URL the shared schema has already confined. `Html` is an
+ * `<iframe sandbox>` over the gateway's own route, so an agent's document is never markup in this page; `Slider` is a
+ * native range input (the kit's binds `styleMap`, which the page CSP refuses).
  *
- * Kit mapping (design §2.5): `Image` → `<img>` (no `srcset`, no referrer); `Icon` → the sprite's `icon()`; `List`
- * → a `role=list` of children; `Tabs` → `wa-tab-group`; `Modal` → `wa-dialog` opened by its trigger; `Slider` →
- * native `<input type=range>` in kit tokens (the kit's slider binds `styleMap`, which the page CSP refuses);
- * `DateTimeInput` → `wa-input type=date|time|datetime-local`; `ChoicePicker` → `wa-select`, or native checkboxes
- * for a multiple selection; `Video`/`AudioPlayer` → native players; `Html` → an `<iframe sandbox>` over the
- * gateway's own route, so an agent's document is never markup in this page.
+ * `ttk://share/` media is read with the SPA's own credential and shown from an object URL that
+ * `releaseA2uiSurface` revokes. Those reads are bounded per surface — each path fetched once, at most
+ * {@linkcode SHARE_CONCURRENCY} at a time, within {@linkcode SHARE_BYTES_PER_SURFACE} — because ~200 `Image`
+ * components naming one 64 MiB file fit in the 256 KiB message cap.
  *
- * Media that is a `ttk://share/` path is read through the SPA's authenticated API and shown from an object URL
- * (`img-src`/`media-src` admit `blob:`); `releaseA2uiSurface` revokes those when the surface is replaced.
- *
- * D-136 (R9): the MCP Apps embed renders the same snapshot with `{ interactive: false, kit: false }`. Read-only:
- * no input writes the model, no action is sent, every control is disabled and every Button says why. Kit-free: the
- * embed is framed in a host's sandbox origin with no Web Awesome loaded and nothing of this origin reachable, so the
- * kit-only components become native elements (`Tabs` and `Modal` → `<details>`, `ChoicePicker` → `<select>`,
- * `DateTimeInput` → `<input type=date|time|datetime-local>`), `Icon` draws no glyph (the sprite URL is unreachable),
- * `Html` and the players are placeholders (no route to frame, and the embed's CSP admits no `media-src`), and share
- * media shows the unavailable placeholder because there is no credential to read it with.
- *
- * Those reads are the operator's browser downloading files an agent named, so they are bounded per rendered
- * surface (review R3-4): each distinct path is fetched once however many components show it, at most
- * {@linkcode SHARE_CONCURRENCY} at a time, and within {@linkcode SHARE_BYTES_PER_SURFACE} in total — a file that
- * would cross it shows the unavailable placeholder instead — and every read is aborted when the surface is
- * released. Without that, ~200 `Image` components over one 64 MiB share file fit in the 256 KiB message cap,
- * and every revision bump downloaded about 12 GiB again.
+ * The MCP Apps embed renders with `{ interactive: false, kit: false }`: read-only (no input, no action, every Button
+ * says why), and kit-free with native stand-ins, no glyphs, and placeholders for `Html`, players and share media.
  */
 import {
 	A2UI_CATALOG_ID,
@@ -53,33 +38,33 @@ export interface A2uiRenderOptions {
 	 */
 	readonly fetchShare?: (path: string, signal: AbortSignal) => Promise<Response>;
 	/**
-	 * D-136: `false` renders a snapshot — inputs are disabled or read-only, nothing writes the model and no action is
+	 * `false` renders a snapshot — inputs are disabled or read-only, nothing writes the model and no action is
 	 * sent, and each Button carries the reason in its tooltip. Default `true`.
 	 */
 	readonly interactive?: boolean;
 	/**
-	 * D-136: `false` uses no Web Awesome element and reaches nothing on this origin (no sprite, no `Html` route, no
+	 * `false` uses no Web Awesome element and reaches nothing on this origin (no sprite, no `Html` route, no
 	 * players): the MCP Apps embed's mode. Default `true`.
 	 */
 	readonly kit?: boolean;
 }
 
-/** D-136: the tooltip on every Button of a read-only render. */
+/** The tooltip on every Button of a read-only render. */
 export const READ_ONLY_ACTION_TIP = 'Read-only here: open the surface in the control plane to act on it';
 
-/** D-136: what a kit-free render shows where an `Html` component's document would be framed. */
+/** What a kit-free render shows where an `Html` component's document would be framed. */
 export const HTML_PLACEHOLDER_TEXT = 'This agent document is shown in the control plane, not in this embed.';
 
-/** Share files a rendered surface downloads at once (R3-4). */
+/** Share files a rendered surface downloads at once. */
 export const SHARE_CONCURRENCY = 8;
 
-/** Bytes of share media one rendered surface may download in total (R3-4); a file past it is not shown. */
+/** Bytes of share media one rendered surface may download in total; a file past it is not shown. */
 export const SHARE_BYTES_PER_SURFACE = 32 * 1024 * 1024;
 
 /** A share file that would take the surface past {@linkcode SHARE_BYTES_PER_SURFACE}. */
 class ShareBudgetError extends Error {}
 
-/** The same-origin route an `Html` component's document is served from, under its `sandbox` CSP (D-111). */
+/** The same-origin route an `Html` component's document is served from, under its `sandbox` CSP. */
 export function a2uiHtmlPath(surfaceId: string, componentId: string): string {
 	return `/api/v1/a2ui/surfaces/${encodeURIComponent(surfaceId)}/html/${encodeURIComponent(componentId)}`;
 }
@@ -102,7 +87,7 @@ interface ShareLoader {
 }
 
 /**
- * R3-4: one fetch per distinct path, at most {@linkcode SHARE_CONCURRENCY} in flight, at most
+ * One fetch per distinct path, at most {@linkcode SHARE_CONCURRENCY} in flight, at most
  * {@linkcode SHARE_BYTES_PER_SURFACE} downloaded in total, everything aborted on release.
  *
  * A declared `Content-Length` is reserved before the body is read, so a file that cannot fit is refused without
@@ -201,7 +186,7 @@ const FONTS: Readonly<Record<NonNullable<A2uiTheme['font']>, string>> = {
 };
 
 /** WCAG 2 relative luminance of a `#rrggbb` colour. */
-export function relativeLuminance(hex: string): number {
+function relativeLuminance(hex: string): number {
 	const channel = (offset: number): number => {
 		const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
 		return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
@@ -216,7 +201,7 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /**
- * RV-3: the label colour for text drawn ON `hex` — black or white, whichever contrasts more. One of the two always
+ * The label colour for text drawn ON `hex` — black or white, whichever contrasts more. One of the two always
  * reaches at least 4.58:1 (the worst case is a colour of luminance ≈ 0.18), so a Button's label stays readable on
  * any primary colour the schema admits.
  */
@@ -225,7 +210,7 @@ export function textOn(hex: string): '#000000' | '#ffffff' {
 }
 
 /**
- * RV-1: `hex` used AS text on `background` — itself when that already reaches 4.5:1, otherwise mixed toward black
+ * `hex` used AS text on `background` — itself when that already reaches 4.5:1, otherwise mixed toward black
  * (a light background) or white (a dark one) in 5 % steps until it does. The hue stays the agent's; only the
  * lightness gives way.
  */
@@ -250,12 +235,12 @@ const LIGHT_SURFACE = '#e4e5e9';
 const DARK_SURFACE = '#2f323f';
 
 /**
- * D-111: maps a theme onto custom properties of the surface root and nowhere else. Custom properties inherit
+ * Maps a theme onto custom properties of the surface root and nowhere else. Custom properties inherit
  * downward only, so the shell above the surface cannot be restyled, and every value written is one the closed
  * schema produced (a `#rrggbb`, a number of pixels, or a fixed stack) or derived from it here — never text an
  * agent chose.
  *
- * The kit's derived tokens are restated, not only its base ones (RV-1, RV-2): `--wa-form-control-activated-color`
+ * The kit's derived tokens are restated, not only its base ones: `--wa-form-control-activated-color`
  * (checkbox fill, the current option) and `--wa-panel-border-radius` (the dialog) are computed from the base
  * tokens at `:root`, and a custom property keeps the value it computed there — so overriding only the base token
  * on the surface left checkboxes and the dialog in the shell's colour and radius. The active tab label reads
@@ -276,9 +261,9 @@ function applyTheme(root: HTMLElement, theme: A2uiTheme): void {
 				'--wa-form-control-activated-color',
 			]
 		) set(token, primary);
-		// RV-3: what is drawn ON the primary — a Button's label, a checkbox's tick, the current option's text.
+		// What is drawn ON the primary — a Button's label, a checkbox's tick, the current option's text.
 		set('--wa-color-brand-on-loud', textOn(primary));
-		// RV-1: the primary as text on the surface, one ink per shell theme.
+		// The primary as text on the surface, one ink per shell theme.
 		set('--a2ui-primary-ink-light', inkOn(primary, LIGHT_SURFACE));
 		set('--a2ui-primary-ink-dark', inkOn(primary, DARK_SURFACE));
 	}
@@ -318,7 +303,7 @@ export function renderA2uiSurface(
 	const components = surface.components.map((component) => A2uiComponentSchema.parse(component));
 	validateA2uiTree(components);
 	const theme = surface.theme === undefined ? undefined : A2uiThemeSchema.parse(surface.theme);
-	// D-136: the embed's read-only, kit-free mode; both default on, so the SPA's call sites are unchanged.
+	// The embed's read-only, kit-free mode; both default on, so the SPA's call sites are unchanged.
 	const interactive = options.interactive !== false;
 	const kit = options.kit !== false;
 	const map = new Map(components.map((component) => [component.id, component]));
@@ -340,7 +325,7 @@ export function renderA2uiSurface(
 	}
 	/** Writes one bound value and refreshes every bound view; a refused write leaves the model as it was. */
 	function write(path: string, value: unknown): void {
-		// D-136: a snapshot never changes; its inputs are disabled too, this is the second line.
+		// A snapshot never changes; its inputs are disabled too, this is the second line.
 		if (!interactive) return;
 		try {
 			model = updateA2uiModel(model, path, value);
@@ -403,7 +388,7 @@ export function renderA2uiSurface(
 	function iconNode(component: Of<'Icon'>): HTMLElement {
 		const known = Object.hasOwn(ICONS, component.name);
 		const attrs = { class: known ? 'a2ui-icon' : 'a2ui-icon unknown', role: 'img', 'aria-label': component.name };
-		// D-136: no glyph without the kit's sprite, which a sandboxed embed cannot reach; the name stays accessible.
+		// No glyph without the kit's sprite, which a sandboxed embed cannot reach; the name stays accessible.
 		return kit ? el('span', attrs, [icon(known ? component.name as IconName : 'help')]) : el('span', attrs);
 	}
 	function list(component: Of<'List'>): HTMLElement {
@@ -415,7 +400,7 @@ export function renderA2uiSurface(
 	}
 	function tabs(component: Of<'Tabs'>): HTMLElement {
 		if (!kit) {
-			// D-136: every panel as a native disclosure under its title, the first one open.
+			// Every panel as a native disclosure under its title, the first one open.
 			return el(
 				'div',
 				{ class: 'a2ui-tabs native' },
@@ -444,7 +429,7 @@ export function renderA2uiSurface(
 	function modal(component: Of<'Modal'>): HTMLElement {
 		const trigger = map.get(component.trigger);
 		if (!kit) {
-			// D-136: the dialog's content as a native disclosure whose summary is the trigger; opening it changes no model.
+			// The dialog's content as a native disclosure whose summary is the trigger; opening it changes no model.
 			const summary = el('summary', { class: 'a2ui-modal-trigger' });
 			if (trigger?.component === 'Button') {
 				bind(() => {
@@ -483,7 +468,7 @@ export function renderA2uiSurface(
 			button.textContent = text(component.text);
 		});
 		if (!interactive) {
-			// D-136: a snapshot sends nothing; the button stays to show the surface as the agent drew it.
+			// A snapshot sends nothing; the button stays to show the surface as the agent drew it.
 			button.disabled = true;
 			button.title = READ_ONLY_ACTION_TIP;
 			return button;
@@ -531,7 +516,7 @@ export function renderA2uiSurface(
 			else if (document.activeElement !== input) input.value = text(component.value);
 		});
 		if (!interactive) {
-			// D-136: a text field stays selectable (read-only); a checkbox has no read-only state, so it is disabled.
+			// A text field stays selectable (read-only); a checkbox has no read-only state, so it is disabled.
 			if (component.component === 'CheckBox') input.disabled = true;
 			else input.readOnly = true;
 		} else {
@@ -574,7 +559,7 @@ export function renderA2uiSurface(
 	function dateTime(component: Of<'DateTimeInput'>): HTMLElement {
 		const type = component.enableTime === true ? component.enableDate === true ? 'datetime-local' : 'time' : 'date';
 		if (!kit) {
-			// D-136: the native control of the same type, with a real label.
+			// The native control of the same type, with a real label.
 			const inputId = fieldId(component);
 			const native = el('input', {
 				id: inputId,
@@ -650,7 +635,7 @@ export function renderA2uiSurface(
 			]);
 		}
 		if (!kit) {
-			// D-136: a native select over the same indices, so no agent value has to survive as an attribute either.
+			// A native select over the same indices, so no agent value has to survive as an attribute either.
 			const selectId = fieldId(component);
 			const options = component.options.map((_option, index) => el('option', { value: String(index) }));
 			const select = el('select', { id: selectId, class: 'a2ui-input a2ui-select' }, [
@@ -698,7 +683,7 @@ export function renderA2uiSurface(
 		return el('div', { class: 'a2ui-field choice' }, [select]);
 	}
 	function image(component: Of<'Image'>): HTMLElement {
-		// RV-6: kit-free, a share file has no credential to be read with, so there is no picture to leave blank — the
+		// Kit-free, a share file has no credential to be read with, so there is no picture to leave blank — the
 		// note says where it is shown, with its description inside. Inline data still shows here.
 		if (!kit && parseA2uiMediaUrl(component.url, 'image').kind !== 'data') {
 			return mediaNote('Image', component.description);
@@ -716,9 +701,9 @@ export function renderA2uiSurface(
 		return node;
 	}
 	/**
-	 * D-136: a kit-free render's player is a note, not a player: the embed's CSP admits images only
+	 * A kit-free render's player is a note, not a player: the embed's CSP admits images only
 	 * (`img-src data: blob:`), so a native player would show controls that can never play anything. A share image is
-	 * a note too (RV-6). A description sits inside its own note, first, so it can never read as the caption of
+	 * a note too. A description sits inside its own note, first, so it can never read as the caption of
 	 * whatever follows.
 	 */
 	function mediaNote(kind: 'Image' | 'Video' | 'Audio', description?: unknown): HTMLElement {
@@ -759,7 +744,7 @@ export function renderA2uiSurface(
 	}
 	function frame(component: Of<'Html'>): HTMLElement {
 		if (!kit) {
-			// D-136: the route that serves the document is this origin's, which a sandboxed embed cannot frame.
+			// The route that serves the document is this origin's, which a sandboxed embed cannot frame.
 			return el('div', {
 				class: 'a2ui-html placeholder',
 				role: 'note',

@@ -13,6 +13,5 @@
 /packages/gateway/      stoffe@tykotech.eu
 /packages/mcp/          stoffe@tykotech.eu
 /Dockerfile             stoffe@tykotech.eu
-/Dockerfile.slim        stoffe@tykotech.eu
 /docker/                stoffe@tykotech.eu
 /SECURITY.md            stoffe@tykotech.eu

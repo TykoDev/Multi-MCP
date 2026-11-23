@@ -1,26 +1,22 @@
 /// <reference lib="deno.ns" />
 /**
- * The settings catalogue against its source of truth, `docs/reference/environment-variables.md` (run
- * model-providers-ui, frontend §2(a), §5): every `TTK_*` the page's tables document appears in the catalogue exactly
- * once, nothing test-only or credential-bearing does, and the readers, reach rules and the schema the composer's
- * form is built from behave as the Configuration panel and the composer rely on.
+ * The settings catalogue against its source of truth, `docs/reference/environment-variables.md`:
+ * every `TTK_*` the page's tables document appears in the catalogue exactly
+ * once, nothing test-only or credential-bearing does, and the readers and reach rules behave as the Configuration
+ * panel relies on.
  */
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { assert, assertEquals } from '@std/assert';
 import {
 	booleanOf,
 	derivedDefault,
-	envValuesOf,
 	isLoopbackHost,
 	readingSource,
 	reportedSettings,
 	runningValue,
-	runningValues,
 	SECTION_WORDS,
 	SECTIONS,
 	settingOf,
 	SETTINGS,
-	settingsIn,
-	settingsSchema,
 	sourceOf,
 	widensReach,
 } from './config_catalog.ts';
@@ -61,18 +57,16 @@ Deno.test('config catalogue: every TTK_* the reference page documents appears ex
 	assertEquals(names.length, new Set(names).size, 'no variable is catalogued twice');
 	const catalogued = new Set(names.filter((name) => name.startsWith('TTK_')));
 	assertEquals([...expected].filter((name) => !catalogued.has(name)), [], 'documented but not catalogued');
-	// D-143: the providers file is catalogued ahead of its reference-page row (D5 adds it); nothing else is.
+	// The providers file may be catalogued without its reference-page row; nothing else may.
 	const extra = [...catalogued].filter((name) => !expected.has(name));
 	assertEquals(extra, expected.has('TTK_MODEL_PROVIDERS_FILE') ? [] : ['TTK_MODEL_PROVIDERS_FILE']);
 });
 
-Deno.test('config catalogue: OTEL_DENO is a row; headers and test-only names never are', async () => {
+Deno.test('config catalogue: no OTEL_* name is a row, and no test-only name is', async () => {
 	const documented = await documentedNames();
-	assert(settingOf('OTEL_DENO') !== undefined);
-	assertEquals(settingOf('OTEL_DENO')?.reach, 'on');
-	// `*_HEADERS` carries credentials and is never read by or granted to the process (D-137).
-	assertEquals(SETTINGS.filter((setting) => /HEADERS/.test(setting.name)), []);
-	// The test-only table names a model key variable; a composer must never offer it.
+	// OpenTelemetry export is not a feature of this server: nothing in the catalogue configures it.
+	assertEquals(SETTINGS.filter((setting) => /OTEL/.test(setting.name)), []);
+	// The test-only table names a model key variable; the catalogue must never hold it.
 	const testOnly = documented.get('Test-only variables') ?? new Set<string>();
 	assert(testOnly.has('TTK_MODEL_API_KEY'), 'the page lists TTK_MODEL_API_KEY as test-only');
 	assertEquals([...testOnly].filter((name) => settingOf(name) !== undefined), []);
@@ -83,14 +77,13 @@ Deno.test('config catalogue: sections are the reference page’s, in order, each
 	assertEquals<readonly string[]>(SECTIONS, Object.keys(SECTION_WORDS));
 	for (const section of SECTIONS) {
 		assert(SECTION_WORDS[section] !== '', section);
-		assert(settingsIn(section).length > 0, `${section} has entries`);
+		assert(SETTINGS.some((setting) => setting.section === section), `${section} has entries`);
 	}
-	// The catalogue is in section order, so panel groups and forms follow the page.
+	// The catalogue is in section order, so the panel's groups follow the page.
 	const order = SETTINGS.map((setting) => SECTIONS.indexOf(setting.section));
 	assertEquals(order, [...order].sort((a, b) => a - b));
 	for (const setting of SETTINGS) {
 		assert(setting.explain.endsWith('.'), `${setting.name}: one sentence`);
-		if (setting.kind === 'enum') assert((setting.values?.length ?? 0) > 1, `${setting.name}: enum words`);
 		if (setting.secret) assertEquals(setting.kind, 'text', `${setting.name}: an inline secret is text`);
 	}
 });
@@ -130,7 +123,6 @@ Deno.test('config catalogue: which values widen reach', () => {
 	assertEquals(widensReach(settingOf('TTK_SANDBOX_BACKEND')!, 'bwrap'), false);
 	assertEquals(widensReach(settingOf('TTK_SANDBOX_BACKEND')!, 'docker'), true);
 	assertEquals(widensReach(settingOf('TTK_MODEL_PROVIDERS_FILE')!, '/run/secrets/ttk_model_providers'), true);
-	assertEquals(widensReach(settingOf('OTEL_DENO')!, 'TRUE'), true);
 	assertEquals(widensReach(settingOf('TTK_CHROMIUM_NO_SANDBOX')!, 'yes'), true);
 	// A narrowing allowlist is not reach.
 	assertEquals(widensReach(settingOf('TTK_ALLOWED_DOMAINS')!, 'example.com'), false);
@@ -148,16 +140,13 @@ const RUNNING = {
 		publicUrl: 'http://192.168.1.14:8787',
 		allowedDomains: ['example.com'],
 		allowedDomainsScope: 'documents',
-		otelEndpoints: [],
 		allowedOrigins: [],
 		apiKeysCount: 2,
 		hasAdminUser: true,
-		oauthEnabled: false,
 		egressEnabled: false,
 		persistenceEnabled: true,
 		recordingEnabled: false,
 		sandboxEnabled: false,
-		clusterMode: 'all',
 		chromiumSandboxed: true,
 		sessionOwnership: 'owner',
 		mcpApps: 'off',
@@ -165,9 +154,10 @@ const RUNNING = {
 		confirmations: true,
 		humanHandoff: { enabled: false },
 		secretProvider: null,
-		telemetry: false,
 		sandboxClone: false,
 		modelProviders: [{ id: 'openai-main', kind: 'openai', models: 1, reachable: false }],
+		modelProvidersFile: false,
+		diskBudgetMb: 2048,
 		builtinAgent: false,
 	},
 };
@@ -186,29 +176,21 @@ Deno.test('config catalogue: running values read defensively — words, faithful
 	// Facts that only say whether a variable is in use.
 	assertEquals(read('TTK_API_KEYS_FILE'), { kind: 'reading', reading: { text: '2 keys', set: true } });
 	assertEquals(read('TTK_ADMIN_USER_FILE'), { kind: 'reading', reading: { text: 'configured', set: true } });
-	assertEquals(read('TTK_OAUTH_ISSUER'), { kind: 'reading', reading: { text: 'off', set: false } });
 	assertEquals(read('TTK_DATA_DIR'), { kind: 'reading', reading: { text: 'configured', set: true } });
 	// Inverted: the sandbox fact is on, so the variable that turns it off reads false.
 	assertEquals(read('TTK_CHROMIUM_NO_SANDBOX'), { kind: 'reading', reading: { text: 'false', value: 'false' } });
 	assertEquals(read('TTK_SESSION_OWNERSHIP'), { kind: 'reading', reading: { text: 'owner', value: 'owner' } });
 	assertEquals(read('TTK_MCP_APPS'), { kind: 'reading', reading: { text: 'off', value: 'off' } });
 	assertEquals(read('TTK_HUMAN_HANDOFF'), { kind: 'reading', reading: { text: 'false', value: 'false' } });
-	assertEquals(read('OTEL_DENO'), { kind: 'reading', reading: { text: 'false', value: 'false' } });
 	assertEquals(read('TTK_API_KEYS_REF'), { kind: 'reading', reading: { text: 'none', set: false } });
-	assertEquals(read('TTK_MODEL_PROVIDERS_FILE'), { kind: 'reading', reading: { text: '1 provider', set: true } });
+	// A provider added in the web app is in force, but no providers file is named.
+	assertEquals(read('TTK_MODEL_PROVIDERS_FILE'), { kind: 'reading', reading: { text: 'not set', set: false } });
+	assertEquals(read('TTK_DISK_BUDGET_MB'), { kind: 'reading', reading: { text: '2048 MiB', value: '2048' } });
 	// No fact maps to it; a fact the gateway omits; a fact of the wrong shape.
 	assertEquals(read('TTK_LOG_FORMAT'), { kind: 'none' });
 	assertEquals(runningValue(settingOf('TTK_HOST')!, {}, {}), { kind: 'not-reported' });
 	assertEquals(runningValue(settingOf('TTK_PORT')!, { port: 'eight' }, {}), { kind: 'not-reported' });
-	// The seed carries only faithful values.
-	const seed = runningValues(config, RUNNING);
-	assertEquals(seed.TTK_HOST, '0.0.0.0');
-	assertEquals(seed.TTK_PUBLIC_URL, 'http://192.168.1.14:8787');
-	assertEquals(seed.TTK_API_KEYS_FILE, undefined);
-	assertEquals(seed.TTK_ALLOWED_ORIGINS, undefined);
-	assertEquals(seed.TTK_ROLE, 'all');
-	assert(!('TTK_API_KEYS' in seed) && !('TTK_SECRETS' in seed), 'never an inline secret');
-	// Every reported setting names a key the fixture carries or an older gateway may omit; none is secret.
+	// Every reported setting names a key the fixture carries or a gateway may omit; none is secret.
 	for (const setting of reportedSettings()) assert(!setting.secret, setting.name);
 });
 
@@ -226,85 +208,35 @@ Deno.test('config catalogue: the source tag — set, default or derived', () => 
 	assertEquals(sourceOf(settingOf('TTK_PUBLIC_URL')!, 'http://192.168.1.14:8787', config), 'set');
 	assertEquals(sourceOf(settingOf('TTK_ALLOWED_ORIGINS')!, undefined, config), 'derived');
 	assertEquals(readingSource(settingOf('TTK_API_KEYS_FILE')!, { text: '2 keys', set: true }, config), 'set');
-	assertEquals(readingSource(settingOf('TTK_OAUTH_ISSUER')!, { text: 'off', set: false }, config), 'default');
 	assertEquals(readingSource(settingOf('TTK_ALLOWED_ORIGINS')!, { text: 'derived' }, config), undefined);
 });
 
-Deno.test('config catalogue (D-150): the default-on switches tag their deployment-shaped defaults as derived', () => {
-	const single = { clusterMode: 'all', persistenceEnabled: true };
-	const keyless = { clusterMode: 'all', persistenceEnabled: false };
-	const edge = { clusterMode: 'edge', persistenceEnabled: true };
-	const ownership = settingOf('TTK_SESSION_OWNERSHIP')!;
+Deno.test('config catalogue: the default-on switches tag their deployment-shaped defaults as derived', () => {
+	const single = { persistenceEnabled: true };
+	const keyless = { persistenceEnabled: false };
 	const apps = settingOf('TTK_MCP_APPS')!;
 	const links = settingOf('TTK_SIGNED_LINKS')!;
-	for (const setting of [ownership, apps, links]) {
+	for (const setting of [apps, links]) {
 		assertEquals(setting.derived, true, setting.name);
 		assertEquals(sourceOf(setting, undefined, single), 'derived', `${setting.name} unset`);
 	}
-	// A single node: owner, control, and links wherever a data directory holds the generated key.
-	assertEquals(derivedDefault(ownership, single), 'owner');
-	assertEquals(sourceOf(ownership, 'owner', single), 'derived');
-	assertEquals(sourceOf(ownership, 'shared', single), 'set');
+	// Control, and links wherever a data directory holds the generated key.
 	assertEquals(derivedDefault(apps, single), 'control');
 	assertEquals(sourceOf(apps, 'control', single), 'derived');
 	assertEquals(sourceOf(apps, 'watch', single), 'set');
 	assertEquals(sourceOf(links, 'true', single), 'derived');
 	assertEquals(sourceOf(links, 'false', single), 'set');
 	assertEquals(sourceOf(links, 'false', keyless), 'derived');
-	// A node whose role is not `all` is clustered: shared, off, and no generated key.
-	assertEquals(sourceOf(ownership, 'shared', edge), 'derived');
-	assertEquals(sourceOf(apps, 'off', edge), 'derived');
-	assertEquals(sourceOf(links, 'false', edge), 'derived');
-	// Facts an older gateway omits derive nothing, so a reading tags "set" rather than a guess.
-	assertEquals(derivedDefault(ownership, {}), undefined);
-	assertEquals(derivedDefault(links, { clusterMode: 'all' }), undefined);
-	// The handoff is a plain default now: on.
+	// Facts the gateway omits derive nothing, so a reading tags "set" rather than a guess.
+	assertEquals(derivedDefault(links, {}), undefined);
+	// Session ownership is a plain default: owner.
+	const ownership = settingOf('TTK_SESSION_OWNERSHIP')!;
+	assertEquals(ownership.default, 'owner');
+	assertEquals(sourceOf(ownership, 'owner', single), 'default');
+	assertEquals(sourceOf(ownership, 'shared', single), 'set');
+	// The handoff is a plain default: on.
 	const handoff = settingOf('TTK_HUMAN_HANDOFF')!;
 	assertEquals(handoff.default, 'true');
 	assertEquals(sourceOf(handoff, 'true', single), 'default');
 	assertEquals(sourceOf(handoff, 'false', single), 'set');
-});
-
-Deno.test('config catalogue: the schema a section’s form is built from', () => {
-	const auth = settingsSchema('auth', { TTK_LOGIN_TTL_S: '3600', TTK_API_KEYS_FILE: '/run/secrets/ttk_api_keys' });
-	const properties = auth.properties ?? {};
-	// Inline secrets have no field; the file path is a string whose description says what it is.
-	assertEquals('TTK_API_KEYS' in properties, false);
-	assertEquals('TTK_ADMIN_USER' in properties, false);
-	assertEquals(properties.TTK_API_KEYS_FILE?.type, 'string');
-	assertEquals(properties.TTK_API_KEYS_FILE?.default, '/run/secrets/ttk_api_keys');
-	assertStringIncludes(
-		properties.TTK_API_KEYS_FILE?.description ?? '',
-		'File-backed: its content is never shown or sent.',
-	);
-	assertEquals(properties.TTK_LOGIN_TTL_S, {
-		type: 'integer',
-		description: 'Lifetime of sign-in sessions, in seconds. Default: 604800.',
-		minimum: 60,
-		maximum: 31_536_000,
-		default: 3600,
-	});
-	const browser = settingsSchema('browser', { TTK_CHROMIUM_NO_SANDBOX: 'yes', TTK_SESSION_OWNERSHIP: 'owner' });
-	assertEquals(browser.properties?.TTK_CHROMIUM_NO_SANDBOX?.type, 'boolean');
-	assertEquals(browser.properties?.TTK_CHROMIUM_NO_SANDBOX?.default, true);
-	assertEquals(browser.properties?.TTK_SESSION_OWNERSHIP?.enum, ['shared', 'owner']);
-	assertEquals(browser.properties?.TTK_SESSION_OWNERSHIP?.default, 'owner');
-	// A seed outside the enum, or a non-integer, seeds nothing rather than something wrong.
-	assertEquals(
-		settingsSchema('browser', { TTK_SESSION_OWNERSHIP: 'everyone' }).properties?.TTK_SESSION_OWNERSHIP?.default,
-		undefined,
-	);
-	assertEquals(settingsSchema('auth', { TTK_LOGIN_TTL_S: 'soon' }).properties?.TTK_LOGIN_TTL_S?.default, undefined);
-	// Lists are comma-separated strings, as the environment carries them.
-	assertEquals(settingsSchema('network').properties?.TTK_ALLOWED_ORIGINS?.type, 'string');
-	// Every section has a form, and the form's read-back becomes environment strings.
-	for (const section of SECTIONS) assert(Object.keys(settingsSchema(section).properties ?? {}).length > 0, section);
-	assertEquals(
-		envValuesOf({ TTK_PORT: 9000, TTK_HEADLESS: false, TTK_HOST: ' ', TTK_LOG_LEVEL: 'debug', X: undefined }),
-		{
-			TTK_PORT: '9000',
-			TTK_HEADLESS: 'false',
-			TTK_LOG_LEVEL: 'debug',
-		},
-	);
 });

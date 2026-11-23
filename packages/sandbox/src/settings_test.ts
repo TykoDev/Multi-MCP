@@ -1,12 +1,12 @@
 import { assertEquals, assertThrows } from '@std/assert';
 import { DOCKER_DEFAULTS, gitSettings, grantedEnv, sandboxSettings } from './settings.ts';
 
-/** R12: what both backends hold when neither git name is set — clone off. */
+/** What both backends hold when neither git name is set — clone off. */
 const NO_GIT = { hosts: new Set<string>(), remotesFile: null };
 
 const env = (values: Record<string, string>) => (name: string): string | undefined => values[name];
 
-Deno.test('D-108 settings: the default image, granting only the token file, starts the bwrap backend', () => {
+Deno.test('settings: the default image, granting only the token file, starts the bwrap backend', () => {
 	// Deno throws for a name outside --allow-env; such a name reads as unset.
 	const granted = (name: string): string | undefined => {
 		if (name !== 'TTK_SANDBOX_TOKEN_FILE') throw new Deno.errors.NotCapable(`Requires env access to "${name}"`);
@@ -28,7 +28,7 @@ Deno.test('D-108 settings: the default image, granting only the token file, star
 	);
 });
 
-Deno.test('D-108 settings: the Docker backend, with its defaults and overrides', () => {
+Deno.test('settings: the Docker backend, with its defaults and overrides', () => {
 	assertEquals(sandboxSettings(env({ TTK_SANDBOX_TOKEN_FILE: '/t', TTK_SANDBOX_BACKEND: 'Docker' })), {
 		backend: 'docker',
 		tokenFile: '/t',
@@ -60,7 +60,7 @@ Deno.test('D-108 settings: the Docker backend, with its defaults and overrides',
 	}
 });
 
-Deno.test('D-108 settings: what the Docker backend cannot use is refused, naming the variable', () => {
+Deno.test('settings: what the Docker backend cannot use is refused, naming the variable', () => {
 	const base = { TTK_SANDBOX_TOKEN_FILE: '/t', TTK_SANDBOX_BACKEND: 'docker' };
 	for (
 		const [name, value] of [
@@ -83,7 +83,7 @@ Deno.test('D-108 settings: what the Docker backend cannot use is refused, naming
 	);
 });
 
-Deno.test('R12 settings: the git hosts are exact lower-cased names, and the remotes file is the compose secret only', () => {
+Deno.test('settings: the git hosts are exact lower-cased names, and the remotes file is the compose secret only', () => {
 	assertEquals(gitSettings(env({})), NO_GIT);
 	assertEquals(gitSettings(env({ TTK_SANDBOX_GIT_HOSTS: '  ' })), NO_GIT);
 	assertEquals(

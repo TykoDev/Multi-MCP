@@ -1,8 +1,8 @@
 /**
- * `CrashWatchdog` contract (ARCHITECTURE.md §6.11; COMPLETIONS-CRITERIA.md §3.2 watchdog row 11:
- * "defined-not-attached; focus recovery covered under SessionManager tests").
+ * `CrashWatchdog` contract: defined but not attached; focus recovery is covered by the SessionManager
+ * tests.
  *
- * The first test is the row's actual requirement — this watchdog is **not** in the default attach
+ * The first test is the core requirement — this watchdog is **not** in the default attach
  * order — pinned against the exported list rather than against a comment. The rest exercise the
  * sentinel an embedder gets when it opts in.
  */
@@ -110,10 +110,10 @@ async function harness(): Promise<Harness> {
 }
 
 // ---------------------------------------------------------------------------
-// the row's requirement
+// the core requirement
 // ---------------------------------------------------------------------------
 
-Deno.test('crash: the watchdog is defined but NOT in the default attach order (§6.11)', () => {
+Deno.test('crash: the watchdog is defined but NOT in the default attach order', () => {
 	assertEquals(WATCHDOG_ATTACH_ORDER.filter((entry) => entry.name === 'CrashWatchdog'), []);
 	assertEquals(UNATTACHED_WATCHDOGS.map((entry) => entry.name), ['CrashWatchdog']);
 	assertEquals(UNATTACHED_WATCHDOGS[0]?.watchdog, CrashWatchdog);

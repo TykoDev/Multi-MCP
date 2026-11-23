@@ -1,6 +1,5 @@
 /**
- * Environment access seam (D-CFG1: env is read through a getter at use time, never snapshotted at
- * import).
+ * Environment access seam: env is read through a getter at use time, never snapshotted at import.
  */
 
 import type { EnvSource } from './types.ts';
@@ -11,10 +10,8 @@ import type { EnvSource } from './types.ts';
  * Missing `--allow-env` for the requested variable raises `NotCapable`; a permission-less embedder
  * must degrade to "unset", not crash.
  *
- * ERRATUM(M0-bus-4): Deno's `--allow-env` needs an explicit wildcard to cover a prefix
- * (`--allow-env=TIMEOUT_*`); the bare `TIMEOUT_` form used by the root `deno.json` test tasks and by
- * OBSERVABILITY-TESTING-CICD.md §4.6 grants nothing, so no `TIMEOUT_<EventClassName>` override can
- * take effect under `deno task test` until those flags gain a `*`.
+ * Deno's `--allow-env` needs an explicit wildcard to cover a prefix (`--allow-env=TIMEOUT_*`); a
+ * bare `TIMEOUT_` grants nothing, so no `TIMEOUT_<EventClassName>` override would take effect.
  */
 export const denoEnvSource: EnvSource = (name) => {
 	try {

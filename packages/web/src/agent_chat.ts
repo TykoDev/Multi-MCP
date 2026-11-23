@@ -1,9 +1,9 @@
 /**
- * The Agents chat (D-147): how a task reads as one turn of a conversation — what was asked, what the agent answered,
+ * The Agents chat: how a task reads as one turn of a conversation — what was asked, what the agent answered,
  * what else it produced — and the safe rich-text renderer the answers are drawn with.
  *
  * A task is one turn. The request is the first message of its history; the answer is the agent's own messages in that
- * history (E-5: a text task's reply joins it), else its `agent-response` artifact, which carries the same text; any
+ * history (a text task's reply joins it), else its `agent-response` artifact, which carries the same text; any
  * other artifact (a tool's `result`, a `delegated-task`) is shown as data under the answer. The status message is a
  * progress or failure line, never the answer: a completed task writes none.
  *
@@ -13,7 +13,6 @@
  */
 import type { AgentTaskSummary } from './api.ts';
 import { el } from './dom.ts';
-import { taskKindOf } from './task_kinds.ts';
 
 /** One message part as a task carries it. */
 type Part = { readonly text?: string; readonly data?: unknown };
@@ -80,20 +79,10 @@ export function titleOf(task: ChatTask, max = 48): string {
 		? request.tool
 		: request.kind === 'text' && request.text !== ''
 		? request.text.split('\n').find((line) => line.trim() !== '')?.trim() ?? ''
-		: taskKindOf(task) === 'delegation'
+		: task.metadata?.kind === 'delegation'
 		? 'Delegation'
 		: 'Task';
 	return raw.length > max ? `${raw.slice(0, max - 1).trimEnd()}…` : raw;
-}
-
-/** The moment a turn began: its creation time when the gateway sends one, else its last update. */
-function startOf(task: ChatTask): string {
-	return task.created_at ?? task.status.timestamp;
-}
-
-/** The turns oldest first, as a conversation reads; ties by id, so the order is stable across polls. */
-export function orderTurns<T extends ChatTask>(tasks: readonly T[]): T[] {
-	return tasks.slice().sort((a, b) => startOf(a).localeCompare(startOf(b)) || a.id.localeCompare(b.id));
 }
 
 // --- rich text ------------------------------------------------------------------------------------------------------
@@ -105,7 +94,7 @@ const LINKABLE = /^https?:\/\//i;
  * Inline Markdown into nodes: `code`, **bold**, *italic* / _italic_, and [text](http…) links. One pass, left to
  * right; a marker without its partner is text. Links open in a new tab without the opener or a referrer.
  */
-export function inlineNodes(text: string): Node[] {
+function inlineNodes(text: string): Node[] {
 	const nodes: Node[] = [];
 	const pattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_|\[([^\]\n]+)\]\(([^)\s]+)\)/g;
 	let at = 0;

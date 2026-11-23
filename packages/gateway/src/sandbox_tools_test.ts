@@ -1,9 +1,6 @@
 /**
- * E-6: `sandbox_create { from_share }`, the reachable directory listing, and the new reply fields, through the
- * gateway's tools against a fake sandbox service and a real library on a scratch data directory.
- *
- * FXC-N1 (design §2.8, AC27): every sandbox tool but `sandbox_clone` (whose own table `sandbox_clone_test.ts` pins)
- * names a failure by the service's private code in fixed words, and echoes nothing the service said.
+ * `sandbox_create { from_share }`, the reachable directory listing, and the reply fields, through the gateway's tools
+ * against a fake sandbox service and a real library on a scratch data directory.
  */
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
@@ -37,7 +34,7 @@ Deno.test('sandbox tools: from_share seeds from the library and needs files:read
 		ready: () => Promise.resolve(true),
 		call: (_principal: string, operation: string, args: Record<string, unknown>) => {
 			calls.push({ operation, args });
-			// D-113: the real service's reply shapes, which the tools' typed output schemas now check.
+			// The real service's reply shapes, which the tools' typed output schemas check.
 			return Promise.resolve(
 				operation === 'create'
 					? {
@@ -120,7 +117,7 @@ Deno.test('sandbox tools: from_share seeds from the library and needs files:read
 	}
 });
 
-/** The general table of design §2.8, verbatim: private code → [HTTP status the service answers with, fixed words]. */
+/** The general sandbox failure table, verbatim: private code → [HTTP status the service answers with, fixed words]. */
 const SANDBOX_FAILURE_TEXTS: Readonly<Record<string, readonly [number, string]>> = {
 	no_workspace: [404, 'no such workspace'],
 	run_busy: [409, 'a command is already running in this workspace'],
@@ -138,7 +135,7 @@ const SANDBOX_FAILURE_TEXTS: Readonly<Record<string, readonly [number, string]>>
 	disk_full: [507, 'the sandbox disk is full'],
 };
 
-Deno.test('FXC-N1 (AC27): each sandbox tool names each service failure code in fixed words, echoing nothing', async () => {
+Deno.test('sandbox tools: each sandbox tool names each service failure code in fixed words, echoing nothing', async () => {
 	const coder = await generateApiKey('coder', ['mcp:invoke', 'sandbox:execute']);
 	const config = loadConfig({
 		TTK_HOST: '127.0.0.1',
@@ -199,7 +196,8 @@ Deno.test('FXC-N1 (AC27): each sandbox tool names each service failure code in f
 			for (const [privateCode, [status, words]] of Object.entries(SANDBOX_FAILURE_TEXTS)) {
 				failure = { status, code: privateCode };
 				const result = await call(name, args);
-				// The status-to-code mapping is unchanged: 404 → file-unavailable, anything else here → feature-unavailable.
+				// The status-to-code mapping is unchanged: 404 → file-unavailable, anything else here →
+				// feature-unavailable.
 				const code = status === 404 ? 'file-unavailable' : 'feature-unavailable';
 				assertEquals(result.isError, true, `${name} ${privateCode}`);
 				assertEquals(result.structuredContent.error.code, code, `${name} ${privateCode}`);

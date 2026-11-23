@@ -1,19 +1,14 @@
-/**
- * D-158: the per-agent settings — parsing (strict, partial onto a base), the tool switches, and how the runtime
- * applies them: the ACP switch and the A2A switches route or refuse text tasks before anything exists, an agent's
- * own default model is used when a request names none (and falls back when it went stale), and the memory and A2UI
- * switches narrow — or, for SlopLord's A2UI, extend — the tool list the provider is offered.
- */
+/** The per-agent settings: strict parsing, and how the runtime applies the A2A, model, memory and A2UI switches. */
 import { assert, assertEquals, assertThrows } from '@std/assert';
 import { AgentError } from './util.ts';
 import { AgentRuntime, type AgentTask } from './runtime.ts';
-import type { ModelProviderClient, ModelTool } from './model/types.ts';
+import type { ModelProviderClient, ModelTool } from './model/transport.ts';
 import {
-	AGENT_APPLIES,
 	type AgentSettings,
 	DEFAULT_AGENT_SETTINGS,
 	parseAgentSettings,
 	settingAllows,
+	withoutRetiredSettings,
 } from './settings.ts';
 
 const FULL = new Set(['agent:invoke', 'mcp:invoke', 'model:invoke', 'sandbox:execute', 'a2ui:publish']);
@@ -35,7 +30,7 @@ function fakeClient(id: string, models: string[], offered: string[][] = []): Mod
 	};
 }
 
-function runtimeWith(settings: AgentSettings, clients: ModelProviderClient[], bridge = false): AgentRuntime {
+function runtimeWith(settings: AgentSettings, clients: ModelProviderClient[]): AgentRuntime {
 	return new AgentRuntime({
 		invoke: () => Promise.resolve({ content: [] }),
 		model: {
@@ -44,7 +39,6 @@ function runtimeWith(settings: AgentSettings, clients: ModelProviderClient[], br
 			reachable: () => true,
 			tools: () => TOOLS,
 		},
-		...(bridge ? { bridge: { url: 'http://127.0.0.1:9/', token: 't', agent: 'a' } } : {}),
 		codingSandbox: true,
 		agents: () => settings,
 	});
@@ -74,20 +68,11 @@ function refusal(fn: () => unknown): AgentError {
 	throw new Error('expected a refusal');
 }
 
-Deno.test('D-158: the defaults are the behaviour before the settings — every switch where it was', () => {
-	assertEquals(DEFAULT_AGENT_SETTINGS.builtin, { model: null, a2a: true, acp: false, a2ui: true, memory: true });
-	assertEquals(DEFAULT_AGENT_SETTINGS.sloplord, { model: null, a2a: true, acp: false, a2ui: false, memory: true });
-	assertEquals(DEFAULT_AGENT_SETTINGS.acp.acp, true);
-	assertEquals(AGENT_APPLIES.acp.model, false);
-	assertEquals(AGENT_APPLIES.builtin.acp, false);
-});
-
-Deno.test('D-158: a settings document is parsed onto its base, strictly, naming the field and never the value', () => {
+Deno.test('a settings document is parsed onto its base, strictly, naming the field and never the value', () => {
 	const next = parseAgentSettings({ builtin: { memory: false, model: { provider: 'p', model: 'm' } } });
 	assertEquals(next.builtin, {
 		model: { provider: 'p', model: 'm' },
 		a2a: true,
-		acp: false,
 		a2ui: true,
 		memory: false,
 	});
@@ -98,7 +83,8 @@ Deno.test('D-158: a settings document is parsed onto its base, strictly, naming 
 			[{ nobody: {} }, 'field nobody'],
 			[{ builtin: { colour: 'red' } }, 'field builtin.colour'],
 			[{ builtin: { a2a: 'yes' } }, 'field builtin.a2a'],
-			[{ acp: { model: { provider: 'p' } } }, 'field acp.model'],
+			[{ acp: {} }, 'field acp'],
+			[{ builtin: { acp: true } }, 'field builtin.acp'],
 			[[], 'field agents'],
 		] as const
 	) {
@@ -108,7 +94,22 @@ Deno.test('D-158: a settings document is parsed onto its base, strictly, naming 
 	}
 });
 
-Deno.test('D-158: the memory and A2UI switches decide which tools an agent may be offered', () => {
+Deno.test('a stored document that names the ACP agent parses without its fields, keeping the rest', () => {
+	const stored = {
+		builtin: { model: { provider: 'p', model: 'm' }, a2a: false, acp: false, a2ui: true, memory: true },
+		sloplord: { model: null, a2a: true, acp: false, a2ui: true, memory: false },
+		acp: { model: null, a2a: true, acp: true, a2ui: false, memory: false },
+	};
+	assertThrows(() => parseAgentSettings(stored), AgentError, 'field builtin.acp');
+	const parsed = parseAgentSettings(withoutRetiredSettings(stored));
+	assertEquals(parsed.builtin, { model: { provider: 'p', model: 'm' }, a2a: false, a2ui: true, memory: true });
+	assertEquals(parsed.sloplord, { model: null, a2a: true, a2ui: true, memory: false });
+	assertEquals(Object.keys(parsed).sort(), ['builtin', 'sloplord']);
+	// Not an object: handed through for the parser to refuse.
+	assertEquals(withoutRetiredSettings([]), []);
+});
+
+Deno.test('the memory and A2UI switches decide which tools an agent may be offered', () => {
 	const off = { ...DEFAULT_AGENT_SETTINGS.builtin, memory: false, a2ui: false };
 	assertEquals(TOOLS.map((tool) => tool.name).filter((name) => settingAllows(off, name)), [
 		'sandbox_exec',
@@ -117,32 +118,7 @@ Deno.test('D-158: the memory and A2UI switches decide which tools an agent may b
 	assertEquals(TOOLS.filter((tool) => settingAllows(DEFAULT_AGENT_SETTINGS.builtin, tool.name)).length, TOOLS.length);
 });
 
-Deno.test('D-158: the ACP switch — off, a text task naming no provider runs on the built-in agent', async () => {
-	const settings = parseAgentSettings({ acp: { acp: false } });
-	const runtime = runtimeWith(settings, [fakeClient('p', ['m'])], true);
-	try {
-		assertEquals(runtime.routesToBridge(), false);
-		const task = runtime.submit('alice', FULL, text());
-		assertEquals([task.metadata?.backend, task.metadata?.provider], ['model', 'p']);
-		assertEquals((await finished(runtime, task.id)).status.state, 'TASK_STATE_COMPLETED');
-	} finally {
-		await runtime.close();
-	}
-});
-
-Deno.test('D-158: the ACP agent off A2A — an A2A text task goes to the built-in agent, a REST one still to the bridge', async () => {
-	const runtime = runtimeWith(parseAgentSettings({ acp: { a2a: false } }), [fakeClient('p', ['m'])], true);
-	try {
-		assertEquals([runtime.routesToBridge(), runtime.routesToBridge('a2a')], [true, false]);
-		const task = runtime.submit('alice', FULL, text(), undefined, { via: 'a2a' });
-		assertEquals(task.metadata?.backend, 'model');
-		await finished(runtime, task.id);
-	} finally {
-		await runtime.close();
-	}
-});
-
-Deno.test('D-158: the A2A switches refuse an agent switched off A2A before any task exists, and only over A2A', async () => {
+Deno.test('the A2A switches refuse an agent switched off A2A before any task exists, and only over A2A', async () => {
 	const settings = parseAgentSettings({ builtin: { a2a: false }, sloplord: { a2a: false } });
 	const runtime = runtimeWith(settings, [fakeClient('p', ['m'])]);
 	try {
@@ -159,7 +135,7 @@ Deno.test('D-158: the A2A switches refuse an agent switched off A2A before any t
 	}
 });
 
-Deno.test('D-158: an agent’s own default model is used when a request names none, and a stale one falls back', async () => {
+Deno.test('an agent’s own default model is used when a request names none, and a stale one falls back', async () => {
 	const first = fakeClient('first', ['a']);
 	const second = fakeClient('second', ['b', 'c']);
 	const chosen = parseAgentSettings({ builtin: { model: { provider: 'second', model: 'c' } } });
@@ -183,7 +159,7 @@ Deno.test('D-158: an agent’s own default model is used when a request names no
 	}
 });
 
-Deno.test('D-158: memory off narrows the built-in agent’s tools; A2UI on adds a2ui_* to SlopLord’s allowlist', async () => {
+Deno.test('memory off narrows the built-in agent’s tools; A2UI on adds a2ui_* to SlopLord’s allowlist', async () => {
 	const offered: string[][] = [];
 	const settings = parseAgentSettings({ builtin: { memory: false }, sloplord: { a2ui: true, memory: false } });
 	const runtime = runtimeWith(settings, [fakeClient('p', ['m'], offered)]);

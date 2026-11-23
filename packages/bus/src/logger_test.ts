@@ -1,5 +1,5 @@
 import { assertEquals, assertMatch } from '@std/assert';
-// Nothing browser-, bus-, or transport-shaped is faked; §4.1.5 permits spies at in-package seams.
+// Nothing browser-, bus-, or transport-shaped is faked; spies sit only at in-package seams.
 // mock-seam: console.error/warn — the logger's own output sink, a module seam inside @tykotech/bus.
 import { stub } from '@std/testing/mock';
 import { consoleBusLogger, silentBusLogger } from '../mod.ts';
@@ -7,7 +7,7 @@ import { consoleBusLogger, silentBusLogger } from '../mod.ts';
 function captureConsole(fn: () => void): { warns: string[]; errors: string[] } {
 	const warns: string[] = [];
 	const errors: string[] = [];
-	// Stubbing `console` is a module-seam stub inside this package, which OBSERVABILITY §4.1.5 allows;
+	// Stubbing `console` is a module-seam stub inside this package;
 	// nothing about the bus itself is faked here.
 	const warnStub = stub(console, 'warn', (...args: unknown[]) => warns.push(args.join(' ')));
 	const errorStub = stub(console, 'error', (...args: unknown[]) => errors.push(args.join(' ')));

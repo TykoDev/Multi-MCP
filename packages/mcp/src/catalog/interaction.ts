@@ -1,21 +1,11 @@
-/**
- * Interaction tools: the ones that put input into the page, plus the autonomous loop (R2) that
- * drives them.
- */
+/** Interaction tools: the ones that put input into the page, plus the autonomous loop that drives them. */
 import * as z from 'zod';
 import * as handlers from '../tools.ts';
 import * as agent from '../agent.ts';
 import { OUTPUT } from '../schemas.ts';
 import { def, sessionId, stateTokenArg, type ToolDefinition } from './shared.ts';
 
-/**
- * The argument shape of every pointer tool: an index, **or** a viewport point, never both and never
- * neither (B2.4).
- *
- * Declared once and reused by all four, because the refinement is the contract — a click that
- * silently preferred `index` when both were supplied would resolve half the callers' intent and
- * never say which half.
- */
+/** The argument shape of every pointer tool: an index, **or** a viewport point, never both and never neither. */
 const POINTER_INPUT = z.object({
 	index: z.number().int().nonnegative().optional().describe('Interactive element index.'),
 	coordinate_x: z.number().optional(),
@@ -29,7 +19,7 @@ const POINTER_INPUT = z.object({
 	{ message: 'provide either index, or both coordinate_x and coordinate_y' },
 );
 
-/** One end of a drag: an element index, or a viewport point. Exactly one, never both (B2.5). */
+/** One end of a drag: an element index, or a viewport point. Exactly one, never both. */
 const DRAG_ENDPOINT = z.object({
 	index: z.number().int().nonnegative().optional(),
 	x: z.number().optional(),
@@ -118,10 +108,8 @@ export const INTERACTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 			'in the key string or in the modifiers array — the two are the same press. Give an index to aim ' +
 			'the chord at one element: it takes keyboard focus first, without being clicked.',
 		inputSchema: z.object({
-			// Bounded (security review B2-SR4-5): `keys` is a sequence grammar — whitespace and commas
-			// separate combos — so one call can dispatch one keystroke per token, and the request-body
-			// cap that would otherwise bound it is G-8's known gap. 256 characters is far more than any
-			// real chord or short sequence and far less than a payload.
+			// Bounded: `keys` is a sequence grammar — whitespace and commas separate combos — so one call can
+			// dispatch one keystroke per token, and nothing else bounds the token count.
 			key: z.string().min(1).max(256).describe('Key name or chord.'),
 			modifiers: z.array(z.string()).max(4).optional().describe(
 				'Modifier names held down for the key: alt, ctrl, meta (cmd, command, super, win) and shift. ' +
@@ -284,11 +272,7 @@ export const INTERACTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		handler: handlers.browserScroll,
 	}),
 
-	// --- B2.8: filling a server-held credential -------------------------------
-	//
-	// Deliberately stricter than `browser_type`, which still accepts `<secret>` placeholders and an
-	// unpinned secret. Once `type=text` is permitted the "is this a password field" check carries no
-	// weight, so the domain pin is the only control left — which is why this surface requires one.
+	// --- filling a server-held credential -------------------------------------
 	def({
 		name: 'browser_fill_secret',
 		title: 'Fill a field with a server-held secret',
@@ -316,12 +300,7 @@ export const INTERACTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		handler: handlers.browserFillSecret,
 	}),
 
-	// --- B2.7: arbitrary in-page JavaScript, behind the explicit grant --------
-	//
-	// The description is written to D-A4's own words and the word "sandbox" is not in it. It states
-	// what evaluated code can reach, because a caller that believes it is running inside a sandbox
-	// will make a decision this server cannot honour — and `SPECS/SECURITY-AUTH.md` §1 and §8 carry
-	// the same sentence, amended in the same change (SEC-02).
+	// --- arbitrary in-page JavaScript, behind the explicit grant --------------
 	def({
 		name: 'browser_evaluate',
 		title: 'Evaluate JavaScript in the page',
@@ -359,7 +338,7 @@ export const INTERACTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		handler: handlers.browserEvaluate,
 	}),
 
-	// --- autonomous task loop (R2) -------------------------------------------
+	// --- autonomous task loop ------------------------------------------------
 	def({
 		name: 'browser_run_task',
 		title: 'Run a browser task',

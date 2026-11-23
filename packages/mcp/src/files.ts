@@ -1,68 +1,42 @@
-/**
- * Session files: the read side of the download pipeline (E-33; MCP-FILE-TOOL-PLAN.md).
- *
- * `DownloadsWatchdog` is the authoritative transfer ledger — it saw every
- * `downloadWillBegin`, validated every completed file, and owns the limits. This
- * module adds only what retrieval needs on top of it: a wire-safe view of a
- * record, a bounded read for inline delivery, a leased stream for HTTP delivery,
- * and the lifetime of the session's download directory. It never scans the
- * directory, never trusts a caller-supplied id as a path, and re-validates the
- * file at read time because "was a regular file inside the directory when it
- * completed" is not the same claim as "is one now".
- */
+/** Session files: the read side of the download pipeline. */
 import { extname, join } from '@std/path';
 import { crypto } from '@std/crypto';
 import { encodeHex } from '@std/encoding/hex';
 import {
 	DOWNLOAD_TRANSFER_DEADLINE_MS,
 	type DownloadRecord,
+	isContainedIn,
 	isDownloadRetrievable,
 	isSafeDownloadGuid,
 	MAX_DOWNLOAD_BYTES,
 	MAX_SESSION_DOWNLOAD_BYTES,
 	MAX_TRACKED_DOWNLOADS,
 } from '@tykotech/browser';
-import { isContainedIn } from '@tykotech/browser';
 import { ToolError } from './errors.ts';
 
-/**
- * Largest file returned inline as an embedded resource, in raw bytes.
- *
- * A product default, not a protocol limit: base64 adds a third, the JSON
- * envelope adds more, and a tool result is something the model reads. Anything
- * larger is fetched over HTTP, which streams.
- */
+/** Largest file returned inline as an embedded resource, in raw bytes. */
 export const INLINE_FILE_LIMIT_BYTES = 1024 * 1024;
 
 /** How long a closed session waits for open readers before it closes them and removes its files. */
 export const FILE_LEASE_GRACE_MS = 30_000;
 
-/**
- * Subdirectory of the session's download directory holding upload-staging copies (B2.5).
- *
- * Inside the session's own directory on purpose: it inherits the lifetime, the sweep and the
- * containment rule that directory already has, rather than inventing a second temporary location
- * with a second set of rules. Never listed — `browser_list_files` reads the ledger, not the disk.
- */
+/** Subdirectory of the session's download directory holding upload-staging copies. */
 export const UPLOAD_STAGE_DIR = '.upload';
 
 /** Read chunk for the HTTP stream: bounded memory whatever the file length. */
 const STREAM_CHUNK_BYTES = 64 * 1024;
 
-/**
- * Server-made files one session may hold beside its downloads (R10, D-119): a `browser_pdf {delivery: 'file'}`
- * result is one. The vendored ledger cannot see these, so they carry caps of their own.
- */
+/** Server-made files one session may hold beside its downloads: a `browser_pdf {delivery: 'file'}` result is one. */
 export const MAX_SESSION_ARTIFACTS = 32;
 
-/** Bytes one session's artifacts may hold together (R10, D-119). */
+/** Bytes one session's artifacts may hold together. */
 export const MAX_SESSION_ARTIFACT_BYTES = 128 * 1024 * 1024;
 
-/** Every artifact id starts with this, which no Chromium download guid (a UUID) can (D-119). */
+/** Every artifact id starts with this, which no Chromium download guid (a UUID) can. */
 export const ARTIFACT_ID_PREFIX = 'art-';
 
 /** What a caller hands {@linkcode SessionFiles.addArtifact}. */
-export interface ArtifactInput {
+interface ArtifactInput {
 	/** The display name; one path segment is never built from it (the file on disk is named by its id). */
 	readonly name: string;
 	readonly mimeType: string;
@@ -75,15 +49,7 @@ interface ArtifactRecord {
 	readonly mimeType: string;
 }
 
-/**
- * The lifecycle a client sees. `completed` implies `available` only when
- * validation passed.
- *
- * An array rather than a bare union so the output schema can be derived from it
- * (`packages/mcp/src/schemas.ts`) instead of restating it. A hand-copied enum in
- * the schema is a second declaration of the same contract, free to drift — and
- * it did, until the gateway's own file test caught it.
- */
+/** The lifecycle a client sees. `completed` implies `available` only when validation passed. */
 export const FILE_STATUSES = ['pending', 'completed', 'failed', 'canceled'] as const;
 export type FileStatus = (typeof FILE_STATUSES)[number];
 
@@ -104,17 +70,7 @@ export interface FileInfo {
 	started_at: string;
 	completed_at: string | null;
 	error?: string;
-	/**
-	 * SHA-256 of the file's bytes, lower-case hex, or `null` (B2.9).
-	 *
-	 * `null` means "not computed", never "empty file" — an empty file has a perfectly good digest and
-	 * gets it. The digest is started when the download completes and cached for the file's lifetime,
-	 * because a completed download's bytes do not change; `browser_list_files` awaits any that are
-	 * still in flight, so a caller that reads the listing gets a digest rather than a race.
-	 *
-	 * There is deliberately no second `bytes` field beside `size`: the validated size on disk is
-	 * already on the wire under that name, and a second spelling of one fact is how the two drift.
-	 */
+	/** SHA-256 of the file's bytes, lower-case hex, or `null`. */
 	sha256: string | null;
 }
 
@@ -125,7 +81,7 @@ export interface DownloadLedger {
 	lookup(guid: string): DownloadRecord | undefined;
 }
 
-export interface SessionFilesOptions {
+interface SessionFilesOptions {
 	/** The session's owned download directory; `null` when nothing was configured. */
 	readonly dir: string | null;
 	/** The ledger, or `null` for a session with no download watchdog (tests, remote attach). */
@@ -135,35 +91,27 @@ export interface SessionFilesOptions {
 	readonly removeDir?: (dir: string) => Promise<void>;
 	/** Deferred-cleanup cap; tests shorten it. */
 	readonly leaseGraceMs?: number;
-	/**
-	 * The artifact caps (D-119); tests shrink them so a cap is reachable without writing 128 MiB. Absent members are
-	 * {@linkcode MAX_SESSION_ARTIFACTS}, {@linkcode MAX_SESSION_ARTIFACT_BYTES} and `MAX_SESSION_DOWNLOAD_BYTES`.
-	 */
+	/** The artifact caps; tests shrink them so a cap is reachable without writing 128 MiB. */
 	readonly artifactLimits?: { readonly count?: number; readonly bytes?: number; readonly sessionBytes?: number };
 	/**
-	 * K-3: called once a server-made file has been added, so the owner can announce that the file list changed — what
-	 * a finished download already does through the registry's `files-changed` (E-33). Never throws into the caller.
+	 * Called once a server-made file has been added, so the owner can announce that the file list changed — what
+	 * a finished download already does through the registry's `files-changed`. Never throws into the caller.
 	 */
 	readonly onChange?: () => void;
 }
 
 /** A leased, streaming read of one file. Release happens on close, cancel or error. */
-export interface OpenedFile {
+interface OpenedFile {
 	readonly info: FileInfo;
 	/** The file's full size on disk, whatever slice of it the stream carries. */
 	readonly size: number;
 	readonly stream: ReadableStream<Uint8Array>;
-	/**
-	 * The slice actually served, when the caller asked for one (B2.9).
-	 *
-	 * Present only for a ranged read, so a route cannot emit `Content-Range` for a whole-file
-	 * response by forgetting to check — the shape says which kind of answer this is.
-	 */
+	/** The slice actually served, when the caller asked for one. */
 	readonly range?: { readonly start: number; readonly end: number; readonly total: number };
 }
 
 /** Everything a validated retrieval knows before bytes move. */
-export interface ResolvedFile {
+interface ResolvedFile {
 	readonly record: DownloadRecord;
 	readonly info: FileInfo;
 	/** Realpath'ed, contained, regular file. */
@@ -171,13 +119,7 @@ export interface ResolvedFile {
 	readonly size: number;
 }
 
-/**
- * Conservative MIME lookup for the display name's extension.
- *
- * Deliberately never `text/html` or `image/svg+xml`: a downloaded document is
- * served as an attachment, and a type a browser would render inline is a type
- * an attacker's export could abuse. Unknown means `application/octet-stream`.
- */
+/** Conservative MIME lookup for the display name's extension; never a type a browser renders inline (HTML, SVG). */
 export function mimeTypeFor(name: string): string {
 	const extension = extname(name).replace(/^\./, '').toLowerCase();
 	return MIME_BY_EXTENSION[extension] ?? 'application/octet-stream';
@@ -237,8 +179,7 @@ export function fileInfoOf(record: DownloadRecord, remote = false, sha256: strin
 }
 
 /**
- * The files of one session: listing, validated lookup, bounded reads, leased
- * streams, and the directory's lifetime.
+ * The files of one session: listing, validated lookup, bounded reads, leased streams, and the directory's lifetime.
  */
 export class SessionFiles {
 	readonly #dir: string | null;
@@ -248,14 +189,11 @@ export class SessionFiles {
 	readonly #leaseGraceMs: number;
 	readonly #artifactLimits: { readonly count: number; readonly bytes: number; readonly sessionBytes: number };
 	readonly #leases = new Set<Deno.FsFile>();
-	/** guid -> SHA-256 hex, computed once per file (B2.9). Dies with the session, like the files. */
+	/** guid -> SHA-256 hex, computed once per file. Dies with the session, like the files. */
 	readonly #digests = new Map<string, string>();
 	/** guid -> the in-flight hash, so two concurrent listings pay for one. */
 	readonly #digesting = new Map<string, Promise<string | null>>();
-	/**
-	 * R10 / D-119: server-made files, by id, in insertion order. Consulted before the ledger by every read path, and
-	 * never written by the vendored watchdog — which is why the accounting below exists at all (F12).
-	 */
+	/** Server-made files, by id, in insertion order. */
 	readonly #artifacts = new Map<string, ArtifactRecord>();
 	/** Bytes of artifacts on disk plus those reserved by an `addArtifact` still writing. */
 	#artifactBytes = 0;
@@ -264,7 +202,7 @@ export class SessionFiles {
 	#closed = false;
 	#removed = false;
 	#graceTimer: ReturnType<typeof setTimeout> | null = null;
-	/** K-3: the owner's "the file list changed" announcement. */
+	/** The owner's "the file list changed" announcement. */
 	readonly #onChange: () => void;
 
 	constructor(options: SessionFilesOptions) {
@@ -293,7 +231,7 @@ export class SessionFiles {
 
 	/**
 	 * Every tracked file of the session: the downloads, oldest first, pending and failed included, then the
-	 * server-made artifacts (R10, D-119) in the order they were made.
+	 * server-made artifacts in the order they were made.
 	 */
 	list(): FileInfo[] {
 		const artifacts = [...this.#artifacts.values()].map((artifact) => this.#artifactInfo(artifact));
@@ -313,24 +251,7 @@ export class SessionFiles {
 		};
 	}
 
-	/**
-	 * Stores a server-made file (a printed PDF) beside the session's downloads and returns its listing entry
-	 * (R10, design §2.7, D-119).
-	 *
-	 * **No vendored edit (F12).** The bytes are written under the session's own download directory as
-	 * `art-<uuid>` — temp file first, then a rename, so a reader never sees half a file — and recorded here, not in
-	 * `DownloadsWatchdog`. Every read path (`lookup`, `list`, `resolve`, `open`, `digest`, `readInline`) consults
-	 * this map before the ledger, so `browser_get_file`, the file route, the resource template and a signed link
-	 * serve an artifact exactly as they serve a download. The id cannot collide with a download: Chromium names
-	 * those by UUID and none starts with `art-`, which still passes `isSafeDownloadGuid`.
-	 *
-	 * **The accounting is the part the ledger cannot do.** At most {@linkcode MAX_SESSION_ARTIFACTS} artifacts and
-	 * {@linkcode MAX_SESSION_ARTIFACT_BYTES} of them, and one is admitted only while the artifacts plus the ledger's
-	 * own completed and received bytes stay within `MAX_SESSION_DOWNLOAD_BYTES` — the session cap the ledger
-	 * enforces on downloads. The ledger cannot see artifacts in turn, so a session's worst case is the download cap
-	 * plus the artifact cap, which is the stated residual. The reservation is taken synchronously, before the first
-	 * await, so two concurrent calls cannot both squeeze under one cap.
-	 */
+	/** Stores a server-made file (a printed PDF) beside the session's downloads and returns its listing entry. */
 	async addArtifact(input: ArtifactInput): Promise<FileInfo> {
 		if (this.#closed) throw new ToolError('unknown-file', 'the session is closed and its files were removed');
 		const dir = this.#dir;
@@ -404,7 +325,7 @@ export class SessionFiles {
 		this.#digests.set(id, encodeHex(new Uint8Array(hash)));
 		const artifact: ArtifactRecord = { record, mimeType: input.mimeType };
 		this.#artifacts.set(id, artifact);
-		// K-3: a new readable file is a resource-list change, exactly as a finished download is (E-33).
+		// A new readable file is a resource-list change, exactly as a finished download is.
 		try {
 			this.#onChange();
 		} catch {
@@ -435,32 +356,14 @@ export class SessionFiles {
 		}
 	}
 
-	/**
-	 * The listing with every available file's digest resolved (B2.9).
-	 *
-	 * `list()` stays synchronous and answers with whatever digests are already cached, because it is
-	 * on the click path (`browser_click` reports a download it started) and must not wait. This is the
-	 * form `browser_list_files` uses: a caller reading the listing gets a digest rather than a race
-	 * with the hash the completion hook started.
-	 */
+	/** The listing with every available file's digest resolved. */
 	async listDigested(): Promise<FileInfo[]> {
 		const files = this.list();
 		await Promise.all(files.filter((file) => file.available).map((file) => this.digest(file.file_id)));
 		return this.list();
 	}
 
-	/**
-	 * SHA-256 of one available file, computed at most once per file and cached.
-	 *
-	 * Streamed through the hasher in {@linkcode STREAM_CHUNK_BYTES} chunks, so memory is bounded
-	 * whatever the file's length — a 100 MiB download is at the per-file limit and must not become a
-	 * 100 MiB allocation. Cached for the file's lifetime because a *completed* download's bytes do not
-	 * change; the cache is keyed on the guid and dies with the session, like everything else here.
-	 *
-	 * Returns `null` rather than throwing when the file cannot be read: a digest is a convenience on a
-	 * listing, and failing the whole listing because one file vanished would be the wrong trade. The
-	 * in-flight promise is cached too, so two concurrent listings hash once.
-	 */
+	/** SHA-256 of one available file, computed at most once per file and cached. */
 	async digest(fileId: string): Promise<string | null> {
 		const cached = this.#digests.get(fileId);
 		if (cached !== undefined) return cached;
@@ -471,14 +374,7 @@ export class SessionFiles {
 		return await work;
 	}
 
-	/**
-	 * Starts a file's digest without waiting for it.
-	 *
-	 * Called when a download completes, which is the moment the bytes stop changing and the cheapest
-	 * point to pay for the hash — by the time a caller lists the session's files it is usually already
-	 * there. Failures are swallowed on purpose: a digest that could not be computed is `null` on the
-	 * listing, never a broken completion.
-	 */
+	/** Starts a file's digest without waiting for it. */
 	startDigest(fileId: string): void {
 		void this.digest(fileId).catch(() => null);
 	}
@@ -491,10 +387,8 @@ export class SessionFiles {
 			return null;
 		}
 		try {
-			// Fed as an async iterable rather than a buffer: the std digest hashes chunk by chunk, so
-			// the peak allocation is one read chunk and not the file. Each chunk is re-wrapped because
-			// the stream's element type is backed by `ArrayBufferLike` and the digest wants a plain
-			// `ArrayBuffer`; the copy is one chunk long.
+			// Fed as an async iterable rather than a buffer: the std digest hashes chunk by chunk, so the peak
+			// allocation is one read chunk and not the file.
 			const chunks = async function* (): AsyncGenerator<Uint8Array<ArrayBuffer>> {
 				for await (const chunk of opened.stream) yield new Uint8Array(chunk);
 			};
@@ -508,7 +402,7 @@ export class SessionFiles {
 		}
 	}
 
-	/** A tracked record by id — an artifact first (D-119), then the ledger — or `undefined`. Refuses non-guid ids. */
+	/** A tracked record by id — an artifact first, then the ledger — or `undefined`. Refuses non-guid ids. */
 	lookup(fileId: string): DownloadRecord | undefined {
 		if (!isSafeDownloadGuid(fileId)) return undefined;
 		const artifact = this.#artifacts.get(fileId);
@@ -528,7 +422,7 @@ export class SessionFiles {
 		if (record === undefined) {
 			throw new ToolError('unknown-file', `no file with id ${fileId} in this session; call browser_list_files`);
 		}
-		// An artifact (D-119) was written by this server, so its bytes are here whatever kind of browser made it.
+		// An artifact was written by this server, so its bytes are here whatever kind of browser made it.
 		const artifact = this.#artifacts.get(fileId);
 		const remote = artifact === undefined && (this.#ledger?.isRemoteBrowser ?? false);
 		const info = artifact === undefined
@@ -570,30 +464,7 @@ export class SessionFiles {
 		return { record, info: { ...info, size: stat.size }, path: realFile, size: stat.size };
 	}
 
-	/**
-	 * Stages one tracked file under its **display name**, for `browser_upload_file` (B2.5).
-	 *
-	 * `DOM.setFileInputFiles` takes a path, and the page reads the *basename* of that path as
-	 * `File.name`. Chromium writes every download to disk under its guid, so uploading
-	 * `resolved.path` directly hands the form a filename like `7f74c050-4f19-…` — measured on the
-	 * browser tier, where the fixture's own change handler reported exactly that. A server that
-	 * validates an extension rejects it, and a replay that uploaded `report.txt` no longer does.
-	 *
-	 * So the bytes are copied once to `<downloads>/.upload/<file_id>/<display name>` and that path is
-	 * uploaded. Three properties keep it inside the existing contract rather than adding to it:
-	 *
-	 * - the display name is already **one sanitised path segment** — the downloads watchdog produced
-	 *   it with `sanitizeFilename` before the ledger ever saw it, so nothing page-authored is
-	 *   concatenated into a path here;
-	 * - the staged copy lives **inside the session's own download directory**, so it is covered by the
-	 *   directory lifetime that already exists and is removed by the same sweep on close or reap;
-	 * - containment is re-checked on the **realpath of the staged file**, after the copy, so the
-	 *   staging step is held to the same rule `resolve` holds the source to.
-	 *
-	 * Copied rather than hard-linked: a link would share an inode with the file the caller can still
-	 * read through `browser_get_file`, and a page that could persuade the browser to write through the
-	 * upload would then be writing into the session's own ledger.
-	 */
+	/** Stages one tracked file under its **display name**, for `browser_upload_file`. */
 	async stageForUpload(fileId: string): Promise<{ path: string; info: FileInfo; size: number }> {
 		const resolved = await this.resolve(fileId);
 		const dir = this.#dir;
@@ -623,12 +494,7 @@ export class SessionFiles {
 		return { path: realStaged, info: resolved.info, size: resolved.size };
 	}
 
-	/**
-	 * Reads a file for inline delivery, refusing anything over `limit` bytes.
-	 *
-	 * Bounded by *reading*, not by trusting a size: the loop stops at `limit + 1` bytes and reports
-	 * the overflow, so a file that grew between stat and read cannot be swallowed whole.
-	 */
+	/** Reads a file for inline delivery, refusing anything over `limit` bytes. */
 	async readInline(fileId: string, limit = INLINE_FILE_LIMIT_BYTES): Promise<{ info: FileInfo; bytes: Uint8Array }> {
 		const resolved = await this.resolve(fileId);
 		if (resolved.size > limit) throw tooLarge(resolved.info, resolved.size, limit);
@@ -648,19 +514,7 @@ export class SessionFiles {
 		}
 	}
 
-	/**
-	 * Opens a file for streaming delivery under a lease, optionally over a byte range (B2.9).
-	 *
-	 * The lease keeps the session's directory alive until the stream closes, is cancelled or errors,
-	 * so a Windows deletion cannot fail on an open handle and leak the directory. A session closed
-	 * while reads are open waits {@linkcode FILE_LEASE_GRACE_MS}, then closes them.
-	 *
-	 * With a `range`, the handle is **seeked** and the read is bounded by a remaining counter, so
-	 * memory stays one {@linkcode STREAM_CHUNK_BYTES} chunk whatever the file's length and whatever
-	 * the range's — the same property the whole-file path already had, and the reason `Range` is
-	 * served from here rather than by slicing a buffer at the route. The range is validated against
-	 * the size the resolve step just re-`stat`ed, not against the ledger's remembered size.
-	 */
+	/** Opens a file for streaming delivery under a lease, optionally over a byte range. */
 	async open(fileId: string, range?: ByteRange): Promise<OpenedFile> {
 		const resolved = await this.resolve(fileId);
 		if (range !== undefined && (range.start < 0 || range.start > range.end || range.end >= resolved.size)) {
@@ -735,9 +589,8 @@ export class SessionFiles {
 	}
 
 	/**
-	 * Ends the session's file lifetime: no further resolves succeed, and the directory is removed
-	 * once no read is open — immediately when none is, otherwise after the last release or the grace
-	 * cap, whichever comes first. Never blocks session teardown on a slow reader.
+	 * Ends the session's file lifetime: no further resolves succeed, and the directory is removed once no read is
+	 * open — immediately when none is, otherwise after the last release or the grace cap, whichever comes first.
 	 */
 	async dispose(): Promise<void> {
 		this.#closed = true;
@@ -797,34 +650,23 @@ export function downloadsRootOf(dataDir: string): string {
 	return join(dataDir, 'downloads');
 }
 
-// --- B2.9: byte ranges, digests, and the policy a client can read -------------
+// --- byte ranges, digests, and the policy a client can read -------------------
 
 /** An inclusive byte range, as `Range: bytes=start-end` names one. */
-export interface ByteRange {
+interface ByteRange {
 	readonly start: number;
 	readonly end: number;
 }
 
 /** What a `Range` header turned out to be. */
-export type ParsedRange =
+type ParsedRange =
 	/** No `Range` header, or one this server does not implement (a multi-range set). Serve the whole file. */
 	| { readonly kind: 'none' }
 	| { readonly kind: 'range'; readonly range: ByteRange }
 	/** Syntactically a range and outside the file: RFC 9110 says 416, not a clamp. */
 	| { readonly kind: 'unsatisfiable' };
 
-/**
- * Parses one `Range` header against a known size.
- *
- * Deliberately narrow: `bytes=` with **one** range, in the three spellings RFC 9110 defines —
- * `start-end`, `start-` (to the end) and `-suffix` (the last N bytes). A multi-range request is
- * answered with the whole file, which is what the specification permits a server to do and is far
- * better than emitting a `multipart/byteranges` body nobody in this product would read.
- *
- * A range outside the file is `unsatisfiable` rather than clamped. Clamping hands a caller fewer
- * bytes than it asked for while telling it the request succeeded, which is how a resumed download
- * silently produces a truncated file.
- */
+/** Parses one `Range` header against a known size. */
 export function parseByteRange(header: string | null | undefined, size: number): ParsedRange {
 	if (header === null || header === undefined) return { kind: 'none' };
 	const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
@@ -847,20 +689,8 @@ export function parseByteRange(header: string | null | undefined, size: number):
 	return { kind: 'range', range: { start, end: Math.min(end, size - 1) } };
 }
 
-/**
- * The retention and transfer policy a client can read instead of infer (B2.9, AC-P1-25).
- *
- * Every number here is **read from the constant the enforcement path uses**, never restated: the
- * three limits and the deadline come from `@tykotech/browser`'s download watchdog, the inline limit
- * and the lease grace from this module. ADM's stated need was to stop guessing, and a policy tool
- * whose numbers were typed out again would be a second guess with a nicer interface.
- *
- * `retention.mode` rather than the `retention_hours` the requirement asked for: the real policy is
- * the session's lifetime — the directory goes when the session closes or is reaped, with a deferral
- * for open reads — and returning a number of hours no code reads would be an invented constant.
- * Recorded as a deliberate deviation.
- */
-export interface FilePolicy {
+/** The retention and transfer policy a client can read instead of infer. */
+interface FilePolicy {
 	readonly retention: {
 		readonly mode: 'session-lifetime';
 		readonly session_idle_ttl_s: number;

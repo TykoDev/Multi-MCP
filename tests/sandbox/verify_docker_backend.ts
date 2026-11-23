@@ -1,18 +1,10 @@
 /**
- * D-108: the Docker workspace backend end to end, on a real Docker Engine, with throwaway names only.
- *
- * It builds the sandbox and workspace images under `--tag` (default `verify`), creates two volumes of its own, runs
- * the sandbox service with the opt-in overlay's exact command (read from docker-compose.sandbox-docker.yml) and the
- * Docker socket, and drives it through SandboxClient on a random loopback port: create, file operations, commands
- * (identity, capabilities, network, read-only .git and socket folder), N3's cleanup of what a command leaves running,
- * a time limit, the diff, a live session beside a command, disk use measured with the container paused even while the
- * session races to hide it (review R2-2), registries mode through the read-only socket mount (R2-1), removal, and
- * reconciliation across a restart. The start-up volume check leaves no container behind (R2-3); containers carry
- * the deployment and body-hash labels (R2-5, R2-6). R12 (D-131): the overlay's command grants the two git names and the
- * remotes secret — the service reads the file once, says `clone: true`, never logs the credential, and refuses a URL
- * off its host list before any network (a clone itself needs a remote, which this verifier never contacts).
- * Everything it made — the service, every workspace container on its volume, the volumes — is removed at the end,
- * whatever happened. No default volume, project or port is touched.
+ * The Docker workspace backend end to end on a real Engine, with throwaway names only: the sandbox service runs the
+ * opt-in overlay's exact command with the socket, and SandboxClient drives create, files, commands (identity,
+ * capabilities, network, read-only .git and socket folder), cleanup of leftovers, a time limit, the diff, a live
+ * session, disk use under a racing session, registries mode, removal, reconciliation across a restart, and the git
+ * remotes secret (read once, never logged, an off-list URL refused before any network). Everything is removed at the
+ * end.
  *
  *   deno run --deny-ffi --allow-run=<docker> --allow-read=.,/var/run/docker.sock --allow-write=tests/.scratch \
  *     --allow-net=127.0.0.1 --allow-env=PATH tests/sandbox/verify_docker_backend.ts --tag verify-w5 [--no-build]
@@ -52,7 +44,7 @@ const name = `ttk-docker-test-${suffix}`;
 const codeVolume = `${name}-code`;
 const sockVolume = `${name}-sock`;
 // The socket's group, as the overlay's TTK_SANDBOX_DOCKER_GID gives it: root on Docker Desktop, `docker` on most Linux
-// hosts. Without the read grant it stays root, the old assumption.
+// hosts. Without the read grant it stays root, the Docker Desktop default.
 const socketGroup = String(await Deno.stat('/var/run/docker.sock').then((info) => info.gid ?? 0, () => 0));
 
 /** The overlay's sandbox `command:`, as written, so this run proves the grants that ship. */
@@ -161,7 +153,7 @@ try {
 	assertEquals(client.backend, 'docker');
 	const logs = await command(['logs', name]);
 	assertStringIncludes(logs, 'sandbox.docker_backend');
-	// R2-3 / R2-5: the volume was proven at start-up by a container of its own, which is gone again.
+	// The volume was proven at start-up by a container of its own, which is gone again.
 	assertEquals(await workspaceContainers(), []);
 	ran.push(
 		'service up with the overlay grants; /healthz says docker; startup warning logged; volume check left nothing',
@@ -178,7 +170,7 @@ try {
 	assertEquals(offList, 400);
 	assertEquals(await workspaceContainers(), [], 'a refused clone created no container');
 	assert(!(await command(['logs', name])).includes(gitToken), 'the credential stays out of the log');
-	ran.push('R12: the overlay grants the git names and the remotes secret; clone offered; off-list URL refused');
+	ran.push('clone: the overlay grants the git names and the remotes secret; clone offered; off-list URL refused');
 
 	const { workspace_id } = await client.call('alice', 'create', {
 		name: 'docker e2e',
@@ -232,7 +224,7 @@ try {
 	assert(!said.includes('eth0') && !said.includes('proxy.sock'), said);
 	ran.push('exec: uid 1993, no capabilities, only loopback, read-only .git and root, cage environment');
 
-	// N3: a background process, and one that made a session of its own, are gone once their command returns.
+	// A background process, and one that made a session of its own, are gone once their command returns.
 	await client.call('alice', 'exec', {
 		workspace_id,
 		command: 'sleep 301 >/dev/null 2>&1 & setsid sleep 302 >/dev/null 2>&1 & echo started',
@@ -242,7 +234,7 @@ try {
 		command: 'for p in /proc/[0-9]*; do tr "\\0" " " <$p/cmdline 2>/dev/null; echo; done',
 	});
 	assert(!String(left.output).includes('sleep 30'), String(left.output));
-	ran.push('N3: background and setsid processes are killed after their command');
+	ran.push('cleanup: background and setsid processes are killed after their command');
 
 	const started = performance.now();
 	const timed = await client.call('alice', 'exec', { workspace_id, command: 'sleep 60', timeout_ms: 2_000 });
@@ -275,7 +267,7 @@ try {
 	assertEquals((await client.call('alice', 'exec', { workspace_id, command: 'echo beside' })).output, 'beside\n');
 	await client.call('alice', 'session_input', { session_id, data: 'echo still here\n' });
 	seq = await readUntil('still here', seq);
-	// R2-2: 3 MiB in a folder the session keeps locking and unlocking, as fast as it can, while a command beside it
+	// 3 MiB in a folder the session keeps locking and unlocking, as fast as it can, while a command beside it
 	// is measured. Measured in the container, the lock could hide the folder from du; the service measures its own
 	// view with the container paused, so the folder is counted every time, and the session runs on afterwards.
 	await client.call('alice', 'exec', {
@@ -301,7 +293,7 @@ try {
 	});
 	ran.push(
 		'live session: input, output, survives a command beside it, closes; disk use counted with the container paused ' +
-			'while the session raced to hide 3 MiB (R2-2)',
+			'while the session raced to hide 3 MiB',
 	);
 
 	const registry = await client.call('alice', 'exec', {
@@ -312,7 +304,7 @@ try {
 			'ls -A /run/harbour; curl -sS -o /dev/null -w "connect=%{http_connect} status=%{http_code}\\n" https://registry.npmjs.org/ || true',
 	});
 	assertStringIncludes(String(registry.output), 'proxy.sock');
-	// R2-1: the proxy answered the CONNECT, so socat reached its socket through the read-only mount.
+	// The proxy answered the CONNECT, so socat reached its socket through the read-only mount.
 	const tunnel = /connect=(\d{3})/.exec(String(registry.output))?.[1];
 	assert(tunnel !== undefined && tunnel !== '000', String(registry.output));
 	const after = await client.call('alice', 'exec', { workspace_id, command: 'ls -A /run/harbour; echo end' });

@@ -1,7 +1,4 @@
-/**
- * Perception tools: the read-only ones that describe the page, including the sampling-backed
- * extraction (R1).
- */
+/** Perception tools: the read-only ones that describe the page, including the sampling-backed extraction. */
 import * as z from 'zod';
 import * as handlers from '../tools.ts';
 import * as agent from '../agent.ts';
@@ -44,7 +41,7 @@ export const PERCEPTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		outputSchema: OUTPUT.browser_get_state,
 		handler: handlers.browserGetState,
 	}),
-	// --- B1.6: find, frames, locators (needed-browser-functions §1.3, §1.4, §7) ---
+	// --- find, frames, locators -----------------------------------------------
 	def({
 		name: 'browser_find',
 		title: 'Find elements',
@@ -59,7 +56,10 @@ export const PERCEPTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 				text: z.string().optional(),
 				css: z.string().max(500).optional(),
 				href_pattern: z.string().max(200).optional().describe(
-					'A regular expression tested against href, server-side, over at most 2000 hrefs under a 2 s budget.',
+					'A regular expression tested against href, server-side, over at most 2000 hrefs of at most 2048 ' +
+						'characters under a 2 s budget. Patterns that could backtrack catastrophically are refused: no ' +
+						'quantified groups except an optional plain one, no backreferences or lookarounds, at most one ' +
+						'unbounded quantifier (two after a leading ^).',
 				),
 				near: z.object({ x: z.number(), y: z.number() }).optional(),
 				frame_id: z.string().optional(),
@@ -72,7 +72,7 @@ export const PERCEPTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		outputSchema: OUTPUT.browser_find,
 		handler: handlers.browserFind,
 	}),
-	// --- B2.1: the hit test in the browser (needed-browser-functions §1.5) ---
+	// --- the hit test in the browser -----------------------------------------
 	def({
 		name: 'browser_element_at',
 		title: 'Element at a point',
@@ -168,7 +168,7 @@ export const PERCEPTION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		handler: handlers.browserScreenshot,
 	}),
 
-	// --- model-backed observation (R1) ---------------------------------------
+	// --- model-backed observation --------------------------------------------
 	def({
 		name: 'browser_extract_content',
 		title: 'Extract content',

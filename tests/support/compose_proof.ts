@@ -1,15 +1,7 @@
 /**
- * ERRATUM(E-112), review R3-4 / K-6: what the two Compose proofs (`tests/sandbox/verify_compose.ts`,
- * `tests/agents/verify_compose.ts`) share, so that each brings up images built from this tree, by tag, and nothing of
- * the operator's.
- *
- * Both proofs used to layer a fixture over the shipped compose files and inherit two things from them: the images the
- * files name (`tykotech-mcp:0.2.0`, `tykotech-sandbox:0.2.0` — the deployed build, not the tree under test) and the
- * `ttk_admin_user` secret (`./secrets/ttk_admin_user.json` — the operator's real administrator record, mounted into a
- * throwaway stack; in a checkout without one Docker Desktop mounts a directory there and the gateway refuses to start).
- * Here: a required `--tag` that may not be a deployed one, a synthetic admin record in the scratch folder, and a check
- * of the resolved configuration — every image the stack runs is the tag's, every secret file is in the scratch folder —
- * before anything is started.
+ * What the Compose proof relies on so it runs images built from this tree, by tag, and nothing of the operator's: a
+ * required `--tag` that is not a deployed one, a synthetic admin record in the scratch folder (never
+ * `./secrets/ttk_admin_user.json`), and a check of the resolved configuration before anything starts.
  */
 import { DELIMITER, isAbsolute, join, relative, resolve } from '@std/path';
 
@@ -29,8 +21,8 @@ export async function deployedTags(root = '.'): Promise<Set<string>> {
 	const tags = new Set<string>();
 	const { version } = JSON.parse(await Deno.readTextFile(join(root, 'deno.json'))) as { version?: unknown };
 	if (typeof version === 'string') tags.add(version);
-	for (const file of ['docker-compose.yml', 'docker-compose.agents.yml']) {
-		// `image: tykotech-mcp:0.2.0`, and `image: '${TTK_AGENT_RUNNER_IMAGE:-tykotech-agent-runner:0.2.0}'`.
+	for (const file of ['docker-compose.yml']) {
+		// `image: tykotech-mcp:0.2.0`, or an interpolated `image: '${NAME:-tykotech-<name>:0.2.0}'`.
 		const images = /image:\s*['"]?(?:\$\{[A-Z_]+:-)?tykotech-[a-z-]+:([A-Za-z0-9_.-]+)/g;
 		for (const match of (await Deno.readTextFile(join(root, file))).matchAll(images)) tags.add(match[1]!);
 	}
@@ -89,30 +81,20 @@ export async function writeSyntheticAdmin(path: string): Promise<void> {
 
 /**
  * The default stack's files beyond the keys, administrator and database key each proof makes for itself, written into
- * `scratch` the way `deno task setup` writes them: the browser-secrets and git-remotes placeholders, the A2A peer list,
- * and the peer's token with the hashed record the peer authenticates it by. Returns the fixture's `secrets:` entries
- * for them (indented for a top-level `secrets:` block) and their names, for `assertIsolated`'s `required`.
+ * `scratch` the way `deno task setup` writes them: the browser-secrets and git-remotes placeholders, and a fresh
+ * sandbox token (64 hex characters and a newline) that the gateway and the sandbox both mount. Returns the fixture's
+ * `secrets:` entries for them (indented for a top-level `secrets:` block) and their names, for `assertIsolated`'s
+ * `required`.
  */
 export async function writeStackFiles(
 	scratch: string,
 ): Promise<{ readonly secrets: string; readonly names: string[] }> {
-	const token = `ttk_${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`;
-	const sha256 = Array.from(
-		new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))),
-		(byte) => byte.toString(16).padStart(2, '0'),
-	).join('');
+	const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, '0'))
+		.join('');
 	const files: Record<string, [string, string]> = {
+		ttk_sandbox_token: ['sandbox-token', `${token}\n`],
 		ttk_secrets: ['browser-secrets.json', '{}\n'],
 		ttk_git_remotes: ['git-remotes.json', '[]\n'],
-		ttk_agent_peers: [
-			'agent-peers.json',
-			`${JSON.stringify([{ id: 'peer', url: 'http://a2a-peer:8787', token_file: '/run/secrets/ttk_peer_token' }])}\n`,
-		],
-		ttk_peer_token: ['peer-token', `${token}\n`],
-		ttk_peer_api_keys: [
-			'peer-keys.json',
-			`${JSON.stringify([{ id: 'gateway', sha256, scopes: ['mcp:invoke', 'agent:invoke'] }])}\n`,
-		],
 	};
 	const lines: string[] = [];
 	for (const [name, [path, text]] of Object.entries(files)) {

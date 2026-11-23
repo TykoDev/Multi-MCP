@@ -1,5 +1,5 @@
 /**
- * `BaseEvent` — the envelope every bus event carries (DATA-MODEL.md §5.1, ARCHITECTURE.md §4).
+ * `BaseEvent` — the envelope every bus event carries.
  */
 
 import { v7 } from '@std/uuid';
@@ -8,14 +8,12 @@ import { currentEventId } from './lineage.ts';
 import type { BusLogger, EnvSource, EventStatics } from './types.ts';
 
 /**
- * Fallback per-handler timeout for event classes that do not declare one (the `—` rows in
- * DATA-MODEL.md §5.1). Sits inside the 3–60 s band ARCHITECTURE.md §8 gives for bus events.
- *
- * ERRATUM(M0-bus-2): the specs reference a "bus default" timeout but never state its value.
+ * Fallback per-handler timeout for event classes that do not declare one. Sits inside the 3–60 s
+ * band the declared bus-event timeouts use.
  */
 export const DEFAULT_EVENT_TIMEOUT_SEC = 30;
 
-/** Env var that overrides a class's default timeout, in seconds (D-BUS1). */
+/** Env var that overrides a class's default timeout, in seconds. */
 export function timeoutEnvVarName(eventName: string): string {
 	return `TIMEOUT_${eventName}`;
 }
@@ -24,7 +22,7 @@ export function timeoutEnvVarName(eventName: string): string {
  * Resolves the effective per-handler timeout in seconds.
  *
  * Read through the {@linkcode EnvSource} getter on every call — never cached — so a process that
- * mutates `TIMEOUT_<EventClassName>` at runtime takes effect on the next dispatch (D-CFG1).
+ * mutates `TIMEOUT_<EventClassName>` at runtime takes effect on the next dispatch.
  * A value of `0` (or negative) disables the timeout; unparseable values are ignored with a warning.
  */
 export function resolveEventTimeoutSec(
@@ -64,19 +62,16 @@ export abstract class BaseEvent<TResult = void> {
 	/** Phantom carrier for `TResult`; erased at runtime. */
 	declare readonly __eventResult: TResult;
 
-	/** uuid v7 — sortable, parity with the Python system's ids (ARCHITECTURE.md §10). */
+	/** uuid v7, so ids sort by creation time. */
 	readonly eventId: string = v7.generate();
 
 	/**
-	 * Id of the event whose handler created this one, or `null` at the top level.
-	 *
-	 * ERRATUM(M0-bus-1): ARCHITECTURE.md §3 sketches `eventParentId?: string` / `eventCreatedAt:
-	 * number`; DATA-MODEL.md §5.1 — which owns field-level specs — says `string | null` / ISO-8601
-	 * string. DATA-MODEL wins, and `string | null` is also the AGENTS.md §3 house rule.
+	 * Id of the event whose handler created this one, or `null` at the top level. Always present
+	 * (`string | null`, never optional), so a serialized envelope has a fixed shape.
 	 */
 	readonly eventParentId: string | null = currentEventId();
 
-	/** ISO-8601 creation timestamp (DATA-MODEL.md §5.1). See ERRATUM(M0-bus-1). */
+	/** ISO-8601 creation timestamp. */
 	readonly eventCreatedAt: string = new Date().toISOString();
 
 	/** The class name; globally unique and non-substring-overlapping across the registry. */
@@ -90,7 +85,7 @@ export abstract class BaseEvent<TResult = void> {
 	}
 
 	/**
-	 * Explicit emitter (DATA-MODEL.md §9.1: no reflection-based dumping of persisted documents).
+	 * Explicit emitter: persisted documents are never dumped by reflection.
 	 * Own enumerable payload fields plus the computed envelope members.
 	 */
 	toJSON(): Record<string, unknown> {

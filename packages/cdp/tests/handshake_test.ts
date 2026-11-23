@@ -1,9 +1,8 @@
 /**
- * Tier 2 — the `/json/version` handshake against local `Deno.serve` fixtures
- * (ARCHITECTURE.md §7.4; OBSERVABILITY-TESTING-CICD.md §4.3).
+ * Tier 2 — the `/json/version` handshake against local `Deno.serve` fixtures.
  *
  * No browser is required here, but the suite lives in `tests/` because it needs `--allow-net`, which
- * the pure-unit tier does not get (SECURITY-AUTH.md §3.6).
+ * the pure-unit tier does not get.
  */
 
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
@@ -137,7 +136,7 @@ Deno.test('handshake: an unreachable port fails fast instead of hanging', async 
 });
 
 /**
- * ARCHITECTURE.md §7.4: proxy env MUST NOT intercept localhost. Deno's `fetch` honours
+ * Proxy env MUST NOT intercept localhost. Deno's `fetch` honours
  * `HTTP_PROXY`/`ALL_PROXY` and does not exempt loopback, so the handshake speaks raw HTTP/1.1 over
  * `Deno.connect` for loopback hosts. With a black-hole proxy configured, a proxying implementation
  * would fail; ours must not.

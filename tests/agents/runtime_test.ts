@@ -56,7 +56,6 @@ Deno.test('agent runtime enforces principal ownership, scopes, snapshots and ter
 		assertThrows(() => runtime.get('bob', created.id), AgentError, 'Task not found');
 		assertThrows(() => runtime.cancel('bob', created.id), AgentError, 'Task not found');
 		assertThrows(() => runtime.subscribe('bob', created.id), AgentError, 'Task not found');
-		assertThrows(() => runtime.permission('bob', created.id), AgentError, 'Task not found');
 		const done = await finished(runtime, 'alice', created.id);
 		assertEquals(done.status.state, 'TASK_STATE_COMPLETED');
 		assertEquals(done.artifacts.length, 1);
@@ -145,7 +144,7 @@ Deno.test('bounded task queue executes at most four and retains at most 32 per o
 	}
 });
 
-Deno.test('R2-7: one owner runs at most two tasks at once, so another owner’s work is never starved', async () => {
+Deno.test('one owner runs at most two tasks at once, so another owner’s work is never starved', async () => {
 	const releases = new Map<string, Array<() => void>>();
 	const running = new Map<string, number>();
 	const high = new Map<string, number>();
@@ -197,13 +196,13 @@ Deno.test('tools fail explicitly; no configured backend means no fabricated text
 		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({ isError: true }),
 	});
 	try {
-		// D-143: reworded to name both text backends; the `configured ACP` match the test always made still holds.
+		// The refusal names the one text backend a deployment can add.
 		const refused = assertThrows(
 			() => runtime.submit('alice', scopes, message({ parts: [{ text: 'Make an app' }] })),
 			AgentError,
-			'configured ACP',
+			'model provider',
 		);
-		assertEquals(refused.message, 'Text execution requires a configured ACP agent or a model provider');
+		assertEquals(refused.message, 'Text execution requires a model provider');
 		const task = runtime.submit('alice', new Set(['agent:invoke']), message());
 		assertEquals((await finished(runtime, 'alice', task.id)).status.state, 'TASK_STATE_FAILED');
 		const failure = runtime.submit('alice', scopes, message());
@@ -228,7 +227,7 @@ Deno.test('tools fail explicitly; no configured backend means no fabricated text
 async function settle(rounds = 8): Promise<void> {
 	for (let i = 0; i < rounds; i++) await new Promise((resolve) => setTimeout(resolve, 0));
 }
-/** The owners `fillSlots` submits as: two, since one owner holds at most TASK_SLOTS_PER_OWNER slots (R2-7). */
+/** The owners `fillSlots` submits as: two, since one owner holds at most TASK_SLOTS_PER_OWNER slots. */
 const FILLERS = ['filler', 'filler-2'];
 /** Four tasks that hold every execution slot until released, so the next submission queues. */
 function fillSlots(runtime: AgentRuntime, credential = 'filler-key'): { owner: string; task: AgentTask }[] {
@@ -241,7 +240,7 @@ function statusText(task: AgentTask): string {
 	return String(task.status.message?.parts.map((part) => part.text ?? '').join(''));
 }
 
-Deno.test('GW-1 PROBE-1: a queued task re-authorizes at start and never runs on scopes its credential lost', async (): Promise<void> => {
+Deno.test('a queued task re-authorizes at start and never runs on scopes its credential lost', async (): Promise<void> => {
 	const granted = new Map<string, ReadonlySet<string> | null>([
 		['filler-key', scopes],
 		['alice-key', scopes],
@@ -281,7 +280,7 @@ Deno.test('GW-1 PROBE-1: a queued task re-authorizes at start and never runs on 
 	}
 });
 
-Deno.test('GW-1: every structured tool call re-reads the credential, so a revocation mid-task stops the next call', async (): Promise<void> => {
+Deno.test('every structured tool call re-reads the credential, so a revocation mid-task stops the next call', async (): Promise<void> => {
 	let live = true;
 	const calls: string[] = [];
 	let release: () => void = (): void => {};
@@ -309,7 +308,7 @@ Deno.test('GW-1: every structured tool call re-reads the credential, so a revoca
 	}
 });
 
-Deno.test('GW-1: reauthorize() fails a revoked credential’s running and queued tasks at once', async (): Promise<void> => {
+Deno.test('reauthorize() fails a revoked credential’s running and queued tasks at once', async (): Promise<void> => {
 	const live = new Set(['filler-key', 'alice-key']);
 	const signals: AbortSignal[] = [];
 	const runtime = new AgentRuntime({
@@ -340,7 +339,7 @@ Deno.test('GW-1: reauthorize() fails a revoked credential’s running and queued
 	}
 });
 
-Deno.test('GW-1: a task waiting past its queue deadline fails without running', async (): Promise<void> => {
+Deno.test('a task waiting past its queue deadline fails without running', async (): Promise<void> => {
 	const releases: (() => void)[] = [];
 	const owners: string[] = [];
 	const runtime = new AgentRuntime({
@@ -365,7 +364,7 @@ Deno.test('GW-1: a task waiting past its queue deadline fails without running', 
 	}
 });
 
-Deno.test('AG-1: finished tasks never hold capacity; the oldest finished are evicted, the caller’s first', async (): Promise<void> => {
+Deno.test('finished tasks never hold capacity; the oldest finished are evicted, the caller’s first', async (): Promise<void> => {
 	const runtime = new AgentRuntime({ invoke: (): Promise<Record<string, unknown>> => Promise.resolve({ ok: true }) });
 	try {
 		const own: AgentTask[] = [];
@@ -373,7 +372,7 @@ Deno.test('AG-1: finished tasks never hold capacity; the oldest finished are evi
 			own.push(runtime.submit('alice', scopes, message()));
 			await finished(runtime, 'alice', own.at(-1)!.id);
 		}
-		// Thirty-two completed tasks used to refuse the thirty-third for the full hour of retention.
+		// Thirty-two completed tasks do not refuse the thirty-third: the oldest finished one is evicted instead.
 		const next = runtime.submit('alice', scopes, message());
 		await finished(runtime, 'alice', next.id);
 		assertThrows(() => runtime.get('alice', own[0]!.id), AgentError, 'Task not found');
@@ -393,7 +392,7 @@ Deno.test('AG-1: finished tasks never hold capacity; the oldest finished are evi
 	}
 });
 
-Deno.test('AG-1: unfinished tasks still fill the global cap and refuse new work', async (): Promise<void> => {
+Deno.test('unfinished tasks still fill the global cap and refuse new work', async (): Promise<void> => {
 	const runtime = new AgentRuntime({
 		invoke: (_tool, _args, _owner, _rights, signal): Promise<Record<string, unknown>> =>
 			new Promise((resolve) => signal?.addEventListener('abort', () => resolve({}), { once: true })),
@@ -406,105 +405,6 @@ Deno.test('AG-1: unfinished tasks still fill the global cap and refuse new work'
 	}
 });
 
-Deno.test('AG-10: the runtime keeps no per-task replay buffer it never reads', async (): Promise<void> => {
-	// A late subscriber already receives the full task snapshot first, so a replay of buffered events would only
-	// duplicate it; the buffer was 256 events / 2 MiB per task of retained memory with no reader.
-	const source = await Deno.readTextFile(new URL('../../packages/agents/src/runtime.ts', import.meta.url));
-	assertEquals(/eventBytes|events:\s*Record<string, unknown>\[\]/.test(source), false);
-});
-
-/** A minimal in-process stand-in for the private runner's HTTP protocol, as `AgentBridgeClient` speaks it. */
-function fakeBridge(hooks: {
-	permission?: (id: string) => Promise<void>;
-	/** Answers an RPC before the defaults do; `undefined` falls through. */
-	rpc?: (method: string, params: Record<string, unknown>) => Response | undefined;
-} = {}): {
-	options: { url: string; token: string; agent: string };
-	push(event: Record<string, unknown>): void;
-	finish(): void;
-	close(): Promise<void>;
-} {
-	let events: ReadableStreamDefaultController<Uint8Array> | undefined;
-	// A `finish()` that arrives before the prompt does is remembered, not lost: under
-	// parallel load a test can reach `finish()` before the runtime's prompt request
-	// reaches this fake, and a lost release used to hold the prompt until its 120 s
-	// timeout failed the task.
-	let prompt: (() => void) | null = null;
-	let released = 0;
-	const release = (): void => {
-		if (prompt === null) released++;
-		else {
-			const held = prompt;
-			prompt = null;
-			held();
-		}
-	};
-	const pending: Record<string, unknown>[] = [];
-	const push = (event: Record<string, unknown>): void => {
-		if (events) events.enqueue(new TextEncoder().encode(`${JSON.stringify(event)}\n`));
-		else pending.push(event);
-	};
-	const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen(): void {} }, async (request) => {
-		const path = new URL(request.url).pathname;
-		if (path === '/v1/events') {
-			return new Response(
-				new ReadableStream<Uint8Array>({
-					start(controller): void {
-						events = controller;
-						for (const event of pending.splice(0)) push(event);
-					},
-					cancel(): void {
-						events = undefined;
-					},
-				}),
-			);
-		}
-		const body = await request.json() as Record<string, unknown>;
-		if (path === '/v1/open') return Response.json({ connectionId: 'connection-1', cwd: 'workspace-1' });
-		if (path === '/v1/permission') {
-			await hooks.permission?.(String(body.id));
-			return Response.json({});
-		}
-		if (path === '/v1/close') {
-			try {
-				events?.close();
-			} catch { /* Already closed by the client. */ }
-			events = undefined;
-			return Response.json({});
-		}
-		const custom = hooks.rpc?.(String(body.method), (body.params ?? {}) as Record<string, unknown>);
-		if (custom !== undefined) return custom;
-		if (body.method === 'session/new') return Response.json({ sessionId: 'session-1' });
-		if (body.method === 'session/prompt') {
-			if (released > 0) released--;
-			else await new Promise<void>((resolve) => prompt = resolve);
-			push({ method: 'bridge/prompt_complete' });
-			return Response.json({ stopReason: 'end_turn' });
-		}
-		return Response.json({});
-	});
-	return {
-		options: { url: `http://127.0.0.1:${server.addr.port}`, token: 'fake-bridge-token-long-enough', agent: 'fake' },
-		push,
-		finish: release,
-		// A held prompt is an in-flight request, and shutdown waits for every one: release it so a failed
-		// assertion ends the test instead of hanging it.
-		close: () => {
-			release();
-			return server.shutdown();
-		},
-	};
-}
-
-function permissionRequest(id: string): Record<string, unknown> {
-	return {
-		jsonrpc: '2.0',
-		id,
-		method: 'session/request_permission',
-		params: { options: [{ optionId: 'once', kind: 'allow_once' }, { optionId: 'no', kind: 'reject_once' }] },
-	};
-}
-
 async function until(predicate: () => boolean, label: string): Promise<void> {
 	const deadline = Date.now() + 5_000;
 	while (!predicate()) {
@@ -513,125 +413,7 @@ async function until(predicate: () => boolean, label: string): Promise<void> {
 	}
 }
 
-Deno.test('AG-7: a decision cannot overwrite the INPUT_REQUIRED of a permission raised while it was in flight', async (): Promise<void> => {
-	let taskId = '';
-	const bridge = fakeBridge({
-		permission: async (id): Promise<void> => {
-			if (id !== 'first') return;
-			// The runner asks again before it acknowledges the first decision.
-			bridge.push(permissionRequest('second'));
-			await until(() => runtime.permission('alice', taskId)?.id === 'second', 'the second request');
-		},
-	});
-	const runtime = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-	});
-	try {
-		taskId = runtime.submit('alice', scopes, { ...message(), parts: [{ text: 'needs two permissions' }] }).id;
-		bridge.push(permissionRequest('first'));
-		await until(() => runtime.permission('alice', taskId)?.id === 'first', 'the first request');
-		await runtime.decidePermission('alice', taskId, 'first', 'once');
-		assertEquals(runtime.get('alice', taskId).status.state, 'TASK_STATE_INPUT_REQUIRED');
-		assertEquals(runtime.permission('alice', taskId)?.id, 'second');
-		await runtime.decidePermission('alice', taskId, 'second', 'no');
-		assertEquals(runtime.get('alice', taskId).status.state, 'TASK_STATE_WORKING');
-		bridge.finish();
-		assertEquals((await finished(runtime, 'alice', taskId)).status.state, 'TASK_STATE_COMPLETED');
-	} finally {
-		await runtime.close();
-		await bridge.close();
-	}
-});
-
-Deno.test('GW-1 PROBE-2: an ACP task asks for its delegation with its own credential and current scopes', async (): Promise<void> => {
-	const bridge = fakeBridge();
-	const asked: [string, string[], string | undefined][] = [];
-	let live = true;
-	const runtime = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-		authorize: (_owner, _scopes, credential) =>
-			live && credential === 'alice-key' ? new Set(['agent:invoke', 'mcp:invoke']) : null,
-		sessionMcp: (owner, rights, credential) => {
-			asked.push([owner, [...rights], credential]);
-			return { servers: [], close(): void {} };
-		},
-	});
-	try {
-		const task = runtime.submit('alice', scopes, { ...message(), parts: [{ text: 'hello' }] }, 'alice-key');
-		await until(() => asked.length === 1, 'the delegation request');
-		assertEquals(asked[0], ['alice', ['agent:invoke', 'mcp:invoke'], 'alice-key']);
-		bridge.finish();
-		assertEquals((await finished(runtime, 'alice', task.id)).status.state, 'TASK_STATE_COMPLETED');
-		// After rotation the pre-rotation credential no longer authorizes, so a queued prompt never asks at all.
-		live = false;
-		const stale = runtime.submit('alice', scopes, { ...message(), parts: [{ text: 'again' }] }, 'alice-key');
-		const refused = await finished(runtime, 'alice', stale.id);
-		assertEquals(refused.status.state, 'TASK_STATE_FAILED');
-		assertEquals(asked.length, 1);
-	} finally {
-		await runtime.close();
-		await bridge.close();
-	}
-});
-
-Deno.test('AG-8: a delegation token split across agent message chunks never reaches events or artifacts', async (): Promise<void> => {
-	const token = `ttkd_${crypto.randomUUID()}${crypto.randomUUID()}`;
-	const bridge = fakeBridge();
-	const runtime = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-		sessionMcp: () => ({
-			servers: [{
-				type: 'http',
-				name: 'tykotech',
-				url: 'http://gateway/mcp',
-				headers: [
-					{ name: 'Authorization', value: `Bearer ${token}` },
-				],
-			}],
-			close(): void {},
-		}),
-	});
-	const chunk = (text: string): Record<string, unknown> => ({
-		jsonrpc: '2.0',
-		method: 'session/update',
-		params: { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } },
-	});
-	try {
-		const task = runtime.submit('alice', scopes, { ...message(), parts: [{ text: 'leak it' }] });
-		const reader = runtime.subscribe('alice', task.id).getReader();
-		// Each line alone is innocent, so the runner's per-line redaction cannot see the token.
-		for (const part of ['my credential is ', token.slice(0, 20), token.slice(20, 50), token.slice(50), ' — done']) {
-			bridge.push(chunk(part));
-		}
-		await settle();
-		bridge.finish();
-		const seen: string[] = [];
-		while (true) {
-			const next = await reader.read();
-			if (next.done) break;
-			seen.push(JSON.stringify(next.value));
-		}
-		const done = runtime.get('alice', task.id);
-		assertEquals(done.status.state, 'TASK_STATE_COMPLETED');
-		const parts = (done.artifacts[0]?.parts ?? []) as { text?: string }[];
-		const text = parts.map((part) => part.text ?? '').join('');
-		assertEquals(text, 'my credential is [REDACTED] — done');
-		// Each fragment lies wholly inside one chunk, so a per-chunk emission would carry it.
-		for (const fragment of [token.slice(1, 19), token.slice(21, 49), token.slice(51)]) {
-			for (const value of [...seen, JSON.stringify(done)]) {
-				assertEquals(value.includes(fragment), false, 'no fragment of the token is emitted');
-			}
-		}
-	} finally {
-		await runtime.close();
-		await bridge.close();
-	}
-});
-
-Deno.test('A2A message validation rejects old envelopes, external file URLs and oversize prompts', (): void => {
+Deno.test('A2A message validation rejects non-1.0 envelopes, external file URLs and oversize prompts', (): void => {
 	assertThrows(() => agentMessage(null), AgentError);
 	assertThrows(() => agentMessage(message({ role: 'user' })), AgentError);
 	assertThrows(() => agentMessage(message({ parts: [] })), AgentError);
@@ -643,153 +425,44 @@ Deno.test('A2A message validation rejects old envelopes, external file URLs and 
 	assert(agentMessage(message()).parts.length === 1);
 });
 
-Deno.test('E-5: a follow-up message answers a pending permission, and the exchange is kept in history', async () => {
-	const decided: string[] = [];
-	const bridge = fakeBridge({
-		permission: (id): Promise<void> => {
-			decided.push(id);
-			return Promise.resolve();
+Deno.test('a follow-up message is refused: no task waits for input, and another owner’s task is not found', async () => {
+	let release = (): void => {};
+	const held = new Promise<void>((resolve) => release = resolve);
+	const runtime = new AgentRuntime({
+		invoke: async (): Promise<Record<string, unknown>> => {
+			await held;
+			return {};
 		},
 	});
-	const runtime = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-	});
 	try {
-		const task = runtime.submit('alice', scopes, { ...message(), parts: [{ text: 'do it' }] });
-		bridge.push(permissionRequest('p1'));
-		await until(() => runtime.permission('alice', task.id)?.id === 'p1', 'the permission request');
-		// A wrong option and a plain text reply are refused; the offered option is accepted.
-		assertThrows(() =>
-			runtime.submit('alice', scopes, { ...message(), taskId: task.id, parts: [{ data: { optionId: 'always' } }] })
-		);
-		assertThrows(() => runtime.submit('alice', scopes, { ...message(), taskId: task.id, parts: [{ text: 'yes' }] }));
-		// Another owner cannot answer it.
-		assertThrows(() =>
-			runtime.submit('bob', scopes, { ...message(), taskId: task.id, parts: [{ data: { optionId: 'once' } }] })
-		);
-		const answered = runtime.submit('alice', scopes, {
-			...message(),
-			taskId: task.id,
-			parts: [{ data: { optionId: 'once' } }],
-		});
-		assertEquals(answered.id, task.id);
-		await until(() => decided.includes('p1'), 'the decision reaching the runner');
-		bridge.push({
-			method: 'session/update',
-			params: { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'done' } } },
-		});
-		bridge.finish();
-		const done = await finished(runtime, 'alice', task.id);
-		assertEquals(done.status.state, 'TASK_STATE_COMPLETED');
-		assertEquals(done.history.map((entry) => entry.role), ['ROLE_USER', 'ROLE_USER', 'ROLE_AGENT']);
-		assertEquals((done.history[2]!.parts[0] as { text: string }).text, 'done');
-		// A finished task takes no more messages.
-		assertThrows(() =>
-			runtime.submit('alice', scopes, { ...message(), taskId: task.id, parts: [{ data: { optionId: 'once' } }] })
-		);
-	} finally {
-		await runtime.close();
-		await bridge.close();
-	}
-});
-
-Deno.test('E-5: tool calls and plans reach task subscribers, redacted', async () => {
-	const token = `ttkd_${crypto.randomUUID()}${crypto.randomUUID()}`;
-	const bridge = fakeBridge();
-	const runtime = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-		sessionMcp: () => ({
-			servers: [{
-				type: 'http',
-				name: 't',
-				url: 'http://x/mcp',
-				headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-			}],
-			close(): void {},
-		}),
-	});
-	try {
-		const task = runtime.submit('alice', scopes, { ...message(), parts: [{ text: 'plan it' }] });
-		const reader = runtime.subscribe('alice', task.id).getReader();
-		bridge.push({
-			method: 'session/update',
-			params: { update: { sessionUpdate: 'tool_call', toolCallId: 'c1', title: `call with ${token}` } },
-		});
-		bridge.push({ method: 'session/update', params: { update: { sessionUpdate: 'plan', entries: [] } } });
-		const seen: unknown[] = [];
-		const deadline = Date.now() + 5_000;
-		while (seen.length < 2 && Date.now() < deadline) {
-			const { value } = await reader.read();
-			const data =
-				(value as { statusUpdate?: { status?: { message?: { parts?: Array<{ data?: { acp?: unknown } }> } } } })
-					?.statusUpdate?.status?.message?.parts?.[0]?.data?.acp;
-			if (data !== undefined) seen.push(data);
-		}
-		await reader.cancel();
-		assertEquals(seen.length, 2);
-		assertEquals(JSON.stringify(seen).includes(token), false, 'the delegation token was redacted');
-		assertEquals((seen[0] as { title: string }).title, 'call with [REDACTED]');
-		bridge.finish();
+		const task = runtime.submit('alice', scopes, message());
+		await until(() => runtime.get('alice', task.id).status.state === 'TASK_STATE_WORKING', 'a running task');
+		const followUp = (owner: string, extra: Record<string, unknown> = {}): AgentError =>
+			assertThrows(
+				() =>
+					runtime.submit(owner, scopes, {
+						messageId: crypto.randomUUID(),
+						role: 'ROLE_USER',
+						taskId: task.id,
+						parts: [{ data: { optionId: 'once' } }],
+						...extra,
+					}),
+				AgentError,
+			);
+		assertEquals([followUp('alice').code, followUp('alice').message], [-32004, 'This task is not waiting for input']);
+		assertEquals(followUp('alice', { contextId: 'another' }).code, -32602);
+		assertEquals(followUp('bob').message, 'Task not found');
+		release();
 		await finished(runtime, 'alice', task.id);
+		assertEquals(followUp('alice').message, 'Terminal task cannot accept messages');
+		assertEquals(runtime.get('alice', task.id).history.length, 1, 'no refused message joins the history');
 	} finally {
+		release();
 		await runtime.close();
-		await bridge.close();
 	}
 });
 
-Deno.test('E-2: an advertised, configured auth method is used; without one the task ends auth-required', async () => {
-	const calls: string[] = [];
-	let authenticated = false;
-	const bridge = fakeBridge({
-		rpc: (method, params) => {
-			calls.push(method === 'authenticate' ? `authenticate:${String(params.methodId)}` : method);
-			if (method === 'initialize') {
-				return Response.json({ protocolVersion: 1, authMethods: [{ id: 'api-key', name: 'API key' }] });
-			}
-			if (method === 'authenticate') {
-				authenticated = true;
-				return Response.json({});
-			}
-			if (method === 'session/new' && !authenticated) {
-				return Response.json({ error: { code: -32000, message: 'Agent requires authentication' } }, { status: 400 });
-			}
-			return undefined;
-		},
-	});
-	const configured = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: { ...bridge.options, authMethod: 'api-key' },
-	});
-	try {
-		const task = configured.submit('alice', scopes, { ...message(), parts: [{ text: 'hi' }] });
-		bridge.finish();
-		assertEquals((await finished(configured, 'alice', task.id)).status.state, 'TASK_STATE_COMPLETED');
-		assert(calls.includes('authenticate:api-key'));
-	} finally {
-		await configured.close();
-	}
-	authenticated = false;
-	const unconfigured = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-	});
-	try {
-		const task = unconfigured.submit('alice', scopes, { ...message(), parts: [{ text: 'hi' }] });
-		await until(() => unconfigured.get('alice', task.id).status.state === 'TASK_STATE_AUTH_REQUIRED', 'auth-required');
-		const status = unconfigured.get('alice', task.id).status as { message?: { parts: Array<{ text: string }> } };
-		assert(status.message?.parts[0]?.text.includes('API key'));
-		assert(status.message?.parts[0]?.text.includes('TTK_AGENT_AUTH_METHOD'));
-		// Still cancellable.
-		assertEquals(unconfigured.cancel('alice', task.id).status.state, 'TASK_STATE_CANCELED');
-	} finally {
-		await unconfigured.close();
-		await bridge.close();
-	}
-});
-
-// --- B1 / G5: durable tasks (AC4) ------------------------------------------------------------------------------
+// --- durable tasks ---------------------------------------------------------------------------------------------
 
 /** A fresh scratch directory for one test's `tasks.json`; the test tiers grant writes under tests/.scratch only. */
 async function scratch(): Promise<{ dir: string; path: string }> {
@@ -798,7 +471,7 @@ async function scratch(): Promise<{ dir: string; path: string }> {
 	return { dir, path: `${dir}/agents/tasks.json` };
 }
 
-Deno.test('B1 / AC4: finished work, history, artifacts and idempotency keys survive a restart; running work comes back failed', async () => {
+Deno.test('finished work, history, artifacts and idempotency keys survive a restart; running work comes back failed', async () => {
 	const { dir, path } = await scratch();
 	const first = new AgentRuntime({
 		// The held tool runs until shutdown aborts it, as a real long command would.
@@ -842,7 +515,7 @@ Deno.test('B1 / AC4: finished work, history, artifacts and idempotency keys surv
 		assertEquals(interrupted.status.state, 'TASK_STATE_FAILED');
 		assertEquals(statusText(interrupted), INTERRUPTED_BY_RESTART);
 		assertThrows(() => second!.get('bob', completed.id), AgentError, 'Task not found');
-		// E-3 survives the restart: the client's retry finds its task and nothing runs again.
+		// Idempotency survives the restart: the client's retry finds its task and nothing runs again.
 		assertEquals(second.submit('alice', scopes, done).id, completed.id);
 		assertEquals(second.submit('alice', scopes, held).id, running.id);
 		await settle();
@@ -866,7 +539,7 @@ Deno.test('B1 / AC4: finished work, history, artifacts and idempotency keys surv
 	}
 });
 
-Deno.test('B1: a restart drops finished tasks past retention and skips malformed entries; no data dir means no file', async () => {
+Deno.test('a restart drops finished tasks past retention and skips malformed entries; no data dir means no file', async () => {
 	const { dir, path } = await scratch();
 	const now = Date.now();
 	const stored = (id: string, finishedAt: number | undefined, state: string): Record<string, unknown> => ({
@@ -879,6 +552,7 @@ Deno.test('B1: a restart drops finished tasks past retention and skips malformed
 			status: { state, timestamp: new Date(now).toISOString() },
 			artifacts: [],
 			history: [],
+			metadata: { kind: 'text' },
 		},
 	});
 	await Deno.mkdir(`${dir}/agents`, { recursive: true });
@@ -892,6 +566,17 @@ Deno.test('B1: a restart drops finished tasks past retention and skips malformed
 				stored('queued', undefined, 'TASK_STATE_SUBMITTED'),
 				stored('waiting', undefined, 'TASK_STATE_INPUT_REQUIRED'),
 				{ owner: 'alice', task: { id: 'broken' } },
+				// A task without `metadata.kind` is malformed, not restored with a guessed kind.
+				{
+					...stored('kindless', now - 1_000, 'TASK_STATE_COMPLETED'),
+					task: {
+						id: 'kindless',
+						contextId: 'c',
+						status: { state: 'TASK_STATE_COMPLETED', timestamp: new Date(now).toISOString() },
+						artifacts: [],
+						history: [],
+					},
+				},
 			],
 			idempotency: [['alice\u0000m-1', 'fresh'], ['mallory\u0000m-2', 'fresh']],
 		}),
@@ -909,7 +594,6 @@ Deno.test('B1: a restart drops finished tasks past retention and skips malformed
 			assertEquals(runtime.get('alice', id).status.state, 'TASK_STATE_FAILED');
 			assertEquals(statusText(runtime.get('alice', id)), INTERRUPTED_BY_RESTART);
 		}
-		assertEquals(runtime.permission('alice', 'waiting'), undefined, 'a pending permission does not survive');
 		assert(warnings.some((line) => line.includes('malformed')), warnings.join('\n'));
 		// An idempotency key naming another owner's task is not restored.
 		const mallory = runtime.submit('mallory', scopes, message({ messageId: 'm-2' }));
@@ -924,7 +608,7 @@ Deno.test('B1: a restart drops finished tasks past retention and skips malformed
 	await memory.close();
 });
 
-Deno.test('R2-8: a durable document is synced before its rename, its folder after, and never left half-written', async () => {
+Deno.test('a durable document is synced before its rename, its folder after, and never left half-written', async () => {
 	const { dir } = await scratch();
 	const path = `${dir}/agents/surfaces.json`;
 	const proto = Deno.FsFile.prototype;
@@ -969,9 +653,9 @@ Deno.test('R2-8: a durable document is synced before its rename, its folder afte
 	}
 });
 
-// --- C4 / G10: per-kind execution bounds -----------------------------------------------------------------------
+// --- per-kind execution bounds ---------------------------------------------------------------------------------
 
-Deno.test('C4 / G10: a tool task is bounded by its tool, clamped to what the tool accepts', () => {
+Deno.test('a tool task is bounded by its tool, clamped to what the tool accepts', () => {
 	const margin = TOOL_BOUND_MARGIN_MS;
 	assertEquals(toolTaskBoundMs('sandbox_exec', {}), 300_000 + SANDBOX_SLOT_WAIT_MS + margin);
 	assertEquals(toolTaskBoundMs('sandbox_exec', { timeout_ms: 900_000 }), 900_000 + SANDBOX_SLOT_WAIT_MS + margin);
@@ -982,7 +666,7 @@ Deno.test('C4 / G10: a tool task is bounded by its tool, clamped to what the too
 	assertEquals(toolTaskBoundMs('browser_click', { timeout_ms: 900_000 }), TOOL_CALL_BOUND_MS);
 });
 
-Deno.test('C4: a 15-minute sandbox_exec submitted as a task is not cut at 120 s, and is cut at its own bound', async () => {
+Deno.test('a 15-minute sandbox_exec submitted as a task is not cut at 120 s, and is cut at its own bound', async () => {
 	const runtime = new AgentRuntime({
 		invoke: (_tool, _args, _owner, _scopes, signal): Promise<Record<string, unknown>> =>
 			new Promise((resolve) => signal?.addEventListener('abort', () => resolve({}), { once: true })),
@@ -997,7 +681,11 @@ Deno.test('C4: a 15-minute sandbox_exec submitted as a task is not cut at 120 s,
 		await time.runMicrotasks();
 		assertEquals(runtime.get('alice', task.id).status.state, 'TASK_STATE_WORKING');
 		await time.tickAsync(121_000);
-		assertEquals(runtime.get('alice', task.id).status.state, 'TASK_STATE_WORKING', 'the old flat 120 s cap is gone');
+		assertEquals(
+			runtime.get('alice', task.id).status.state,
+			'TASK_STATE_WORKING',
+			'a 15-minute task is not cut at 120 s',
+		);
 		await time.tickAsync(toolTaskBoundMs('sandbox_exec', { timeout_ms: 900_000 }) - 121_000);
 		const cut = runtime.get('alice', task.id);
 		assertEquals(cut.status.state, 'TASK_STATE_FAILED');
@@ -1008,29 +696,40 @@ Deno.test('C4: a 15-minute sandbox_exec submitted as a task is not cut at 120 s,
 	}
 });
 
-Deno.test('C4: a text task is bounded by the operator’s TTK_AGENT_TASK_TIMEOUT_S', async () => {
-	const bridge = fakeBridge();
+Deno.test('a text task is bounded by the operator’s TTK_AGENT_TASK_TIMEOUT_S', async () => {
+	// A provider that answers only when its call is aborted, so only the bound ends the task.
+	const slow: ModelProviderClient = {
+		id: 'slow',
+		kind: 'openai',
+		models: ['m'],
+		defaultModel: 'm',
+		complete: (_input, signal): Promise<ModelTurn> =>
+			new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+	};
 	const runtime = new AgentRuntime({
 		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
+		model: { providers: new Map([['slow', slow]]), default: 'slow', reachable: () => true, tools: () => [] },
 		taskTimeoutMs: 100,
 	});
 	try {
-		const task = runtime.submit('alice', scopes, { messageId: 'slow', role: 'ROLE_USER', parts: [{ text: 'hi' }] });
+		const task = runtime.submit('alice', new Set([...scopes, 'model:invoke']), {
+			messageId: 'slow',
+			role: 'ROLE_USER',
+			parts: [{ text: 'hi' }],
+		});
 		const ended = await finished(runtime, 'alice', task.id);
 		assertEquals(ended.status.state, 'TASK_STATE_FAILED');
 		assertStringIncludes(statusText(ended), 'timed out');
 	} finally {
 		await runtime.close();
-		await bridge.close();
 	}
 });
 
-// --- D-143 (model-providers-ui S0 + W2): task metadata on every path, and the §3.10 admission table ----------------
+// --- task metadata on every path, and text-task admission over model providers -----------------------------------
 
 /**
- * A recording provider client (gate K1): `calls` counts how often the loop dialled it, so every §3.10 row can
- * assert which fake ran — this one, the recording bridge, or neither. Each turn ends at once with a fixed text.
+ * A recording provider client: `calls` counts how often the loop dialled it, so every admission case can
+ * assert which fake ran — this one, or none. Each turn ends at once with a fixed text.
  */
 function fakeProvider(
 	id: string,
@@ -1056,23 +755,6 @@ function fakeProvider(
 	};
 }
 
-/** A recording ACP bridge (gate K1): `prompts` counts `session/prompt`; each prompt completes at once. */
-function recordingBridge(): ReturnType<typeof fakeBridge> & { prompts: number } {
-	// Counted on the returned object itself: a copied number would never see the increments.
-	const recording = Object.assign(
-		fakeBridge({
-			rpc: (method): Response | undefined => {
-				if (method !== 'session/prompt') return undefined;
-				recording.prompts++;
-				recording.push({ method: 'bridge/prompt_complete' });
-				return Response.json({ stopReason: 'end_turn' });
-			},
-		}),
-		{ prompts: 0 },
-	);
-	return recording;
-}
-
 /** `AgentRuntimeOptions.model` over the given providers, with `reachable` answered per id. */
 function modelOption(
 	providers: ModelProviderClient[],
@@ -1083,33 +765,41 @@ function modelOption(
 }
 
 const text = (): Record<string, unknown> => ({ ...message(), parts: [{ text: 'hello' }] });
-const NO_TEXT_BACKEND = 'Text execution requires a configured ACP agent or a model provider';
+const NO_TEXT_BACKEND = 'Text execution requires a model provider';
 const withModel = new Set([...scopes, 'model:invoke']);
 
-Deno.test('D-143 addendum A: every submission path writes metadata.kind from the first snapshot on', async (): Promise<void> => {
-	// A bridge and a peer that nothing dials: close() cancels the text and delegation tasks before they would run.
+Deno.test('every submission path writes metadata.kind from the first snapshot on', async (): Promise<void> => {
+	// A provider that never answers and a peer that nothing dials: close() cancels the text and delegation tasks.
+	const silent: ModelProviderClient = {
+		id: 'p',
+		kind: 'openai',
+		models: ['m'],
+		defaultModel: 'm',
+		complete: (_input, signal): Promise<ModelTurn> =>
+			new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+	};
 	const runtime = new AgentRuntime({
 		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({ workspaces: [] }),
-		bridge: { url: 'http://127.0.0.1:9', token: 'never-used', agent: 'none' },
+		model: modelOption([silent], () => true, 'p'),
 		peers: [{ id: 'peer', url: 'http://127.0.0.1:9' }],
 	});
 	try {
 		const tool = runtime.submit('alice', scopes, message());
 		assertEquals(tool.metadata, { kind: 'tool' });
-		const acp = runtime.submit('alice', scopes, text());
-		assertEquals(acp.metadata, { kind: 'text', backend: 'acp' });
+		const prompt = runtime.submit('alice', withModel, text());
+		assertEquals(prompt.metadata, { kind: 'text', backend: 'model', provider: 'p', model: 'm' });
 		const delegated = runtime.delegate('alice', scopes, 'peer', text());
 		assertEquals(delegated.metadata, { kind: 'delegation' });
 		// The snapshot every reader gets carries it, and a wrong-owner read is still not found.
-		assertEquals(runtime.get('alice', acp.id).metadata, { kind: 'text', backend: 'acp' });
+		assertEquals(runtime.get('alice', prompt.id).metadata?.backend, 'model');
 		assertEquals(runtime.list('alice').map((task) => task.metadata?.kind).sort(), ['delegation', 'text', 'tool']);
-		assertThrows(() => runtime.get('bob', acp.id), AgentError, 'Task not found');
+		assertThrows(() => runtime.get('bob', prompt.id), AgentError, 'Task not found');
 	} finally {
 		await runtime.close();
 	}
 });
 
-Deno.test('D-143 addendum A / B1: metadata round-trips through tasks.json', async (): Promise<void> => {
+Deno.test('metadata round-trips through tasks.json', async (): Promise<void> => {
 	const dir = await Deno.makeTempDir({ dir: 'tests/.scratch' });
 	const path = `${dir}/tasks.json`;
 	const first = new AgentRuntime({
@@ -1135,15 +825,15 @@ Deno.test('D-143 addendum A / B1: metadata round-trips through tasks.json', asyn
 	}
 });
 
-Deno.test('D-143 §3.10, the S0 state: no bridge and no providers — one text, with or without the scope or a selection', async (): Promise<void> => {
+Deno.test('admission with no providers — one text, with or without the scope or a selection', async (): Promise<void> => {
 	const runtime = new AgentRuntime({ invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}) });
 	try {
 		assertEquals(runtime.supportsText, false);
-		// Rows 5 and 6: the reworded `-32004`, which still names the configured ACP agent.
+		// Rows 5 and 6: the one `-32004`, naming the backend the deployment could add.
 		for (const held of [scopes, withModel]) {
 			const error = assertThrows(() => runtime.submit('alice', held, text()), AgentError, NO_TEXT_BACKEND);
 			assertEquals(error.code, -32004);
-			assertStringIncludes(error.message, 'configured ACP');
+			assertEquals(error.message, NO_TEXT_BACKEND);
 		}
 		// Row 2: a selection without the scope names the scope the caller already claimed to need.
 		const scopeless = assertThrows(
@@ -1165,7 +855,7 @@ Deno.test('D-143 §3.10, the S0 state: no bridge and no providers — one text, 
 	}
 });
 
-Deno.test('D-143 §3.10 (gate K1): the admission rows over configured providers, each naming which fake ran', async (): Promise<void> => {
+Deno.test('admission over configured providers: each admitted or refused case names which fake ran', async (): Promise<void> => {
 	const up = fakeProvider('up');
 	const down = fakeProvider('down');
 	const reachable = (id: string): boolean => id === 'up';
@@ -1176,7 +866,6 @@ Deno.test('D-143 §3.10 (gate K1): the admission rows over configured providers,
 	try {
 		assertEquals(runtime.reachableProviders, 1);
 		assertEquals(runtime.supportsText, true, 'a reachable provider is a text backend');
-		assertEquals(runtime.hasBridge, false);
 		const selected = (model: Record<string, string>, held = withModel): AgentTask =>
 			runtime.submit('alice', held, text(), undefined, { model });
 		// Row 1: unknown provider / unknown model → -32602; unreachable → -32004 with the grant text.
@@ -1194,19 +883,19 @@ Deno.test('D-143 §3.10 (gate K1): the admission rows over configured providers,
 			).code,
 			-32004,
 		);
-		// Row 2: the scope first, before the provider is even looked up.
+		// The scope is checked first, before the provider is even looked up.
 		assertEquals(assertThrows(() => selected({ provider: 'nope' }, scopes), AgentError, 'model:invoke').code, -32600);
-		// Row 1, admitted: the resolved ids are on the task from the first snapshot (default model applied).
+		// An explicit selection is admitted: the resolved ids are on the task from the first snapshot (default model applied).
 		const chosen = selected({ provider: 'up' });
 		assertEquals(chosen.metadata, { kind: 'text', backend: 'model', provider: 'up', model: 'm-default' });
 		const named = selected({ provider: 'up', model: 'm-other' });
 		assertEquals(named.metadata?.model, 'm-other');
-		// Row 4: no selection, no bridge, a reachable default, the scope → the default provider and its default model.
+		// No selection, a reachable default, the scope → the default provider and its default model.
 		const fallback = runtime.submit('alice', withModel, text());
 		assertEquals(fallback.metadata, { kind: 'text', backend: 'model', provider: 'up', model: 'm-default' });
-		// Row 5: the same request without the scope is told nothing about providers.
+		// The same request without the scope is told nothing about providers.
 		assertEquals(assertThrows(() => runtime.submit('alice', scopes, text()), AgentError, NO_TEXT_BACKEND).code, -32004);
-		// W2: every admitted task ran on the provider the table named — `up`, with the model it resolved — and only
+		// Every admitted task ran on the provider its admission named — `up`, with the model it resolved — and only
 		// there; the refused rows above dialled nothing.
 		for (const task of [chosen, named, fallback]) {
 			const done = await finished(runtime, 'alice', task.id);
@@ -1224,50 +913,15 @@ Deno.test('D-143 §3.10 (gate K1): the admission rows over configured providers,
 	}
 });
 
-Deno.test('D-143 §3.10 rows 3, 4 and 6 (gate K1): a bridge beats a default; an unreachable default is -32004; several without a default have no fallback — each row names which fake ran', async (): Promise<void> => {
-	const bridge = recordingBridge();
-	const up = fakeProvider('up');
-	const bridged = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-		bridge: bridge.options,
-		model: modelOption([up], () => true, 'up'),
-	});
-	try {
-		assertEquals(bridged.hasBridge, true);
-		// Row 3: no selection → ACP, whatever the default says: the bridge is prompted, the provider is not dialled.
-		const acp = bridged.submit('alice', withModel, text());
-		assertEquals(acp.metadata, { kind: 'text', backend: 'acp' });
-		assertEquals((await finished(bridged, 'alice', acp.id)).status.state, 'TASK_STATE_COMPLETED');
-		assertEquals([bridge.prompts, up.calls.length], [1, 0]);
-		// Row 3 without the scope: still ACP — the bridge needs no `model:invoke`.
-		const scopeless = bridged.submit('alice', scopes, text());
-		assertEquals(scopeless.metadata?.backend, 'acp');
-		assertEquals((await finished(bridged, 'alice', scopeless.id)).status.state, 'TASK_STATE_COMPLETED');
-		assertEquals([bridge.prompts, up.calls.length], [2, 0]);
-		// A selection still wins over the bridge (row 1): the provider is dialled, the bridge is not.
-		const picked = bridged.submit('alice', withModel, text(), undefined, { model: { provider: 'up' } });
-		assertEquals(picked.metadata?.backend, 'model');
-		assertEquals((await finished(bridged, 'alice', picked.id)).status.state, 'TASK_STATE_COMPLETED');
-		assertEquals([bridge.prompts, up.calls.length], [2, 1]);
-		// Row 2 beside a bridge: a selection without the scope is refused, and neither fake hears of it.
-		assertEquals(
-			assertThrows(() => bridged.submit('alice', scopes, text(), undefined, { model: { provider: 'up' } }), AgentError)
-				.code,
-			-32600,
-		);
-		assertEquals([bridge.prompts, up.calls.length], [2, 1]);
-	} finally {
-		await bridged.close();
-		await bridge.close();
-	}
-	// Row 4, unreachable default (gate F19): refused before any task exists; the provider is never dialled.
+Deno.test('admission: an unreachable default is -32004; several without a default have no fallback — each case names which fake ran', async (): Promise<void> => {
+	// An unreachable default is refused before any task exists; the provider is never dialled.
 	const down = fakeProvider('down');
 	const unreachableDefault = new AgentRuntime({
 		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
 		model: modelOption([down], () => false, 'down'),
 	});
 	try {
-		assertEquals(unreachableDefault.supportsText, false, 'no reachable provider and no bridge');
+		assertEquals(unreachableDefault.supportsText, false, 'no reachable provider');
 		assertEquals(
 			assertThrows(() => unreachableDefault.submit('alice', withModel, text()), AgentError, 'not reachable').code,
 			-32004,
@@ -1277,8 +931,8 @@ Deno.test('D-143 §3.10 rows 3, 4 and 6 (gate K1): a bridge beats a default; an 
 	} finally {
 		await unreachableDefault.close();
 	}
-	// The `default` rule (gate F19), three cases over the runtime's side of it.
-	// (a) One provider named as the default (the parser auto-defaults a sole provider): row 4 runs it.
+	// The `default` rule, three cases over the runtime's side of it.
+	// (a) One provider named as the default (the parser auto-defaults a sole provider): a request without a selection runs it.
 	const only = fakeProvider('only');
 	const sole = new AgentRuntime({
 		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
@@ -1292,7 +946,7 @@ Deno.test('D-143 §3.10 rows 3, 4 and 6 (gate K1): a bridge beats a default; an 
 	} finally {
 		await sole.close();
 	}
-	// (b) Several providers and no default: row 6 — a bridge-less text task without a selection has nowhere to go,
+	// (b) Several providers and no default: row 6 — a text task without a selection has nowhere to go,
 	// and a selection still runs the named one and no other.
 	const a = fakeProvider('a');
 	const b = fakeProvider('b');
@@ -1305,7 +959,7 @@ Deno.test('D-143 §3.10 rows 3, 4 and 6 (gate K1): a bridge beats a default; an 
 			assertThrows(() => noDefault.submit('alice', withModel, text()), AgentError, NO_TEXT_BACKEND).code,
 			-32004,
 		);
-		// QR-6: row 6 without the scope — the same text, nothing about providers to a scopeless caller.
+		// Several providers without a default and without the scope — the same text, nothing about providers to a scopeless caller.
 		assertEquals(
 			assertThrows(() => noDefault.submit('alice', scopes, text()), AgentError, NO_TEXT_BACKEND).code,
 			-32004,
@@ -1338,66 +992,23 @@ Deno.test('D-143 §3.10 rows 3, 4 and 6 (gate K1): a bridge beats a default; an 
 	}
 });
 
-Deno.test('D-143 §3.10 (CR-1 / BUG-6): a model without a provider is -32602 "model requires provider", with and without a bridge, with and without the scope — no task, nothing dialled', async (): Promise<void> => {
+Deno.test('a model without a provider is -32602 "model requires provider", with and without the scope — no task, nothing dialled', async (): Promise<void> => {
 	const only = fakeProvider('only');
-	const bridgeOptions = { url: 'http://127.0.0.1:9', token: 'never-used', agent: 'none' };
-	for (const bridge of [undefined, bridgeOptions]) {
-		const runtime = new AgentRuntime({
-			invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-			model: modelOption([only], () => true, 'only'),
-			...(bridge === undefined ? {} : { bridge }),
-		});
-		try {
-			assertEquals(runtime.hasBridge, bridge !== undefined);
-			for (const held of [scopes, withModel]) {
-				const error = assertThrows(
-					() => runtime.submit('alice', held, text(), undefined, { model: { model: 'm-other' } }),
-					AgentError,
-					'model requires provider',
-				);
-				assertEquals(error.code, -32602, `bridge: ${bridge !== undefined}, scope: ${held.has('model:invoke')}`);
-			}
-			assertEquals(only.calls.length, 0, 'the default provider was never dialled');
-		} finally {
-			await runtime.close();
-		}
-	}
-});
-
-Deno.test('run log: a tool task records the call with its arguments, the result, its duration and the states', async () => {
-	const big = 'x'.repeat(10_000);
 	const runtime = new AgentRuntime({
-		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({ content: [{ type: 'text', text: big }] }),
+		invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}),
+		model: modelOption([only], () => true, 'only'),
 	});
 	try {
-		const task = runtime.submit(
-			'alice',
-			scopes,
-			message({
-				parts: [{ data: { tool: 'sandbox_list', arguments: { workspace_id: 'w' } } }],
-			}),
-		);
-		await finished(runtime, 'alice', task.id);
-		const run = runtime.runLog('alice', task.id);
-		assertEquals(run.entries.map((entry) => entry.kind), [
-			'received',
-			'state',
-			'tool_call',
-			'tool_result',
-			'artifact',
-			'state',
-		]);
-		assertEquals(run.entries[0]!.kind === 'received' && run.entries[0]!.via, undefined);
-		const call = run.entries.find((entry) => entry.kind === 'tool_call')!;
-		assertEquals([call.name, call.arguments], ['sandbox_list', { workspace_id: 'w' }]);
-		const result = run.entries.find((entry) => entry.kind === 'tool_result')!;
-		assertEquals(result.isError, false);
-		assert(typeof result.duration_ms === 'number');
-		assert(
-			String(result.text).length < 4200 && String(result.text).endsWith('[10000 chars]'),
-			'a long result is clipped',
-		);
-		assertThrows(() => runtime.runLog('mallory', task.id), AgentError);
+		for (const held of [scopes, withModel]) {
+			const error = assertThrows(
+				() => runtime.submit('alice', held, text(), undefined, { model: { model: 'm-other' } }),
+				AgentError,
+				'model requires provider',
+			);
+			assertEquals(error.code, -32602, `scope: ${held.has('model:invoke')}`);
+		}
+		assertEquals(only.calls.length, 0, 'the default provider was never dialled');
+		assertEquals(runtime.list('alice'), []);
 	} finally {
 		await runtime.close();
 	}

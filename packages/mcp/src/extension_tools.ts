@@ -1,30 +1,21 @@
-/** Optional service catalogs, kept separate from the frozen browser catalog (D-064). */
+/** Optional service catalogs, kept separate from the frozen browser catalog. */
 import * as z from 'zod';
 import { A2uiMessageSchema, A2uiThemeSchema, normalizeA2uiMessage } from '@tykotech/wire';
 import type { ToolAvailability, ToolDefinition, ToolHints } from './catalog.ts';
-import { untilAborted } from './cancel.ts';
-import { ToolError } from './errors.ts';
+import { ToolError, untilAborted } from './errors.ts';
 import { json, type ToolContext, type ToolResult } from './types.ts';
 import type { Scope } from './scopes.ts';
 
-export type ExtensionAction = (args: Record<string, unknown>, ctx: ToolContext) => Promise<Record<string, unknown>>;
+type ExtensionAction = (args: Record<string, unknown>, ctx: ToolContext) => Promise<Record<string, unknown>>;
 export type ExtensionActions = Readonly<Record<string, ExtensionAction | undefined>>;
 
 const workspace = z.string().uuid();
 const path = z.string().min(1).max(4096);
 const text = z.string().max(65_536);
 
-// --- A8 / D-113: typed results ---------------------------------------------------------------------------------
-//
-// Every result keeps the D-064 `{ result: … }` envelope (wire stability) and now says what is inside it. The shapes
-// are read from the code that produces them: the sandbox service (`packages/sandbox/src/workspaces.ts`, backends in
-// `sandbox.ts`), the agent runtime's `AgentTask` (`packages/agents/src/runtime.ts`) and the A2UI store
-// (`packages/gateway/src/a2ui.ts`). Those are other services and packages, so each object is *loose*: its declared
-// fields are typed and checked, and a field a later version adds passes through rather than being stripped in the
-// dispatcher's validation — which would turn a harmless addition into silent data loss. A declared field that goes
-// missing or changes type still fails the check and is reported, which is the point.
+// --- typed results ---------------------------------------------------------------------------------------------
 
-/** The D-064 envelope around a typed result. */
+/** The extension tools' envelope around a typed result. */
 function envelope(shape: z.ZodType): z.ZodObject<z.ZodRawShape> {
 	return z.object({ result: shape });
 }
@@ -47,7 +38,7 @@ const SANDBOX_OUTPUT = {
 		name: z.string().optional(),
 		limits: sandboxLimits,
 	}),
-	// R12 (design §2.19): a workspace from a git remote, with the commit and ref it landed on.
+	// A workspace from a git remote, with the commit and ref it landed on.
 	sandbox_clone: z.looseObject({
 		workspace_id: z.string(),
 		created_at: z.string(),
@@ -64,7 +55,7 @@ const SANDBOX_OUTPUT = {
 			name: z.string().optional(),
 			busy: z.boolean().optional(),
 		})).optional(),
-		// R12: present when the sandbox clones — the hosts a url may name and the remotes' ids, never a credential.
+		// Present when the sandbox clones — the hosts a url may name and the remotes' ids, never a credential.
 		clone: z.looseObject({ hosts: z.array(z.string()), remotes: z.array(z.string()) }).optional(),
 		entries: z.array(z.looseObject({
 			name: z.string(),
@@ -142,7 +133,7 @@ const embedStreamTicket = z.looseObject({
 	origin_bound: z.string(),
 });
 
-// D-154: the agents' vector memory. The store (`packages/gateway/src/memory.ts`) owns these bounds and judges them
+// The agents' vector memory. The store (`packages/gateway/src/memory.ts`) owns these bounds and judges them
 // again; they are repeated here so a model reads them in the schema, and `memory_test.ts` pins the two equal.
 const memoryCollection = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/).describe(
 	'collection name: lower-case letters, digits, _ and -, up to 64',
@@ -189,17 +180,13 @@ export const EXTENSION_OUTPUT: Readonly<Record<string, z.ZodType>> = {
 	...SANDBOX_OUTPUT,
 	agent_peers: z.looseObject({ peers: z.array(z.looseObject({ id: z.string() })) }),
 	agent_delegate: taskResult,
-	agent_prompt: taskResult,
 	agent_get_task: taskResult,
 	agent_cancel_task: taskResult,
-	// R1 (D-121): a tool call run as a background task, and the caller's own tasks.
+	// A tool call run as a background task, and the caller's own tasks.
 	agent_run_tool: taskResult,
 	agent_list_tasks: z.looseObject({
 		tasks: z.array(agentTask).describe('newest first; history is omitted (read one task with agent_get_task)'),
 		truncated: z.boolean().describe('true when more tasks matched than the limit returned'),
-		unreachable_nodes: z.array(z.string()).optional().describe(
-			'in a cluster: nodes that did not answer, so their tasks are missing from this list',
-		),
 	}),
 	// `deleteSurface` arrives through a2ui_publish too, and answers like a2ui_delete.
 	a2ui_publish: z.union([z.looseObject({ surface: a2uiSurface }), a2uiRemoved]),
@@ -213,7 +200,7 @@ export const EXTENSION_OUTPUT: Readonly<Record<string, z.ZodType>> = {
 /** The default `sandbox_exec` timeout the service applies when the call names none (`LIMITS`, sandbox service). */
 const SANDBOX_EXEC_DEFAULT_TIMEOUT_MS = 300_000;
 
-/** Why a sandbox tool is withheld while its service is down (D-082). */
+/** Why a sandbox tool is withheld while its service is down. */
 const SANDBOX_DOWN = 'the coding sandbox is not reachable right now; try again shortly';
 
 /** The refusal an MCP Apps stream ticket tool gives while the operator has not turned MCP Apps on. */
@@ -239,11 +226,7 @@ const embedOrigin = z.string().max(256).describe(
 	'The embed’s origin, scheme://host[:port], as its socket will send it.',
 );
 
-/**
- * R12 (design §2.3, §2.4): `sandbox_clone` is offered only while the sandbox is up **and** its `/healthz` says it
- * clones. Off, it answers `feature-unavailable` naming the sandbox service's own switches — a static configuration
- * fact, as the D-082 precedent is — without a `feature` extra.
- */
+/** `sandbox_clone` is offered only while the sandbox is up **and** its `/healthz` says it clones. */
 const SANDBOX_CLONE_GATE = {
 	available: (state: ToolAvailability): boolean => state.services?.sandbox !== false && state.sandboxClone === true,
 	unavailableDetail: (state: ToolAvailability): string =>
@@ -254,9 +237,8 @@ const SANDBOX_CLONE_GATE = {
 };
 
 /**
- * R3-9: why a `sandbox_clone` failed, by the sandbox service's private code (D-131), in fixed words. The generic
- * "check the service configuration" read a wrong `ref` as cloning being off. The MCP code stays `feature-unavailable`
- * (no new code), and nothing the service or the remote said is passed on: these strings are the whole detail.
+ * Why a `sandbox_clone` failed, by the sandbox service's private code, in fixed words. The generic "check the service
+ * configuration" would read a wrong `ref` as cloning being off.
  */
 const SANDBOX_CLONE_FAILURES: Readonly<Record<string, string>> = {
 	clone_failed: 'the clone did not complete: check the url or remote, the ref, and that the repository exists and ' +
@@ -270,11 +252,9 @@ const SANDBOX_CLONE_FAILURES: Readonly<Record<string, string>> = {
 };
 
 /**
- * FXC-N1 (design §2.8): why any sandbox tool failed, by the sandbox service's private code (D-131), in fixed words —
- * the same treatment R3-9 gave `sandbox_clone`, for every `sandbox_*` tool. Consulted after the clone table, so a
- * clone keeps its own five texts. The MCP code still comes from the HTTP status alone (no new code), and nothing the
- * service said is passed on: these strings are the whole detail. `cage_failed` and any code not listed keep the
- * generic text, which names nothing the caller could act on differently.
+ * Why any sandbox tool failed, by the sandbox service's private code, in fixed words — the same treatment
+ * `sandbox_clone` gets, for every `sandbox_*` tool. Consulted after the clone table, so a clone keeps its own five
+ * texts.
  */
 const SANDBOX_FAILURES: Readonly<Record<string, string>> = {
 	no_workspace: 'no such workspace',
@@ -293,11 +273,7 @@ const SANDBOX_FAILURES: Readonly<Record<string, string>> = {
 	disk_full: 'the sandbox disk is full',
 };
 
-/**
- * The fixed words for a sandbox tool's failure, or `undefined` for the generic text. `sandbox_clone` reads its own
- * R3-9 table first, under the condition R3-9 set (the call ended `feature-unavailable`), so its five texts are exactly
- * what they were; every sandbox tool, the clone included for any other code, then reads {@linkcode SANDBOX_FAILURES}.
- */
+/** The fixed words for a sandbox tool's failure, or `undefined` for the generic text. */
 function sandboxFailure(name: string, code: string, privateCode: unknown): string | undefined {
 	if (!name.startsWith('sandbox_') || typeof privateCode !== 'string') return undefined;
 	if (
@@ -318,7 +294,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		scope: Scope,
 		mutates: boolean,
 		hints?: ToolHints,
-		/** R12: a gate of the tool's own in place of its service's health alone (`sandbox_clone`). */
+		/** A gate of the tool's own in place of its service's health alone (`sandbox_clone`). */
 		gate?: Pick<ToolDefinition, 'available' | 'unavailableDetail'>,
 		/** A rewrite of alternative argument spellings onto the schema's own (`a2ui_publish`). */
 		normalizeArguments?: ToolDefinition['normalizeArguments'],
@@ -327,8 +303,8 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		if (action === undefined) return;
 		const output = EXTENSION_OUTPUT[name];
 		if (output === undefined) throw new Error(`extension tool ${name} has no output schema`);
-		// D-082: a tool whose private service is down is withheld until the next probe finds it up again.
-		const service = name.startsWith('sandbox_') ? 'sandbox' : name === 'agent_prompt' ? 'agents' : null;
+		// A tool whose private service (the coding sandbox) is down is withheld until the next probe finds it up again.
+		const sandboxed = name.startsWith('sandbox_');
 		tools.push({
 			name,
 			title: name.replaceAll('_', ' '),
@@ -339,18 +315,15 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 			mutates,
 			...(hints === undefined ? {} : { hints }),
 			...(normalizeArguments === undefined ? {} : { normalizeArguments }),
-			...(gate !== undefined ? gate : service === null ? {} : {
-				available: (state: ToolAvailability) => state.services?.[service] !== false,
-				unavailableDetail: () =>
-					service === 'sandbox'
-						? SANDBOX_DOWN
-						: 'the external agent runner is not reachable right now; try again shortly',
+			...(gate !== undefined ? gate : !sandboxed ? {} : {
+				available: (state: ToolAvailability) => state.services?.sandbox !== false,
+				unavailableDetail: () => SANDBOX_DOWN,
 			}),
 			handler: async (args: unknown, ctx: ToolContext): Promise<ToolResult> => {
-				// A10: a call cancelled before it starts does not start.
+				// A call cancelled before it starts does not start.
 				ctx.signal?.throwIfAborted();
 				if (name === 'sandbox_exec') {
-					// A9: elapsed against the command's own timeout; the heartbeat supplies the elapsed seconds.
+					// Elapsed against the command's own timeout; the heartbeat supplies the elapsed seconds.
 					const timeoutMs = (args as { timeout_ms?: number }).timeout_ms ?? SANDBOX_EXEC_DEFAULT_TIMEOUT_MS;
 					ctx.progress?.({ total: timeoutMs / 1000, message: 'sandbox_exec running in the cage' });
 				}
@@ -376,7 +349,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 						? 'file-unavailable'
 						: 'feature-unavailable';
 					// Do not echo upstream diagnostics: external services may include credential-bearing URLs. A sandbox
-					// failure is named by its code alone (R3-9, FXC-N1), and only from the fixed tables.
+					// failure is named by its code alone, and only from the fixed tables.
 					const fixed = sandboxFailure(name, code, (error as { code?: unknown })?.code);
 					if (fixed !== undefined) throw new ToolError(code, `${name} could not complete: ${fixed}`);
 					throw new ToolError(code, `${name} could not complete; check the service configuration and operation`);
@@ -401,7 +374,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		'sandbox:execute',
 		true,
 	);
-	// R12 (design §2.19, D-131): openWorld — the clone step reaches the operator's git hosts or a fixed remote.
+	// openWorld — the clone step reaches the operator's git hosts or a fixed remote.
 	add(
 		'sandbox_clone',
 		'Create an owned coding workspace from a git repository: url (https, on a host the sandbox lists in ' +
@@ -492,7 +465,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		true,
 		{ destructive: true },
 	);
-	// D-076: a live shell over a workspace, line mode, in the same cage as a command.
+	// A live shell over a workspace, line mode, in the same cage as a command.
 	add(
 		'sandbox_session_open',
 		'Open a live shell session in your coding workspace (one per workspace; ends after 30 min idle or 4 h). Feed it with sandbox_session_input and collect output with sandbox_session_read.',
@@ -525,7 +498,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		'sandbox:execute',
 		false,
 	);
-	// Ends activity, not data: not destructive (A7).
+	// Ends activity, not data: not destructive.
 	add(
 		'sandbox_session_close',
 		'End a live session and its shell.',
@@ -577,23 +550,13 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		{ openWorld: true },
 	);
 	add(
-		'agent_prompt',
-		'Start a task with the configured external ACP agent; use agent_get_task to follow it.',
-		z.object({
-			message: text,
-		}).strict(),
-		'agent:invoke',
-		true,
-		{ openWorld: true },
-	);
-	add(
 		'agent_get_task',
 		'Read your task state and artifacts.',
 		z.object({ task_id: workspace }).strict(),
 		'agent:invoke',
 		false,
 	);
-	// Ends activity, not data: not destructive (A7).
+	// Ends activity, not data: not destructive.
 	add(
 		'agent_cancel_task',
 		'Cancel your task and propagate cancellation to its executor.',
@@ -603,7 +566,7 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		'agent:invoke',
 		true,
 	);
-	// R1 (D-121): the MCP face of the owner-isolated task runtime A2A already uses. Not the MCP Tasks wire (G3): the
+	// The MCP face of the owner-isolated task runtime A2A already uses. Not the MCP Tasks wire: the
 	// SDK has no task runtime and the 2026 codec deletes `execution` and `capabilities.tasks`.
 	add(
 		'agent_run_tool',
@@ -677,10 +640,8 @@ export function extensionTools(actions: ExtensionActions): readonly ToolDefiniti
 		undefined,
 		SURFACE_TICKET_GATE,
 	);
-	// D-154: vector memory on the data volume, so the library's scopes (D-075): reading is `files:read`, changing it
-	// `files:write`. Owned like a workspace, so it is an extension tool and not a library one. No service gate: there is
-	// no private service, and an embedder that is gone is answered per collection. Closed world, as the MCP spec's own
-	// example has it — a provider embedder's call is how the store works, not something the caller reaches.
+	// Vector memory on the data volume, so the library's scopes: reading is `files:read`, changing it `files:write`.
+	// Owned like a workspace, so it is an extension tool and not a library one.
 	add(
 		'memory_save',
 		'Save up to 32 texts to your memory for later retrieval by similarity. Memory is private to you and kept ' +

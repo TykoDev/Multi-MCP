@@ -1,10 +1,6 @@
 /**
- * Browser-output tools (R10, R11; design §2.3, §2.7–§2.8; D-118–D-120): a printed PDF, a signed link to a session
- * file, the accessibility tree and the page's performance numbers.
- *
- * The output schemas live here beside their definitions rather than in `schemas.ts` (design §2.3): each part owns
- * its shapes. The file listing entry is borrowed from `OUTPUT.browser_get_file`, so an artifact and a download can
- * never be described two ways.
+ * Browser-output tools: a printed PDF, a signed link to a session file, the accessibility tree and the page's
+ * performance numbers.
  */
 import * as z from 'zod';
 import * as handlers from '../tools.ts';
@@ -36,7 +32,7 @@ export const MEDIA_OUTPUT = {
 		delivery: z.enum(['inline', 'file']),
 		/** The PDF's size in bytes; the bytes themselves ride the `application/pdf` block or the artifact. */
 		bytes: z.number().int(),
-		/** The artifact, for `delivery: 'file'` (D-119). */
+		/** The artifact, for `delivery: 'file'`. */
 		file: FileInfo.optional(),
 	}),
 	browser_file_link: z.object({
@@ -112,9 +108,8 @@ export const MEDIA_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 	def({
 		name: 'browser_file_link',
 		title: 'Link to a session file',
-		// D-140 (G5): the life widened from 300 s to an hour, a wire widening offset by revocation — the link dies with
-		// the session (incarnation), with a rotated key or changed password (credential epoch), and with the OAuth
-		// access token it was minted under (F1).
+		// An hour-long life is offset by revocation — the link dies with the session (incarnation), with a rotated
+		// key or changed password (credential epoch), and with the delegated bearer it was minted under.
 		description: 'Mint a URL that downloads one file listed by browser_list_files with no ' +
 			'credential — for handing a file to a person or a program that holds none. The link is bound to the file, ' +
 			'the session and the credential that minted it, works for ttl_seconds (default 3600, at most 3600), and ' +
@@ -126,11 +121,11 @@ export const MEDIA_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 			session_id: sessionId,
 			ttl_seconds: z.number().int().min(10).max(3600).optional().describe(
 				'10 to 3600 seconds. Default: the deployment’s, 3600 unless the operator changed it. A link never ' +
-					'outlives the OAuth access token it was minted under.',
+					'outlives the credential it was minted under.',
 			),
 		}),
 		mutates: false,
-		// A deployment switch, not a missing capability: the refusal names it (design §2.4). D-150: on by default
+		// A deployment switch, not a missing capability: the refusal names it. On by default
 		// wherever a signing key can be had, so a refusal means the operator turned it off or gave it no key.
 		available: (state) => state.signedLinks === true,
 		unavailableDetail: () =>

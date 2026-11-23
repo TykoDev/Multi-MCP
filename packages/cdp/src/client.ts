@@ -2,12 +2,9 @@
  * `CdpClient` — id-correlated CDP request/response over a native `WebSocket`, plus the typed
  * `send.Domain.method(...)` surface and a multi-listener event registry.
  *
- * Contract: SPECS/ARCHITECTURE.md §7.1/§7.2/§8, SPECS/DECISION-REGISTER.md D-CDP1/D-CDP2/D-CFG1,
- * SPECS/COMPLETIONS-CRITERIA.md §3.1, SPECS/OBSERVABILITY-TESTING-CICD.md §1.4.
- *
- * Layering (ARCHITECTURE §3): this is leaf infrastructure. It imports no other `@bua/*` package and
+ * Layering: this is leaf infrastructure. It imports no other `@tykotech/*` package and
  * knows nothing about session pooling, focus policy, or the event bus. Session/target state lives in
- * `@tykotech/browser`'s SessionManager (§7.3); reconnect *policy* lives there too (§7.4) — this file only
+ * `@tykotech/browser`'s SessionManager; reconnect *policy* lives there too — this file only
  * exposes the close signal that policy needs.
  */
 
@@ -29,19 +26,19 @@ import {
 	MAX_INBOUND_FRAME_BYTES,
 } from './transport.ts';
 
-/** Per-request timeout default: 60 s (SPECS/ARCHITECTURE.md §8 timeout hierarchy). */
+/** Per-request timeout default: 60 s. */
 export const DEFAULT_CDP_REQUEST_TIMEOUT_MS = 60_000;
 
-/** Primary env override for the per-request timeout, in **seconds** (D-CFG1). */
+/** Primary env override for the per-request timeout, in **seconds**. */
 export const CDP_TIMEOUT_ENV = 'BUA_CDP_TIMEOUT_S';
 
-/** Compat alias for {@linkcode CDP_TIMEOUT_ENV} (D-CFG1 `BROWSER_USE_*` aliases). */
+/** Compat alias for {@linkcode CDP_TIMEOUT_ENV} (the `BROWSER_USE_*` spelling). */
 export const CDP_TIMEOUT_ENV_COMPAT = 'BROWSER_USE_CDP_TIMEOUT_S';
 
-/** Env switch for the wire log. Off by default (OBS §1.4). */
+/** Env switch for the wire log. Off by default. */
 export const CDP_WIRE_LOG_ENV = 'BUA_CDP_WIRE_LOG';
 
-/** Wire-log bodies are truncated at 4 KB with a `truncatedBytes` field (OBS §1.4). */
+/** Wire-log bodies are truncated at 4 KB with a `truncatedBytes` field. */
 export const WIRE_LOG_BODY_LIMIT = 4096;
 
 /** How long `close()` waits for the socket's close handshake before synthesizing the terminal state. */
@@ -52,7 +49,7 @@ export type { CdpCloseInfo } from './transport.ts';
 // domains.ts). Keep this line — `deno check packages/cdp/mod.ts` depends on it.
 export type { CdpSend, CdpSendOptions } from './domains.ts';
 
-/** `isCdpConnected ⇔ state === 'open'` (ARCHITECTURE §3). */
+/** `isCdpConnected ⇔ state === 'open'`. */
 export type CdpConnectionState = 'open' | 'closed';
 
 /** One CDP frame as recorded by the wire log. */
@@ -83,13 +80,13 @@ export interface CdpClientOptions {
 	 * (`BUA_CDP_TIMEOUT_S`, compat `BROWSER_USE_CDP_TIMEOUT_S`, seconds) → 60 s.
 	 */
 	requestTimeoutMs?: number;
-	/** Cap on the WebSocket handshake. Defaults to 15 s (ARCHITECTURE §7.4). */
+	/** Cap on the WebSocket handshake. Defaults to 15 s. */
 	connectTimeoutMs?: number;
 	/** Inbound frame budget. Defaults to 200 MB. */
 	maxFrameBytes?: number;
 	/**
-	 * Wire log (OBS §1.4). `undefined` consults `BUA_CDP_WIRE_LOG`; `true` uses the stderr sink; a
-	 * function receives the records. The redaction filter (OBS §1.5) lives in `@tykotech/browser`, which
+	 * Wire log. `undefined` consults `BUA_CDP_WIRE_LOG`; `true` uses the stderr sink; a
+	 * function receives the records. The redaction filter lives in `@tykotech/browser`, which
 	 * this package may not import — install it by passing a wrapping sink.
 	 */
 	wireLog?: boolean | CdpWireLogSink;
@@ -121,7 +118,7 @@ interface PendingRequest {
 /**
  * Read an env var without exploding when `--allow-env` does not cover it.
  *
- * D-CFG1 mandates getters rather than import-time snapshots, and `@tykotech/cdp` is a library: a caller
+ * Env is read through getters rather than import-time snapshots, and `@tykotech/cdp` is a library: a caller
  * running under a tighter permission set must get the documented default, not a `NotCapable` crash.
  */
 function readEnv(name: string): string | undefined {
@@ -159,13 +156,13 @@ function readEnvSeconds(name: string): number | undefined {
 	return Math.round(seconds * 1000);
 }
 
-/** Whether the wire log is enabled by env. Off unless explicitly `true`/`1` (OBS §1.4). */
+/** Whether the wire log is enabled by env. Off unless explicitly `true`/`1`. */
 export function isWireLogEnabledByEnv(): boolean {
 	const raw = readEnv(CDP_WIRE_LOG_ENV)?.trim().toLowerCase();
 	return raw === 'true' || raw === '1';
 }
 
-/** The default wire-log sink: one JSON line per frame on **stderr** (OBS §1.4). */
+/** The default wire-log sink: one JSON line per frame on **stderr**. */
 export function stderrWireLogSink(record: CdpWireLogRecord): void {
 	console.error(`bua.cdp.wire ${JSON.stringify(record)}`);
 }
@@ -186,9 +183,9 @@ function truncateBody(value: unknown): { body?: string; truncatedBytes?: number 
  * A connected CDP endpoint.
  *
  * Flat session mode throughout: browser-level calls omit `sessionId`, per-target calls pass it on
- * the same socket (ARCHITECTURE §7.1). Events carry `method` plus an optional `sessionId`, which is
+ * the same socket. Events carry `method` plus an optional `sessionId`, which is
  * handed through to listeners so a single global handler can route by target — the design
- * SessionManager is required to keep (D-CDP2).
+ * SessionManager keeps.
  */
 export class CdpClient {
 	readonly #transport: CdpTransport;
@@ -222,7 +219,7 @@ export class CdpClient {
 	 * Open a CDP connection.
 	 *
 	 * `cdpUrl` MUST be a `ws://`/`wss://` URL — resolve an http(s) DevTools endpoint with
-	 * `fetchWebSocketDebuggerUrl()` first (ARCHITECTURE §7.4). On handshake timeout the socket is
+	 * `fetchWebSocketDebuggerUrl()` first. On handshake timeout the socket is
 	 * torn down before rejecting so a retry starts clean.
 	 */
 	static async connect(cdpUrl: string, opts?: CdpClientOptions): Promise<CdpClient> {
@@ -266,7 +263,7 @@ export class CdpClient {
 	 * Resolves — never rejects — when the connection ends, with the reason.
 	 *
 	 * This plus {@linkcode CdpClient.onClose} is the drop-detection seam `@tykotech/browser` reconnect policy
-	 * (ARCHITECTURE §7.4) consumes: reconnect iff `info.intentional === false`.
+	 * consumes: reconnect iff `info.intentional === false`.
 	 */
 	get closed(): Promise<CdpCloseInfo> {
 		return this.#closedDeferred.promise;
@@ -280,8 +277,8 @@ export class CdpClient {
 	/**
 	 * Subscribe to a CDP event. Returns an unsubscribe function.
 	 *
-	 * Multi-listener by design (`Map<method, Set<fn>>`) — the explicit D-CDP2 improvement over
-	 * cdp-use's single slot, where a second registration silently clobbered the first. A listener
+	 * Multi-listener by design (`Map<method, Set<fn>>`): a second registration never clobbers the
+	 * first. A listener
 	 * that throws is reported via `onListenerError` and does not affect the read loop or its peers.
 	 */
 	on<E extends CdpEventName>(event: E, listener: CdpEventListener<E>): () => void {
@@ -319,7 +316,7 @@ export class CdpClient {
 	}
 
 	/**
-	 * Escape hatch for methods outside the typed D-CDP2 surface (vendor `BrowserUse` commands, a
+	 * Escape hatch for methods outside the typed domain surface (vendor `BrowserUse` commands, a
 	 * domain not yet added). The caller owns the result type; prefer `send.*` wherever it exists.
 	 */
 	sendRaw<TResult = unknown>(
@@ -336,7 +333,7 @@ export class CdpClient {
 	 *
 	 * Settles every pending request, clears every timer, closes the socket and leaves zero leaked
 	 * ops. Idempotent; the resulting {@linkcode CdpCloseInfo} is marked `intentional`, which is what
-	 * suppresses M1's auto-reconnect (ARCHITECTURE §7.4).
+	 * suppresses the browser layer's auto-reconnect.
 	 */
 	async close(): Promise<void> {
 		this.#intentionalClose = true;
@@ -392,8 +389,8 @@ export class CdpClient {
 		const text = JSON.stringify(frame);
 
 		return new Promise<unknown>((resolve, reject) => {
-			// A cancellable timeout composed with the socket lifetime and the caller's signal, per
-			// ARCHITECTURE §8. `AbortSignal.timeout` is not used directly because it cannot be
+			// A cancellable timeout composed with the socket lifetime and the caller's signal.
+			// `AbortSignal.timeout` is not used directly because it cannot be
 			// cancelled, and an uncancelled 60 s timer is exactly what the op sanitizer flags.
 			const timeoutController = new AbortController();
 			const timer = setTimeout(() => {
@@ -508,14 +505,11 @@ export class CdpClient {
 	/**
 	 * An inbound frame was dropped.
 	 *
-	 * ERRATUM(M0-cdp-transport-4): ARCHITECTURE §7.1 states the 200 MB budget but not the failure
-	 * mode. Resolution implemented below; see errata-M0.md.
-	 *
 	 * When the correlation id survived in the frame prefix, the matching request is failed
 	 * immediately — better than making the caller wait out the full 60 s for a response we already
 	 * know we threw away. Otherwise (an oversized *event*, or an undecodable frame) the error goes to
 	 * `onFrameError`. Either way the socket stays open: one bad frame is not proof the browser died,
-	 * and tearing down here would fight the reconnect policy in ARCHITECTURE §7.4.
+	 * and tearing down here would fight the browser layer's reconnect policy.
 	 */
 	#handleFrameError(error: CdpError, idHint: number | null): void {
 		if (idHint !== null) {

@@ -1,11 +1,10 @@
 /**
- * `SessionManager` contract tests (ARCHITECTURE.md §7.3; COMPLETIONS-CRITERIA.md §3.2 SessionManager
- * row): single-source-of-truth maps, push-based discovery, the per-session autoAttach cascade, focus
+ * `SessionManager` contract tests: single-source-of-truth maps, push-based discovery, the per-session autoAttach cascade, focus
  * recovery including the emergency-fallback tab, `getOrCreateCdpSession` as the sole accessor, the
  * maxlen-50 lifecycle ring buffers, and the 4-char `tabId` suffix resolution.
  *
  * Everything runs against the real {@linkcode ChromeFixture} over a real WebSocket — no CDP or bus
- * is mocked (D-TEST1).
+ * is mocked.
  */
 
 import { assert, assertEquals, assertLess, assertRejects, assertStrictEquals } from '@std/assert';
@@ -29,7 +28,9 @@ import {
 	RingBuffer,
 	SessionManager,
 	SUBRESOURCE_BLOCK_ERROR_REASON,
+	WINDOWLESS_TARGET_TYPES,
 } from './session_manager.ts';
+import { WEBRTC_LOCKDOWN_SOURCE } from './webrtc_lockdown.ts';
 import { ChromeFixture, type ChromeFixtureOptions, type FixtureRequest } from './cdp_fixture_test.ts';
 
 // ---------------------------------------------------------------------------
@@ -80,10 +81,10 @@ async function waitUntil(predicate: () => boolean, label: string, timeoutMs = 5_
 }
 
 // ---------------------------------------------------------------------------
-// constants (COMPLETIONS-CRITERIA.md §3.2: "all timing constants encoded verbatim and asserted")
+// constants (every timing constant is pinned)
 // ---------------------------------------------------------------------------
 
-Deno.test('ARCHITECTURE §7.3/§8 constants are encoded verbatim', () => {
+Deno.test('the session manager constants keep their budgets', () => {
 	assertEquals(LIFECYCLE_RING_CAPACITY, 50);
 	assertEquals(ATTACH_WAIT_TIMEOUT_MS, 2_000);
 	assert(ATTACH_POLL_INTERVAL_MS < ATTACH_WAIT_TIMEOUT_MS);
@@ -133,11 +134,11 @@ Deno.test('a target created after start is discovered without being asked for', 
 	const targetId = h.fixture.addPage('about:blank');
 	await waitUntil(() => h.manager.targets.has(targetId), 'targetCreated to arrive');
 	assertEquals(h.manager.targets.get(targetId)?.type, 'page');
-	// Seeded targets are suppressed for the §7.4 replay; targets discovered later announce themselves.
+	// Seeded targets are suppressed for the post-connect replay; targets discovered later announce themselves.
 	await waitUntil(() => h.seen.some((entry) => entry.type === 'created' && entry.targetId === targetId), 'TabCreated');
 });
 
-Deno.test('seededPageTargets carries the pre-existing tabs for the §7.4 replay', async () => {
+Deno.test('seededPageTargets carries the pre-existing tabs for the post-connect replay', async () => {
 	await using h = await harness({ pages: ['about:blank', 'https://127.0.0.1/a'] });
 	assertEquals(h.manager.seededPageTargets().length, 2);
 	// …and nothing was announced for them: the session replays them itself, in its own order.
@@ -216,6 +217,21 @@ Deno.test('proxy credentials arm Fetch.enable per session', async () => {
 			| undefined;
 		assertEquals(answered?.response, 'ProvideCredentials');
 		assertEquals(answered?.username, 'u');
+
+		// A site's own 401 never receives the proxy's credentials.
+		fixture.emit('Fetch.authRequired', {
+			requestId: 'REQ2',
+			request: { url: 'https://evil.example/x' },
+			frameId: 'F',
+			resourceType: 'Document',
+			authChallenge: { origin: 'https://evil.example', scheme: 'basic', realm: 'site', source: 'Server' },
+		}, session.sessionId);
+		await waitUntil(() => fixture.requestsFor('Fetch.continueWithAuth').length === 2, 'second continueWithAuth');
+		const server = fixture.requestsFor('Fetch.continueWithAuth')[1]?.params.authChallengeResponse as
+			| Record<string, unknown>
+			| undefined;
+		assertEquals(server?.response, 'Default');
+		assertEquals(server?.username, undefined);
 	} finally {
 		await manager.stop();
 		await client.close();
@@ -242,7 +258,7 @@ Deno.test('getOrCreateCdpSession does not hand out a session whose Network.enabl
 	await using h = await harness();
 	const held: FixtureRequest[] = [];
 	// `Network.enable` is received and deliberately left unanswered: the attach cascade is stuck
-	// exactly where the first document would otherwise slip past it (ERRATUM(M1-hardening-1)).
+	// exactly where the first document would otherwise slip past it.
 	h.fixture.script('Network.enable', (request) => void held.push(request));
 
 	const targetId = h.manager.mostRecentPageTarget()?.targetId ?? '';
@@ -417,9 +433,9 @@ Deno.test('the focus pointer never names a target that has already been removed'
 	await waitUntil(() => h.manager.targets.has(survivor), 'the survivor to be discovered');
 
 	// What an agent's next step does, from inside the `TabClosedEvent` window — the 3 s fan-out that
-	// runs *between* removal and focus recovery. The pointer used to still name the dead target for
-	// that whole window, and resolving "the current tab" then failed with `Target.attachToTarget:
-	// No target with given id found` (ERRATUM(M1-hardening-2)).
+	// runs *between* removal and focus recovery. If the pointer still named the dead target in that
+	// window, resolving "the current tab" would fail with `Target.attachToTarget: No target with given
+	// id found`.
 	const observed: { alive: boolean; resolved: string | null; error: string | null }[] = [];
 	h.bus.on(TabClosedEvent, async () => {
 		const focus = h.manager.agentFocusTargetId;
@@ -473,7 +489,7 @@ Deno.test('emergency fallback: a failing createTarget reports FocusRecoveryFaile
 });
 
 // ---------------------------------------------------------------------------
-// tab identity (DATA-MODEL.md §5.4)
+// tab identity
 // ---------------------------------------------------------------------------
 
 Deno.test('tab identity for the LLM is the 4-char targetId suffix, resolved back by suffix match', async () => {
@@ -512,10 +528,10 @@ Deno.test('stop() detaches every listener and refuses further accessor calls', a
 });
 
 // ---------------------------------------------------------------------------
-// CancelOptions — ERRATUM(E-62)
+// CancelOptions
 // ---------------------------------------------------------------------------
 
-Deno.test('E-62: getOrCreateCdpSession refuses entry to an abandoned caller', async () => {
+Deno.test('cancellation: getOrCreateCdpSession refuses entry to an abandoned caller', async () => {
 	await using h = await harness({ pages: ['about:blank', 'about:blank'] });
 	const second = h.fixture.targets[1]?.targetId ?? '';
 	const before = h.fixture.requests.length;
@@ -533,7 +549,7 @@ Deno.test('E-62: getOrCreateCdpSession refuses entry to an abandoned caller', as
 	);
 });
 
-Deno.test('E-62: setAgentFocus refuses entry, and binds the signal to activateTarget', async () => {
+Deno.test('cancellation: setAgentFocus refuses entry, and binds the signal to activateTarget', async () => {
 	await using h = await harness({ pages: ['about:blank', 'about:blank'] });
 	const second = h.fixture.targets[1]?.targetId ?? '';
 	const focusBefore = h.manager.agentFocusTargetId;
@@ -558,7 +574,7 @@ Deno.test('E-62: setAgentFocus refuses entry, and binds the signal to activateTa
 	assertEquals(h.manager.agentFocusTargetId, focusBefore, 'nor move the focus pointer');
 });
 
-Deno.test('E-62: a signal that aborts mid-flight cancels activateTarget without failing the focus move', async () => {
+Deno.test('cancellation: a signal that aborts mid-flight cancels activateTarget without failing the focus move', async () => {
 	await using h = await harness({ pages: ['about:blank', 'about:blank'] });
 	const second = h.fixture.targets[1]?.targetId ?? '';
 	// Accepted and never answered: without a bound signal this waits out the CDP request timeout.
@@ -583,7 +599,7 @@ Deno.test('E-62: a signal that aborts mid-flight cancels activateTarget without 
 	assertLess(elapsed, 5_000, `the abort must settle the request, not wait out its 60 s timeout (${elapsed}ms)`);
 });
 
-Deno.test('E-62: no signal means no cancellation — the unbudgeted path is unchanged', async () => {
+Deno.test('cancellation: no signal means no cancellation — the unbudgeted path is unchanged', async () => {
 	await using h = await harness({ pages: ['about:blank', 'about:blank'] });
 	const second = h.fixture.targets[1]?.targetId ?? '';
 	const session = await h.manager.getOrCreateCdpSession(second, true);
@@ -594,7 +610,7 @@ Deno.test('E-62: no signal means no cancellation — the unbudgeted path is unch
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-94) — the pre-request document veto (E0, AC3)
+// the pre-request document veto (E0)
 // ---------------------------------------------------------------------------
 
 const ON_LIST = 'http://127.0.0.1:8080/page';
@@ -614,7 +630,7 @@ interface FilterHarness extends AsyncDisposable {
 	paused(sessionId: string, params: Record<string, unknown>): void;
 	/** One CDP round trip, then the manager's background work: every frame written before it has been handled. */
 	settle(): Promise<void>;
-	/** ERRATUM(E-114): creates a target of `type`, attaches it held for the debugger, and returns its session id. */
+	/** Creates a target of `type`, attaches it held for the debugger, and returns its session id. */
 	attachType(type: string, waitingForDebugger?: boolean): Promise<string>;
 }
 
@@ -705,7 +721,7 @@ async function filterHarness(
 
 const get = (url: string) => ({ url, method: 'GET', headers: {} });
 
-Deno.test('E-94 (AC3): without a filter the attach path is the donor’s — no pause, no Fetch, no requestPaused answerer', async () => {
+Deno.test('document veto: without a filter the attach path arms nothing — no pause, no Fetch, no requestPaused answerer', async () => {
 	await using h = await filterHarness({ filter: null });
 	const sessionId = await h.attach();
 	const autoAttach = h.fixture.requestsFor('Target.setAutoAttach').find((r) => r.sessionId === sessionId);
@@ -719,13 +735,13 @@ Deno.test('E-94 (AC3): without a filter the attach path is the donor’s — no 
 	assertEquals(h.fixture.requestsFor('Fetch.failRequest').length, 0);
 });
 
-Deno.test('E-94 (AC3): proxy credentials without a filter keep the donor’s Fetch.enable byte for byte', async () => {
+Deno.test('document veto: proxy credentials without a filter send only the auth Fetch.enable', async () => {
 	await using h = await filterHarness({ filter: null, proxy: true });
 	const sessionId = await h.attach();
 	const enabled = h.fixture.requestsFor('Fetch.enable');
 	assertEquals(enabled.length, 1);
 	assertEquals(enabled[0]?.params, { handleAuthRequests: true });
-	// ...and every paused request is still released, now by the one shared answerer.
+	// ...and every paused request is still released, by the one shared answerer.
 	h.paused(sessionId, { requestId: 'P1', request: get(OFF_LIST) });
 	await h.settle();
 	assertEquals(h.fixture.requestsFor('Fetch.continueRequest').map((r) => r.params.requestId), ['P1']);
@@ -733,7 +749,7 @@ Deno.test('E-94 (AC3): proxy credentials without a filter keep the donor’s Fet
 	assertEquals(h.errors, []);
 });
 
-Deno.test('E-94 (M5), E-115: a filter pauses new targets and arms Document + Fetch before the resume', async () => {
+Deno.test('document veto: a filter pauses new targets and arms Document + Fetch before the resume', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach(true);
 	const scoped = (method: string) => h.fixture.requestsFor(method).filter((r) => r.sessionId === sessionId);
@@ -744,7 +760,7 @@ Deno.test('E-94 (M5), E-115: a filter pauses new targets and arms Document + Fet
 	});
 	const enabled = scoped('Fetch.enable');
 	assertEquals(enabled.length, 1, 'one Fetch.enable per session: a second would replace the first');
-	// ERRATUM(E-115): `Fetch` joins `Document` in the default scope — `<link rel=prefetch>` arrives as one (D-139).
+	// `Fetch` joins `Document` in the default scope — `<link rel=prefetch>` arrives as one.
 	assertEquals(enabled[0]?.params, {
 		patterns: [
 			{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' },
@@ -762,7 +778,7 @@ Deno.test('E-94 (M5), E-115: a filter pauses new targets and arms Document + Fet
 	assertEquals(h.manager.filtersDocuments, true);
 });
 
-Deno.test('E-94 (AC3): an on-list document continues, exactly once, with no block reported — no hang', async () => {
+Deno.test('document veto: an on-list document continues, exactly once, with no block reported — no hang', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	h.paused(sessionId, { requestId: 'OK1', request: get(ON_LIST) });
@@ -772,7 +788,7 @@ Deno.test('E-94 (AC3): an on-list document continues, exactly once, with no bloc
 	assertEquals(h.errors, []);
 });
 
-Deno.test('E-94: an off-list document is failed with Aborted before it is sent, and reported as one E0', async () => {
+Deno.test('document veto: an off-list document is failed with Aborted before it is sent, and reported as one E0', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	const targetId = h.manager.sessionTargets.get(sessionId);
@@ -790,17 +806,17 @@ Deno.test('E-94: an off-list document is failed with Aborted before it is sent, 
 		targetId,
 		frameId: targetId,
 		containment: 'request-blocked',
-		// Review R2-1 / R2-2: what was refused, and where its chain began (its own URL: no redirect before it).
+		// What was refused, and where its chain began (its own URL: no redirect before it).
 		resourceType: 'Document',
 		chainStart: OFF_LIST,
 	});
-	// E-78: the manager's own log line names the origin and nothing after it.
+	// The manager's own log line names the origin and nothing after it.
 	const line = h.logged.find((entry) => entry.startsWith('document request refused'));
 	assert(line !== undefined && line.includes('http://localhost:9090'), String(line));
 	assert(!line.includes('exfiltrate') && !line.includes('Zq8-E0-CODE'), line);
 });
 
-Deno.test('E-94 (AC3): every redirect hop is judged on its own URL', async () => {
+Deno.test('document veto: every redirect hop is judged on its own URL', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	h.paused(sessionId, { requestId: 'HOP1', request: get(`${ON_LIST}/redirect`) });
@@ -810,11 +826,11 @@ Deno.test('E-94 (AC3): every redirect hop is judged on its own URL', async () =>
 	assertEquals(h.fixture.requestsFor('Fetch.continueRequest').map((r) => r.params.requestId), ['HOP1']);
 	assertEquals(h.fixture.requestsFor('Fetch.failRequest').map((r) => r.params.requestId), ['HOP2']);
 	assertEquals(h.errors.map((e) => e.details.url), [OFF_LIST]);
-	// Review R2-2: the refused hop names the URL its chain began at — the on-list request the tool made.
+	// The refused hop names the URL its chain began at — the on-list request the tool made.
 	assertEquals(h.errors.map((e) => e.details.chainStart), [`${ON_LIST}/redirect`]);
 });
 
-Deno.test('E-94 (AC3): a filter that throws fails the document closed', async () => {
+Deno.test('document veto: a filter that throws fails the document closed', async () => {
 	await using h = await filterHarness({
 		filter: () => {
 			throw new Error('matcher exploded');
@@ -828,7 +844,7 @@ Deno.test('E-94 (AC3): a filter that throws fails the document closed', async ()
 	assertEquals(h.errors[0]?.details.enforcementPoint, 'E0');
 });
 
-Deno.test('E-94 (AC3): with proxy credentials one Fetch.enable pauses everything, auth is answered, subresources pass', async () => {
+Deno.test('document veto: with proxy credentials one Fetch.enable pauses everything, auth is answered, subresources pass', async () => {
 	await using h = await filterHarness({ proxy: true });
 	const sessionId = await h.attach();
 	const enabled = h.fixture.requestsFor('Fetch.enable');
@@ -851,7 +867,7 @@ Deno.test('E-94 (AC3): with proxy credentials one Fetch.enable pauses everything
 	assertEquals(h.fixture.requestsFor('Fetch.failRequest').map((r) => r.params.requestId), ['DOC']);
 });
 
-Deno.test('E-94 (AC3): a failed Fetch.enable is logged at warn, by target type and without a URL', async () => {
+Deno.test('document veto: a failed Fetch.enable is logged at warn, by target type and without a URL', async () => {
 	await using h = await filterHarness({ fetchEnableFails: true });
 	await h.attach();
 	const warning = h.warnings.find((entry) => entry.message.includes('document filter could not be armed'));
@@ -862,7 +878,7 @@ Deno.test('E-94 (AC3): a failed Fetch.enable is logged at warn, by target type a
 	assert(h.manager.sessions.size > 0);
 });
 
-Deno.test('E-94: only documents are judged — an off-list image passes the veto', async () => {
+Deno.test('document veto: only documents are judged — an off-list image passes the veto', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	h.paused(sessionId, { requestId: 'IMG', resourceType: 'Image', request: get(OFF_LIST) });
@@ -872,10 +888,10 @@ Deno.test('E-94: only documents are judged — an off-list image passes the veto
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-94), review R2-1 / R2-2 — Prefetch judged fail-closed, chain starts, the main-frame commit check
+// Prefetch judged fail-closed, chain starts, the main-frame commit check
 // ---------------------------------------------------------------------------
 
-Deno.test('R2-1: Fetch.enable never names Prefetch — Chrome 154 refuses the whole call for it', async () => {
+Deno.test('prefetch and commit check: Fetch.enable never names Prefetch — Chrome 154 refuses the whole call for it', async () => {
 	await using h = await filterHarness();
 	await h.attach();
 	const patterns = h.fixture.requestsFor('Fetch.enable').map((r) => JSON.stringify(r.params));
@@ -891,7 +907,7 @@ Deno.test('R2-1: Fetch.enable never names Prefetch — Chrome 154 refuses the wh
 	assertEquals([...JUDGED_RESOURCE_TYPES], ['Document', 'Prefetch']);
 });
 
-Deno.test('R2-1: a Prefetch that reaches the answerer is judged like a document, fail closed', async () => {
+Deno.test('prefetch and commit check: a Prefetch that reaches the answerer is judged like a document, fail closed', async () => {
 	await using h = await filterHarness({ proxy: true });
 	const sessionId = await h.attach();
 	h.paused(sessionId, { requestId: 'PF-OFF', resourceType: 'Prefetch', request: get(OFF_LIST) });
@@ -902,7 +918,7 @@ Deno.test('R2-1: a Prefetch that reaches the answerer is judged like a document,
 	assertEquals(h.errors.map((e) => e.details.resourceType), ['Prefetch']);
 });
 
-Deno.test('R2-2: a chain start survives every hop, and the memory of chains is bounded', async () => {
+Deno.test('prefetch and commit check: a chain start survives every hop, and the memory of chains is bounded', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	h.paused(sessionId, { requestId: 'C1', request: get(`${ON_LIST}/a`) });
@@ -938,7 +954,7 @@ function committed(h: FilterHarness, sessionId: string, url: string, parentId?: 
 	}, sessionId);
 }
 
-Deno.test('R2-1: an off-list main-frame commit is parked on about:blank and reported once as E2 (trigger commit)', async () => {
+Deno.test('prefetch and commit check: an off-list main-frame commit is parked on about:blank and reported once as E2 (trigger commit)', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	const targetId = h.manager.sessionTargets.get(sessionId);
@@ -955,12 +971,12 @@ Deno.test('R2-1: an off-list main-frame commit is parked on about:blank and repo
 		trigger: 'commit',
 	});
 	assert(h.manager.parkedRecently(targetId ?? ''), 'remembered for the watchdog’s E2');
-	// E-78: the manager's own line names the origin only.
+	// The manager's own line names the origin only.
 	const line = h.logged.find((entry) => entry.startsWith('an off-list document committed'));
 	assert(line !== undefined && line.includes('http://localhost:9090') && !line.includes('Zq8-E0-CODE'), String(line));
 });
 
-Deno.test('R2-1: the commit check leaves on-list pages, child frames and non-network documents alone', async () => {
+Deno.test('prefetch and commit check: the commit check leaves on-list pages, child frames and non-network documents alone', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	committed(h, sessionId, ON_LIST);
@@ -973,7 +989,7 @@ Deno.test('R2-1: the commit check leaves on-list pages, child frames and non-net
 	assertEquals(h.errors, []);
 });
 
-Deno.test('R2-1 (AC3): without a filter there is no commit check at all', async () => {
+Deno.test('prefetch and commit check: without a filter there is no commit check at all', async () => {
 	await using h = await filterHarness({ filter: null });
 	const sessionId = await h.attach();
 	committed(h, sessionId, OFF_LIST);
@@ -982,7 +998,7 @@ Deno.test('R2-1 (AC3): without a filter there is no commit check at all', async 
 	assertEquals(h.errors, []);
 });
 
-Deno.test('R2-1: a filter that throws parks the commit (fail closed)', async () => {
+Deno.test('prefetch and commit check: a filter that throws parks the commit (fail closed)', async () => {
 	await using h = await filterHarness({
 		filter: () => {
 			throw new Error('matcher exploded');
@@ -996,14 +1012,14 @@ Deno.test('R2-1: a filter that throws parks the commit (fail closed)', async () 
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-114/E-115) — the request scope and hints (AC10, AC35)
+// the request scope and hints
 // ---------------------------------------------------------------------------
 
 const DOCUMENT_PATTERN = { urlPattern: '*', resourceType: 'Document', requestStage: 'Request' };
 const FETCH_PATTERN = { urlPattern: '*', resourceType: 'Fetch', requestStage: 'Request' };
 const STAR = { patterns: [{ urlPattern: '*', requestStage: 'Request' }] };
 const PROXY_STAR = { patterns: [{ urlPattern: '*' }], handleAuthRequests: true };
-/** Every target type Chrome 154 attached in the design probe, plus one a later Chrome might add. */
+/** Every target type Chrome 154 attached when probed, plus one a later Chrome might add. */
 const OTHER_TYPES = ['other', 'service_worker', 'shared_worker', 'browser_ui', 'background_page', 'future_type'];
 const METHOD_NOT_FOUND = { code: -32601, message: 'Fetch.enable was not found' };
 const hint = (url: string, header = 'Sec-Purpose', value = 'prefetch') => ({
@@ -1017,7 +1033,7 @@ function enabledOn(h: FilterHarness, sessionId: string): unknown[] {
 	return h.fixture.requestsFor('Fetch.enable').filter((r) => r.sessionId === sessionId).map((r) => r.params);
 }
 
-Deno.test('E-114/E-115: requestKindOf — Sec-Purpose or Purpose prefetch* is a hint, then document, then subresource', () => {
+Deno.test('request scope: requestKindOf — Sec-Purpose or Purpose prefetch* is a hint, then document, then subresource', () => {
 	const kind = (resourceType: string, headers: Record<string, unknown> = {}) =>
 		requestKindOf({ resourceType, request: { headers } });
 	assertEquals(kind('Fetch', { 'Sec-Purpose': 'prefetch' }), 'hint');
@@ -1031,7 +1047,7 @@ Deno.test('E-114/E-115: requestKindOf — Sec-Purpose or Purpose prefetch* is a 
 	assertEquals(requestKindOf({ resourceType: 'Document', request: {} }), 'document');
 });
 
-Deno.test('E-114 (AC10/AC3): requestScope all without a filter is inert — the donor attach path, byte for byte', async () => {
+Deno.test('request scope: requestScope all without a filter is inert — the unfiltered attach path, byte for byte', async () => {
 	await using h = await filterHarness({ filter: null, scope: 'all' });
 	const sessionId = await h.attach();
 	const worker = await h.attachType('service_worker', false);
@@ -1047,7 +1063,7 @@ Deno.test('E-114 (AC10/AC3): requestScope all without a filter is inert — the 
 	assertEquals(h.fixture.requestsFor('Fetch.failRequest').length, 0);
 });
 
-Deno.test('E-114/E-115 (AC10): documents scope — Document+Fetch on pages/iframes, Document on other, nothing else', async () => {
+Deno.test('request scope: documents scope — Document+Fetch on pages/iframes, Document on other, nothing else', async () => {
 	await using h = await filterHarness();
 	assertEquals(enabledOn(h, await h.attach()), [{ patterns: [DOCUMENT_PATTERN, FETCH_PATTERN] }]);
 	assertEquals(enabledOn(h, await h.attachType('iframe')), [{ patterns: [DOCUMENT_PATTERN, FETCH_PATTERN] }]);
@@ -1061,7 +1077,7 @@ Deno.test('E-114/E-115 (AC10): documents scope — Document+Fetch on pages/ifram
 	assertEquals(h.manager.requestScope, 'documents');
 });
 
-Deno.test('E-114 (AC10, F10): all scope — * on every type but worker, unknown types included, armed before resume', async () => {
+Deno.test('request scope: all scope — * on every type but worker, unknown types included, armed before resume', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	assertEquals(enabledOn(h, await h.attach()), [STAR]);
 	for (const type of ['iframe', ...OTHER_TYPES]) {
@@ -1077,7 +1093,7 @@ Deno.test('E-114 (AC10, F10): all scope — * on every type but worker, unknown 
 });
 
 for (const scope of ['documents', 'all'] as const) {
-	Deno.test(`E-114 (AC10, AC35): proxy credentials in ${scope} — * plus auth on every armed type, one answerer`, async () => {
+	Deno.test(`request scope: proxy credentials in ${scope} — * plus auth on every armed type, one answerer`, async () => {
 		await using h = await filterHarness({ scope, proxy: true });
 		const page = await h.attach();
 		assertEquals(enabledOn(h, page), [PROXY_STAR]);
@@ -1107,7 +1123,7 @@ for (const scope of ['documents', 'all'] as const) {
 	});
 }
 
-Deno.test('E-115 (AC10): in documents a hint is refused with BlockedByClient while an XHR to the same host continues', async () => {
+Deno.test('request scope: in documents a hint is refused with BlockedByClient while an XHR to the same host continues', async () => {
 	await using h = await filterHarness();
 	const sessionId = await h.attach();
 	const targetId = h.manager.sessionTargets.get(sessionId);
@@ -1135,12 +1151,12 @@ Deno.test('E-115 (AC10): in documents a hint is refused with BlockedByClient whi
 		resourceType: 'Fetch',
 	});
 	assertEquals(h.manager.requestRefusals.get('page'), 2);
-	// E-78: the manager's log line names the origin only.
+	// The manager's log line names the origin only.
 	const line = h.logged.find((entry) => entry.startsWith('request refused before it was sent'));
 	assert(line !== undefined && line.includes('http://localhost:9090') && !line.includes('Zq8-E0-CODE'), String(line));
 });
 
-Deno.test('E-115: the prerender host (other) — its hint Document is refused with Aborted, counted, never an event', async () => {
+Deno.test('request scope: the prerender host (other) — its hint Document is refused with Aborted, counted, never an event', async () => {
 	await using h = await filterHarness();
 	const other = await h.attachType('other');
 	h.paused(other, {
@@ -1152,13 +1168,13 @@ Deno.test('E-115: the prerender host (other) — its hint Document is refused wi
 	assertEquals(h.fixture.requestsFor('Fetch.failRequest').map((r) => r.params), [
 		{ requestId: 'NSP', errorReason: 'Aborted' },
 	]);
-	assertEquals(h.errors, [], 'review N4: no per-session event for a non-page target');
+	assertEquals(h.errors, [], 'no per-session event for a non-page target');
 	assertEquals(h.manager.requestRefusals.get('other'), 1);
 	assert(h.logged.some((entry) => entry.startsWith('request refused before it was sent')), 'a debug line');
 });
 
 for (const scope of ['documents', 'all'] as const) {
-	Deno.test(`E-114 (AC10): an off-list subresource in ${scope}`, async () => {
+	Deno.test(`request scope: an off-list subresource in ${scope}`, async () => {
 		await using h = await filterHarness({ scope });
 		const sessionId = await h.attach();
 		h.paused(sessionId, { requestId: 'IMG', resourceType: 'Image', request: get(OFF_LIST) });
@@ -1184,7 +1200,7 @@ for (const scope of ['documents', 'all'] as const) {
 	});
 }
 
-Deno.test('E-114 (AC10): in all a document is still Aborted, judged as before, and reported without requestKind', async () => {
+Deno.test('request scope: in all a document is still Aborted, judged by the document veto, and reported without requestKind', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	const sessionId = await h.attach();
 	h.paused(sessionId, { requestId: 'DOC', request: get(OFF_LIST) });
@@ -1193,11 +1209,11 @@ Deno.test('E-114 (AC10): in all a document is still Aborted, judged as before, a
 		{ requestId: 'DOC', errorReason: 'Aborted' },
 	]);
 	assertEquals(h.errors.length, 1);
-	assertEquals(h.errors[0]?.details.requestKind, undefined, 'a document report is the E-94 report, unchanged');
+	assertEquals(h.errors[0]?.details.requestKind, undefined, 'a document report is the document-veto report');
 	assertEquals(h.errors[0]?.details.chainStart, OFF_LIST);
 });
 
-Deno.test('E-114 (AC10): a throwing filter fails every judged kind closed', async () => {
+Deno.test('request scope: a throwing filter fails every judged kind closed', async () => {
 	await using h = await filterHarness({
 		scope: 'all',
 		filter: () => {
@@ -1212,7 +1228,7 @@ Deno.test('E-114 (AC10): a throwing filter fails every judged kind closed', asyn
 	assertEquals(h.fixture.requestsFor('Fetch.continueRequest').length, 0);
 });
 
-Deno.test('E-114 (AC10): only network schemes are judged; ws/wss are judged as http/https', async () => {
+Deno.test('request scope: only network schemes are judged; ws/wss are judged as http/https', async () => {
 	const seen: string[] = [];
 	await using h = await filterHarness({
 		scope: 'all',
@@ -1246,7 +1262,7 @@ Deno.test('E-114 (AC10): only network schemes are judged; ws/wss are judged as h
 	assertEquals(seen.slice(-2), ['http://127.0.0.1:8080/socket', 'https://localhost:9090/socket?code=Zq8']);
 });
 
-Deno.test('E-114 (AC10): 100 refusals of one origin are one event', async () => {
+Deno.test('request scope: 100 refusals of one origin are one event', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	const sessionId = await h.attach();
 	for (let index = 0; index < 100; index++) {
@@ -1258,7 +1274,7 @@ Deno.test('E-114 (AC10): 100 refusals of one origin are one event', async () => 
 	assertEquals(h.manager.requestRefusals.get('page'), 100);
 });
 
-Deno.test('E-114 (AC10): 40 origins are 32 reports plus one overflow, and a commit starts afresh', async () => {
+Deno.test('request scope: 40 origins are 32 reports plus one overflow, and a commit starts afresh', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	const sessionId = await h.attach();
 	const targetId = h.manager.sessionTargets.get(sessionId) ?? '';
@@ -1300,7 +1316,7 @@ Deno.test('E-114 (AC10): 40 origins are 32 reports plus one overflow, and a comm
 	assertEquals(h.errors.at(-1)?.details.overflow, undefined);
 });
 
-Deno.test('E-114: refused origins are remembered for at most REQUEST_BLOCK_TARGET_LIMIT targets, oldest first', async () => {
+Deno.test('request scope: refused origins are remembered for at most REQUEST_BLOCK_TARGET_LIMIT targets, oldest first', async () => {
 	assertEquals(REQUEST_BLOCK_TARGET_LIMIT, 64);
 	await using h = await filterHarness({ scope: 'all' });
 	const first = await h.attach();
@@ -1319,7 +1335,7 @@ Deno.test('E-114: refused origins are remembered for at most REQUEST_BLOCK_TARGE
 	assertEquals(h.errors.length, 2 + REQUEST_BLOCK_TARGET_LIMIT, 'a forgotten target reports its origin again');
 });
 
-Deno.test('E-114 (N4): a refusal on a service worker or background_page target is counted and logged, never an event', async () => {
+Deno.test('request scope: a refusal on a service worker or background_page target is counted and logged, never an event', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	const sw = await h.attachType('service_worker');
 	const ui = await h.attachType('background_page');
@@ -1332,7 +1348,7 @@ Deno.test('E-114 (N4): a refusal on a service worker or background_page target i
 	assertEquals(h.manager.requestRefusals.get('background_page'), 1);
 });
 
-Deno.test('E-114 (F10): an arming failure on an unknown type is a warn naming the type', async () => {
+Deno.test('request scope: an arming failure on an unknown type is a warn naming the type', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	h.fixture.script('Fetch.enable', (request, f) => f.replyError(request.id, METHOD_NOT_FOUND));
 	const sessionId = await h.attachType('future_type');
@@ -1340,10 +1356,10 @@ Deno.test('E-114 (F10): an arming failure on an unknown type is a warn naming th
 	assert(warning !== undefined, JSON.stringify(h.warnings));
 	assertEquals(warning.fields?.targetType, 'future_type');
 	assert(h.fixture.requestsFor('Runtime.runIfWaitingForDebugger').some((r) => r.sessionId === sessionId));
-	assertEquals([...FETCH_UNSUPPORTED], [], 'MB3: every type Chrome 154 attaches but worker accepts Fetch');
+	assertEquals([...FETCH_UNSUPPORTED], [], 'every type Chrome 154 attaches but worker accepts Fetch');
 });
 
-Deno.test('E-114: a -32601 on a type measured to refuse Fetch is debug, not warn', async () => {
+Deno.test('request scope: a -32601 on a type measured to refuse Fetch is debug, not warn', async () => {
 	await using h = await filterHarness({ scope: 'all', fetchUnsupported: new Set(['future_type']) });
 	h.fixture.script('Fetch.enable', (request, f) => f.replyError(request.id, METHOD_NOT_FOUND));
 	await h.attachType('future_type');
@@ -1351,7 +1367,7 @@ Deno.test('E-114: a -32601 on a type measured to refuse Fetch is debug, not warn
 	assert(h.logged.some((entry) => entry.startsWith('Fetch is unavailable on this target type')), h.logged.join('\n'));
 });
 
-Deno.test('E-114 (N4): an arming that never answers is bounded, and the target is resumed anyway', async () => {
+Deno.test('request scope: an arming that never answers is bounded, and the target is resumed anyway', async () => {
 	await using h = await filterHarness({ scope: 'all', fetchArmTimeoutMs: 50 });
 	h.fixture.script('Fetch.enable', () => {/* never answered */});
 	const started = Date.now();
@@ -1362,7 +1378,7 @@ Deno.test('E-114 (N4): an arming that never answers is bounded, and the target i
 	assertEquals(warning?.fields, { targetType: 'browser_ui', error: 'no answer within 50 ms' });
 });
 
-Deno.test('E-114 (N4): a refused document on a non-page target is counted, never an event', async () => {
+Deno.test('request scope: a refused document on a non-page target is counted, never an event', async () => {
 	await using h = await filterHarness({ scope: 'all' });
 	const other = await h.attachType('other');
 	h.paused(other, { requestId: 'DOC', request: get(OFF_LIST) });
@@ -1372,4 +1388,81 @@ Deno.test('E-114 (N4): a refused document on a non-page target is counted, never
 	]);
 	assertEquals(h.errors, []);
 	assertEquals(h.manager.requestRefusals.get('other'), 1);
+});
+
+// ---------------------------------------------------------------------------
+// the WebRTC lockdown under `all`
+// ---------------------------------------------------------------------------
+
+/** The `Page.addScriptToEvaluateOnNewDocument` parameters sent on one session, in order. */
+function lockdownsOn(h: FilterHarness, sessionId: string): unknown[] {
+	return h.fixture.requestsFor('Page.addScriptToEvaluateOnNewDocument').filter((r) => r.sessionId === sessionId)
+		.map((r) => r.params);
+}
+
+const LOCKDOWN = { source: WEBRTC_LOCKDOWN_SOURCE, runImmediately: true };
+
+Deno.test('webrtc lockdown: all registers the WebRTC lockdown on every window-bearing target, before its resume', async () => {
+	await using h = await filterHarness({ scope: 'all' });
+	const page = await h.attach(true);
+	assertEquals(lockdownsOn(h, page), [LOCKDOWN]);
+	for (const type of ['iframe', 'other', 'browser_ui', 'background_page', 'future_type']) {
+		const sessionId = await h.attachType(type);
+		await h.settle();
+		assertEquals(lockdownsOn(h, sessionId), [LOCKDOWN], `${type} takes the lockdown (fail closed)`);
+		const order = h.fixture.requests.filter((r) => r.sessionId === sessionId).map((r) => r.method);
+		assert(
+			order.indexOf('Page.addScriptToEvaluateOnNewDocument') < order.indexOf('Runtime.runIfWaitingForDebugger'),
+			`${type}: ${order}`,
+		);
+	}
+	const pageOrder = h.fixture.requests.filter((r) => r.sessionId === page).map((r) => r.method);
+	assert(
+		pageOrder.indexOf('Page.addScriptToEvaluateOnNewDocument') < pageOrder.indexOf('Runtime.runIfWaitingForDebugger'),
+		`page: ${pageOrder}`,
+	);
+	for (const type of [...WINDOWLESS_TARGET_TYPES]) {
+		const sessionId = await h.attachType(type);
+		await h.settle();
+		assertEquals(lockdownsOn(h, sessionId), [], `${type} has no window`);
+	}
+	assertEquals(h.warnings, []);
+});
+
+Deno.test('webrtc lockdown: documents scope, and all without a filter, register no lockdown anywhere', async () => {
+	for (const options of [{ scope: 'documents' as const }, { scope: 'all' as const, filter: null }]) {
+		await using h = await filterHarness(options);
+		await h.attach(true);
+		for (const type of ['iframe', 'other', 'future_type']) await h.attachType(type);
+		await h.settle();
+		assertEquals(h.fixture.requestsFor('Page.addScriptToEvaluateOnNewDocument'), [], JSON.stringify(options));
+	}
+});
+
+Deno.test('webrtc lockdown: a lockdown the page refuses is a warn by target type; elsewhere a debug line; the target resumes', async () => {
+	await using h = await filterHarness({ scope: 'all' });
+	h.fixture.script(
+		'Page.addScriptToEvaluateOnNewDocument',
+		(request, f) => f.replyError(request.id, { code: -32601, message: 'not found' }),
+	);
+	const page = await h.attach(true);
+	const warning = h.warnings.find((entry) => entry.message.includes('WebRTC lockdown could not be registered'));
+	assertEquals(warning?.fields?.targetType, 'page');
+	assert(h.fixture.requestsFor('Runtime.runIfWaitingForDebugger').some((r) => r.sessionId === page));
+	const other = await h.attachType('other');
+	await h.settle();
+	assert(h.fixture.requestsFor('Runtime.runIfWaitingForDebugger').some((r) => r.sessionId === other));
+	assertEquals(h.warnings.filter((entry) => entry.fields?.targetType === 'other'), []);
+	assert(h.logged.some((line) => line.startsWith('the WebRTC lockdown was not taken')), h.logged.join('\n'));
+});
+
+Deno.test('webrtc lockdown: a lockdown that is never answered on a non-page target holds neither its resume nor stop()', async () => {
+	await using h = await filterHarness({ scope: 'all', fetchArmTimeoutMs: 50 });
+	h.fixture.script('Page.addScriptToEvaluateOnNewDocument', () => {/* never answered */});
+	const targetId = h.fixture.addPage('https://ttk-target.test/other', 'other');
+	const sessionId = h.fixture.attachTarget(targetId, true);
+	await waitUntil(
+		() => h.fixture.requestsFor('Runtime.runIfWaitingForDebugger').some((r) => r.sessionId === sessionId),
+		'the other target resumed',
+	);
 });

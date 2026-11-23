@@ -1,9 +1,8 @@
 /**
- * `ScreenshotWatchdog` contract (ARCHITECTURE.md §6.6; COMPLETIONS-CRITERIA.md §3.2 watchdog row 6:
- * "focus validation/repair, highlight removal, PNG base64 result").
+ * `ScreenshotWatchdog` contract: focus validation/repair, highlight removal, PNG base64 result.
  *
- * Real bus, real `CdpClient`, real `SessionManager`, real CDP frames over `ChromeFixture` — no mocks
- * (D-TEST1). The capture is asserted on the wire: format, clip, and the highlight-removal call that
+ * Real bus, real `CdpClient`, real `SessionManager`, real CDP frames over `ChromeFixture` — no mocks.
+ * The capture is asserted on the wire: format, clip, and the highlight-removal call that
  * MUST precede it.
  */
 
@@ -162,7 +161,7 @@ Deno.test("screenshot: an endless page is truncated at Chrome's texture limit, n
 	await h.bus.dispatch(new ScreenshotEvent({ fullPage: true })).eventResult({ raiseIfAny: true });
 
 	const clip = h.sent('Page.captureScreenshot')[0]?.params.clip as Record<string, number>;
-	assertEquals(clip.height, MAX_SCREENSHOT_DIMENSION_PX, 'ERRATUM(M1-watchdogs-action-11)');
+	assertEquals(clip.height, MAX_SCREENSHOT_DIMENSION_PX, 'a full-page capture is capped at the texture limit');
 	assertEquals(MAX_SCREENSHOT_DIMENSION_PX, 16_384);
 });
 

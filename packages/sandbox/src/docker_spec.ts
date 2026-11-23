@@ -1,22 +1,13 @@
 /**
- * D-108 (design §2.13): what the Docker workspace backend asks the Docker Engine for, and what it runs inside a
- * workspace container. Everything here is pure, so the tests read it on any machine.
+ * What the Docker backend asks the Engine for and runs inside a workspace container; pure, so tests run anywhere.
  *
- * The socket the backend talks to is root on the host: whoever can create a container through it can bind the
- * host's `/`, join its namespaces or run privileged. So no body is ever composed from a request. Each is built
- * from fixed values, and then checked again — an allowlist of keys, a forbidden list, and the fixed value of every
- * field — by `checkCreateBody` / `checkExecBody`, which the Engine client calls before it sends anything
- * (engine.ts). A body that fails is refused there (`invalid_request`, logged), never sent.
+ * The Engine socket is root on the host, so no body is ever composed from a request: each is built from fixed values
+ * and checked again — key allowlist, forbidden list, every field's fixed value — by `checkCreateBody` /
+ * `checkExecBody`, which the Engine client calls before sending (a failure is `invalid_request`, never sent).
  *
- * A workspace container is the bwrap cage made long-lived (sandbox.ts stays the reference for semantics):
- *
- * - the workspace's own folders on the shared code volume, by daemon-resolved volume subpaths (no host path ever
- *   appears): `/workspace` read-write, `/workspace/.git` read-only, `/home/sandbox` read-write, and `/run/harbour`
- *   on the socket volume, read-only, where the registry proxy's socket appears only while a registries-mode command
- *   runs (connecting to a unix socket needs no write access to its mount, as bwrap's `--ro-bind` of it shows);
- * - a read-only root, a 256 MiB `/tmp` tmpfs, no network interface beyond loopback (`NetworkMode: none`, always),
- *   every capability dropped, `no-new-privileges`, uid 1993, and memory, CPU and process limits;
- * - `sleep infinity` under Docker's init as PID 1, with every command an exec into it.
+ * A container is the bwrap cage made long-lived: its own volume subpaths only (`/workspace`, `/workspace/.git`
+ * read-only, `/home/sandbox`, `/run/harbour` read-only), a read-only root with a 256 MiB `/tmp`, `NetworkMode: none`,
+ * no capabilities, `no-new-privileges`, uid 1993, resource limits, and `sleep infinity` under Docker's init.
  */
 import { BASE_ENV, CAGE_HOME, PROXY_PORT, PROXY_SOCKET, proxyEnv, WORKSPACE } from './cage.ts';
 import { LIMITS } from './limits.ts';
@@ -26,35 +17,26 @@ import { RESERVED_ENV, RUN_ID } from './request.ts';
 export const WORKSPACE_USER = '1993:1993';
 /** Where a workspace container sees its socket-volume subpath; the proxy's socket is PROXY_SOCKET inside it. */
 export const HARBOUR_DIR = '/run/harbour';
-/**
- * A workspace container's name: `ttk-sandbox-<deployment>-<workspace>`, one per workspace and deployment, so a
- * restarted service finds it again by name and two deployments on one daemon never share one.
- */
+/** A container is named `ttk-sandbox-<deployment>-<workspace>`, so a restarted service finds it again. */
 export const CONTAINER_PREFIX = 'ttk-sandbox-';
 export const LABEL_SANDBOX = 'eu.tykotech.sandbox';
 export const LABEL_WORKSPACE = 'eu.tykotech.workspace';
 export const LABEL_OWNER = 'eu.tykotech.owner';
-/** R2-5: the deployment a container belongs to ({@linkcode deploymentId}); reconciliation touches its own only. */
+/** The deployment a container belongs to ({@linkcode deploymentId}); reconciliation touches its own only. */
 export const LABEL_DEPLOYMENT = 'eu.tykotech.deployment';
-/**
- * R2-6: the SHA-256 of the canonical create body the container was made from ({@linkcode createFor}), so a container
- * left by an earlier release is replaced as soon as its body differs from the one this service would send.
- */
+/** The SHA-256 of the canonical create body, so a container whose body differs from today's is replaced. */
 export const LABEL_BODY = 'eu.tykotech.body';
 export const TMPFS_OPTIONS = 'rw,nosuid,nodev,size=256m';
 export const CONTAINER_MEMORY = 1024 * 1024 * 1024;
 export const CONTAINER_NANO_CPUS = 1_000_000_000;
 /** Where the diff stages its index and objects: on the volume, as bwrap's /tmp is; the container's /tmp is small. */
 export const DOCKER_DIFF_SCRATCH = `${CAGE_HOME}/.harbour-diff`;
-/**
- * The file the service's start-up check writes, in the home of a check container of its own, to prove the configured
- * volume is the one it holds at its work folder (docker.ts `#checkVolume`). Never written in a workspace's home.
- */
+/** The start-up volume proof's file, in the check container's own home, never a workspace's. */
 export const VOLUME_CHECK_FILE = '.harbour-volume-check';
 /** The owner label of the start-up check's container: no principal hashes to it, so no owner record ever names it. */
 export const CHECK_OWNER = '0'.repeat(64);
 
-/** Fields that must never appear in a create body, at its top or in `HostConfig` (design §2.13). */
+/** Fields that must never appear in a create body, at its top or in `HostConfig`. */
 export const FORBIDDEN_FIELDS = [
 	'Binds',
 	'Devices',
@@ -161,13 +143,13 @@ export interface WorkspaceTarget {
 	owner: string;
 	/** Whether the checkout has its `.git` yet: the provisioning container, which runs `git init`, has not. */
 	git: boolean;
-	/** R2-5: this deployment's id, {@linkcode deploymentId} of the code volume. */
+	/** This deployment's id, {@linkcode deploymentId} of the code volume. */
 	deployment: string;
 }
 
 /** A target with its body's hash ({@linkcode createFor}), so the check can rebuild every fixed value and compare. */
 export interface CreateFor extends WorkspaceTarget {
-	/** R2-6: SHA-256 (hex) of the canonical body without its own hash label. */
+	/** SHA-256 (hex) of the canonical body without its own hash label. */
 	bodyHash: string;
 }
 
@@ -179,7 +161,7 @@ export class BodyRefused extends Error {
 	}
 }
 
-/** A workspace container's name, scoped to its deployment (R2-5). */
+/** A workspace container's name, scoped to its deployment. */
 export const containerName = (deployment: string, runId: string): string => `${CONTAINER_PREFIX}${deployment}-${runId}`;
 
 const OWNER = /^[0-9a-f]{64}$/;
@@ -192,10 +174,8 @@ async function sha256(text: string): Promise<string> {
 }
 
 /**
- * R2-5: a deployment's id — the first 16 hex digits of the SHA-256 of its code volume's name. It scopes container
- * names and reconciliation, so two deployments with their own code volumes on one daemon never touch each other's
- * containers. Two deployments on one code volume are one deployment (they share every workspace and owner record as
- * well), which is why a code volume must never be shared between deployments.
+ * A deployment's id: 16 hex digits of the SHA-256 of its code volume's name. It scopes container names and
+ * reconciliation; two deployments sharing a code volume would share every workspace, so they must not.
  */
 export async function deploymentId(volume: string): Promise<string> {
 	return (await sha256(volume)).slice(0, 16);
@@ -212,7 +192,7 @@ export function canonicalJson(value: unknown): string {
 	return JSON.stringify(value);
 }
 
-/** R2-6: the target with the hash of the body it builds (without the hash's own label). */
+/** The target with the hash of the body it builds (without the hash's own label). */
 export async function createFor(target: WorkspaceTarget): Promise<CreateFor> {
 	return { ...target, bodyHash: await sha256(canonicalJson(unlabelledBody(target))) };
 }
@@ -223,20 +203,9 @@ export function envList(env: Readonly<Record<string, string>>): string[] {
 }
 
 /**
- * The workspace's mounts: the design's table (§2.13). Docker resolves each subpath inside its named volume (Engine
- * ≥ 26, API 1.45), so the service never names a host path and a workspace sees nothing of the volume but its own
- * folders.
- *
- * ERRATUM(E-86): two departures from the table, both narrower. The `/workspace/.git` row is present once the checkout
- * has a `.git`, exactly as the cage mounts it (sandbox.ts): the container that runs provisioning's `git init` is
- * created before there is one (a read-only `.git` could not be initialised, and a subpath must exist), and is
- * replaced by the four-mount container as soon as it exists (docker.ts `#settle`). And every mount carries
- * `NoCopy`, so the image's content is never copied into the code volume.
- *
- * ERRATUM(E-90): the table's `/run/harbour` row says rw; it is mounted **read-only** (review R2-1). The workspace only
- * connects to the proxy's socket there, which a read-only mount allows (as bwrap's `--ro-bind` of the socket does);
- * the service keeps its own read-write mount of the socket volume to bind the socket. Read-write, the folder was a
- * place to keep data outside the measured folders and the owner's quota, for as long as the workspace existed.
+ * The workspace's mounts: daemon-resolved volume subpaths (no host path), each `NoCopy`. `/workspace/.git` appears
+ * once the checkout has one (provisioning's `git init` runs before). `/run/harbour` is read-only: connecting to the
+ * socket needs no write, and a writable folder would hold data outside the measured budget.
  */
 export function workspaceMounts(policy: DockerPolicy, runId: string, git: boolean): VolumeMount[] {
 	const mount = (source: string, target: string, readOnly: boolean, subpath: string): VolumeMount => ({
@@ -254,10 +223,10 @@ export function workspaceMounts(policy: DockerPolicy, runId: string, git: boolea
 	];
 }
 
-/** The folders a workspace container may write: the two the disk budget measures (SB-1), and nothing else. */
+/** The folders a workspace container may write: the two the disk budget measures, and nothing else. */
 export const WRITABLE_TARGETS: readonly string[] = [WORKSPACE, CAGE_HOME];
 
-/** The create body for one workspace, from fixed values only, without the hash label (R2-6). */
+/** The create body for one workspace, from fixed values only, without the hash label. */
 function unlabelledBody(target: WorkspaceTarget): CreateBody {
 	return {
 		Image: target.policy.image,
@@ -288,7 +257,7 @@ function unlabelledBody(target: WorkspaceTarget): CreateBody {
 	};
 }
 
-/** The create body for one workspace, from fixed values only, labelled with its own hash (R2-6). */
+/** The create body for one workspace, from fixed values only, labelled with its own hash. */
 export function containerBody(target: CreateFor): CreateBody {
 	const body = unlabelledBody(target);
 	body.Labels[LABEL_BODY] = target.bodyHash;
@@ -329,9 +298,8 @@ function fixed(value: unknown, expected: unknown, field: string): void {
 }
 
 /**
- * Checks a create body before it is sent: nothing forbidden, nothing outside the allowlist, every field its fixed
- * value for `target`. The named invariants are checked on their own as well, so a mistake in `containerBody`
- * itself cannot pass merely by agreeing with the comparison.
+ * Checks a create body before it is sent: nothing forbidden or outside the allowlist, every field its fixed value.
+ * The named invariants are checked on their own too, so a mistake in `containerBody` cannot pass by agreeing.
  */
 export function checkCreateBody(body: unknown, target: CreateFor): CreateBody {
 	if (!isRecord(body)) throw new BodyRefused('body', 'must be an object');
@@ -363,7 +331,7 @@ export function checkCreateBody(body: unknown, target: CreateFor): CreateBody {
 		if (typeof subpath !== 'string' || subpath.startsWith('/') || subpath.split('/').some((s) => s === '..')) {
 			throw new BodyRefused('HostConfig.Mounts', 'must mount a subpath inside its volume');
 		}
-		// R2-1: whatever a workspace can write is inside the folders its disk budget measures.
+		// Whatever a workspace can write is inside the folders its disk budget measures.
 		if (mount.ReadOnly !== true && !WRITABLE_TARGETS.includes(String(mount.Target))) {
 			throw new BodyRefused('HostConfig.Mounts', 'may write only the workspace and its home');
 		}
@@ -379,12 +347,9 @@ export function checkCreateBody(body: unknown, target: CreateFor): CreateBody {
 // --- execs ---------------------------------------------------------------------------------------------------
 
 /**
- * Every command, session and housekeeping script starts through this wrapper. It starts the real work in a session
- * of its own (`setsid`, which does not fork here: a background job of a shell without job control is never a
- * process group leader), says on stderr which pid it is and which session the work has, and waits for it, so the
- * exec's exit status is the work's (128 + n for a signal, as from bwrap). Knowing the session is what lets the
- * service kill a command's whole process group on a time limit, and spare the live ones when it clears the
- * container after a command (N3).
+ * Every exec starts through this wrapper: it runs the work in a session of its own (`setsid`), reports its pid and
+ * the work's session on stderr, and waits, so the exit status is the work's. The session is what the kill targets
+ * and what a cleanup spares.
  */
 export const WRAPPER = [
 	'exec 3<&0',
@@ -399,61 +364,76 @@ export const WRAPPER = [
 /** What the wrapper says on stderr once the work is started: its own pid, and the work's session id. */
 export const READY_LINE = /^harbour-cage-ready (\d+) (\d+)$/m;
 
-/**
- * Kills a process group (its session leader's pid) at once: the time limit, a cancelled request, the disk
- * watchdog. ERRATUM(E-86): the shell's own `kill`, without the design's `--`, which dash's builtin reads as a pid.
- */
+/** Kills a process group at once; no `--`, which dash's builtin `kill` reads as a pid. */
 export const KILL_SCRIPT = 'kill -KILL "-$1" 2>/dev/null\nexit 0';
 
 /**
- * N3: after every command, and when a session ends, every process in the container goes except PID 1's own session
- * (Docker's init and `sleep infinity`), the pids in `$1` (the wrappers of execs still running) and the sessions in
- * `$2` (their work: an open shell, a measurement). Whatever a command left behind — a server in the background, a
- * process that made a session of its own — is gone with it, as it is with a cage's pid namespace. Passes repeat
- * until one kills nothing (a process can fork while it is read), at most 20; the count goes to stdout. Only shell
- * builtins run, so the script starts nothing it could then kill.
- *
- * ERRATUM(E-87): N3 reads "all uid-1993 processes except PID 1". Every process in the container is uid 1993, and
- * PID 1's child `sleep infinity` is what keeps the container up, so its session is spared with PID 1; so is the work
- * of execs still running, or a command would end the live session beside it.
+ * Kills every process in the container except PID 1's session, the wrapper pids in `$1` and the sessions in `$2`
+ * (execs still running), as a cage's pid namespace would; builtins only, the count to stdout. It ends only after two
+ * passes in a row find no candidate — a process that forks and exits between scan and kill would fool "a pass that
+ * killed nothing" — counting unreadable stats and zombies whose parent is not spared. Fifty passes without that
+ * proof exit 3 and PID 1's stat unreadable exits 2; either way the service stops the container.
  */
 export const CLEANUP_SCRIPT = [
 	'kp=" $1 $$ "',
 	'ks=" $2 "',
-	'read -r s 2>/dev/null </proc/1/stat || exit 0',
+	'read -r s 2>/dev/null </proc/1/stat || exit 2',
 	's=${s##*) }',
 	's=${s#* }',
 	's=${s#* }',
 	's=${s#* }',
 	'ks="$ks${s%% *} "',
 	'n=0',
+	'quiet=0',
 	'pass=0',
-	'while [ "$pass" -lt 20 ]; do',
+	'while [ "$pass" -lt 50 ]; do',
 	'  pass=$((pass + 1))',
-	'  k=0',
+	'  c=0',
 	'  for d in /proc/[0-9]*; do',
 	'    p=${d#/proc/}',
 	'    [ "$p" = 1 ] && continue',
 	'    case $kp in *" $p "*) continue ;; esac',
-	'    read -r s 2>/dev/null <"$d/stat" || continue',
+	'    if ! read -r s 2>/dev/null <"$d/stat"; then',
+	'      c=$((c + 1))',
+	'      continue',
+	'    fi',
 	'    s=${s##*) }',
-	'    case $s in Z*) continue ;; esac',
+	'    st=${s%% *}',
 	'    s=${s#* }',
+	'    pp=${s%% *}',
 	'    s=${s#* }',
 	'    s=${s#* }',
 	'    case $ks in *" ${s%% *} "*) continue ;; esac',
-	'    kill -KILL "$p" 2>/dev/null && k=$((k + 1))',
+	'    case $st in Z*)',
+	'      if read -r q 2>/dev/null <"/proc/$pp/stat"; then',
+	'        q=${q##*) }',
+	'        q=${q#* }',
+	'        q=${q#* }',
+	'        q=${q#* }',
+	'        case $ks in *" ${q%% *} "*) continue ;; esac',
+	'      fi',
+	'      c=$((c + 1))',
+	'      continue',
+	'      ;;',
+	'    esac',
+	'    c=$((c + 1))',
+	'    kill -KILL "$p" 2>/dev/null && n=$((n + 1))',
 	'  done',
-	'  n=$((n + k))',
-	'  [ "$k" -eq 0 ] && break',
+	'  if [ "$c" -eq 0 ]; then',
+	'    quiet=$((quiet + 1))',
+	'    if [ "$quiet" -ge 2 ]; then',
+	'      echo "$n"',
+	'      exit 0',
+	'    fi',
+	'  else',
+	'    quiet=0',
+	'  fi',
 	'done',
 	'echo "$n"',
+	'exit 3',
 ].join('\n');
 
-/**
- * The first lines of everything the wrapper starts: it must be the leader of its own session (pid = process group
- * = session), or the kill and the cleanup could not tell it apart; then stderr joins stdout, as in a cage.
- */
+/** The work must lead its own session or the kill and cleanup could not tell it apart; stderr joins stdout. */
 const SESSION_CHECK = [
 	'read -r s </proc/$$/stat || exit 125',
 	's=${s##*) }',
@@ -468,14 +448,13 @@ export interface InnerOptions {
 	proxy?: boolean;
 	/** The work reads the exec's standard input; otherwise it reads /dev/null. */
 	stdin?: boolean;
-	/** SB-7: the run is over its budget, so nothing it starts may write file data. */
+	/** The run is over its budget, so nothing it starts may write file data. */
 	noGrowth?: boolean;
 }
 
 /**
- * The script the wrapper runs as the work: the session check, the cage's own prelude lines (out-of-memory first,
- * the proxy forwarder, the no-growth limits) and then `body`. No `ulimit -p`: without a user namespace that limit
- * would count every uid-1993 process on the host; the container's `PidsLimit` is the bound instead.
+ * The work's script: the session check, the cage's prelude lines, then `body`. No `ulimit -p`: without a user
+ * namespace it would count every uid-1993 process on the host; `PidsLimit` bounds the container instead.
  */
 export function innerScript(body: string, options: InnerOptions = {}): string {
 	const lines = [SESSION_CHECK];
@@ -499,12 +478,8 @@ export function innerScript(body: string, options: InnerOptions = {}): string {
 
 /** A request's command line: the caller's text arrives as `$1`, never inside the script. */
 export const COMMAND_BODY = 'exec /bin/sh -c "$1"';
-/** A live session's shell (D-076): it reads what the service writes to the exec's standard input. */
+/** A live session's shell: it reads what the service writes to the exec's standard input. */
 export const SESSION_BODY = 'exec /bin/sh -s';
-
-// SB-1: nothing here measures disk use. A measurement inside the container ran beside the workspace's own processes,
-// which could hide files from it (review R2-2); the service measures its own view of the volume instead, with the
-// container paused (docker.ts `#measure`, disk.ts `treeUsage`).
 
 /** Gives the owner read, write and search back throughout the checkout, so git can stage what a command locked. */
 export const REPAIR_BODY = `chmod -R u+rwX ${WORKSPACE} 2>/dev/null\nexit 0`;
@@ -586,9 +561,8 @@ function checkEnv(value: unknown): void {
 }
 
 /**
- * Checks an exec body before it is sent: only the allowlisted keys; a fixed user, never privileged, never a TTY;
- * one of the fixed outer scripts with arguments of the shape it takes; the cage's environment; a working folder in
- * the workspace.
+ * Checks an exec body before it is sent: allowlisted keys, the fixed user, never privileged or a TTY, a fixed outer
+ * script with arguments of its shape, the cage's environment, a working folder in the workspace.
  */
 export function checkExecBody(body: unknown): ExecBody {
 	if (!isRecord(body)) throw new BodyRefused('body', 'must be an object');

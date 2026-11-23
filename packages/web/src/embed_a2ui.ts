@@ -1,5 +1,5 @@
 /**
- * The A2UI embed, `ui://tykotech/a2ui-surface` (R9, design §2.20, D-134/D-136).
+ * The A2UI embed, `ui://tykotech/a2ui-surface`.
  *
  * A read-only render of the surface an `a2ui_publish` call returned, framed by an MCP Apps host. The snapshot comes
  * from the result the host relays (`ui/notifications/tool-result`, `structuredContent.result.surface`). It is the
@@ -10,8 +10,7 @@
  * **Follow live** keeps the render current while the agent goes on publishing: the press mints a single-use,
  * origin-bound ticket through the app-only `a2ui_surface_ticket` tool and opens the surface socket — the same
  * transport the live view uses for a browser (`embed_stream.ts`) — which sends every new revision and says when the
- * surface is removed. The stream is read-only: no action is sent and the model is never written (design §1 item 3,
- * G9).
+ * surface is removed. The stream is read-only: no action is sent and the model is never written.
  */
 // First, before anything builds a schema: no `new Function` probe under the embed's CSP (jitless.ts).
 import './jitless.ts';

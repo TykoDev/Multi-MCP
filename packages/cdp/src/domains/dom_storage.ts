@@ -1,8 +1,7 @@
 /**
  * CDP `DOMStorage` domain — localStorage / sessionStorage read+write.
  *
- * The `origins[].localStorage` / `origins[].sessionStorage` half of the storage-state round-trip
- * (SPECS/DATA-MODEL.md §5.2, SPECS/ARCHITECTURE.md §6.9).
+ * The `origins[].localStorage` / `origins[].sessionStorage` half of the storage-state round-trip.
  */
 
 import type { EmptyResult, NoParams } from './common.ts';

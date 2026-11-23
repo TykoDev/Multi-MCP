@@ -1,9 +1,10 @@
 /**
- * Live session bookkeeping (D-076): the output ring a reader collects from, the waiters a long-poll parks
- * on, and the idle and lifetime clocks. Nothing here touches a cage; `sandbox.ts` runs the cage and feeds
- * `push`, `end` and the input file.
+ * Live session bookkeeping: the output ring a reader collects from, the waiters a long-poll parks
+ * on, and the idle and lifetime clocks. Nothing here touches a cage; the backends run the shell and feed `push`
+ * and `end`.
  */
 import { LIMITS } from './limits.ts';
+import { concat } from './output.ts';
 
 export interface SessionRead {
 	/** Bytes of output after `after`, as UTF-8 text (a split code point is carried to the next read). */
@@ -86,13 +87,7 @@ export class SessionState {
 					if (end <= from) continue;
 					parts.push(chunk.bytes.subarray(Math.max(0, from - chunk.start)));
 				}
-				const size = parts.reduce((sum, part) => sum + part.length, 0);
-				const joined = new Uint8Array(size);
-				let at = 0;
-				for (const part of parts) {
-					joined.set(part, at);
-					at += part.length;
-				}
+				const joined = concat(parts);
 				// A UTF-8 sequence cut by the chunk boundary is left for the next read rather than mangled.
 				let keep = joined.length;
 				for (let back = 1; back <= 3 && back <= joined.length; back += 1) {

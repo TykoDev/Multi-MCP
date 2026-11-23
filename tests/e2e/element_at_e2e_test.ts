@@ -1,23 +1,13 @@
 /**
- * U-2 (B2.1): the hit test in the browser, against the dual-origin corpus.
- *
- * `browser_element_at` and `live.hover` must answer from `DOM.getNodeForLocation` and join the
- * browser's own `frameId` / `backendNodeId` to the LLM index through the serializer's reverse map —
- * on the top document, inside an out-of-process frame, and on the two occlusion fixtures where the
- * *topmost* element, not the deepest, is the answer. Every raw field the browser returned is logged
- * so the evidence is the measurement rather than the assertion that wrapped it.
- *
- * The corpus is served on the two pinned origins `tests/fixtures/manifest.json` records
- * (`127.0.0.1:38111` and `localhost:38112`), because `iframe_crossorigin.html` hard-codes the
- * secondary origin and site isolation keys on scheme+site: the two spellings of loopback are what
- * puts the child frame in its own renderer.
- *
- * Browser tier — requires `--allow-run=<resolved chromium>`.
+ * The hit test in the browser: `browser_element_at` and `live.hover` answer from `DOM.getNodeForLocation` and join
+ * the browser's `frameId`/`backendNodeId` to the element index through the serializer's reverse map, on the top
+ * document, inside an out-of-process frame, and where the topmost element (not the deepest) is the answer. The corpus
+ * is served on the two pinned origins (`iframe_crossorigin.html` hard-codes the second), which are different sites.
  */
 import { assert, assertEquals } from '@std/assert';
 import { hitTest } from '@tykotech/mcp';
 import { loadFixtureRoutes } from '../../packages/browser/fixtures/dom/pages.ts';
-import { harness, skipUnlessBrowser } from '../support/harness.ts';
+import { type Harness, harness, skipUnlessBrowser } from '../support/harness.ts';
 import { jsLiteral } from '../support/js_literal.ts';
 
 const ignore = skipUnlessBrowser('element_at e2e');
@@ -69,60 +59,12 @@ async function corpus(): Promise<{ close(): Promise<void> }> {
 	};
 }
 
-/** The structured half of a result, where every field added since 0.1.0 lives (I-4). */
-async function structured<T>(
-	h: {
-		call(
-			name: string,
-			args?: Record<string, unknown>,
-		): Promise<{ isError?: boolean; structuredContent?: unknown; content?: unknown }>;
-	},
-	name: string,
-	args: Record<string, unknown>,
-): Promise<T> {
-	const result = await h.call(name, args);
-	assert(result.isError !== true, `${name} failed: ${JSON.stringify(result.content)}`);
-	return result.structuredContent as T;
-}
-
-/** A page element's viewport box, read from the page itself — test input, not the tool's arithmetic. */
-async function rectOf(h: { gateway: { registry: { peek(id: string): unknown } } }, id: string): Promise<Rect> {
-	const record = h.gateway.registry.peek('default') as {
-		session: {
-			cdpClient:
-				| { send: { Runtime: { evaluate(p: unknown, s: string): Promise<{ result: { value?: unknown } }> } } }
-				| null;
-			sessionManager: { getOrCreateCdpSession(t: unknown, f: boolean): Promise<{ sessionId: string }> } | null;
-			agentFocusTargetId: string | null;
-		};
-	} | undefined;
-	assert(record !== undefined && record.session.cdpClient !== null && record.session.sessionManager !== null);
-	const cdp = await record.session.sessionManager.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
-	const out = await record.session.cdpClient.send.Runtime.evaluate({
-		expression: `(() => { const r = document.getElementById(${
-			jsLiteral(id)
-		}).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`,
-		returnByValue: true,
-	}, cdp.sessionId);
-	return out.result.value as Rect;
-}
-
-/** A page element's text, read from the page — how the covers page reports which control a click reached. */
-async function pageText(h: { gateway: { registry: { peek(id: string): unknown } } }, id: string): Promise<string> {
-	const record = h.gateway.registry.peek('default') as {
-		session: {
-			cdpClient: { send: { Runtime: { evaluate(p: unknown, s: string): Promise<{ result: { value?: unknown } }> } } };
-			sessionManager: { getOrCreateCdpSession(t: unknown, f: boolean): Promise<{ sessionId: string }> };
-			agentFocusTargetId: string | null;
-		};
-	};
-	const cdp = await record.session.sessionManager.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
-	const out = await record.session.cdpClient.send.Runtime.evaluate({
-		expression: `document.getElementById(${jsLiteral(id)}).textContent`,
-		returnByValue: true,
-	}, cdp.sessionId);
-	return String(out.result.value ?? '');
-}
+/** A page element's viewport box, read from the page itself: test input, not the tool's arithmetic. */
+const rectOf = (h: Harness, id: string): Promise<Rect> =>
+	h.pageValue<Rect>(
+		`(() => { const r = document.getElementById(${jsLiteral(id)}).getBoundingClientRect(); ` +
+			'return { x: r.x, y: r.y, w: r.width, h: r.height }; })()',
+	);
 
 function byId(state: State, id: string): Element {
 	const found = state.interactive_elements.find((element) => element.attrs?.id === id);
@@ -138,7 +80,7 @@ function centre(element: Element): { x: number; y: number } {
 
 Deno.test({
 	name:
-		'e2e element_at (U-2): the hit test resolves through the reverse map on the OOPIF, the top document, and the occlusion fixtures',
+		'e2e element_at: the hit test resolves through the reverse map on the OOPIF, the top document, and the occlusion fixtures',
 	ignore,
 	async fn(t) {
 		const served = await corpus();
@@ -150,7 +92,7 @@ Deno.test({
 				await h.callText('browser_navigate', {
 					url: `http://${PRIMARY.hostname}:${PRIMARY.port}/iframe_crossorigin.html`,
 				});
-				const state = await structured<State>(h, 'browser_get_state', { fields });
+				const state = await h.callStructured<State>('browser_get_state', { fields });
 				const oopif = state.frames.find((frame) => frame.is_oopif);
 				assert(oopif !== undefined, `no OOPIF captured: ${JSON.stringify(state.frames)}`);
 				const child = byId(state, 'xo-button');
@@ -161,38 +103,27 @@ Deno.test({
 				const record = h.gateway.registry.peek('default');
 				assert(record !== undefined);
 				const raw = await hitTest(record, centre(child).x, centre(child).y);
-				console.log(
-					`U-2 OOPIF probe: ${JSON.stringify({ resolution: raw.resolution, index: raw.index, probes: raw.probes })}`,
-				);
 				assertEquals(raw.index, child.index, 'the OOPIF hit must resolve to the indexed child element');
 				assertEquals(raw.frameId, oopif.id);
 
-				const inFrame = await structured<ElementAt>(h, 'browser_element_at', { ...centre(child), fields });
+				const inFrame = await h.callStructured<ElementAt>('browser_element_at', { ...centre(child), fields });
 				assertEquals(inFrame.element?.index, child.index);
 				assertEquals(inFrame.frame_id, oopif.id);
 				assertEquals(inFrame.state_token, state.state_token);
 
-				const top = await structured<ElementAt>(h, 'browser_element_at', { ...centre(host), fields });
-				console.log(`U-2 top probe: ${JSON.stringify(top)}`);
+				const top = await h.callStructured<ElementAt>('browser_element_at', { ...centre(host), fields });
 				assertEquals(top.element?.index, host.index);
 				assertEquals(top.frame_id, state.frames[0]?.id);
 				assertEquals(top.resolution, 'direct');
 
-				// The text inside the button resolves to the button: a click there is a click on it.
-				const text = await structured<ElementAt>(h, 'browser_element_at', {
-					x: centre(host).x,
-					y: centre(host).y,
-				});
-				assertEquals(text.element?.index, host.index);
-
 				// Off the document is a success with no element, never an error.
-				const nothing = await structured<ElementAt>(h, 'browser_element_at', { x: 5000, y: 5000 });
+				const nothing = await h.callStructured<ElementAt>('browser_element_at', { x: 5000, y: 5000 });
 				assertEquals(nothing.element, null);
 				assertEquals(nothing.frame_id, null);
 			});
 
 			await t.step('live.hover answers the same element over the socket, without a lock', async () => {
-				const state = await structured<State>(h, 'browser_get_state', { fields });
+				const state = await h.callStructured<State>('browser_get_state', { fields });
 				const child = byId(state, 'xo-button');
 				const socket = await h.live();
 				socket.send({ type: 'live.hover', id: 'h1', ...centre(child) });
@@ -207,22 +138,16 @@ Deno.test({
 				await h.callText('browser_navigate', {
 					url: `http://${PRIMARY.hostname}:${PRIMARY.port}/occlusion_paint_order.html`,
 				});
-				const state = await structured<State>(h, 'browser_get_state', { fields, include_hidden: true });
-				// The fully covered button is not in the table at all (paint-order filtering, correctly), so
-				// its point comes from the page. The opaque cover is what the pointer reaches; it is not
-				// interactive, so the answer is no element — never the button underneath.
+				const state = await h.callStructured<State>('browser_get_state', { fields, include_hidden: true });
+				// The fully covered button is filtered from the table; the opaque cover the pointer reaches is not
+				// interactive, so the answer is no element, never the button underneath.
 				assert(state.interactive_elements.every((e) => e.attrs?.id !== 'occluded-button'), 'occluded button filtered');
 				const occluded = centre({ index: -1, tag: 'button', bounds: await rectOf(h, 'occluded-button') });
-				const covered = await structured<ElementAt>(h, 'browser_element_at', { ...occluded, fields });
-				console.log(`U-2 occluded probe: ${JSON.stringify(covered)}`);
+				const covered = await h.callStructured<ElementAt>('browser_element_at', { ...occluded, fields });
 				assertEquals(covered.element, null);
 				assertEquals(covered.resolution, 'none');
 
-				// The button under a pointer-events:none cover: the browser's hit test reaches it (the
-				// cover is transparent to pointer events), and the raw probe says so. Until A1 the
-				// serializer's paint-order filter treated that cover as an occluder and left the button out
-				// of the table, so the tool answered `none` where a click lands. ERRATUM(E-76) stopped a
-				// pointer-transparent element occluding: the button is in the table and resolves directly.
+				// A pointer-events:none cover does not occlude: the browser hit-tests through it to the button.
 				const peNoneElement = byId(state, 'pe-none-covered-button');
 				const peNone = centre({ index: -1, tag: 'button', bounds: await rectOf(h, 'pe-none-covered-button') });
 				const record = h.gateway.registry.peek('default');
@@ -235,41 +160,33 @@ Deno.test({
 				const described = await cdp.send.DOM.describeNode({ backendNodeId: probe.backend_node_id }, probe.session_id);
 				const attributes = described.node.attributes ?? [];
 				const hitId = attributes[attributes.indexOf('id') + 1];
-				console.log(
-					`U-2 pointer-events:none probe: ${
-						JSON.stringify({ ...probe, hit_id: hitId, resolution: rawPeNone.resolution })
-					}`,
-				);
 				assertEquals(hitId, 'pe-none-covered-button', 'the browser hit-tests through a pointer-events:none cover');
-				assertEquals(rawPeNone.resolution, 'direct', 'A1: the button a click lands on is the answer');
-				const underCover = await structured<ElementAt>(h, 'browser_element_at', { ...peNone, fields });
+				assertEquals(rawPeNone.resolution, 'direct', 'the button a click lands on is the answer');
+				const underCover = await h.callStructured<ElementAt>('browser_element_at', { ...peNone, fields });
 				assertEquals(underCover.element?.index, peNoneElement.index);
 
 				// Partly covered: the uncovered left edge is the button, the covered right edge is not.
 				const partly = byId(state, 'partly-occluded-button');
 				const pb = partly.bounds as Rect;
-				const open = await structured<ElementAt>(h, 'browser_element_at', { x: pb.x + 10, y: pb.y + pb.h / 2, fields });
+				const open = await h.callStructured<ElementAt>('browser_element_at', {
+					x: pb.x + 10,
+					y: pb.y + pb.h / 2,
+					fields,
+				});
 				assertEquals(open.element?.index, partly.index, 'the uncovered part of a partly covered button answers');
-				const shut = await structured<ElementAt>(h, 'browser_element_at', {
+				const shut = await h.callStructured<ElementAt>('browser_element_at', {
 					x: pb.x + pb.w - 10,
 					y: pb.y + pb.h / 2,
 					fields,
 				});
-				console.log(`U-2 partial probe: open=${open.resolution} shut=${shut.resolution}`);
 				assertEquals(shut.element, null, 'the covered part of a partly covered button answers the cover');
 
-				// The control sits below the fold: a hit test is a viewport read, so scroll first. The
-				// point is then a viewport point again, and the browser answers the unoccluded button.
+				// Below the fold: a hit test is a viewport read, so scroll first.
 				await h.callText('browser_scroll', { direction: 'down', pages: 1 });
-				const scrolled = await structured<State>(h, 'browser_get_state', { fields });
+				const scrolled = await h.callStructured<State>('browser_get_state', { fields });
 				const control = byId(scrolled, 'visible-control-button');
-				const plain = await structured<ElementAt>(h, 'browser_element_at', { ...centre(control), fields });
+				const plain = await h.callStructured<ElementAt>('browser_element_at', { ...centre(control), fields });
 				const rawControl = await hitTest(record, centre(control).x, centre(control).y);
-				console.log(
-					`U-2 scrolled-document probe: ${
-						JSON.stringify({ point: centre(control), probes: rawControl.probes, resolution: plain.resolution })
-					}`,
-				);
 				assert(
 					(rawControl.probes[0]?.scroll.y ?? 0) > 0,
 					'the document must actually be scrolled for this leg to prove anything',
@@ -281,11 +198,10 @@ Deno.test({
 				await h.callText('browser_navigate', {
 					url: `http://${PRIMARY.hostname}:${PRIMARY.port}/stacking_contexts.html`,
 				});
-				const state = await structured<State>(h, 'browser_get_state', { fields });
+				const state = await h.callStructured<State>('browser_get_state', { fields });
 				for (const id of ['sc-top', 'sc-mid', 'sc-base']) {
 					const element = byId(state, id);
-					const answer = await structured<ElementAt>(h, 'browser_element_at', { ...centre(element), fields });
-					console.log(`U-2 stacking probe ${id}: ${JSON.stringify(answer)}`);
+					const answer = await h.callStructured<ElementAt>('browser_element_at', { ...centre(element), fields });
 					assertEquals(answer.element?.index, element.index, `${id} is the topmost element at its own centre`);
 				}
 			});
@@ -295,15 +211,9 @@ Deno.test({
 	},
 });
 
-/**
- * A1: what lies between the pointer and a control (`tests/fixtures/element_at_covers.html`).
- *
- * Every leg asserts two things about the same point: what `browser_element_at` answers, and where a real
- * click at that point lands — the page records its own clicks. The answer is right exactly when the two
- * agree, which is the property A1 exists for.
- */
+/** What lies between the pointer and a control: the answer is right exactly when a real click at the point agrees. */
 Deno.test({
-	name: 'e2e element_at (A1): covers and pseudo-elements answer the element a click at the point reaches',
+	name: 'e2e element_at (covers): covers and pseudo-elements answer the element a click at the point reaches',
 	ignore,
 	async fn(t) {
 		const html = await Deno.readTextFile(new URL('../fixtures/element_at_covers.html', import.meta.url));
@@ -316,22 +226,19 @@ Deno.test({
 			await using h = await harness();
 			const fields = ['core', 'attrs'];
 			await h.callText('browser_navigate', { url: `http://127.0.0.1:${(server.addr as Deno.NetAddr).port}/` });
-			const state = await structured<State>(h, 'browser_get_state', { fields });
+			const state = await h.callStructured<State>('browser_get_state', { fields });
 			const record = h.gateway.registry.peek('default');
 			assert(record !== undefined);
 
 			/** Clicks at a viewport point and returns which controls have recorded a click so far. */
 			const clickAt = async (point: { x: number; y: number }): Promise<string> => {
 				await h.callText('browser_click', { coordinate_x: point.x, coordinate_y: point.y });
-				return await pageText(h, 'log');
+				return await h.pageValue<string>("document.getElementById('log').textContent");
 			};
 
 			await t.step('a control under a pointer-events:none layer is the answer, and the click reaches it', async () => {
 				const button = byId(state, 'under-pe-none');
-				const answer = await structured<ElementAt>(h, 'browser_element_at', { ...centre(button), fields });
-				console.log(
-					`A1 pointer-events:none: ${JSON.stringify({ resolution: answer.resolution, index: answer.element?.index })}`,
-				);
+				const answer = await h.callStructured<ElementAt>('browser_element_at', { ...centre(button), fields });
 				assertEquals(answer.resolution, 'direct');
 				assertEquals(answer.element?.index, button.index);
 				assert((await clickAt(centre(button))).includes('under-pe-none'), 'the click lands on the button');
@@ -345,10 +252,9 @@ Deno.test({
 				const cdp = record.session.cdpClient;
 				assert(cdp !== null);
 				const described = await cdp.send.DOM.describeNode({ backendNodeId: probe.backend_node_id }, probe.session_id);
-				console.log(`A1 icon probe: ${JSON.stringify({ ...probe, node: described.node.nodeName })}`);
 				assertEquals(described.node.nodeName, '::before', 'the browser names the pseudo-element itself');
 				assert(probe.pseudo_host_backend_node_id !== undefined, 'and its element was asked for');
-				const answer = await structured<ElementAt>(h, 'browser_element_at', { ...centre(button), fields });
+				const answer = await h.callStructured<ElementAt>('browser_element_at', { ...centre(button), fields });
 				assertEquals(answer.resolution, 'ancestor');
 				assertEquals(answer.element?.index, button.index);
 				assert((await clickAt(centre(button))).includes('icon-button'));
@@ -361,10 +267,7 @@ Deno.test({
 				const point = { x: Math.round(stage.x + 330), y: Math.round(stage.y + 30) };
 				const box = link.bounds as Rect;
 				assert(point.x > box.x + box.w || point.y < box.y, 'the point is outside the link’s own box');
-				const answer = await structured<ElementAt>(h, 'browser_element_at', { ...point, fields });
-				console.log(
-					`A1 stretched link: ${JSON.stringify({ resolution: answer.resolution, index: answer.element?.index })}`,
-				);
+				const answer = await h.callStructured<ElementAt>('browser_element_at', { ...point, fields });
 				assertEquals(answer.resolution, 'ancestor');
 				assertEquals(answer.element?.index, link.index);
 				assert((await clickAt(point)).includes('card-link'), 'the click lands on the link');
@@ -374,8 +277,7 @@ Deno.test({
 				'a backdrop drawn by a plain element answers nothing, and the control beneath gets no click',
 				async () => {
 					const button = byId(state, 'under-backdrop');
-					const answer = await structured<ElementAt>(h, 'browser_element_at', { ...centre(button), fields });
-					console.log(`A1 backdrop: ${JSON.stringify({ resolution: answer.resolution, element: answer.element })}`);
+					const answer = await h.callStructured<ElementAt>('browser_element_at', { ...centre(button), fields });
 					assertEquals(answer.element, null);
 					assertEquals(answer.resolution, 'none');
 					assert(!(await clickAt(centre(button))).includes('under-backdrop'), 'the backdrop takes the click');

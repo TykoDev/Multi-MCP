@@ -1,6 +1,6 @@
 {
 	"name": "selector_collision",
-	"pins": "R6.1 — selectorIndex is the backendNodeId, assigned in document order (the host <iframe> before its content); a cross-session collision takes the next free synthetic index above max(reservedBackendIds)",
+	"pins": "selector indices — selectorIndex is the backendNodeId, assigned in document order (the host <iframe> before its content); a cross-session collision takes the next free synthetic index above max(reservedBackendIds)",
 	"tree": {
 		"tag": "HTML",
 		"children": [

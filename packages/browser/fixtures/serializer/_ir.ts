@@ -1,7 +1,7 @@
 /**
  * Authoring form for the DOM-serializer goldens.
  *
- * `EnhancedDomTreeNode` (DATA-MODEL §6.1) is a cyclic graph with 25 fields, most of which are `null`
+ * `EnhancedDomTreeNode` is a cyclic graph with 25 fields, most of which are `null`
  * on any given node — unusable as a hand-written JSON fixture. This module defines a terse acyclic
  * JSON shape and inflates it into the real IR (parent links wired, defaults filled), so a fixture
  * states only what the rule under test needs and every unstated field takes its documented default.

@@ -12,10 +12,11 @@ import {
 import { GitForwarder, type GitRemote } from './git_forwarder.ts';
 import { type OpenEgress, RegistryProxy } from './proxy.ts';
 import { type ExecRequest, parseCwd, parseExec, parseRunId, RequestError, RUN_ID } from './request.ts';
+import { OwnerGates } from './gate.ts';
 import { ApiError, type DiskQuota, type ExecResult, type Sandbox } from './sandbox.ts';
 import { LIMITS } from './limits.ts';
 
-/** What runs a workspace's commands: the bubblewrap `Sandbox` (the default) or the Docker backend (D-108). */
+/** What runs a workspace's commands: the bubblewrap `Sandbox` (the default) or the Docker backend. */
 export type Backend =
 	& Pick<
 		Sandbox,
@@ -34,15 +35,14 @@ export type Backend =
 	& {
 		/** Which backend this is, as `/healthz` reports it. */
 		readonly kind: SandboxBackend;
-		/** D-108: at start-up, every workspace and its owner hash, so the backend can reconcile what it left running. */
+		/** At start-up, every workspace and its owner hash, so the backend can reconcile what it left running. */
 		reconcile?(owners: ReadonlyMap<string, string>): Promise<void>;
-		/** D-108: a new workspace's owner hash, before its first command. */
+		/** A new workspace's owner hash, before its first command. */
 		assign?(runId: string, owner: string): void;
+		/** True while a Docker container may run something, so file operations must stay inside it (`fileOp`). */
+		cagesFiles?(runId: string): boolean;
 	};
-/**
- * R12 (design §2.19): where this service may clone from. Both empty (the default): `clone` is off and `/healthz` says
- * `clone: false`.
- */
+/** Where this service may clone from; both empty (the default) turns `clone` off. */
 export interface CloneSettings {
 	/** `TTK_SANDBOX_GIT_HOSTS`: public clones of any repository on these exact names, through the git-host proxy. */
 	readonly hosts: ReadonlySet<string>;
@@ -114,7 +114,7 @@ function recordedUsage(metadata: Record<string, unknown>): number {
 	return typeof bytes === 'number' && Number.isFinite(bytes) && bytes >= 0 ? bytes : LIMITS.diskBudgetBytes;
 }
 
-/** E-6: the limits a new workspace works within, reported by `create`. */
+/** The limits a new workspace works within, reported by `create`. */
 function effectiveLimits(quota: DiskQuota, usage: number): Record<string, number> {
 	return {
 		disk_budget_bytes: Math.max(0, quota.limit),
@@ -138,15 +138,27 @@ export class WorkspaceService {
 	#creating: string | null = null;
 	readonly #clone: CloneSettings;
 	readonly #remotes: ReadonlyMap<string, GitRemote>;
+	/** Each owner's share of the command slots, taken before the backend's own gate. */
+	readonly #commandShares = new OwnerGates();
 
 	constructor(readonly root: string, readonly backend: Backend, clone: CloneSettings = NO_CLONE) {
 		this.#clone = clone;
 		this.#remotes = new Map(clone.remotes.map((remote) => [remote.id, remote]));
 	}
 
-	/** R12: whether this service clones at all — it was given git hosts, remotes, or both. */
+	/** Whether this service clones at all — it was given git hosts, remotes, or both. */
 	get clones(): boolean {
 		return this.#clone.hosts.size > 0 || this.#remotes.size > 0;
+	}
+
+	/** Runs `work`, which takes one of the backend's command slots, within `owner`'s share of them. */
+	async #shared<T>(owner: string, signal: AbortSignal | undefined, work: () => Promise<T>): Promise<T> {
+		const release = await this.#commandShares.enter(owner, signal);
+		try {
+			return await work();
+		} finally {
+			release();
+		}
 	}
 
 	/** Initializes the private ownership directory without following a symlink. */
@@ -156,17 +168,17 @@ export class WorkspaceService {
 		await Deno.mkdir(`${this.root}/.owners`, { recursive: true, mode: 0o700 });
 		await this.#directory(`${this.root}/.owners`);
 		let entries = await this.#entries();
-		// D-108: the backend learns every workspace's owner, and settles what an earlier run of it left behind.
+		// The backend learns every workspace's owner, and settles what an earlier run of it left behind.
 		await this.backend.reconcile?.(
 			new Map(entries.flatMap(({ id, metadata }) => (metadata === null ? [] : [[id, metadata.owner as string]]))),
 		);
-		// R12: a clone the service stopped in the middle of (a crash, a restart) never finished provisioning; its
+		// A clone the service stopped in the middle of (a crash, a restart) never finished provisioning; its
 		// half-written .git would stay read-only for good, so the workspace goes, as a failed clone's does.
 		for (const { id, metadata } of entries) {
 			if (metadata?.provisioning === true) await this.#discard(id);
 		}
 		entries = await this.#entries();
-		// SB-1: records written before disk use was kept in them are measured once, so owner totals
+		// A record that holds no disk use yet is measured once, so owner totals
 		// start out right; one that cannot be measured counts as a full budget until it is.
 		for (const { id, metadata } of entries) {
 			if (metadata === null || typeof metadata.disk_bytes === 'number') continue;
@@ -174,10 +186,7 @@ export class WorkspaceService {
 		}
 	}
 
-	/**
-	 * Cage readiness, stripped of machine-specific diagnostics, which backend answers (D-108), and whether it clones
-	 * (R12, additive to D-110).
-	 */
+	/** Readiness without diagnostics, the backend, and whether it clones. */
 	async health(): Promise<{ ok: boolean; backend: SandboxBackend; clone: boolean }> {
 		return { ok: (await this.backend.health()).ok, backend: this.backend.kind, clone: this.clones };
 	}
@@ -201,17 +210,16 @@ export class WorkspaceService {
 					workspace_id: id,
 					created_at: metadata.created_at,
 					...(typeof metadata.name === 'string' ? { name: metadata.name } : {}),
-					// SB-8: a workspace in use is listed too; the flag says a call on it now would be refused.
+					// A workspace in use is listed too; the flag says a call on it now would be refused.
 					...(this.#busy.has(id) ? { busy: true } : {}),
 				});
 			}
-			// R12: what a clone may name — the git hosts and the remotes' ids, never a remote's URL or credential.
+			// What a clone may name — the git hosts and the remotes' ids, never a remote's URL or credential.
 			if (!this.clones) return { workspaces };
 			return { workspaces, clone: { hosts: [...this.#clone.hosts], remotes: [...this.#remotes.keys()] } };
 		}
-		// D-076: session operations never take the workspace lock — a long poll or an open shell must not keep
-		// file reads and writes out — and address a session by id after `session_open`, whose ownership is the
-		// workspace's; the backend binds every later call to the same owner hash.
+		// Session operations never take the workspace lock (a long poll must not keep file operations out); the
+		// backend binds every call after `session_open` to the same owner hash.
 		if (operation === 'session_input' || operation === 'session_read' || operation === 'session_close') {
 			if (typeof args.session_id !== 'string' || !RUN_ID.test(args.session_id)) {
 				throw new RequestError('session_id', 'a session id is required');
@@ -239,10 +247,8 @@ export class WorkspaceService {
 		const id = parseRunId(args.workspace_id);
 		const metadata = await this.#metadata(id);
 		if (metadata.owner !== owner) throw new ApiError(404, 'no_workspace', 'Workspace not found.');
-		// R3-1: a workspace still cloning is the clone's alone until its `.git` is in place: a session or command let in
-		// before then would find no `.git` to mount read-only (bwrap mounts it only if it exists at open; Docker skips
-		// `#settle` while a session is live) and could rewrite HEAD and the index under the diff. Removing it cancels
-		// the clone, so that one operation goes on.
+		// A cloning workspace is the clone's alone until its `.git` is in place (else nothing mounts it read-only);
+		// only `remove`, which cancels the clone, goes on.
 		if (metadata.provisioning === true && operation !== 'remove') {
 			throw new ApiError(409, 'run_busy', 'Workspace is busy.');
 		}
@@ -253,7 +259,7 @@ export class WorkspaceService {
 				throw new RequestError('network', 'must be none or registries');
 			}
 			await this.#directory(`${this.root}/${id}`);
-			// D-077: opened under the workspace lock, so no file operation on the fast path is still checking a path
+			// Opened under the workspace lock, so no file operation on the fast path is still checking a path
 			// when the shell starts; every one after it sees the session and runs caged.
 			if (this.#busy.has(id)) throw new ApiError(409, 'run_busy', 'Workspace is busy.');
 			this.#busy.add(id);
@@ -263,7 +269,7 @@ export class WorkspaceService {
 				this.#busy.delete(id);
 			}
 		}
-		// SB-4: removal still works when the directory is already gone (a crash between the two deletions).
+		// Removal still works when the directory is already gone (a crash between the two deletions).
 		if (operation !== 'remove' || await lstatOrNull(`${this.root}/${id}`) !== null) {
 			await this.#directory(`${this.root}/${id}`);
 		}
@@ -276,9 +282,8 @@ export class WorkspaceService {
 	}
 
 	/**
-	 * Runs `work` holding the workspace's lock: one call at a time per workspace (409 `run_busy` otherwise), cancelled
-	 * with `signal` or by a `remove` of the same workspace, which waits for it to end. With `adopt`, the caller already
-	 * holds the workspace's busy slot (R3-1: a clone takes it before its record is written) and the lock takes it over.
+	 * Runs `work` holding the workspace's lock (409 `run_busy` otherwise), cancelled by `signal` or a `remove`. With
+	 * `adopt`, the lock takes over the busy slot the caller (a clone) already holds.
 	 */
 	async #locked<T>(
 		id: string,
@@ -315,9 +320,8 @@ export class WorkspaceService {
 	}
 
 	/**
-	 * SB-4: removes what a crash left behind: a checkout or run state with no owner record (creation
-	 * or removal cut short), and half-written records, once nothing has touched them for
-	 * LIMITS.orphanAgeMs. A workspace that has a record is never touched, however long it is idle.
+	 * Removes what a crash left behind — checkouts or state without an owner record, half-written records — once
+	 * untouched for LIMITS.orphanAgeMs. A workspace with a record is never touched.
 	 */
 	async sweep(now = Date.now()): Promise<number> {
 		const stale = (info: Deno.FileInfo) => (info.mtime?.getTime() ?? now) <= now - LIMITS.orphanAgeMs;
@@ -381,7 +385,7 @@ export class WorkspaceService {
 		}
 	}
 
-	/** SB-4: every owner record, with null for one that cannot be read: skipped, never fatal. */
+	/** Every owner record, with null for one that cannot be read: skipped, never fatal. */
 	async #entries(): Promise<{ id: string; metadata: Record<string, unknown> | null }[]> {
 		const entries: { id: string; metadata: Record<string, unknown> | null }[] = [];
 		for await (const entry of Deno.readDir(`${this.root}/.owners`)) {
@@ -392,10 +396,7 @@ export class WorkspaceService {
 		return entries;
 	}
 
-	/**
-	 * SB-4: a record is written whole or not at all: a new file, synced, renamed over the old one, and
-	 * the directory synced where the platform allows it.
-	 */
+	/** A record is written whole or not at all: new file, synced, renamed, directory synced. */
 	async #writeMetadata(id: string, metadata: Record<string, unknown>): Promise<void> {
 		await replace(`${this.root}/.owners/${id}.json`, encoder.encode(JSON.stringify(metadata)), 0o600);
 		try {
@@ -410,16 +411,15 @@ export class WorkspaceService {
 		}
 	}
 
-	/** Keeps the workspace's disk use in its record, for its owner's total (SB-1). */
+	/** Keeps the workspace's disk use in its record, for its owner's total. */
 	async #record(id: string, bytes: number): Promise<void> {
 		const metadata = await this.#metadata(id);
 		await this.#writeMetadata(id, { ...metadata, disk_bytes: Math.max(0, Math.round(bytes)) });
 	}
 
 	/**
-	 * SB-1: what a workspace of `owner` may keep: its own budget, or what its owner's other
-	 * workspaces leave of LIMITS.ownerDiskBytes. Over that, commands may only remove files (SB-7),
-	 * until the workspace is a budget past its share; then nothing runs.
+	 * What a workspace may keep: its budget, or what its owner's others leave of LIMITS.ownerDiskBytes. Over it,
+	 * commands may only remove files; a budget past it, nothing runs.
 	 */
 	async #quota(owner: string, id: string | null): Promise<DiskQuota> {
 		let others = 0;
@@ -471,6 +471,8 @@ export class WorkspaceService {
 			}
 			await Deno.mkdir(`${this.root}/${id}`, { mode: 0o700 });
 			this.backend.assign?.(id, owner);
+			// Not within the owner's share: under `#creating`, waiting behind the owner's long command would hold up
+			// every other owner's create, and this short `git init` is already one at a time.
 			const initialized = await this.backend.exec(
 				parseExec({
 					runId: id,
@@ -481,7 +483,7 @@ export class WorkspaceService {
 				quota,
 			);
 			if (initialized.exitCode !== 0) throw new ApiError(503, 'cage_failed', 'Workspace provisioning failed.');
-			// SB-3: the seed is at most 256 KiB in all, so one check against the budget does, rather than
+			// The seed is at most 256 KiB in all, so one check against the budget does, rather than
 			// a measuring cage per file.
 			const usage = initialized.diskBytes + seedBytes;
 			if (usage > quota.limit) throw new ApiError(507, 'over_budget', 'Workspace disk budget exceeded.');
@@ -492,7 +494,7 @@ export class WorkspaceService {
 			const created_at = new Date().toISOString();
 			const display = args.name === undefined ? {} : { name: args.name };
 			await this.#writeMetadata(id, { owner, created_at, ...display, disk_bytes: usage });
-			// E-6: what this workspace may use, as the service will enforce it, so a caller plans within it.
+			// What this workspace may use, as the service will enforce it, so a caller plans within it.
 			return { workspace_id: id, created_at, ...display, limits: effectiveLimits(quota, usage) };
 		} catch (error) {
 			await this.backend.remove(id).catch(() => {});
@@ -511,14 +513,10 @@ export class WorkspaceService {
 	}
 
 	/**
-	 * R12 (design §2.19): a workspace from a git remote. Everything is checked before the disk or the network is
-	 * touched: exactly one of `url` (a public clone, its host on `TTK_SANDBOX_GIT_HOSTS`) and `remote` (an operator
-	 * remote's id), the ref, the depth, the time limit. Then `create`'s path without `git init` and without seed files:
-	 * the owner record is written — marked as provisioning, and counted at the full budget — and `#creating` released,
-	 * so a long clone never holds other creates up; the clone then runs under the workspace's own lock — held from
-	 * before the record is written, and every operation but `remove` refused on a record still `provisioning` (R3-1) —
-	 * and its owner's quota, in the provisioning cage (`.git` writable once, read-only in every cage after). Any failure,
-	 * a cancelled call or a `remove` meanwhile included, removes the workspace.
+	 * A workspace from a git remote: exactly one of `url` (host on `TTK_SANDBOX_GIT_HOSTS`) and `remote` (an operator
+	 * remote's id), with ref, depth and time limit all checked before disk or network is touched. The record is written
+	 * as provisioning at the full budget, then the clone runs under the workspace's lock in the provisioning cage
+	 * (`.git` writable once, read-only after). Any failure, cancel or `remove` removes the workspace.
 	 */
 	async #cloneWorkspace(
 		owner: string,
@@ -557,9 +555,7 @@ export class WorkspaceService {
 		const created_at = new Date().toISOString();
 		const display = args.name === undefined ? {} : { name: args.name };
 		this.#creating = id;
-		// R3-1: the workspace is busy from before its record exists until the clone step ends: the record is listed and
-		// addressable the moment it is renamed into place, and the lock below adopts this slot rather than taking it
-		// afresh, so nothing gets in between (a session opened there would have kept a writable `.git`).
+		// Busy from before the record exists until the clone ends; the lock adopts this slot, so nothing gets in.
 		this.#busy.add(id);
 		try {
 			const entries = await this.#entries();
@@ -571,7 +567,7 @@ export class WorkspaceService {
 			}
 			await Deno.mkdir(`${this.root}/${id}`, { mode: 0o700 });
 			this.backend.assign?.(id, owner);
-			// SB-1: counted at its whole budget until the clone is measured; `provisioning` until it has finished.
+			// Counted at its whole budget until the clone is measured; `provisioning` until it has finished.
 			await this.#writeMetadata(id, { owner, created_at, ...display, disk_bytes: quota.limit, provisioning: true });
 		} catch (error) {
 			await this.#discard(id);
@@ -597,7 +593,7 @@ export class WorkspaceService {
 						stdin: null,
 						egress,
 					};
-					const result = await this.backend.exec(request, held, quota);
+					const result = await this.#shared(owner, held, () => this.backend.exec(request, held, quota));
 					held.throwIfAborted();
 					if (result.killed === 'disk' || result.overBudget) {
 						throw new ApiError(507, 'over_budget', 'The clone does not fit the workspace disk budget.');
@@ -612,7 +608,7 @@ export class WorkspaceService {
 					await this.#discard(id);
 					throw error;
 				}
-			}, /* adopt the busy slot taken before the record was written (R3-1) */ true);
+			}, /* adopt the busy slot taken before the record was written */ true);
 			return {
 				workspace_id: id,
 				created_at,
@@ -653,10 +649,7 @@ export class WorkspaceService {
 		return path;
 	}
 
-	/**
-	 * SB-5: a file is written to a new file in its validated parent and renamed over the path, so a
-	 * write can never go through a link put there after the path was checked; the file keeps its mode.
-	 */
+	/** Written to a new file in the validated parent and renamed, so a write never goes through a planted link. */
 	async #writeFile(path: string, content: string): Promise<number> {
 		const existing = await lstatOrNull(path);
 		if (existing !== null && (!existing.isFile || existing.isSymlink)) {
@@ -668,16 +661,15 @@ export class WorkspaceService {
 	}
 
 	/**
-	 * SB-1: a command with its owner's quota. While it runs, the record counts the workspace at its
-	 * limit, so two commands of one owner cannot both spend the same room, and a crash leaves the
-	 * worst case on record; afterwards, what was measured.
+	 * A command with its owner's quota. While it runs the record counts the workspace at its limit, so two commands
+	 * cannot spend the same room and a crash leaves the worst case; afterwards, what was measured.
 	 */
 	async #exec(id: string, owner: string, request: ExecRequest, signal: AbortSignal): Promise<ExecResult> {
 		const quota = await this.#quota(owner, id);
 		let usage = recordedUsage(await this.#metadata(id));
 		await this.#record(id, Math.max(usage, quota.limit));
 		try {
-			const result = await this.backend.exec(request, signal, quota);
+			const result = await this.#shared(owner, signal, () => this.backend.exec(request, signal, quota));
 			usage = result.diskBytes;
 			return result;
 		} finally {
@@ -685,10 +677,7 @@ export class WorkspaceService {
 		}
 	}
 
-	/**
-	 * D-077: read, write or list for a workspace with a live session, done in a cage (Sandbox.fileOp). The old
-	 * size of a file is not looked up from outside the cage, so a write counts its whole size against the budget.
-	 */
+	/** A file operation done in a cage; a write counts its whole size (the old size is not looked up outside). */
 	async #caged(
 		id: string,
 		owner: string,
@@ -733,14 +722,14 @@ export class WorkspaceService {
 		}
 		if (operation === 'diff') {
 			fields(args, ['workspace_id']);
-			return { ...await this.backend.diff(id, signal) };
+			return { ...await this.#shared(owner, signal, () => this.backend.diff(id, signal)) };
 		}
 		if (operation === 'remove') {
 			await this.backend.remove(id);
 			await Deno.remove(`${this.root}/${id}`, { recursive: true }).catch((error) => {
 				if (!(error instanceof Deno.errors.NotFound)) throw error;
 			});
-			// R12: a clone this removal cancelled has already discarded its workspace, record included.
+			// A clone this removal cancelled has already discarded its workspace, record included.
 			await Deno.remove(`${this.root}/.owners/${id}.json`).catch((error) => {
 				if (!(error instanceof Deno.errors.NotFound)) throw error;
 			});
@@ -756,21 +745,24 @@ export class WorkspaceService {
 		if ((operation === 'read' || operation === 'write') && (typeof args.path !== 'string' || !parseCwd(args.path))) {
 			throw new RequestError('path', 'a file path is required');
 		}
-		// D-077: a live session can change the tree at any moment, so the operation runs where a link cannot leave
-		// the checkout. The lock still keeps commands and other file operations out meanwhile.
-		if (this.backend.sessionOf(id) !== null) return await this.#caged(id, owner, operation, args, signal);
+		// A live session (or a process left in a Docker container) can change the tree at any moment, so the
+		// operation runs where a link cannot leave the checkout.
+		if (this.backend.sessionOf(id) !== null || this.backend.cagesFiles?.(id) === true) {
+			return await this.#caged(id, owner, operation, args, signal);
+		}
 		const path = await this.#path(id, args.path, operation === 'write');
 		if (operation === 'write') {
 			const content = args.content as string;
 			const existing = await lstatOrNull(path);
 			if (existing !== null && !existing.isFile) throw new RequestError('path', 'must name a regular file');
-			// SB-7: a write that does not grow the file is allowed over the budget: it is how one shrinks.
+			// A write that does not grow the file is allowed over the budget: it is how one shrinks.
 			const grows = encoder.encode(content).length - (existing?.size ?? 0);
 			const usage = await this.backend.diskUsage(id, signal);
 			if (grows > 0 && usage + grows > (await this.#quota(owner, id)).limit) {
 				throw new ApiError(507, 'over_budget', 'Workspace disk budget exceeded.');
 			}
-			// No cage runs while this workspace's lock is held.
+			// Nothing of the workspace runs here: no session, and no container left running; every start
+			// of either happens under this workspace's lock, which this operation holds.
 			const bytes = await this.#writeFile(path, content);
 			await this.#record(id, usage + grows);
 			return { written: true, bytes, path: parseCwd(args.path) };
@@ -782,7 +774,7 @@ export class WorkspaceService {
 			}
 			const file = await Deno.open(path, { read: true });
 			try {
-				// SB-5: what was opened is what was checked; a path swapped for a link meanwhile is refused.
+				// What was opened is what was checked; a path swapped for a link meanwhile is refused.
 				const opened = await file.stat();
 				if (!opened.isFile || opened.dev !== info.dev || opened.ino !== info.ino) {
 					throw new RequestError('path', 'changed while it was being read');
@@ -810,12 +802,12 @@ export class WorkspaceService {
 	}
 }
 
-/** R12: a public clone's socket is the registry proxy, admitting the git hosts and nothing else, for its one step. */
+/** A public clone's socket is the registry proxy, admitting the git hosts and nothing else, for its one step. */
 function publicEgress(hosts: ReadonlySet<string>): OpenEgress {
 	return (path, deps, runId) => RegistryProxy.open(path, deps, runId, hosts);
 }
 
-/** R12: a credentialed clone's socket is the forwarder for that one remote, which adds its credential itself. */
+/** A credentialed clone's socket is the forwarder for that one remote, which adds its credential itself. */
 function forwardEgress(remote: GitRemote): OpenEgress {
 	return (path, deps, runId) => GitForwarder.open(path, deps, runId, remote);
 }

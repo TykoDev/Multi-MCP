@@ -1,37 +1,8 @@
 /**
- * Secret placeholders for `browser_type` (SPECS/ROADMAP.md R14).
- *
- * The problem this solves: to log a model into something, *somebody* has to
- * send the password. Without this, that somebody is the model — the credential
- * appears in its context, in the tool call, in the transcript the client keeps,
- * and in whatever that client logs. None of those are places a credential
- * should be.
- *
- * So the value never leaves the server. The operator configures it here; the
- * model is told only the *name* and writes `<secret>github_password</secret>`;
- * substitution happens in the handler, after validation, on the way to the
- * browser. The model can use a credential it is never shown.
- *
- * Two rules make that safe rather than merely convenient:
- *
- * 1. **Domain scoping.** A secret declares where it may be typed. A model that
- *    has been talked into visiting an attacker's page cannot spend the banking
- *    password there: substitution on a non-matching origin is refused, and the
- *    refusal is reported to the model as an error rather than silently typing
- *    the placeholder text into the field.
- * 2. **One direction.** Nothing reads a secret back out. The value is not in
- *    any result, any log line, or any error message — only its name is.
- *
- * **The pin is a secret-scoping decision, not a navigation one** (SEC-FH-23).
- * Rule 1 is enforced by {@linkcode urlMatch} in its `'secret'` context, which is
- * the primitive `sensitiveData` scoping calls (the `M4` scheme rule lives with
- * the matcher, `packages/browser/src/security/url_matcher.ts`). The
- * navigation predicate is a *different rule* that deliberately permits
- * `about:blank`, `data:`, `blob:` and plaintext `http:` — all correct for "may
- * the agent go here", all wrong for "may a credential be spent here" — and
- * resolving the pin through it typed pinned credentials at opaque and plaintext
- * origins. The two predicates are not interchangeable and this module must never
- * reach for the navigation one again.
+ * Secret placeholders for `browser_type`: the model writes `<secret>name</secret>`, the server substitutes the value
+ * on the way to the browser, and nothing reads it back out.
+ * A secret is pinned to its domains with `urlMatch`'s `'secret'` context, never the navigation predicate, which
+ * admits `about:blank`, `data:` and plaintext `http:`.
  */
 import { urlMatch } from '@tykotech/browser';
 import { ToolError } from './errors.ts';
@@ -44,19 +15,16 @@ export interface SecretEntry {
 	readonly name: string;
 	readonly value: string;
 	/**
-	 * Domain patterns this secret may be used on, in the same *pattern* syntax as
-	 * the navigation allowlist but under the stricter `'secret'` scheme rule: a
-	 * scheme-less pattern covers `https:` only, and a secret that genuinely has to
-	 * be typed over plaintext HTTP needs an explicit `http://host` pattern
-	 * (the matcher's M4 scheme rule, `packages/browser/src/security/url_matcher.ts`;
-	 * SECURITY-AUTH.md §7.1 states the pin). Empty means any origin the server itself
-	 * permits — which is why `browser_fill_secret` refuses an empty one outright.
+	 * Domain patterns this secret may be used on, in the same *pattern* syntax as the navigation allowlist but under
+	 * the stricter `'secret'` scheme rule: a scheme-less pattern covers `https:` only, and a secret that genuinely
+	 * has to be typed over plaintext HTTP needs an explicit
+	 * `http://host` pattern (the matcher's scheme rule, `packages/browser/src/security/url_matcher.ts`).
 	 */
 	readonly domains: readonly string[];
 }
 
 /** What a substitution did, with no value anywhere in it. */
-export interface Substitution {
+interface Substitution {
 	/** The text to actually type. */
 	readonly text: string;
 	/** Names substituted, in first-use order. */
@@ -65,12 +33,7 @@ export interface Substitution {
 	readonly substituted: boolean;
 }
 
-/**
- * The configured secrets.
- *
- * Immutable after construction: a store that could be written at runtime would
- * be a way to exfiltrate one (write a known value, read the effect).
- */
+/** The configured secrets; immutable, since a writable store would be an exfiltration oracle. */
 export class SecretStore {
 	readonly #entries: ReadonlyMap<string, SecretEntry>;
 
@@ -97,24 +60,12 @@ export class SecretStore {
 		return this.#entries.has(name);
 	}
 
-	/**
-	 * The domain patterns a named secret is pinned to, or `undefined` when there is no such secret.
-	 *
-	 * An **empty array is the meaningful answer**, not a missing one: it is what `parseSecrets`
-	 * produces for the short form, and `#permits` reads it as "any origin the server itself permits".
-	 * `browser_fill_secret` refuses on exactly that answer (SEC-07), so it needs to be able to see it
-	 * without being handed the entry — and being handed the entry would mean being handed the value.
-	 */
+	/** The domain patterns a named secret is pinned to, or `undefined` when there is no such secret. */
 	domainsOf(name: string): readonly string[] | undefined {
 		return this.#entries.get(name)?.domains;
 	}
 
-	/**
-	 * The names usable on `url`, which is what a model is told about.
-	 *
-	 * Naming a secret that cannot be used here would invite the model to plan
-	 * around an affordance it does not have.
-	 */
+	/** The names usable on `url`, which is what a model is told about. */
 	namesFor(url: string): string[] {
 		return [...this.#entries.values()]
 			.filter((entry) => this.#permits(entry, url))
@@ -122,34 +73,13 @@ export class SecretStore {
 			.sort();
 	}
 
-	/**
-	 * True when `entry` may be typed into a page at `url` — **the SEC-07 pin, and the one place it is
-	 * decided** (SEC-FH-23).
-	 *
-	 * Both consumers come through here: {@linkcode substitute}, which binds the value, and
-	 * {@linkcode namesFor}, which is what `browser_get_state` advertises to the model. That is not an
-	 * accident of factoring, it is the property being kept — `available_secrets` is an authorization
-	 * statement, so a predicate that disagreed with the pin would have the server *proposing* a spend
-	 * it would then refuse, or worse, advertising one it would allow.
-	 *
-	 * `urlMatch(…, 'secret')` fails closed on an empty, unparseable or host-less URL (M1) and on a
-	 * new-tab URL (M2), so `about:blank`, `data:`, `blob:` and `javascript:` have no host to match and
-	 * are refused; in the `'secret'` context a scheme-less pattern covers `https:` only, so a pinned
-	 * host reached over plaintext `http:` is refused too. Each of those was a measured fail-open row.
-	 */
+	/** True when `entry` may be typed into a page at `url` — **the domain pin, and the one place it is decided**. */
 	#permits(entry: SecretEntry, url: string): boolean {
 		if (entry.domains.length === 0) return true;
 		return entry.domains.some((pattern) => urlMatch(url, pattern, 'secret'));
 	}
 
-	/**
-	 * Replaces every `<secret>name</secret>` in `text` with its value.
-	 *
-	 * @throws ToolError when a named secret does not exist, or exists but is not
-	 * permitted on `url`. Both are refusals rather than pass-throughs: typing the
-	 * literal string `<secret>x</secret>` into a password field would look to the
-	 * model like success and leave a broken login nobody can debug.
-	 */
+	/** Replaces every `<secret>name</secret>` in `text` with its value. */
 	substitute(text: string, url: string): Substitution {
 		if (this.empty || !text.includes('<secret>')) {
 			return { text, used: [], substituted: false };
@@ -188,16 +118,7 @@ export class SecretStore {
 		return { text: out, used, substituted: used.length > 0 };
 	}
 
-	/**
-	 * `text` with every stored value of four or more characters, as written, replaced by `[secret]` (design §2.0
-	 * item 10). Pure.
-	 *
-	 * S0 seam for the read paths that hand page-derived text back to a model — W1's network log and HAR, W2's
-	 * accessibility tree — where a typed secret can reappear in a header, a URL or a field's accessible name. One
-	 * pass with the longest value tried first at each position, so a value containing a shorter one is never left
-	 * half-replaced and a value that happens to spell part of `[secret]` cannot rewrite an earlier replacement.
-	 * Shorter values are skipped: replacing two or three characters everywhere would wreck the text and hide nothing.
-	 */
+	/** `text` with every stored value of four or more characters, as written, replaced by `[secret]`. Pure. */
 	redact(text: string): string {
 		if (this.empty || text === '') return text;
 		const values = [...new Set([...this.#entries.values()].map((entry) => entry.value))]
@@ -207,6 +128,40 @@ export class SecretStore {
 		const pattern = new RegExp(values.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
 		return text.replace(pattern, REDACTED);
 	}
+}
+
+/**
+ * `value` with {@linkcode SecretStore.redact} applied to every string inside it: object values, array items and
+ * nested content blocks, never keys. Pure; returns `value` itself when nothing changed or the store is empty.
+ */
+export function redactDeep<T>(value: T, store: SecretStore | undefined): T {
+	if (store === undefined || store.empty) return value;
+	return walk(value, store) as T;
+}
+
+/** {@linkcode redactDeep}'s recursion; returns the same reference when nothing below it changed. */
+function walk(value: unknown, store: SecretStore): unknown {
+	if (typeof value === 'string') return store.redact(value);
+	if (Array.isArray(value)) {
+		let changed = false;
+		const out = value.map((item) => {
+			const next = walk(item, store);
+			if (next !== item) changed = true;
+			return next;
+		});
+		return changed ? out : value;
+	}
+	if (value === null || typeof value !== 'object') return value;
+	const record = value as Record<string, unknown>;
+	const binary = record.type === 'image' || record.type === 'audio';
+	let changed = false;
+	const out: Record<string, unknown> = {};
+	for (const [key, item] of Object.entries(record)) {
+		const next = (binary && key === 'data') || key === 'blob' ? item : walk(item, store);
+		if (next !== item) changed = true;
+		out[key] = next;
+	}
+	return changed ? out : value;
 }
 
 /** The shortest stored value `SecretStore.redact` replaces. */
@@ -223,24 +178,14 @@ function originOf(url: string): string {
 	}
 }
 
-/**
- * Parses the configured secrets.
- *
- * Two shapes, both JSON: a flat `{"name": "value"}` map for secrets usable
- * anywhere, and `{"name": {"value": "…", "domains": ["*.example.com"]}}` when a
- * secret should be pinned to where it belongs. Mixing them in one document is
- * allowed — the common case is one pinned credential among several unpinned
- * ones, and forcing the long form on all of them would just invite the operator
- * to skip the pinning.
- */
+/** Parses the configured secrets. */
 export function parseSecrets(raw: string): SecretEntry[] {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
 	} catch (cause) {
-		// Review R1-1 (D-123, S-10): V8's own message quotes the input — the whole of it when short, its start otherwise
-		// — so a bare credential stored where this document belongs (the file, the variable, a provider) was printed by
-		// the refusal. A fixed phrase, and the position when the parser reports one.
+		// V8's own message quotes the input — the whole of it when short, its start otherwise — so a bare credential
+		// stored where this document belongs (the file, the variable, a provider) would be printed by the refusal.
 		const at = cause instanceof SyntaxError ? /\bat position (\d+)\b/.exec(cause.message)?.[1] : undefined;
 		throw new Error(at === undefined ? 'not valid JSON' : `not valid JSON at position ${at}`);
 	}
@@ -253,7 +198,7 @@ export function parseSecrets(raw: string): SecretEntry[] {
 	for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
 		entry += 1;
 		if (!/^[A-Za-z0-9_.\-]{1,64}$/.test(name)) {
-			// Review R1-1: located, never repeated. A map written the wrong way round puts the credential where the name
+			// Located, never repeated. A map written the wrong way round puts the credential where the name
 			// belongs, and a name that fails this grammar is exactly where it would land.
 			throw new Error(`invalid secret name (entry ${entry}): use letters, digits, _ . - (max 64)`);
 		}
@@ -281,42 +226,20 @@ export function parseSecrets(raw: string): SecretEntry[] {
 	return entries;
 }
 
-// --- the secret-fill element contract (B2.8) ---------------------------------
+// --- the secret-fill element contract ----------------------------------------
 
-/**
- * The element shapes `browser_fill_secret` will type a server-held credential into.
- *
- * `text` is here because the requirement asks for it and because it is right: plenty of login forms
- * use `type=text` for the username, and a reveal toggle turns a password field into one. The
- * consequence is worth stating rather than leaving implied — **once `text` is permitted, the "is this
- * a password field" check carries no weight, and the secret's domain pinning is the only control that
- * remains** (SEC-07). That is why `browser_fill_secret` refuses an unpinned secret where
- * `browser_type` allows one.
- */
+/** The element shapes `browser_fill_secret` will type a server-held credential into. */
 const FILLABLE_INPUT_TYPES: ReadonlySet<string> = new Set(['password', 'text']);
 
 /** What a fillable element turned out to be, for the result and for the refusal messages. */
-export interface FillTarget {
+interface FillTarget {
 	/** Lower-cased tag name: `input` or `textarea`. */
 	readonly tag: string;
 	/** The input's `type`, or `textarea` for one. Structural, never content. */
 	readonly type: string;
 }
 
-/**
- * Names an element for a refusal message — **tag, `type=` and `#id` only**.
- *
- * One function, so a refusal cannot become the disclosure the result avoided. The obvious
- * implementation of "say which element" is to serialise the node's attribute map, and a password
- * input the browser has already filled carries the credential in that map — which would put it into
- * an error string that reaches the transcript and the logs. Three attributes are named here and
- * nothing is iterated, so widening it is an edit rather than an accident; the BF-8 matrix exercises
- * this function against the three password shapes for exactly that reason.
- *
- * (The invariant I-14 scanner reads comments as well as code, deliberately, which is why this note
- * describes the attribute rather than spelling it — a module that only *mentions* the read would
- * otherwise have to be allowlisted beside the ones that perform it.)
- */
+/** Names an element for a refusal message — **tag, `type=` and `#id` only**. */
 export function describeFillTarget(node: {
 	nodeName?: string;
 	attributes?: Record<string, string> | null;
@@ -327,13 +250,7 @@ export function describeFillTarget(node: {
 	return `<${tag}${type === undefined ? '' : ` type=${type}`}${id === undefined ? '' : ` #${id}`}>`;
 }
 
-/**
- * Refuses an element a server-held credential must not be typed into.
- *
- * `element-not-interactable` rather than `unknown-index` or `invalid-arguments`: the index resolved
- * and the element is the one the caller meant — it simply cannot take this action. The other two
- * codes would be false in opposite directions (B2.5's reason for the code existing at all).
- */
+/** Refuses an element a server-held credential must not be typed into. */
 export function assertFillable(node: {
 	nodeName?: string;
 	attributes?: Record<string, string> | null;

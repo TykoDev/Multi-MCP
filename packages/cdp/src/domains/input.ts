@@ -3,7 +3,7 @@
  *
  * The whole interaction surface rides on this: the click cascade's move/press/release with 3 s/5 s
  * caps, per-char `keyDown`/`char`/`keyUp` typing, `insertText` for the direct-value path, and wheel
- * scrolling (SPECS/ARCHITECTURE.md §6.10, SPECS/AGENT-RUNTIME.md input-synthesis contract).
+ * scrolling.
  */
 
 import type { CdpTimestamp, EmptyResult } from './common.ts';
@@ -73,9 +73,9 @@ export interface InputParams {
 	/** The direct-value path: no per-char key events, so no framework keydown handlers fire. */
 	'Input.insertText': { text: string };
 	/**
-	 * The in-progress state of an IME composition (SPECS/ROADMAP.md R13).
+	 * The in-progress state of an IME composition.
 	 *
-	 * ERRATUM(E-22). Added to the typed surface rather than reached through
+	 * Typed rather than reached through
 	 * `sendRaw`, because it is not an escape hatch case: composition is a first
 	 * class input mode for every language that needs one, and the live view's
 	 * takeover is unusable in Japanese, Chinese or Korean without it. Chrome

@@ -1,16 +1,8 @@
 /**
  * @module
- * The fixture site every browser-tier test drives.
- *
- * A real origin rather than `data:` URLs — the navigation policy refuses every
- * scheme but http/https, correctly, so a fixture needs a real one. Each site
- * carries a per-run nonce: an assertion that finds the nonce has proven the
- * whole chain ran (HTTP → auth → tool → CDP → Chromium → DOM pipeline) rather
- * than that some cached or stubbed value came back.
- *
- * Every page records what the browser actually did into DOM elements the tools
- * can read back, so a test asserts on observed browser behaviour rather than on
- * the fact that a CDP call returned without throwing.
+ * The fixture site every browser-tier test drives: a real http origin (the navigation policy refuses other schemes)
+ * with a per-run nonce in every page, so finding the nonce proves the whole chain ran. Pages record what the browser
+ * did into DOM elements the tools read back.
  */
 
 /** One running fixture site. */
@@ -23,18 +15,6 @@ export interface FixtureSite {
 	page(name: PageName): string;
 	/** Requests served so far, newest last. Proves navigation really left. */
 	readonly hits: readonly string[];
-	/**
-	 * Bytes this site actually wrote for `/measured`, and its declared size (U-4).
-	 *
-	 * Kept for the download and egress legs; `browser_head` no longer goes through
-	 * the browser (SR-HEAD-REDIRECT, D-042) and its byte count is measured by the
-	 * raw upstream in `packages/mcp/src/head_test.ts`. Historically this counted
-	 * what `Network.loadNetworkResource`
-	 * and releases the stream handle immediately. Whether that stops the transfer
-	 * or merely discards it is a *measurement*, not an assumption, and the number
-	 * it produces goes in the tool's own documentation.
-	 */
-	readonly measured: { served: number; total: number };
 	close(): Promise<void>;
 }
 
@@ -50,7 +30,6 @@ export type PageName =
 	| 'article'
 	| 'second'
 	| 'slow'
-	| 'title'
 	| 'setcookie'
 	| 'showcookie'
 	| 'downloads'
@@ -69,7 +48,7 @@ export type PageName =
 	| 'pseudoframe'
 	| 'liar';
 
-/** How many same-site child documents the `liar` page lies from (R3-2: enough to occupy low context ids). */
+/** How many same-site child documents the `liar` page lies from (enough to occupy low context ids). */
 const LIAR_FRAMES = 16;
 
 /** The `objectcross`/`embedcross` host's half of `focusframe`'s report: the embedded field's length, as text. */
@@ -83,47 +62,21 @@ button,input,select,textarea{font:inherit;padding:.4rem;margin:.2rem 0}
 .tall{height:320vh;background:linear-gradient(#fff,#e8eefc)}</style></head>
 <body>${body}<script>${script}</script></body></html>`;
 
-// --- the frameset pages (S4: `browser_get_html {frame_id}`) ----------------------------------------
+// --- the frameset pages (`browser_get_html {frame_id}`): each document carries its own sentinel -------------
 
-/**
- * The unique string the `framesetcontent` document carries and **no other document does**.
- *
- * Every frame-html acceptance row is a statement about which document came back, so the rows are
- * written against sentinels rather than against lengths or titles: a read that carries this string
- * has provably read the content child, and a refusal that carries
- * {@linkcode FRAMESET_TOP_SENTINEL} has provably returned the top document instead of refusing
- * (I-FH-1, C-7).
- */
+/** Only the `framesetcontent` document carries this. */
 export const FRAME_SENTINEL = 'BIL51-SENTINEL-9F2A';
-
-/** The depth-2 leaf's own sentinel — criterion 2a's discriminator. */
+/** The depth-2 leaf's own sentinel. */
 export const FRAME_NESTED_SENTINEL = 'BIL51-NESTED-SENTINEL-4D7B';
-
-/** The frameset **shell's** sentinel. It must appear in no child read and in no refusal. */
+/** The frameset shell's sentinel: in no child read and no refusal. */
 export const FRAMESET_TOP_SENTINEL = 'FRAMESET-TOP-SENTINEL-2B8E';
-
-/** `browser_get_html`'s character cap, restated here so the fixture can be sized past it (F-3). */
+/** `browser_get_html`'s character cap, restated so the fixture can be sized past it. */
 export const HTML_LIMIT_CHARS = 200_000;
 
-/**
- * Filler that makes `framesetnested`'s `documentElement.outerHTML` exceed
- * {@linkcode HTML_LIMIT_CHARS}, so criterion 4a has a real frame to truncate.
- *
- * An HTML **comment**, deliberately, and placed in `<head>` right after the `<title>`: it inflates
- * the serialized document without adding an element, a text node, a layout box or an attribute, so
- * the DOM capture that `browser_get_frames` runs over this page is unaffected and the frame list
- * stays honest. A 200 000-character `<div>` would have made criterion 4a's fixture the reason
- * criteria 1 and 2 could not be observed.
- */
+/** A comment in `<head>` that puts `framesetnested` past the cap without adding any node the DOM capture sees. */
 const NESTED_PAD = `<!--${'pad '.repeat(60_000)}-->`;
 
-/**
- * A `<frameset>` document, which by construction has **no `<body>`**.
- *
- * {@linkcode SHELL} always emits one, and a `<body>` makes a `<frameset>` inert — the browser drops
- * the frames and renders an empty document — so the frameset pages bypass it. That is the recorded
- * trap, and the reason this second helper exists rather than a `SHELL` option.
- */
+/** A `<frameset>` document: no `<body>`, which would make the frameset inert (so not {@linkcode SHELL}). */
 const FRAMESET = (nonce: string, menu: string, content: string): string =>
 	`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Frameset ${FRAMESET_TOP_SENTINEL} ${nonce}</title></head>
@@ -136,16 +89,7 @@ const FRAMESET = (nonce: string, menu: string, content: string): string =>
 /** The pages, each a function of the run's nonce and, for `oopif`, of the second site's origin. */
 function pages(nonce: string, frameOrigin: string, altOrigin: string): Record<PageName, string> {
 	return {
-		// Owner item 6: the egress bypasses. Every link and button here points at a
-		// *different* host from the one that served the page, so a test that
-		// allowlists only this site's host can prove that the `{index}` form of
-		// `browser_download` gates the resolved `href` before clicking, that a
-		// JS-driven download with no `href` is caught at the ledger, and that a
-		// redirect off the allowlist is caught on its final URL.
-		// Owner item 3: deterministic triggers for the `console` and `dom.settled`
-		// content kinds. A button logs at each level; another appends a node after
-		// a delay so a settle can be observed after a burst of mutations, then
-		// quiet. No secret anywhere: these kinds carry only level/text and a count.
+		// Deterministic triggers for the `console` and `dom.settled` event kinds.
 		content: SHELL(
 			`Content Events`,
 			`<h1>content ${nonce}</h1>
@@ -168,6 +112,7 @@ document.getElementById('mutate').addEventListener('click',()=>{
   step();});`,
 		),
 
+		// Every link points at another host: an allowlist of this host alone proves the download gates.
 		egress: SHELL(
 			`Egress`,
 			`<h1>egress ${nonce}</h1>
@@ -180,9 +125,7 @@ document.getElementById('mutate').addEventListener('click',()=>{
 			`document.getElementById('js-off').addEventListener('click',()=>{
   location.href='${altOrigin}/opendownload?name=js.txt&body=js-${nonce}';});`,
 		),
-		// B1.5 / A-1: a click recorder meant to be embedded from ANOTHER site, so Chromium puts it in
-		// its own renderer (an OOPIF). It reports where the click landed in its own DOM, and the DOM
-		// pipeline's merged text is how the top-level tools read it back.
+		// A click recorder embedded from another site, so Chromium renders it out of process.
 		frame: SHELL(
 			`Frame Child`,
 			`<p id="frame-marker">frame ${nonce}</p>
@@ -197,22 +140,13 @@ ff.addEventListener('input',()=>{
   document.getElementById('frame-echo').textContent=ff.value||'frame-empty';});`,
 		),
 
-		// S4: the `<frameset>` corpus the browser tier reads `browser_get_html {frame_id}` over. The
-		// corpus had no frameset anywhere and the fixture site had no same-origin child frame at all —
-		// its only child was the cross-site `oopif` host — so both gaps are filled here. The shape is
-		// statbank.dk's on purpose: a narrow menu column and a wide content column, the content child
-		// carrying a table whose caption is the sentinel, a `2024M12` period cell and numeric data. S5
-		// replays the live site and must find the same three things, so the shape is pinned where it
-		// can be tested offline first.
+		// statbank.dk's shape: a menu column and a content column whose table caption is the sentinel.
 		frameset: FRAMESET(nonce, '/framesetmenu', '/framesetcontent'),
 
-		// The same shell with its content child on ANOTHER site, so Chromium renders it in its own
-		// process: criterion 2b's out-of-process case, and C-1/C-2's gate rows. The second origin is
-		// the harness's `frameOrigin`, which a suite points at a second fixture site on `localhost`.
+		// The content child on another site (`frameOrigin`): the out-of-process case.
 		framesetcross: FRAMESET(nonce, '/framesetmenu', `${frameOrigin}/framesetcontent`),
 
-		// The navigation child. It carries NO sentinel: reading it must return this document, and a
-		// read of it must not carry its sibling's table or the shell.
+		// The navigation child carries no sentinel.
 		framesetmenu: SHELL(
 			`Statistics menu`,
 			`<p id="menu-heading">Statistics ${nonce}</p>
@@ -238,17 +172,13 @@ ff.addEventListener('input',()=>{
 <iframe id="frameset-nested" title="nested note" src="/framesetnested" style="width:380px;height:90px"></iframe>`,
 		),
 
-		// The depth-2 leaf: an `<iframe>` inside a `<frame>` inside a `<frameset>`. Its sentinel is in
-		// the `<title>` as well as the body, so it survives the 200 000-character cap the pad forces —
-		// criterion 2a (the right document) and criterion 4a (truncation with the TRUE length) are then
-		// two assertions over one read rather than two fixtures.
+		// The depth-2 leaf; the sentinel in its title survives truncation.
 		framesetnested:
 			`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${FRAME_NESTED_SENTINEL}</title>${NESTED_PAD}</head>
 <body><p id="nested-marker">${FRAME_NESTED_SENTINEL} ${nonce}</p>
 <a id="nested-source" href="/framesetcontent">source table</a></body></html>`,
 
-		// The host page: a margin, a host control, then the cross-site frame, so the child's geometry
-		// is a real composition (host offset plus border) and not a coincidence at the origin.
+		// The cross-site frame sits below a margin and a control: its geometry is a real composition.
 		oopif: SHELL(
 			`OOPIF Host`,
 			`<h1 id="host-heading">host ${nonce}</h1>
@@ -257,10 +187,7 @@ ff.addEventListener('input',()=>{
 <iframe id="child" name="child" src="${frameOrigin}/frame" style="width:520px;height:220px;border:1px solid #888"></iframe>`,
 		),
 
-		// R3-1 (D-096 A2): the two frame owners that are not `<iframe>`. Each embeds `focusframe` from
-		// `frameOrigin` — another site, so Chromium renders it out of process — next to a field of the top
-		// document's own. A click inside the owner puts keyboard focus in the embedded document, and the top
-		// document's `activeElement` is then the `<object>`/`<embed>` element itself, not an `<iframe>`.
+		// The frame owners that are not `<iframe>`, embedding `focusframe` cross-site beside a top field.
 		objectcross: SHELL(
 			`Object Host`,
 			`<h1 id="host-heading">object host ${nonce}</h1>
@@ -279,18 +206,13 @@ ff.addEventListener('input',()=>{
 <div id="inner-echo">inner:none</div>`,
 			ECHO_INNER,
 		),
-		// The embedded document: one field filling the whole viewport, so a click anywhere in the owner lands in
-		// it. It reports its value's LENGTH (never the value) to the host page, because neither the frame list
-		// nor a cross-origin read reaches an `<object>`/`<embed>` document from the outside.
+		// One field filling the viewport; it reports its value's length (never the value) to the host.
 		focusframe: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Focus Frame</title></head>
 <body style="margin:0"><input id="inner-field" aria-label="inner field" style="display:block;box-sizing:border-box;width:100%;height:100vh;margin:0;font:16px monospace">
 <script>const f=document.getElementById('inner-field');
 f.addEventListener('input',()=>{parent.postMessage({innerLength:f.value.length},'*');});</script></body></html>`,
 
-		// R3-2's site A: a field to type at, and beside it a same-process child document whose only content is a
-		// `::before` box. `browser_element_at` over that box asks the browser which element the pseudo-element
-		// belongs to, from an isolated world of the CHILD frame — one more world in this renderer before the focus
-		// walk makes its own, which is what lines a reused id up with a lying main world on the next site.
+		// A field and a same-process child holding only a `::before` box, for the isolated-world focus legs.
 		pseudoframe: SHELL(
 			`Pseudo Frame`,
 			`<h1 id="pf-heading">pseudo frame ${nonce}</h1>
@@ -298,11 +220,7 @@ f.addEventListener('input',()=>{parent.postMessage({innerLength:f.value.length},
 <iframe id="deco" title="decoration" style="display:block;width:240px;height:120px;border:0" srcdoc="<style>body{margin:0}#p::before{content:'';display:block;width:240px;height:120px;background:#dde}</style><div id='p'></div>"></iframe>`,
 		),
 
-		// R3-2 (D-096 isolated worlds): a page that lies about focus from every main world it owns. Its own field
-		// has focus; `#bank` frames `frameOrigin` (the pinned site, cross-site from here, so out of process); the
-		// top document and ${LIAR_FRAMES} same-site child documents each redefine `Document.prototype.activeElement`
-		// to answer `#bank`. A focus read made in any of those main worlds — or in a stale isolated-world id that
-		// a cross-process navigation handed to one of them — names the bank frame instead of `#evil-field`.
+		// Lies about focus from every main world it owns: each answers `#bank` while `#evil-field` has focus.
 		liar: SHELL(
 			`Liar`,
 			`<h1 id="liar-heading">liar ${nonce}</h1>
@@ -363,10 +281,7 @@ f.addEventListener('input',()=>{
   notes:document.getElementById('notes').value,
   colour:document.getElementById('colour').value,
   agree:document.getElementById('agree').checked});};
-// B2.8: the password field reports only its LENGTH, never its value. A fixture that echoed the value
-// would put a credential in the page text, where browser_get_state would faithfully return it - and a
-// test asserting "the tool did not leak the secret" would then be asserting it against a page that
-// had. The length is enough to prove the right value arrived.
+// The password field reports only its length: echoing the value would put the secret in the page.
 const pw=document.getElementById('password');
 const pwecho=()=>{document.getElementById('pwlen').textContent='pwlen:'+pw.value.length;};
 pw.addEventListener('input',pwecho);
@@ -411,8 +326,7 @@ t.addEventListener('compositionend',e=>{
   document.getElementById('composed').textContent=e.data??'';});`,
 		),
 
-		// The pad is viewport-fixed at the origin so a test can name a coordinate
-		// that is certainly inside it without first measuring the layout.
+		// The pad is fixed at the origin, so a coordinate inside it needs no measuring.
 		mouse: SHELL(
 			`Mouse Recorder`,
 			`<div id="pad" style="position:fixed;left:0;top:0;width:400px;height:300px;background:#eef"></div>
@@ -431,12 +345,7 @@ addEventListener('wheel',e=>{
   document.getElementById('wheel').textContent=String(Math.round(e.deltaY));},{passive:true});`,
 		),
 
-		// B2.4: the four gestures the pointer and keyboard tools add, each recorded into a DOM element
-		// the tools read back. The menu opens on `mouseover` **only** — no click handler anywhere on
-		// the trigger — so a `browser_hover` that secretly clicked would be caught by `#opened-by`
-		// rather than passing. `#dbl` counts `dblclick` and `#single` counts `click`, so the two-pair
-		// ramp is checkable from the page's side: a real double click leaves `single=2, dbl=1`, while
-		// one press/release pair carrying `clickCount: 2` would leave `single=0, dbl=1`.
+		// The menu opens on `mouseover` only; a real double click leaves `single=2, dbl=1`.
 		pointer: SHELL(
 			`Pointer Recorder`,
 			`<h1>pointer ${nonce}</h1>
@@ -476,11 +385,7 @@ chordTarget.addEventListener('keydown',e=>{
     (document.activeElement&&document.activeElement.id)||'none';});`,
 		),
 
-		// B2.5: the four gestures the action tools add, each recorded into a DOM element the tools read
-		// back. The `<select>` records its change handler firing, because "the value is set" and "the
-		// page knows the value is set" are different claims and only the second is what a replay needs.
-		// The slider records both its value and whether it saw the intermediate moves, so a drag that
-		// pressed and released without moving is caught rather than passing.
+		// The select records its change handler firing; the slider counts the moves of a drag.
 		actions: SHELL(
 			`Action Recorder`,
 			`<h1>actions ${nonce}</h1>
@@ -537,8 +442,7 @@ addEventListener('scroll',()=>{
 			`document.getElementById('openwin').addEventListener('click',()=>window.open('/second','_blank'));`,
 		),
 
-		// Content-rich, unambiguous, and machine-checkable: the extraction tool's
-		// answer can be verified against facts that appear nowhere but here.
+		// Facts that appear nowhere else, for checking extraction answers.
 		article: SHELL(
 			`Quarterly Report`,
 			`<h1>Acme Corp Q3 Report</h1>
@@ -556,9 +460,7 @@ up from 31 million euro a year earlier. The chief executive is <b>Dana Whitfield
 		// Deliberately slow, for timeout and navigation-in-flight behaviour.
 		slow: SHELL(`Slow Page`, `<h1>slow ${nonce}</h1><p id="slow-marker">eventually</p>`),
 
-		// R3: state that must survive a session restart. The cookie and the
-		// localStorage entry are written by the page itself, so what a later
-		// session reads back is genuinely what the browser persisted.
+		// State the page itself writes, which must survive a session restart.
 		setcookie: SHELL(
 			`Set State`,
 			`<h1>set ${nonce}</h1><div id="done">no</div>`,
@@ -574,11 +476,7 @@ document.getElementById('done').textContent='set-${nonce}';`,
 document.getElementById('local').textContent=localStorage.getItem('ttk')||'none';`,
 		),
 
-		// E-33: attachment links. The page sets a cookie the attachment endpoints
-		// require, so a completed download proves the *browser's* session fetched
-		// it — a server-side re-fetch would get 403. Two links share a suggested
-		// filename with different bodies (the observed overwrite defect), one has a
-		// hostile name, one is empty, one arrives slowly, one is an inline PDF.
+		// The endpoints require the cookie this page sets: a finished download proves the browser fetched it.
 		downloads: SHELL(
 			`Downloads`,
 			`<h1>downloads ${nonce}</h1>
@@ -593,46 +491,8 @@ document.getElementById('local').textContent=localStorage.getItem('ttk')||'none'
 </ul>`,
 		),
 
-		title: SHELL(
-			`Original Title`,
-			`<h1>title ${nonce}</h1><button id="rename" type="button">rename</button>`,
-			`document.getElementById('rename').addEventListener('click',()=>{
-  document.title='Renamed ${nonce}';});`,
-		),
 	};
 }
-
-const ROUTES: Record<string, PageName> = {
-	'/': 'index',
-	'/second': 'second',
-	'/form': 'form',
-	'/long': 'long',
-	'/keys': 'keys',
-	'/mouse': 'mouse',
-	'/pointer': 'pointer',
-	'/actions': 'actions',
-	'/tabs': 'tabs',
-	'/article': 'article',
-	'/slow': 'slow',
-	'/title': 'title',
-	'/setcookie': 'setcookie',
-	'/showcookie': 'showcookie',
-	'/downloads': 'downloads',
-	'/frame': 'frame',
-	'/oopif': 'oopif',
-	'/egress': 'egress',
-	'/content': 'content',
-	'/frameset': 'frameset',
-	'/framesetmenu': 'framesetmenu',
-	'/framesetcontent': 'framesetcontent',
-	'/framesetnested': 'framesetnested',
-	'/framesetcross': 'framesetcross',
-	'/objectcross': 'objectcross',
-	'/embedcross': 'embedcross',
-	'/focusframe': 'focusframe',
-	'/pseudoframe': 'pseudoframe',
-	'/liar': 'liar',
-};
 
 /** The cookie the attachment endpoints require; set by the `downloads` page. */
 const DOWNLOAD_COOKIE = 'ttkdl';
@@ -641,10 +501,6 @@ const DOWNLOAD_COOKIE = 'ttkdl';
 function swappedHost(origin: string): string {
 	return origin.includes('127.0.0.1') ? origin.replace('127.0.0.1', 'localhost') : origin.replace('localhost', '127.0.0.1');
 }
-
-/** `/measured` chunk size and total, chosen so a full transfer is unmistakable. */
-const MEASURED_CHUNK = 64 * 1024;
-const MEASURED_TOTAL = 32 * 1024 * 1024;
 
 /** A minimal, valid single-page PDF, served inline so Chromium's viewer renders it. */
 const TINY_PDF = `%PDF-1.4
@@ -655,9 +511,7 @@ trailer << /Root 1 0 R >>
 %%EOF
 `;
 
-/**
- * The attachment endpoints (E-33). Every one is cookie-gated; `null` means "not one of ours".
- */
+/** The cookie-gated attachment endpoints; `null` for any other path. */
 function attachmentResponse(request: Request, path: string, nonce: string, slowMs: number): Response | null {
 	if (!['/download', '/hostile', '/slowdownload', '/hugedownload', '/manual.pdf'].includes(path)) return null;
 	const cookies = request.headers.get('cookie') ?? '';
@@ -677,9 +531,7 @@ function attachmentResponse(request: Request, path: string, nonce: string, slowM
 			},
 		});
 	}
-	// Advertises far more than the 100 MiB per-file limit, then trickles: Chromium
-	// reports `totalBytes` from this Content-Length on its first progress event, so
-	// the watchdog cancels the transfer before the body matters (E-33 limits).
+		// Advertises more than the 100 MiB per-file limit, then trickles: the watchdog cancels on `totalBytes`.
 	if (path === '/hugedownload') {
 		const chunk = new Uint8Array(64 * 1024);
 		const body = new ReadableStream<Uint8Array>({
@@ -732,28 +584,16 @@ function attachmentResponse(request: Request, path: string, nonce: string, slowM
 	});
 }
 
-const PATH_FOR: Record<PageName, string> = Object.fromEntries(
-	Object.entries(ROUTES).map(([path, name]) => [name, path]),
-) as Record<PageName, string>;
-
 export interface FixtureSiteOptions {
 	/** Overrides the run nonce; tests that assert on it usually let it default. */
 	readonly nonce?: string;
 	/** Delay in ms before `/slow` responds. */
 	readonly slowMs?: number;
-	/**
-	 * The hostname to bind. `127.0.0.1` by default; a second site on `localhost` is a different
-	 * *site* to Chromium (scheme plus host, port ignored), which is what puts a frame it serves into
-	 * its own renderer.
-	 */
+	/** The hostname to bind; a site on `localhost` is another site to Chromium, so its frames go out of process. */
 	readonly hostname?: '127.0.0.1' | 'localhost';
 	/** The origin the `oopif` page embeds its `/frame` from. Defaults to this site's own origin. */
 	readonly frameOrigin?: string;
-	/**
-	 * A second origin the `egress` page points at (owner item 6). A test that allowlists only this
-	 * site's host uses it as the off-allowlist destination. Defaults to this site's own origin with
-	 * `127.0.0.1` and `localhost` swapped, which is only reachable when a second site is bound there.
-	 */
+	/** The off-allowlist origin the `egress` page points at; defaults to this origin with the loopback host swapped. */
 	readonly altOrigin?: string;
 }
 
@@ -767,23 +607,17 @@ export function startFixtureSite(options: FixtureSiteOptions = {}): FixtureSite 
 	let body: Record<PageName, string> | null = null;
 	let ownOrigin = '';
 
-	// U-4's counter: how many bytes this site actually handed to the socket.
-	const measured = { served: 0, total: MEASURED_TOTAL };
-
 	const server = Deno.serve({ hostname, port: 0, onListen: () => {} }, async (request) => {
 		body ??= pages(nonce, options.frameOrigin ?? ownOrigin, options.altOrigin ?? swappedHost(ownOrigin));
 		const url = new URL(request.url);
 		const path = url.pathname;
 		hits.push(path);
-		// An open redirect, as a real site would have one: `?to=` is followed
-		// verbatim. It exists so a redirect *off* the allowlist can be provoked
-		// from an allowed host.
+		// An open redirect, so a redirect off the allowlist can be provoked from an allowed host.
 		if (path === '/redirect') {
 			const to = url.searchParams.get('to') ?? '/';
 			return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store' } });
 		}
-		// An attachment with no cookie gate: the egress tests are about *where* a
-		// download comes from, and a cookie set on one host is not sent to another.
+		// No cookie gate: a cookie set on one host is not sent to another.
 		if (path === '/opendownload') {
 			const name = url.searchParams.get('name') ?? 'file.bin';
 			return new Response(url.searchParams.get('body') ?? '', {
@@ -794,51 +628,17 @@ export function startFixtureSite(options: FixtureSiteOptions = {}): FixtureSite 
 				},
 			});
 		}
-		if (path === '/measured') {
-			// Deliberately *not* cookie-gated: U-4 is about transfer cost, and an
-			// auth gate would only add a way for the probe to measure nothing.
-			measured.served = 0;
-			const chunk = new Uint8Array(MEASURED_CHUNK).fill(0x41);
-			let sent = 0;
-			const stream = new ReadableStream<Uint8Array>({
-				pull(controller) {
-					if (sent >= MEASURED_TOTAL) {
-						controller.close();
-						return;
-					}
-					// Counted on `pull`, which the runtime calls as the consumer
-					// drains: what is counted is what left this process, not what was
-					// queued for it.
-					controller.enqueue(chunk);
-					sent += chunk.length;
-					measured.served = sent;
-				},
-				cancel() {
-					sent = MEASURED_TOTAL;
-				},
-			});
-			return new Response(stream, {
-				headers: {
-					'content-type': 'application/octet-stream',
-					'content-length': String(MEASURED_TOTAL),
-					'cache-control': 'no-store',
-					'last-modified': 'Wed, 01 Jan 2025 00:00:00 GMT',
-					'etag': '\"ttk-measured\"',
-				},
-			});
-		}
 		const attachment = attachmentResponse(request, path, nonce, slowMs);
 		if (attachment !== null) return attachment;
-		const name = ROUTES[path];
-		if (name === undefined) {
+		const name = (path === '/' ? 'index' : path.slice(1)) as PageName;
+		if (!Object.hasOwn(body, name)) {
 			return new Response('not found', { status: 404, headers: { 'content-type': 'text/plain' } });
 		}
 		if (name === 'slow') await new Promise((resolve) => setTimeout(resolve, slowMs));
 		return new Response(body[name], {
 			headers: {
 				'content-type': 'text/html; charset=utf-8',
-				// No caching: a second navigation must really re-fetch, so `hits`
-				// stays an honest record of what the browser did.
+				// No caching, so `hits` records every navigation.
 				'cache-control': 'no-store',
 				...(name === 'downloads' ? { 'set-cookie': `${DOWNLOAD_COOKIE}=${nonce}; Path=/` } : {}),
 			},
@@ -852,9 +652,8 @@ export function startFixtureSite(options: FixtureSiteOptions = {}): FixtureSite 
 	return {
 		url: `${origin}/`,
 		nonce,
-		page: (name) => `${origin}${PATH_FOR[name]}`,
+		page: (name) => `${origin}/${name === 'index' ? '' : name}`,
 		hits,
-		measured,
 		close: async () => {
 			await server.shutdown();
 		},

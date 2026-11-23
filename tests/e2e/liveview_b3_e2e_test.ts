@@ -1,8 +1,8 @@
 /**
- * B3.3 on real Chromium: the live view's address row.
+ * The live view's address row, on real Chromium.
  *
- * Three acceptance rows meet here (AC-P2-06, AC-P2-07, AC-P2-08) and all three are about the same
- * question — can a viewer tell *where* it is looking? A frame list read from a scripted tree, a tab
+ * Three checks meet here and all three are about the same question — can a viewer tell *where* it is
+ * looking? A frame list read from a scripted tree, a tab
  * list built from a fake session and a viewport number computed from a literal would each pass a
  * unit test and tell nobody whether the browser agrees. So: a genuinely out-of-process frame, a
  * second tab the page opens itself, and a resize driven through the real tool.
@@ -16,7 +16,8 @@ import { harness, skipUnlessBrowser } from '../support/harness.ts';
 const ignore = skipUnlessBrowser('liveview B3 e2e');
 
 Deno.test({
-	name: 'e2e live (B3.3): state carries the frame list, tabs carry url and title, a tool resize announces the viewport',
+	name:
+		'e2e live (address row): state carries the frame list, tabs carry url and title, a tool resize announces the viewport',
 	ignore,
 	async fn(t) {
 		// A second origin for the child frame. `localhost` and `127.0.0.1` are
@@ -30,12 +31,12 @@ Deno.test({
 		const socket = await h.live();
 		await socket.ready();
 		// The `viewport` message and the event stream both reach only sockets that
-		// opted in — a 0.1.0 client receives nothing it did not know.
+		// opted in — a client receives nothing it did not ask for.
 		socket.send({ type: 'events.subscribe' });
 		await socket.waitFor('event', (m) => m.event.kind === 'control');
 
 		await t.step(
-			'AC-P2-06: a page with an out-of-process frame emits a state message carrying both frames',
+			'a page with an out-of-process frame emits a state message carrying both frames',
 			async () => {
 				const from = socket.messages.length;
 				await h.callText('browser_navigate', { url: h.site.page('oopif') });
@@ -55,7 +56,6 @@ Deno.test({
 				);
 
 				const frames = state.frames ?? [];
-				console.log(`[B3.3] state.frames = ${JSON.stringify(frames)}`);
 				assert(frames.length >= 2, `expected the host and the child frame, got ${JSON.stringify(frames)}`);
 
 				// Exactly one root, and it is the page the tool navigated to.
@@ -64,7 +64,7 @@ Deno.test({
 				assert(roots[0]?.url.endsWith('/oopif'), `the root is the navigated page: ${roots[0]?.url}`);
 
 				// The child is present, is parented to the root, and carries its OWN url —
-				// which is the whole of §1.4's ask: a top URL does not change when an
+				// which is the whole point: a top URL does not change when an
 				// inner frame navigates, so a per-frame URL is the only way to say where
 				// the user really is.
 				const child = frames.find((frame) => frame.parent_id === roots[0]?.frame_id && frame.name === 'child');
@@ -72,14 +72,14 @@ Deno.test({
 				assert(child.url.endsWith('/frame'), `the child carries its own url, not the host's: ${child.url}`);
 				assert(child.url !== roots[0]?.url, 'a frame list whose entries all share the top URL says nothing');
 
-				// SR1-A5 on the new field: no query, no fragment, on any frame.
+				// The URL redaction holds on this field too: no query, no fragment, on any frame.
 				for (const frame of frames) {
 					assert(!frame.url.includes('?') && !frame.url.includes('#'), `${frame.url} carries a query or fragment`);
 				}
 			},
 		);
 
-		await t.step('AC-P2-07: a second tab appears in the tab list with its own url and title', async () => {
+		await t.step('a second tab appears in the tab list with its own url and title', async () => {
 			await h.callText('browser_navigate', { url: h.site.page('tabs') });
 			const from = socket.messages.length;
 			// The page opens the tab itself, through `target="_blank"` — the case the
@@ -91,7 +91,6 @@ Deno.test({
 				(m) => m.tabs.length >= 2 && m.tabs.every((tab) => tab.url !== '' && tab.title !== ''),
 				from,
 			);
-			console.log(`[B3.3] tabs = ${JSON.stringify(tabs.tabs)}`);
 			assert(tabs.tabs.length >= 2, `expected two tabs, got ${JSON.stringify(tabs.tabs)}`);
 
 			// By name, not by count: the two tabs are the opener and the page it opened.
@@ -107,7 +106,7 @@ Deno.test({
 			assertEquals(tabs.tabs.filter((tab) => tab.focused).length, 1, 'exactly one tab is focused');
 		});
 
-		await t.step('AC-P2-08: browser_set_viewport announces the new viewport and the recomputed scale', async () => {
+		await t.step('browser_set_viewport announces the new viewport and the recomputed scale', async () => {
 			await h.callText('browser_navigate', { url: h.site.page('long') });
 			await socket.waitForFrames(1);
 			const from = socket.messages.length;
@@ -117,8 +116,10 @@ Deno.test({
 			// directly would prove the notification fires for a caller nobody has.
 			await h.callText('browser_set_viewport', { width: 900, height: 600 });
 
-			const viewport = await socket.waitFor('viewport', () => true, from);
-			console.log(`[B3.3] viewport = ${JSON.stringify(viewport)}`);
+			// The announcement rides on the first frame at the new size, and Chromium drops a repaint that lands while a
+			// frame awaits its ack (likely on a slow, instrumented run): give the page a reason to paint again.
+			const repaint = async () => void await h.callText('browser_scroll', { direction: 'down' });
+			const viewport = await socket.waitFor('viewport', () => true, from, repaint);
 			// The frames really are that size now — the notification is not a
 			// restatement of what the tool was asked for.
 			assert(viewport.w > 0 && viewport.h > 0);
@@ -133,11 +134,7 @@ Deno.test({
 			const frame = await socket.until(
 				() => socket.frames.find((f) => f.meta.w === viewport.w && f.meta.h === viewport.h),
 				'a frame at the announced viewport',
-				async () => {
-					// A screencast frame arrives only when the page paints, so it needs a
-					// reason to.
-					await h.callText('browser_scroll', { direction: 'down' });
-				},
+				repaint,
 			);
 			assertEquals(frame.meta.scale, viewport.frame_scale);
 		});

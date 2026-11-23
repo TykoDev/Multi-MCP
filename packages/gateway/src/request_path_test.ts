@@ -1,15 +1,4 @@
-/**
- * R1-5: the credential decision and the router judge the same path.
- *
- * Deno keeps a request target's raw dot segments in `request.url`, the WHATWG parser behind `new URL()` resolves
- * them (and `%2e`) away, and Hono routes the raw path, percent-decoded. So `GET /a2a/v1/../../live/x/ws` was public to
- * the auth middleware — it saw `/live/x/ws` — while the router sent it into the authenticated `/a2a/v1/*` wildcard.
- * The front now refuses a target that is not in canonical form (a dot segment, raw or encoded; an encoded slash or
- * backslash; an empty segment), and the auth middleware judges public-ness on the router's own path.
- *
- * A `Request` built in a test normalizes its URL, so the dot-segment rows go over a real socket on an ephemeral
- * loopback port, exactly as a client would send them.
- */
+/** The credential decision and the router judge the same path. */
 import { assert, assertEquals } from '@std/assert';
 import { SessionRegistry } from '@tykotech/mcp';
 import { createGatewayApp } from './app.ts';
@@ -18,7 +7,7 @@ import { loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
 import { pathRefusal, rawPathOf } from './request_path.ts';
 
-Deno.test('R1-5: rawPathOf keeps the target as sent; pathRefusal names every non-canonical form', () => {
+Deno.test('rawPathOf keeps the target as sent; pathRefusal names every non-canonical form', () => {
 	assertEquals(rawPathOf('http://h:1/a2a/v1/../../live/x/ws?y=1'), '/a2a/v1/../../live/x/ws');
 	assertEquals(rawPathOf('http://h:1/a#frag'), '/a');
 	assertEquals(rawPathOf('http://h:1'), '/');
@@ -38,7 +27,13 @@ Deno.test('R1-5: rawPathOf keeps the target as sent; pathRefusal names every non
 			'/a2a/v1/message:send',
 			'/api/v1/share/file',
 			'/x/..y/y..',
-			'/%41',
+			// Escapes of reserved, space and non-ASCII characters stay legal — only unreserved and control ones go.
+			'/api/v1/sessions/01J0/files/a%20b.pdf',
+			'/api/v1/sessions/01J0/files/%C3%A9t%C3%A9.txt',
+			'/a2a/v1/message%3Asend',
+			'/x/%25',
+			'/x/%21',
+			'/x/%40%5B%7B%60',
 		]
 	) {
 		assertEquals(pathRefusal(canonical), null, canonical);
@@ -58,6 +53,25 @@ Deno.test('R1-5: rawPathOf keeps the target as sent; pathRefusal names every non
 			['/api/v1%2Fsessions', 'encoded slash'],
 			['/api/v1%5csessions', 'encoded slash'],
 			['/api\\v1', 'backslash'],
+			// An encoded unreserved character (A-Z, a-z, 0-9, - . _ ~) or control character (C0, DEL).
+			['/%41', 'unreserved or control'],
+			['/%61pi/v1/live/ticket', 'unreserved or control'],
+			['/api/v1/%73essions', 'unreserved or control'],
+			['/%6Cive/default/ws', 'unreserved or control'],
+			['/mcp%5F', 'unreserved or control'],
+			['/m%63p', 'unreserved or control'],
+			['/x/%30', 'unreserved or control'],
+			['/x/%2D', 'unreserved or control'],
+			['/x/a%2eb', 'unreserved or control'],
+			['/x/%7e', 'unreserved or control'],
+			['/x/%5A', 'unreserved or control'],
+			['/x/%7a', 'unreserved or control'],
+			['/x/%0A', 'unreserved or control'],
+			['/x/%0d', 'unreserved or control'],
+			['/x/%09', 'unreserved or control'],
+			['/x/%00', 'unreserved or control'],
+			['/x/%1F', 'unreserved or control'],
+			['/x/%7F', 'unreserved or control'],
 			['', 'not a path'],
 			['api', 'not a path'],
 		] as const
@@ -93,7 +107,7 @@ async function rawRequest(port: number, target: string): Promise<{ status: numbe
 	}
 }
 
-Deno.test('R1-5: a non-canonical request target is refused before auth and routing, over a real socket', async () => {
+Deno.test('a non-canonical request target is refused before auth and routing, over a real socket', async () => {
 	const key = await generateApiKey('ops', ['mcp:invoke', 'agent:invoke']);
 	const config = loadConfig({ TTK_HOST: '127.0.0.1', TTK_PORT: '8787', TTK_API_KEYS: JSON.stringify([key.record]) });
 	const registry = new SessionRegistry({ reapIntervalMs: 0 });
@@ -133,7 +147,7 @@ Deno.test('R1-5: a non-canonical request target is refused before auth and routi
 	}
 });
 
-Deno.test('R1-5: the auth middleware judges public-ness on the path the router matches', async () => {
+Deno.test('the auth middleware judges public-ness on the path the router matches', async () => {
 	const key = await generateApiKey('ops', ['mcp:invoke']);
 	const config = loadConfig({ TTK_HOST: '127.0.0.1', TTK_PORT: '8787', TTK_API_KEYS: JSON.stringify([key.record]) });
 	const registry = new SessionRegistry({ reapIntervalMs: 0 });
@@ -145,22 +159,69 @@ Deno.test('R1-5: the auth middleware judges public-ness on the path the router m
 		logger: createLogger({ level: 'error', write: () => {} }),
 	});
 	try {
-		// `%6C` is `l`: the router decodes it and matches `/live/:sessionId/ws`, the ticket-checked socket route.
-		// Judged on the undecoded path the middleware demanded a bearer the browser socket can never send; judged on
-		// the router's path, the ticket check answers, as it does for `/live/default/ws`.
-		for (const path of ['/%6Cive/default/ws', '/live/default/ws']) {
+		// The public socket route is judged public and answered by its ticket check.
+		const socket = await gateway.app.request('http://127.0.0.1:8787/live/default/ws', {
+			headers: { host: '127.0.0.1:8787', upgrade: 'websocket', connection: 'Upgrade' },
+		});
+		assertEquals(socket.status, 403);
+		assertEquals((await socket.json()).type, 'https://tykotech.eu/problems/ticket-invalid');
+		// An encoded spelling of either a public or a protected route (`%6C` is `l`, `%73` is `s`) never reaches the
+		// middleware at all — the front refuses it, so the raw and routed paths cannot disagree there either.
+		for (const path of ['/%6Cive/default/ws', '/api/v1/%73essions']) {
 			const response = await gateway.app.request(`http://127.0.0.1:8787${path}`, {
 				headers: { host: '127.0.0.1:8787', upgrade: 'websocket', connection: 'Upgrade' },
 			});
-			assertEquals(response.status, 403, path);
-			assertEquals((await response.json()).type, 'https://tykotech.eu/problems/ticket-invalid', path);
+			assertEquals(response.status, 400, path);
+			assertEquals((await response.json()).type, 'https://tykotech.eu/problems/invalid-request', path);
 		}
-		// And the other way round: an encoded spelling of a protected route stays protected.
-		const hidden = await gateway.app.request('http://127.0.0.1:8787/api/v1/%73essions', {
-			headers: { host: '127.0.0.1:8787' },
+	} finally {
+		await gateway.close();
+		await registry.shutdown();
+	}
+});
+
+Deno.test('an encoded spelling cannot slip a body past the cap or a ticket mint past the drain gate', async () => {
+	const key = await generateApiKey('ops', ['mcp:invoke', 'view:control']);
+	const config = loadConfig({
+		TTK_HOST: '127.0.0.1',
+		TTK_PORT: '8787',
+		TTK_API_KEYS: JSON.stringify([key.record]),
+		TTK_MAX_BODY_KB: '1',
+	});
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const gateway = createGatewayApp({
+		config,
+		verifier: new VerifierChain({ config, allowAnonymous: false }),
+		registry,
+		version: 'test',
+		logger: createLogger({ level: 'error', write: () => {} }),
+	});
+	const mint = (path: string, body: string) =>
+		gateway.app.request(`http://127.0.0.1:8787${path}`, {
+			method: 'POST',
+			// Not JSON-typed, so the per-path rule applies — the one an encoded raw path would dodge.
+			headers: { host: '127.0.0.1:8787', authorization: `Bearer ${key.key}`, 'content-type': 'text/plain' },
+			body,
 		});
-		assertEquals(hidden.status, 401);
-		await hidden.body?.cancel();
+	try {
+		// `%61` is `a`: the router would serve this as `/api/v1/live/ticket`, uncapped.
+		const big = 'x'.repeat(4096);
+		const canonical = await mint('/api/v1/live/ticket', big);
+		assertEquals(canonical.status, 413);
+		await canonical.body?.cancel();
+		const encoded = await mint('/%61pi/v1/live/ticket', big);
+		assertEquals(encoded.status, 400);
+		assertEquals((await encoded.json()).type, 'https://tykotech.eu/problems/invalid-request');
+
+		// And while draining: the drain gate does not recognise the encoded spelling, and does not have to — the path
+		// refusal right behind it answers, so the mint is never reached.
+		gateway.drain();
+		const drained = await mint('/api/v1/live/ticket', '');
+		assertEquals(drained.status, 503);
+		await drained.body?.cancel();
+		const drainedEncoded = await mint('/%61pi/v1/live/ticket', '');
+		assertEquals(drainedEncoded.status, 400);
+		await drainedEncoded.body?.cancel();
 	} finally {
 		await gateway.close();
 		await registry.shutdown();

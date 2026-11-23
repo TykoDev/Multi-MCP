@@ -1,26 +1,4 @@
-/**
- * D-154 (owner-requested; replaces D-153's JSON store and plaintext key files): model providers live in the database.
- *
- * ## One source in force
- *
- * The database's `model_providers` table is the set in force and the only allowlist for model hosts:
- * every row is judged by the providers file's own parser (`parseModelProviders`), so every `base_url`, header,
- * `allow_http` and key rule applies unchanged, and a refusal is the parser's phrase — never a value. The operator's
- * `TTK_MODEL_PROVIDERS_FILE` is a **seed** (`seed.ts`): copied in once, when the table was never seeded and is empty,
- * and again only by `seed --force`. The file is never written. Without a data directory there is no database, and
- * the file's providers are used directly and cannot be changed here (`409 persistence-required`).
- *
- * ## Keys are sealed, write-only, and stay with their host
- *
- * A provider's key is a vault row (`vault.ts`) named `model-provider/<id>`, AES-256-GCM sealed with the provider's net
- * host (`providerNetHost`) as additional data, so a ciphertext copied to another provider or host does not open.
- * - `set`: the typed key is judged by the parser's key rules, sealed, and never returned, logged or echoed.
- * - `keep`: the stored key, refused when the provider's net host changes — a key never follows a provider elsewhere.
- * - `none`: the stored key, if any, is deleted.
- * Storing a key needs `TTK_DB_KEY_FILE`; without it a `set` is refused (`409 conflict`) and nothing is written.
- *
- * Writes are serialised on one queue and each lands in one transaction. Node-local: nothing is replicated.
- */
+/** Model providers live in the database. One source in force. Keys are sealed, write-only, and stay with their host. */
 import { anthropicClient, ModelProviderError, openAiClient } from '@tykotech/agents';
 import * as z from 'zod';
 import { type Database, now } from './database.ts';
@@ -43,7 +21,7 @@ import type { Sealed, Vault } from './vault.ts';
 export const MODEL_PROVIDERS_BODY_BYTES = MODEL_PROVIDERS_FILE_MAX_BYTES;
 
 /** The most providers in force at once — the providers file's own limit. */
-export const MAX_PROVIDERS = 16;
+const MAX_PROVIDERS = 16;
 
 /** The vault row that holds provider `id`'s key. */
 export function providerKeyName(id: string): string {
@@ -57,8 +35,8 @@ export const DEFAULT_PROVIDER_SETTING = 'model_providers.default';
 
 const KeyChoiceSchema = z.discriminatedUnion('mode', [
 	z.object({ mode: z.literal('keep') }).strict(),
-	// Bounded here only to cap work; the parser's key rules (1–512 characters, no whitespace, not the composer
-	// placeholder) are applied before anything is sealed.
+	// Bounded here only to cap work; the parser's key rules (1–512 characters, no whitespace, not the
+	// `REPLACE_WITH_KEY` placeholder) are applied before anything is sealed.
 	z.object({ mode: z.literal('set'), value: z.string().min(1).max(4096) }).strict(),
 	z.object({ mode: z.literal('none') }).strict(),
 ]);
@@ -80,16 +58,16 @@ const ProviderInputSchema = z.object({
 }).strict();
 
 /** `PUT /api/v1/system/model-providers`: the whole provider list, replacing it. Strict: no inline key field exists. */
-export const ModelProvidersPutSchema = z.object({
+const ModelProvidersPutSchema = z.object({
 	default: z.string().max(64).nullable().optional(),
 	providers: z.array(ProviderInputSchema).max(64),
 }).strict();
 
 /**
- * D-158: `POST /api/v1/system/model-providers/models` — a provider as the editor holds it, for listing its models. The
+ * `POST /api/v1/system/model-providers/models` — a provider as the editor holds it, for listing its models. The
  * `models` list is not part of it: that is what the answer fills in.
  */
-export const ModelsProbeSchema = z.object({
+const ModelsProbeSchema = z.object({
 	id: z.string().max(64),
 	kind: z.enum(['openai', 'anthropic']),
 	base_url: z.string().max(4096),
@@ -98,10 +76,10 @@ export const ModelsProbeSchema = z.object({
 	key: KeyChoiceSchema,
 }).strict();
 
-/** D-158: how long a model list may take, end to end — the picker waits on it, so far less than a task's call. */
-export const MODELS_PROBE_TIMEOUT_MS = 20_000;
+/** How long a model list may take, end to end — the picker waits on it, so far less than a task's call. */
+const MODELS_PROBE_TIMEOUT_MS = 20_000;
 
-/** D-158: the answer of the model-list probe. */
+/** The answer of the model-list probe. */
 export interface ModelsProbeAnswer {
 	readonly models: readonly string[];
 }
@@ -199,20 +177,13 @@ interface Candidate {
 	readonly warnings: readonly string[];
 }
 
-/**
- * The model providers in force and the control plane's management of them (D-154).
- *
- * Built by {@linkcode ModelProvidersAdmin.load} before the gateway composes the runtime (its set is the runtime's
- * initial one), then {@linkcode ModelProvidersAdmin.attach}ed to the expansion that installs every change.
- */
+/** The model providers in force and the control plane's management of them. */
 export class ModelProvidersAdmin {
 	readonly #operator: ModelProvidersConfig | null;
 	readonly #db: Database | null;
 	readonly #vault: Vault | null;
 	readonly #logger: { warn(message: string): void; info(message: string): void } | undefined;
 	#loaded = false;
-	/** The parser's phrase for stored rows it did not admit; the set is then empty until a write replaces them. */
-	#rejected: string | null = null;
 	#rows: readonly ProviderRow[] = [];
 	#config: ModelProvidersConfig | null;
 	#apply: ((next: ModelProvidersConfig) => void) | undefined;
@@ -224,7 +195,7 @@ export class ModelProvidersAdmin {
 		this.#db = options.store?.db ?? null;
 		this.#vault = options.store?.vault ?? null;
 		this.#logger = options.logger;
-		// Without a database the providers file is the set in force, used directly as before D-154.
+		// Without a database the providers file is the set in force, used directly.
 		this.#config = this.#db === null ? options.operator : null;
 	}
 
@@ -283,11 +254,7 @@ export class ModelProvidersAdmin {
 		};
 	}
 
-	/**
-	 * Validates `body`, writes it in one transaction (sealed keys with it) and installs the set live. Every refusal is
-	 * an {@linkcode HttpProblem}: `409 persistence-required` without a database, `409 conflict` when nothing can be
-	 * written now (or a key cannot be sealed), `400 invalid-request` for a body the parser refuses.
-	 */
+	/** Validates `body`, writes it in one transaction (sealed keys with it) and installs the set live. */
 	replace(body: unknown): Promise<ModelProvidersDocument> {
 		const refusal = this.#refusal();
 		if (refusal !== undefined) return Promise.reject(new HttpProblem(refusal.slug, refusal.reason));
@@ -302,15 +269,7 @@ export class ModelProvidersAdmin {
 		return run;
 	}
 
-	/**
-	 * D-158: lists the models the provider in `body` serves (`GET …/models`), for the editor's picker. It dials only a
-	 * host a provider in force already names — the set in force stays the only allowlist for model hosts, so a new host
-	 * is listed once it is saved — and only with the process's net grant for it. The draft is judged by the providers
-	 * file's parser like a saved row (`base_url`, `allow_http`, headers, key rules). Its key: `set` is used for this one
-	 * call and never stored; `keep` opens the stored key only while the host is the one it is sealed to; `none` sends
-	 * none. A provider failure is `503 service-unavailable` with the transport's text (a status and a hint, never a
-	 * body); a provider without a model list (404) is told to type its models by hand.
-	 */
+	/** Lists the models the provider in `body` serves (`POST …/models`), for the editor's picker. */
 	async models(body: unknown, fetchImpl?: typeof fetch): Promise<ModelsProbeAnswer> {
 		const refusal = this.#refusal();
 		if (refusal !== undefined) throw new HttpProblem(refusal.slug, refusal.reason);
@@ -337,6 +296,8 @@ export class ModelProvidersAdmin {
 				if (host !== existing.keyHost) {
 					throw new HttpProblem('invalid-request', 'a kept key cannot follow its provider to another host, field key');
 				}
+				const refusal = keptKeyRefusal(existing, probe.base_url);
+				if (refusal !== null) throw new HttpProblem('invalid-request', `${refusal}, field key`);
 				if (!this.#vault!.unlocked) throw new HttpProblem('conflict', LOCKED_REASON);
 				key = await this.#vault!.get(providerKeyName(probe.id), existing.keyHost);
 			}
@@ -396,7 +357,17 @@ export class ModelProvidersAdmin {
 			const keys = new Map<string, string>();
 			for (const row of rows) {
 				if (row.keyHost === null) continue;
-				const key = await this.#vault!.get(providerKeyName(row.id), row.keyHost);
+				// The vault's binding proves only that the key was sealed for `key_host`; nothing ties that column to
+				// the `base_url` the key is then sent to, so a hand edit of `entry` alone (no database key needed)
+				// would redirect it.
+				const bound = netHostOf(row.entry.base_url);
+				if (bound === null || bound !== row.keyHost) {
+					throw new HttpProblem(
+						'invalid-request',
+						`a stored key is sealed to another host than its base_url, provider ${row.id}`,
+					);
+				}
+				const key = await this.#vault!.get(providerKeyName(row.id), bound);
 				if (key !== null) keys.set(row.id, key);
 			}
 			const warnings: string[] = [];
@@ -405,7 +376,6 @@ export class ModelProvidersAdmin {
 			this.#logger?.info(`model providers: ${rows.length} in the database`);
 		} catch (cause) {
 			const detail = cause instanceof HttpProblem ? cause.detail ?? 'refused' : 'a stored key does not open';
-			this.#rejected = detail;
 			this.#config = { default: null, providers: [] };
 			this.#logger?.warn(
 				`the stored model providers are not admitted (${detail}); none is offered until they are saved again`,
@@ -445,7 +415,6 @@ export class ModelProvidersAdmin {
 		this.#apply!(candidate.config);
 		this.#rows = candidate.rows;
 		this.#config = candidate.config;
-		this.#rejected = null;
 		for (const line of candidate.warnings) this.#logger?.warn(line);
 		return this.document();
 	}
@@ -483,6 +452,8 @@ export class ModelProvidersAdmin {
 					if (next !== null && next !== existing.keyHost) {
 						throw fail('key', 'a kept key cannot follow its provider to another host');
 					}
+					const refusal = next === null ? null : keptKeyRefusal(existing, provider.base_url);
+					if (refusal !== null) throw fail('key', refusal);
 					if (!vault.unlocked) throw new HttpProblem('conflict', LOCKED_REASON);
 					const key = await vault.get(providerKeyName(provider.id), existing.keyHost);
 					if (key !== null) {
@@ -594,6 +565,31 @@ export function netHostOf(raw: unknown): string | null {
 	} catch {
 		return null;
 	}
+}
+
+/** A raw `base_url`'s scheme (`https:` or `http:`), or `null` when it does not parse. */
+function schemeOf(raw: unknown): string | null {
+	if (typeof raw !== 'string') return null;
+	try {
+		return new URL(serviceUrl(raw)).protocol;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Why a stored key may not be kept for a provider moving to `nextBaseUrl`, beyond a change of net host (which the
+ * callers refuse first), or `null` when it may.
+ */
+function keptKeyRefusal(existing: ProviderRow, nextBaseUrl: string): string | null {
+	if (netHostOf(existing.entry.base_url) !== existing.keyHost) {
+		return 'the stored key does not match its provider host; set the key again';
+	}
+	const before = schemeOf(existing.entry.base_url);
+	if (before === null || before !== schemeOf(nextBaseUrl)) {
+		return 'a kept key cannot follow its provider to another scheme; set the key again';
+	}
+	return null;
 }
 
 /** The parser's `api_key` field renamed to the body's: `key.value` (set) or `key`. */

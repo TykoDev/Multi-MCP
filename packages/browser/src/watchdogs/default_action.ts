@@ -1,20 +1,19 @@
 /**
  * @module
- * `DefaultActionWatchdog` — every element and page interaction command (ARCHITECTURE.md §6.10).
+ * `DefaultActionWatchdog` — every element and page interaction command.
  *
- * Handles 13 of the 18 command events of DATA-MODEL.md §5.1.1: `ClickElementEvent`,
+ * Handles 13 of the 18 browser command events: `ClickElementEvent`,
  * `ClickCoordinateEvent`, `TypeTextEvent`, `ScrollEvent`, `GoBackEvent`, `GoForwardEvent`,
  * `RefreshEvent`, `WaitEvent`, `SendKeysEvent`, `UploadFileEvent`, `GetDropdownOptionsEvent`,
  * `SelectDropdownOptionEvent`, `ScrollToTextEvent`.
  *
- * This is parity risk **R5** (SPECS/ROADMAP.md, "Input-synthesis fidelity"): the differences that
- * matter here are not the ones a test notices, they are the ones a real site notices. A click that
- * lands on an overlay, a keystroke without a virtual-key code, a value assignment React reverts on
- * its next render — each of those looks like success from the outside and fails the task. So every
- * branch of every cascade names the mechanism it used, and those names are asserted against real
- * pages in `packages/core/tests/integration/watchdog_action_test.ts`.
+ * Input-synthesis fidelity: the differences that matter here are not the ones a test notices, they
+ * are the ones a real site notices. A click that lands on an overlay, a keystroke without a
+ * virtual-key code, a value assignment React reverts on its next render — each of those looks like
+ * success from the outside and fails the task. So every branch of every cascade names the mechanism
+ * it used, and those names are what the real-browser tests assert.
  *
- * ## The click cascade, in §6.10's order
+ * ## The click cascade, in order
  *
  * 1. **guard rails first** — clicking a `<select>` or a file input returns `{validationError}` *as
  *    data*, never an exception. A `<select>`'s popup is browser chrome no synthetic event can reach,
@@ -23,15 +22,15 @@
  * 2. `DOM.scrollIntoViewIfNeeded`;
  * 3. the **geometry fallback chain** (`default_action_geometry.ts`);
  * 4. the **occlusion check** — hit-test inside the element's own document;
- * 5. **mouse move → press → release** under the §8 3 s / 5 s caps,
+ * 5. **mouse move → press → release** under the 3 s / 5 s caps,
  *
  * all of it wrapped in download detection (0.5 s start grace, 30 s completion wait) through the
  * DownloadsWatchdog callback seam (`default_action_downloads.ts`), and with print-dialog clicks
  * diverted into `Page.printToPDF` before any of it runs.
  *
  * Division of labour with the rest of the browser layer: SessionManager owns *which* session
- * (`getOrCreateCdpSession` is the only accessor, ARCHITECTURE.md §7.3), BrowserSession owns
- * navigation-by-URL (§7.5), DownloadsWatchdog owns the download pipeline (§6.8). This watchdog owns
+ * (`getOrCreateCdpSession` is the only accessor), BrowserSession owns navigation-by-URL,
+ * DownloadsWatchdog owns the download pipeline. This watchdog owns
  * synthesized input and nothing else.
  */
 
@@ -101,35 +100,32 @@ import {
 	withDownloadDetection,
 } from './default_action_downloads.ts';
 
-// ERRATUM(G4-5): the mouse timeout re-export line is gone — both constants live in
-// `default_action_geometry.ts`, are used there, and were forwarded through this module for nobody.
 export { DOWNLOAD_COMPLETION_TIMEOUT_MS, DOWNLOAD_START_GRACE_MS } from './default_action_downloads.ts';
 
 // ---------------------------------------------------------------------------
-// timing constants (ARCHITECTURE.md §8 + AGENT-RUNTIME.md §3.1 "Inner ops" —
-// load-bearing, DECISION-REGISTER rule §2.5: changing one needs real-browser evidence)
+// timing constants (load-bearing: changing one needs real-browser evidence)
 // ---------------------------------------------------------------------------
 
-/** Inner cap on `Page.printToPDF` (AGENT-RUNTIME.md §3.1 "printToPDF 30 s"). */
+/** Inner cap on `Page.printToPDF`. */
 export const PRINT_TO_PDF_TIMEOUT_MS = 30_000;
 
-/** Inner cap on producing a dropdown result (AGENT-RUNTIME.md §3.1 "dropdown result 3 s"). */
+/** Inner cap on producing a dropdown result. */
 export const DROPDOWN_RESULT_TIMEOUT_MS = 3_000;
 
 /**
  * Readiness wait after a history navigation or a reload.
  *
- * ERRATUM(M1-watchdogs-action-9): §6.10 requires go back/forward "via navigation history" but states
- * no readiness model for it — §7.5's machine is scoped to `NavigateToUrlEvent`. The same-domain
- * heuristic (3 s) is reused, and expiry is **non-fatal** exactly as §7.5 makes it: a history entry is
- * a page this browser has already loaded, so a slow one is a slow page, not an error.
+ * Go back/forward run through navigation history, which the `NavigateToUrlEvent` readiness machine
+ * does not cover. The same-domain heuristic (3 s) is reused, and expiry is **non-fatal** as it is for
+ * a navigation: a history entry is a page this browser has already loaded, so a slow one is a slow
+ * page, not an error.
  */
 export const HISTORY_READINESS_TIMEOUT_MS = 3_000;
 
-/** Poll cadence of that readiness wait, matching the §7.5 lifecycle poll. */
+/** Poll cadence of that readiness wait, matching the navigation lifecycle poll. */
 export const HISTORY_READINESS_POLL_MS = 50;
 
-/** Lifecycle names that end the readiness wait (ARCHITECTURE.md §7.5 step 4). */
+/** Lifecycle names that end the readiness wait. */
 const READY_LIFECYCLE_NAMES: readonly string[] = ['load', 'DOMContentLoaded', 'networkIdle'];
 
 /** Accessible labels that identify a print trigger (see {@linkcode isPrintDialogTrigger}). */
@@ -141,7 +137,7 @@ export const PRINT_TRIGGER_LABELS: readonly string[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// result shapes (DATA-MODEL.md §5.1.1: `Record | null`)
+// result shapes (event results are `Record | null`)
 // ---------------------------------------------------------------------------
 
 /**
@@ -161,9 +157,9 @@ export type ClickResult = {
 	occlusionReason?: string;
 	hitTag?: string | null;
 	clamped?: boolean;
-	/** ERRATUM(E-48): how many press/release pairs the ramp sent. Absent on the JavaScript fallback. */
+	/** How many press/release pairs the ramp sent. Absent on the JavaScript fallback. */
 	clickCount?: number;
-	/** §8's 3 s / 5 s caps expired. Non-fatal; see ERRATUM(M1-watchdogs-action-2). */
+	/** The 3 s / 5 s press/release caps expired. Non-fatal; see `dispatchMouseClick`. */
 	pressTimedOut?: boolean;
 	releaseTimedOut?: boolean;
 	download?: Record<string, unknown>;
@@ -180,7 +176,7 @@ export type TypeResult = {
 	strategy?: string;
 	clearStrategy?: string | null;
 	focused?: boolean;
-	/** Present only on a mismatch, and never for sensitive text — see ERRATUM(M1-watchdogs-action-6). */
+	/** Present only on a mismatch, and never for sensitive text: a secret must not travel back in a result. */
 	actualValue?: string;
 	actualValueMatched?: boolean;
 	validationError?: string;
@@ -192,13 +188,13 @@ export type TypeResult = {
 
 export interface DefaultActionWatchdogOptions {
 	/**
-	 * The DownloadsWatchdog seam (ARCHITECTURE.md §6.8). Without it clicks still work; they just
+	 * The DownloadsWatchdog seam. Without it clicks still work; they just
 	 * cannot report a download they triggered.
 	 */
 	readonly downloads?: ClickDownloadSource | undefined;
 	/**
 	 * Fall back to a JS `element.click()` when every candidate point is occluded. Default `true` —
-	 * see ERRATUM(M1-watchdogs-action-1).
+	 * see `#clickNode`.
 	 */
 	readonly clickThroughOcclusion?: boolean | undefined;
 	/**
@@ -208,7 +204,7 @@ export interface DefaultActionWatchdogOptions {
 	 */
 	readonly includePrintPdfData?: boolean | undefined;
 	/**
-	 * Directories an upload path must resolve inside (SECURITY-AUTH.md §8.2). Defaults to the
+	 * Directories an upload path must resolve inside. Defaults to the
 	 * profile's `downloadsPath` when it is set; an empty list means "no watchdog-level containment",
 	 * which is the correct posture once the action layer's authorization chain is in front of it.
 	 */
@@ -253,7 +249,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 	/**
 	 * Wires the DownloadsWatchdog callback channel after construction.
 	 *
-	 * Attach order (ARCHITECTURE.md §6) puts Downloads first, but the two watchdogs are constructed by
+	 * Attach order puts Downloads first, but the two watchdogs are constructed by
 	 * whoever owns the session, so late binding is the seam that does not force a construction order.
 	 */
 	setDownloadChannel(channel: ClickDownloadSource | null): void {
@@ -268,7 +264,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 	// -- clicks ------------------------------------------------------------------------------------
 
 	/**
-	 * The §6.10 click cascade.
+	 * The click cascade.
 	 *
 	 * Returns `{validationError}` as data for the two guard-railed element kinds, and
 	 * `{printDialogIntercepted}` when the click would have opened a print dialog.
@@ -298,7 +294,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Move the pointer onto an element, or to a raw viewport point — ERRATUM(E-49).
+	 * Move the pointer onto an element, or to a raw viewport point.
 	 *
 	 * The element arm is the click cascade minus the press: the same scroll-into-view, the same
 	 * viewport metrics and the same {@linkcode resolveClickPoint}, so a hover lands exactly where a
@@ -354,7 +350,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 		};
 	}
 
-	/** Raw viewport coordinates; `force` skips the hit test (DATA-MODEL.md §5.1.1). */
+	/** Raw viewport coordinates; `force` skips the hit test. */
 	async onClickCoordinateEvent(
 		event: ClickCoordinateEvent,
 		context?: HandlerContext,
@@ -434,17 +430,17 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 			focused: outcome.focused,
 		};
 		if (!outcome.matched) {
-			// D-SEC2: a secret must not travel back through an event result into history or logs.
+			// A secret must not travel back through an event result into history or logs.
 			if (event.isSensitive) result.actualValueMatched = false;
 			else result.actualValue = outcome.actualValue;
 		}
 		return result;
 	}
 
-	/** `sendKeys` combos: `'Enter'`, `'ctrl+a'`, `'ctrl+shift+t'` (ARCHITECTURE.md §6.10). */
+	/** `sendKeys` combos: `'Enter'`, `'ctrl+a'`, `'ctrl+shift+t'`. */
 	async onSendKeysEvent(event: SendKeysEvent, context?: HandlerContext): Promise<void> {
 		const page = await this.sessions.getOrCreateCdpSession(null, true);
-		// ERRATUM(E-50). The focus is moved with `DOM.focus` rather than by clicking, because a click
+		// The focus is moved with `DOM.focus` rather than by clicking, because a click
 		// fires the element's own handlers — a chord aimed at a button must not first press it. The
 		// keys are still dispatched to the **page** session: `Input.dispatchKeyEvent` goes to the frame
 		// tree's owner, and the focused element receives them wherever in the tree it lives.
@@ -461,7 +457,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 				shortTermMemory: `${describeNode(event.node)} could not be focused, so the keys were not sent`,
 			});
 		}
-		// Security review B2-SR4-8. The combos are parsed **before** the last focus check and the check
+		// The combos are parsed **before** the last focus check and the check
 		// is repeated immediately before the first dispatch, so a `focus`/`focusin` handler that moves
 		// focus away between the two cannot leave the result claiming a chord landed on this element.
 		// Parsing first also means a malformed chord is refused without having moved focus at all.
@@ -476,7 +472,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
 	// -- scrolling ---------------------------------------------------------------------------------
 
-	/** Page gesture, element wheel, or iframe script — whichever the target calls for (§6.10). */
+	/** Page gesture, element wheel, or iframe script — whichever the target calls for. */
 	async onScrollEvent(event: ScrollEvent, context?: HandlerContext): Promise<void> {
 		const node = event.node;
 		const scope = await this.#resolveSessions(node);
@@ -533,7 +529,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 		this.logger.debug('scrolled an element', { ...outcome });
 	}
 
-	/** `DOM.performSearch` + the text-walker fallback. Throws when the text is nowhere (§5.1.1). */
+	/** `DOM.performSearch` + the text-walker fallback. Throws when the text is nowhere. */
 	async onScrollToTextEvent(event: ScrollToTextEvent, context?: HandlerContext): Promise<void> {
 		const page = await this.sessions.getOrCreateCdpSession(null, true);
 		const result = await scrollToText({
@@ -573,11 +569,9 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 	/**
 	 * A deliberate pause, clamped to `maxSeconds`.
 	 *
-	 * ERRATUM(M1-watchdogs-action-10): §7.4 #4 describes the *action* sleeping
-	 * `min(max(seconds−1, 0), 30)`; the −1 and the 30 belong to the action's own budget arithmetic.
-	 * The event's contract (DATA-MODEL.md §5.1.1, `seconds` = 3, `maxSeconds` = 10) is a plain clamp,
-	 * so the handler does exactly `min(max(seconds, 0), maxSeconds)` and leaves the action's
-	 * adjustment to the action.
+	 * The event's contract (`seconds` = 3, `maxSeconds` = 10 by default) is a plain clamp, so the
+	 * handler does exactly `min(max(seconds, 0), maxSeconds)`. Any budget arithmetic of the action
+	 * that sent the event (subtracting its own overhead, capping the total) belongs to that action.
 	 */
 	async onWaitEvent(event: WaitEvent, context?: HandlerContext): Promise<void> {
 		const seconds = Math.min(Math.max(event.seconds, 0), event.maxSeconds);
@@ -587,7 +581,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
 	// -- upload ------------------------------------------------------------------------------------
 
-	/** `DOM.setFileInputFiles` on the node, or on the file input it stands for (§6.10). */
+	/** `DOM.setFileInputFiles` on the node, or on the file input it stands for. */
 	async onUploadFileEvent(event: UploadFileEvent, context?: HandlerContext): Promise<void> {
 		// Containment first: the cheapest check, and a refused path must not touch the page at all.
 		const filePath = await this.#authorizeUploadPath(event.filePath);
@@ -639,14 +633,14 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 	/**
 	 * Select an option by exact text or value.
 	 *
-	 * ERRATUM(M1-watchdogs-action-5): §6.10 lists "native select + ARIA/framework paths" without
-	 * saying they use different mechanisms, but they must. A native `<select>`'s option list is
+	 * Native `<select>` and ARIA/framework dropdowns use different mechanisms, and must. A native
+	 * `<select>`'s option list is
 	 * browser chrome outside the page's coordinate space, so no synthesized mouse event can reach it —
 	 * assignment plus the framework event pair *is* the native path. An ARIA option is ordinary DOM
 	 * whose framework handlers are the only thing that commits a selection, so that path expands the
 	 * control and presses the option through the full click cascade.
 	 *
-	 * A miss never throws: the available options come back as structured memory (§7.4 #20).
+	 * A miss never throws: the available options come back as structured memory.
 	 */
 	async onSelectDropdownOptionEvent(
 		event: SelectDropdownOptionEvent,
@@ -705,14 +699,14 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
 	/** The full click cascade for an already-resolved node. */
 	async #clickNode(options: {
-		/** The dispatch this click belongs to; `undefined` outside one (ERRATUM(E-52)). */
+		/** The dispatch this click belongs to; `undefined` outside one. */
 		context: HandlerContext | undefined;
 		handle: NodeHandle;
 		page: CdpSessionRecord;
 		absolutePosition: EnhancedDomTreeNode['absolutePosition'];
 		sameSessionAsPage: boolean;
 		button: MouseButton;
-		/** ERRATUM(E-48). Omitted means a single click, which is what every caller sent before it. */
+		/** Press/release pairs to send, clamped to 1..3. Omitted means a single click. */
 		clickCount?: number;
 		label: string;
 	}): Promise<ClickResult> {
@@ -765,7 +759,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 			hitTag: occlusion.hitTag,
 			clamped: point.clamped,
 			// The JavaScript fallback dispatches no mouse events at all, so it has no click count to
-			// report; a `2` there would claim a `dblclick` the page never received (ERRATUM(E-48)).
+			// report; a `2` there would claim a `dblclick` the page never received.
 			...(useJavascript || detection.value === null ? {} : { clickCount: detection.value.sent }),
 			pressTimedOut: detection.value?.pressTimedOut ?? false,
 			releaseTimedOut: detection.value?.releaseTimedOut ?? false,
@@ -774,7 +768,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 		return result;
 	}
 
-	/** `Page.printToPDF` in place of a click that would have opened the print dialog (§6.10). */
+	/** `Page.printToPDF` in place of a click that would have opened the print dialog. */
 	async #interceptPrintDialog(sessionId: SessionId, context: HandlerContext | undefined): Promise<ClickResult> {
 		const printed = await this.cdpFor(context).send.Page.printToPDF(
 			{ printBackground: true, transferMode: 'ReturnAsBase64' },
@@ -903,10 +897,10 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Local containment for an upload path (SECURITY-AUTH.md §8.2).
+	 * Local containment for an upload path.
 	 *
-	 * Remote (attached-browser) sessions are exempt by spec: the path names a file on the machine the
-	 * browser runs on, which this process cannot see, "documented as such" in §8.2. Locally the path
+	 * Remote (attached-browser) sessions are exempt, and documented as such: the path names a file on
+	 * the machine the browser runs on, which this process cannot see. Locally the path
 	 * must be absolute (a path resolved against this process's cwd is not a security property), must
 	 * resolve — through symlinks, which is the GHSA-j9hj-92j8-jv9h contract — to an existing regular
 	 * file, and must sit inside a configured root when roots are configured.
@@ -949,7 +943,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 }
 
 // ---------------------------------------------------------------------------
-// guard rails — data, not exceptions (ARCHITECTURE.md §6.10)
+// guard rails — data, not exceptions
 // ---------------------------------------------------------------------------
 
 /**
@@ -1012,16 +1006,15 @@ const JAVASCRIPT_HREF = /^[\x00-\x20]*javascript:/i;
 /**
  * Does clicking this element open the print dialog?
  *
- * ERRATUM(M1-watchdogs-action-3): §6.10 requires "print-dialog clicks are intercepted into
- * `Page.printToPDF`" but states no detection rule. The rule implemented here is deliberately narrow,
- * because a false positive silently *does not click* something the agent asked to click:
+ * Print-dialog clicks are intercepted into `Page.printToPDF`. The detection rule is deliberately
+ * narrow, because a false positive silently *does not click* something the agent asked to click:
  *
  * - an `onclick` (or `javascript:` href) that calls `print(…)` / `window.print(…)`, which is what
  *   every "Print this page" link in the wild is; **or**
  * - an accessible label that is exactly one of {@linkcode PRINT_TRIGGER_LABELS} on a
  *   button-ish element — so `<button aria-label="Print">` matches and "3D printing services" does not.
  *
- * The event's node is cycle-stripped (`childrenNodes: []`, DATA-MODEL.md §5.1), so the label comes
+ * The event's node is cycle-stripped (`childrenNodes: []`), so the label comes
  * from attributes only; text-content-only print buttons take the ordinary click path and are handled
  * by PopupsWatchdog if a dialog does appear.
  */
@@ -1117,14 +1110,14 @@ async function findRelatedFileInput(handle: NodeHandle): Promise<number | null> 
 }
 
 /**
- * The multi-click ramp — ERRATUM(E-48).
+ * The multi-click ramp.
  *
  * A double click is **not** one press/release pair carrying `clickCount: 2`. It is the second pair
  * of a sequence: the browser fires `click` at count 1 and `dblclick` at count 2, so a page with both
  * handlers must see both. This is exactly the sequence the Live View produces when a human
  * double-clicks — the SPA sends one `input.mouse` per physical click, carrying the browser's own
- * `detail` — which is what makes §10's "reproducible by the tools" true for this gesture rather than
- * merely claimed. The count is clamped to 1..3 because that is the range
+ * `detail` — which is what makes a human's gesture reproducible by the tools rather than merely
+ * claimed to be. The count is clamped to 1..3 because that is the range
  * `packages/wire/src/messages.ts` already accepts from the socket, and the two paths must not differ.
  */
 async function clickRamp(
@@ -1137,7 +1130,7 @@ async function clickRamp(
 	const total = Number.isFinite(requested) ? Math.min(3, Math.max(1, requested)) : 1;
 	let outcome = await send(1);
 	for (let count = 2; count <= total; count += 1) outcome = await send(count);
-	// Security review B2-SR4-10: the **sent** total, not the requested one. The result's `clickCount`
+	// The **sent** total, not the requested one. The result's `clickCount`
 	// is a claim about what the page received, and reporting the request would make it a false claim
 	// the moment the clamp did any work.
 	return { ...outcome, sent: total };

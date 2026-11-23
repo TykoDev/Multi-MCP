@@ -1,14 +1,17 @@
-/**
- * Tool-handler tests against a fake browser session.
- *
- * These cover the parts that decide *policy* — the navigation allowlist, index
- * and tab resolution, lock enforcement, error mapping — which the browser-tier
- * e2e run exercises only incidentally.
- */
+/** Tool-handler tests against a fake browser session. */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
-import type { BrowserSession } from '@tykotech/browser';
+import {
+	type BrowserSession,
+	type EnhancedDomTreeNode,
+	isPasswordField,
+	isSecretFilled,
+	markSecretFilled,
+} from '@tykotech/browser';
 import { EventBus } from '@tykotech/bus';
+import { CATALOG } from './catalog.ts';
+import { inputStateOf, MASKED_INPUT_VALUE, resolveFields, textOf as recordTextOf } from './element_record.ts';
 import { ToolError } from './errors.ts';
+import { observe } from './observe.ts';
 import { SessionRegistry } from './registry.ts';
 import { OUTPUT } from './schemas.ts';
 import { SecretStore } from './secrets.ts';
@@ -28,27 +31,17 @@ import {
 } from '../fixtures/capture_session.ts';
 
 interface FakeOptions {
-	/**
-	 * Tabs as `TabInfo` really shapes them: a full `targetId` plus the
-	 * four-character `tabId` a model is shown. Modelling focus on the short id —
-	 * as this fake once did — made the unit tier agree with the E-14 defect
-	 * instead of catching it.
-	 */
+	/** Tabs as `TabInfo` really shapes them: a full `targetId` plus the four-character `tabId` a model is shown. */
 	tabs?: Array<{ targetId: string; tabId: string; url: string; title: string }>;
 	selectorMap?: Map<number, unknown>;
 	dispatchError?: Error;
-	/** B1.4: the identity of the table in `selectorMap`. `null` models a build that minted none. */
+	/** The identity of the table in `selectorMap`. `null` models a build that minted none. */
 	stateToken?: string | null;
-	/** B1.4: models a session that holds no state at all, which is not the same as an empty table. */
+	/** Models a session that holds no state at all, which is not the same as an empty table. */
 	noCachedState?: boolean;
 }
 
-/**
- * A DOM node with the fields the element-event sanitizer walks.
- *
- * The events deep-copy their node, so a thin stub throws inside the vendored
- * constructor rather than in the code under test.
- */
+/** A DOM node with the fields the element-event sanitizer walks. */
 function fakeNode(nodeName = 'BUTTON'): Record<string, unknown> {
 	return {
 		nodeName,
@@ -98,9 +91,6 @@ function fakeSession(options: FakeOptions = {}): Fake {
 			domState: { selectorMap: options.selectorMap ?? new Map(), root: null },
 			pageInfo: { viewportWidth: 1280, viewportHeight: 720, pixelsAbove: 0, pixelsBelow: 0, scrollX: 0, scrollY: 0 },
 		},
-		// A real bus underneath the recording facade: the registry subscribes to
-		// it for page-change announcements (R4), and a facade with no `on` would
-		// only fail once a browser was involved.
 		eventBus: Object.assign(new EventBus({ name: 'fake-tools-session' }), {
 			dispatch(event: Record<string, unknown>) {
 				dispatched.push({ name: event.constructor.name, event });
@@ -118,11 +108,12 @@ function fakeSession(options: FakeOptions = {}): Fake {
 	return { session: session as unknown as BrowserSession, dispatched };
 }
 
-async function harness(options: FakeOptions & { allowedDomains?: string[] } = {}) {
+async function harness(options: FakeOptions & { allowedDomains?: string[]; dataDir?: string } = {}) {
 	const fake = fakeSession(options);
 	const registry = new SessionRegistry({
 		reapIntervalMs: 0,
 		launch: () => Promise.resolve(fake.session),
+		...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
 	});
 	const record = await registry.resolve(undefined);
 	const ctx: ToolContext = {
@@ -142,46 +133,30 @@ function textOf(result: ToolResult): string {
 
 // --- navigation policy --------------------------------------------------------
 
-Deno.test('tools: navigate refuses a non-http scheme', async () => {
+Deno.test('tools: navigate refuses non-http schemes and malformed URLs; an empty allowlist admits any host', async () => {
 	const { ctx, registry } = await harness();
 	for (const url of ['data:text/html,<h1>x', 'file:///etc/passwd', 'javascript:alert(1)']) {
 		const error = await assertRejects(() => tools.browserNavigate({ url }, ctx), ToolError);
-		assert(
-			error.code === 'navigation-blocked' || error.code === 'invalid-arguments',
-			`${url} produced ${error.code}`,
-		);
+		assert(error.code === 'navigation-blocked' || error.code === 'invalid-arguments', `${url} produced ${error.code}`);
 	}
+	const malformed = await assertRejects(() => tools.browserNavigate({ url: 'not a url' }, ctx), ToolError);
+	assertEquals(malformed.code, 'invalid-arguments', 'an argument error, not a policy refusal');
+	assertStringIncludes(
+		textOf(await tools.browserNavigate({ url: 'https://anywhere.example.org/' }, ctx)),
+		'session_id',
+	);
 	await registry.shutdown();
 });
 
 Deno.test('tools: navigate enforces the domain allowlist by suffix', async () => {
 	const { ctx, registry } = await harness({ allowedDomains: ['example.com'] });
-
-	// Exact host and subdomains are permitted.
 	for (const url of ['https://example.com/a', 'https://docs.example.com/b']) {
-		const result = await tools.browserNavigate({ url }, ctx);
-		assertStringIncludes(textOf(result), 'session_id');
+		assertStringIncludes(textOf(await tools.browserNavigate({ url }, ctx)), 'session_id');
 	}
-
-	// A host that merely ends with the same letters is not a subdomain.
 	for (const url of ['https://notexample.com/', 'https://example.com.evil.net/']) {
 		const error = await assertRejects(() => tools.browserNavigate({ url }, ctx), ToolError);
 		assertEquals(error.code, 'navigation-blocked', url);
 	}
-	await registry.shutdown();
-});
-
-Deno.test('tools: an empty allowlist permits any http(s) host', async () => {
-	const { ctx, registry } = await harness({ allowedDomains: [] });
-	const result = await tools.browserNavigate({ url: 'https://anywhere.example.org/' }, ctx);
-	assertStringIncludes(textOf(result), 'session_id');
-	await registry.shutdown();
-});
-
-Deno.test('tools: a malformed URL is an argument error, not a policy refusal', async () => {
-	const { ctx, registry } = await harness();
-	const error = await assertRejects(() => tools.browserNavigate({ url: 'not a url' }, ctx), ToolError);
-	assertEquals(error.code, 'invalid-arguments');
 	await registry.shutdown();
 });
 
@@ -195,70 +170,43 @@ Deno.test('tools: clicking an unknown index names the recovery', async () => {
 	await registry.shutdown();
 });
 
-Deno.test('tools: an index sent with a stale state_token is refused, not resolved (G-1)', async () => {
+Deno.test('tools: an index sent with a stale state_token is refused, not resolved', async () => {
 	const { ctx, registry } = await harness({
 		selectorMap: new Map([[1, fakeNode()]]),
 		stateToken: 'cccccccccccccccc.dddddddddddddddd',
 	});
-	// The index exists in the table the server holds. It was read from a different one, and resolving
-	// it would click whatever now happens to occupy index 1 on a page the caller has never seen.
 	const error = await assertRejects(
 		() => tools.browserClick({ index: 1, state_token: 'aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb' }, ctx),
 		ToolError,
 	);
 	assertEquals(error.code, 'element-not-found');
 	assertEquals(error.extras.reason, 'stale-token');
-	// The current token comes back, so the client can re-read once rather than poll.
 	assertEquals(error.extras.state_token, 'cccccccccccccccc.dddddddddddddddd');
 	assertEquals(error.extras.index, 1);
 	await registry.shutdown();
 });
 
-Deno.test('tools: an index sent with no table held reports no-state, not unknown-index (G-1)', async () => {
+Deno.test('tools: an index sent with no table held reports no-state, not unknown-index', async () => {
 	const { ctx, registry } = await harness({ noCachedState: true });
 	const error = await assertRejects(() => tools.browserClick({ index: 1 }, ctx), ToolError);
 	assertEquals(error.code, 'element-not-found');
 	assertEquals(error.extras.reason, 'no-state');
 	assertEquals(error.extras.state_token, null);
-	// The distinction is the whole point of the new code: "re-read the page" and "this index is not
-	// in the page you already read" are different instructions to the model.
 	assertStringIncludes(error.message, 'browser_get_state');
 	await registry.shutdown();
 });
 
-Deno.test('tools: omitting state_token keeps 0.1.0 behaviour exactly (additivity)', async () => {
+Deno.test('tools: omitting state_token clicks against the held table, and the result carries its token', async () => {
 	const { ctx, registry, fake } = await harness({
 		selectorMap: new Map([[3, fakeNode()]]),
 		stateToken: 'cccccccccccccccc.dddddddddddddddd',
 	});
-	// No token sent, a token held that the caller could not possibly match: the call still succeeds.
-	await tools.browserClick({ index: 3 }, ctx);
-	assertEquals(fake.dispatched.at(-1)?.name, 'ClickElementEvent');
-	await registry.shutdown();
-});
-
-Deno.test('tools: a click result carries the token of the table it acted on', async () => {
-	const { ctx, registry } = await harness({
-		selectorMap: new Map([[3, fakeNode()]]),
-		stateToken: 'cccccccccccccccc.dddddddddddddddd',
-	});
 	const result = await tools.browserClick({ index: 3 }, ctx);
+	assertEquals(fake.dispatched.at(-1)?.name, 'ClickElementEvent');
 	assertEquals(
 		(result.structuredContent as { state_token?: unknown }).state_token,
 		'cccccccccccccccc.dddddddddddddddd',
 	);
-	await registry.shutdown();
-});
-
-Deno.test('tools: clicking a known index dispatches an element click', async () => {
-	const { ctx, registry, fake } = await harness({ selectorMap: new Map([[3, fakeNode()]]) });
-	await tools.browserClick({ index: 3 }, ctx);
-	assertEquals(fake.dispatched.at(-1)?.name, 'ClickElementEvent');
-	await registry.shutdown();
-});
-
-Deno.test('tools: clicking coordinates dispatches a coordinate click', async () => {
-	const { ctx, registry, fake } = await harness();
 	await tools.browserClick({ coordinate_x: 12, coordinate_y: 34 }, ctx);
 	const last = fake.dispatched.at(-1);
 	assertEquals(last?.name, 'ClickCoordinateEvent');
@@ -266,9 +214,9 @@ Deno.test('tools: clicking coordinates dispatches a coordinate click', async () 
 	await registry.shutdown();
 });
 
-// --- B2.4: the pointer and keyboard tools ---------------------------------------------
+// --- the pointer and keyboard tools -------------------------------------------------
 
-Deno.test('B2.4: double click and right click reach the SAME event with one field changed', async () => {
+Deno.test('pointer and keys: double click and right click reach the SAME event with one field changed', async () => {
 	const { ctx, registry, fake } = await harness({ selectorMap: new Map([[3, fakeNode()]]) });
 
 	await tools.browserDoubleClick({ index: 3 }, ctx);
@@ -283,7 +231,6 @@ Deno.test('B2.4: double click and right click reach the SAME event with one fiel
 	assertEquals((right?.event as { button: string }).button, 'right');
 	assertEquals((right?.event as { clickCount: number }).clickCount, 1);
 
-	// The single click is unchanged by both, which is the additivity claim.
 	await tools.browserClick({ index: 3 }, ctx);
 	const single = fake.dispatched.at(-1);
 	assertEquals((single?.event as { clickCount: number }).clickCount, 1);
@@ -291,7 +238,7 @@ Deno.test('B2.4: double click and right click reach the SAME event with one fiel
 	await registry.shutdown();
 });
 
-Deno.test('B2.4: the coordinate arm of each pointer tool carries the same two fields', async () => {
+Deno.test('pointer and keys: the coordinate arm of each pointer tool carries the same two fields', async () => {
 	const { ctx, registry, fake } = await harness();
 	await tools.browserDoubleClick({ coordinate_x: 12, coordinate_y: 34 }, ctx);
 	const dbl = fake.dispatched.at(-1);
@@ -302,7 +249,7 @@ Deno.test('B2.4: the coordinate arm of each pointer tool carries the same two fi
 	await registry.shutdown();
 });
 
-Deno.test('B2.4: hover dispatches a HoverEvent and never a click', async () => {
+Deno.test('pointer and keys: hover dispatches a HoverEvent and never a click', async () => {
 	const { ctx, registry, fake } = await harness({ selectorMap: new Map([[3, fakeNode()]]) });
 	await tools.browserHover({ index: 3 }, ctx);
 	assertEquals(fake.dispatched.at(-1)?.name, 'HoverEvent');
@@ -318,7 +265,7 @@ Deno.test('B2.4: hover dispatches a HoverEvent and never a click', async () => {
 	await registry.shutdown();
 });
 
-Deno.test('B2.4: a pointer tool resolves its index through the ONE resolver (state_token honoured)', async () => {
+Deno.test('pointer and keys: a pointer tool resolves its index through the ONE resolver (state_token honoured)', async () => {
 	const { ctx, registry } = await harness({
 		selectorMap: new Map([[3, fakeNode()]]),
 		stateToken: 'cccccccccccccccc.dddddddddddddddd',
@@ -338,74 +285,100 @@ Deno.test('B2.4: a pointer tool resolves its index through the ONE resolver (sta
 	await registry.shutdown();
 });
 
-Deno.test('B2.4: press_key folds a modifiers array into the chord and reports the bitfield', async () => {
-	const { ctx, registry, fake } = await harness();
-	const result = await tools.browserPressKey({ key: 'a', modifiers: ['Control', 'SHIFT'] }, ctx);
-	assertEquals((fake.dispatched.at(-1)?.event as { keys: string }).keys, 'ctrl+shift+a');
-	const payload = result.structuredContent as { key: string; modifiers: number };
-	assertEquals(payload.key, 'ctrl+shift+a');
-	// MODIFIER_BITS: ctrl 2 | shift 8. The bitfield is the vendored table's, not a second one.
-	assertEquals(payload.modifiers, 10);
-	await registry.shutdown();
-});
-
-Deno.test('B2.4: press_key aliases and de-duplicates modifier names', async () => {
-	const { ctx, registry, fake } = await harness();
-	await tools.browserPressKey({ key: 'k', modifiers: ['cmd', 'command', 'meta'] }, ctx);
-	assertEquals((fake.dispatched.at(-1)?.event as { keys: string }).keys, 'meta+k');
-	await registry.shutdown();
-});
-
-Deno.test('B2.4: an unknown modifier is REFUSED, never silently dropped', async () => {
+Deno.test('pointer and keys: press_key folds, aliases and de-duplicates modifiers, and refuses an unknown one', async () => {
 	const { ctx, registry, fake } = await harness();
 	const error = await assertRejects(() => tools.browserPressKey({ key: 'a', modifiers: ['controll'] }, ctx), ToolError);
 	assertEquals(error.code, 'invalid-arguments');
 	assertStringIncludes(error.message, 'controll');
 	assertEquals(fake.dispatched.length, 0, 'nothing may reach the browser after a refusal');
+	const result = await tools.browserPressKey({ key: 'a', modifiers: ['Control', 'SHIFT'] }, ctx);
+	assertEquals((fake.dispatched.at(-1)?.event as { keys: string }).keys, 'ctrl+shift+a');
+	assertEquals(result.structuredContent as { key: string; modifiers: number }, {
+		...(result.structuredContent as object),
+		key: 'ctrl+shift+a',
+		modifiers: 10,
+	});
+	await tools.browserPressKey({ key: 'k', modifiers: ['cmd', 'command', 'meta'] }, ctx);
+	assertEquals((fake.dispatched.at(-1)?.event as { keys: string }).keys, 'meta+k');
 	await registry.shutdown();
 });
 
-Deno.test('B2.4: press_key with an index carries the node so the element is focused first', async () => {
+Deno.test('pointer and keys: press_key with an index carries the node so the element is focused first', async () => {
 	const { ctx, registry, fake } = await harness({ selectorMap: new Map([[3, fakeNode('INPUT')]]) });
 	const result = await tools.browserPressKey({ key: 'Enter', index: 3 }, ctx);
 	const event = fake.dispatched.at(-1);
 	assertEquals(event?.name, 'SendKeysEvent');
-	assert((event?.event as { node: unknown }).node !== null, 'the node travels with the event (E-50)');
+	assert((event?.event as { node: unknown }).node !== null, 'the node travels with the event');
 	assertEquals((result.structuredContent as { index?: number }).index, 3);
-	// And without an index the event is byte-for-byte the 0.1.0 one.
 	await tools.browserPressKey({ key: 'Enter' }, ctx);
 	assertEquals((fake.dispatched.at(-1)?.event as { node: unknown }).node, null);
 	await registry.shutdown();
 });
 
-Deno.test('B2.4: every new pointer and key tool is refused while a human holds the session', async () => {
-	const { ctx, registry, record } = await harness({ selectorMap: new Map([[3, fakeNode()]]) });
-	const viewer = {
-		id: 'v1',
-		principal: 'p',
-		mode: 'control' as const,
-		send: () => {},
-		close: () => {},
-	};
+/**
+ * The takeover lock, over the whole catalog: `mutates` only drives annotations, and each handler checks the lock itself,
+ * so a mutating tool that skipped the check would act under a person's hands. Every one answers `human-has-control`,
+ * which tells the agent to wait; the exemptions are the ones the docs name. A new mutating tool fails here until it is
+ * given arguments below (and refuses) or is exempted with its reason.
+ */
+const LOCKED_ARGS: Record<string, Record<string, unknown>> = {
+	browser_navigate: { url: 'https://example.com/' },
+	browser_go_back: {},
+	browser_click: { index: 3 },
+	browser_double_click: { index: 3 },
+	browser_right_click: { index: 3 },
+	browser_hover: { index: 3 },
+	browser_type: { index: 3, text: 'a' },
+	browser_press_key: { key: 'a', modifiers: ['ctrl'] },
+	browser_fill: { index: 3, value: 'a' },
+	browser_scroll_to: { text: 'a' },
+	browser_scroll_into_view: { index: 3 },
+	browser_select_option: { index: 3, option: 'a' },
+	browser_upload_file: { index: 3, files: ['a.txt'] },
+	browser_handle_dialog: { accept: true },
+	browser_drag: { from_index: 3, to_index: 3 },
+	browser_scroll: { direction: 'down' },
+	browser_fill_secret: { index: 3, name: 'a' },
+	browser_evaluate: { expression: '1' },
+	browser_run_task: { task: 'a' },
+	browser_set_viewport: { width: 800, height: 600 },
+	browser_set_session_options: { block_images: true },
+	browser_switch_tab: { tab_id: 'T1' },
+	browser_close_tab: { tab_id: 'T1' },
+	browser_storage_state: { action: 'load', name: 'a' },
+	browser_download: { url: 'https://example.com/a.txt' },
+};
+const LOCK_EXEMPT: Record<string, string> = {
+	browser_close_session: 'closing is administrative: it ends the session for its viewers too',
+	browser_close_all: 'closing is administrative',
+};
+
+Deno.test('takeover: every mutating tool is refused with human-has-control while a person holds the session', async () => {
+	await Deno.mkdir('tests/.scratch', { recursive: true });
+	const dataDir = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'takeover-' });
+	const { ctx, registry, record } = await harness({ selectorMap: new Map([[3, fakeNode()]]), dataDir });
+	const viewer = { id: 'v1', principal: 'p', mode: 'control' as const, send: () => {}, close: () => {} };
 	registry.addViewer(record, viewer);
 	registry.takeControl(record, viewer);
-	for (
-		const call of [
-			() => tools.browserDoubleClick({ index: 3 }, ctx),
-			() => tools.browserRightClick({ index: 3 }, ctx),
-			() => tools.browserHover({ index: 3 }, ctx),
-			() => tools.browserPressKey({ key: 'a', modifiers: ['ctrl'] }, ctx),
-		]
-	) {
-		const error = await assertRejects(call, ToolError);
-		assertEquals(error.code, 'human-has-control');
+	try {
+		const mutating = CATALOG.filter((tool) => tool.mutates && !(tool.name in LOCK_EXEMPT));
+		assertEquals(mutating.map((tool) => tool.name).sort(), Object.keys(LOCKED_ARGS).sort());
+		for (const tool of mutating) {
+			const error = await assertRejects(() => tool.handler(LOCKED_ARGS[tool.name] as never, ctx), ToolError);
+			assertEquals(error.code, 'human-has-control', `${tool.name} answered ${error.code}: ${error.message}`);
+		}
+		// A save only reads the browser, so the lock does not refuse it (whatever the fake session then answers).
+		const save = await tools.browserStorageState({ action: 'save', name: 'a' }, ctx).catch((error) => error);
+		assert(!(save instanceof ToolError && save.code === 'human-has-control'), 'a storage-state save is not refused');
+	} finally {
+		await registry.shutdown();
+		await Deno.remove(dataDir, { recursive: true });
 	}
-	await registry.shutdown();
 });
 
-// --- B2.5: fill, scrolling, selects, upload, drag ------------------------------------
+// --- fill, scrolling, selects, upload, drag ----------------------------------------
 
-Deno.test('B2.5: browser_fill clears by DEFAULT where browser_type appends by default', async () => {
+Deno.test('actions: browser_fill clears by DEFAULT where browser_type appends by default', async () => {
 	const { ctx, registry, fake } = await harness({ selectorMap: new Map([[3, fakeNode('INPUT')]]) });
 
 	await tools.browserType({ text: 'hello', index: 3 }, ctx);
@@ -421,7 +394,7 @@ Deno.test('B2.5: browser_fill clears by DEFAULT where browser_type appends by de
 	await registry.shutdown();
 });
 
-Deno.test('B2.5: browser_fill inherits browser_type’s disclosure rules rather than restating them', async () => {
+Deno.test('actions: browser_fill inherits browser_type’s disclosure rules rather than restating them', async () => {
 	const { ctx, registry } = await harness({ selectorMap: new Map([[3, fakeNode('INPUT')]]) });
 	const result = await tools.browserFill({ index: 3, text: 'plain text' }, ctx);
 	const payload = result.structuredContent as { sensitive: boolean; typed_length?: number; index: number };
@@ -431,7 +404,7 @@ Deno.test('B2.5: browser_fill inherits browser_type’s disclosure rules rather 
 	await registry.shutdown();
 });
 
-Deno.test('B2.5: upload refuses a file id this session never tracked', async () => {
+Deno.test('actions: upload refuses a file id this session never tracked', async () => {
 	const { ctx, registry, fake } = await harness({ selectorMap: new Map([[3, fakeNode('INPUT')]]) });
 	const error = await assertRejects(
 		() => tools.browserUploadFile({ index: 3, file_id: 'not-a-file' }, ctx),
@@ -446,7 +419,7 @@ Deno.test('B2.5: upload refuses a file id this session never tracked', async () 
 	await registry.shutdown();
 });
 
-Deno.test('B2.5: the CDP-backed actions refuse cleanly on a session with no connection', async () => {
+Deno.test('actions: the CDP-backed actions refuse cleanly on a session with no connection', async () => {
 	const { ctx, registry } = await harness({ selectorMap: new Map([[3, fakeNode('SELECT')]]) });
 	for (
 		const call of [
@@ -462,28 +435,7 @@ Deno.test('B2.5: the CDP-backed actions refuse cleanly on a session with no conn
 	await registry.shutdown();
 });
 
-Deno.test('B2.5: every new action tool is refused while a human holds the session', async () => {
-	const { ctx, registry, record } = await harness({ selectorMap: new Map([[3, fakeNode('SELECT')]]) });
-	const viewer = { id: 'v1', principal: 'p', mode: 'control' as const, send: () => {}, close: () => {} };
-	registry.addViewer(record, viewer);
-	registry.takeControl(record, viewer);
-	for (
-		const call of [
-			() => tools.browserFill({ index: 3, text: 'x' }, ctx),
-			() => tools.browserScrollTo({ x: 0, y: 1 }, ctx),
-			() => tools.browserScrollIntoView({ index: 3 }, ctx),
-			() => tools.browserSelectOption({ index: 3, value: 'b' }, ctx),
-			() => tools.browserUploadFile({ index: 3, file_id: 'f' }, ctx),
-			() => tools.browserDrag({ from: { x: 1, y: 2 }, to: { x: 3, y: 4 } }, ctx),
-		]
-	) {
-		const error = await assertRejects(call, ToolError);
-		assertEquals(error.code, 'human-has-control');
-	}
-	await registry.shutdown();
-});
-
-Deno.test('B2.5: an index-addressed B2.5 tool honours state_token through the ONE resolver', async () => {
+Deno.test('actions: an index-addressed action tool honours state_token through the ONE resolver', async () => {
 	const { ctx, registry } = await harness({
 		selectorMap: new Map([[3, fakeNode('SELECT')]]),
 		stateToken: 'cccccccccccccccc.dddddddddddddddd',
@@ -505,24 +457,21 @@ Deno.test('B2.5: an index-addressed B2.5 tool honours state_token through the ON
 	await registry.shutdown();
 });
 
-Deno.test('B2.5: handle_dialog says WHY nothing was answered, and never echoes prompt_text', async () => {
+Deno.test('actions: handle_dialog says WHY nothing was answered, and never echoes prompt_text', async () => {
 	const { ctx, registry, record } = await harness();
-	// The fake launcher builds no watchdogs, which is the "this deployment cannot" case.
 	assertEquals(record.popups, null);
 	const missing = await assertRejects(
 		() => tools.browserHandleDialog({ dialog_id: 'd1', accept: true, prompt_text: 'Ada' }, ctx),
 		ToolError,
 	);
 	assertEquals(missing.code, 'feature-unavailable');
-	// DD-7 in the shape it takes here: the caller's own text must not come back, in the message or
-	// anywhere else, because a second copy in a transcript buys no capability at all.
 	assert(!JSON.stringify(missing.structuredPayload).includes('Ada'), missing.message);
 	await registry.shutdown();
 });
 
-// --- B2.6: session introspection and options ------------------------------------------
+// --- session introspection and options ----------------------------------------------
 
-Deno.test('B2.6/AC-P1-26: get_session and list_sessions carry EXACTLY the same fields', async () => {
+Deno.test('sessions: get_session and list_sessions carry EXACTLY the same fields', async () => {
 	const { ctx, registry } = await harness({
 		tabs: [{ targetId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT1', tabId: 'T1', url: 'https://a.test/', title: 'A' }],
 		allowedDomains: ['a.test'],
@@ -532,8 +481,6 @@ Deno.test('B2.6/AC-P1-26: get_session and list_sessions carry EXACTLY the same f
 		details: Array<Record<string, unknown>>;
 	};
 	assertEquals(listed.details.length, 1);
-	// Field-set equality in both directions, so a field added to one builder cannot reach only one
-	// tool — which is the whole content of the acceptance row.
 	assertEquals(Object.keys(one).sort(), Object.keys(listed.details[0]!).sort());
 	assertEquals(one.session_id, 'default');
 	assertEquals(one.origin_allowlist, ['a.test'], 'the list effective for THIS principal');
@@ -543,18 +490,17 @@ Deno.test('B2.6/AC-P1-26: get_session and list_sessions carry EXACTLY the same f
 	await registry.shutdown();
 });
 
-Deno.test('B2.6: list_sessions keeps its frozen text payload and grows only the structured half (I-4)', async () => {
+Deno.test('sessions: list_sessions keeps its frozen text payload and grows only the structured half', async () => {
 	const { ctx, registry } = await harness();
 	const result = await tools.browserListSessions({}, ctx);
 	const text = JSON.parse(textOf(result)) as Record<string, unknown>;
-	// The 0.1.0 client parses this block. It must still see exactly one key.
 	assertEquals(Object.keys(text), ['sessions']);
 	assert(!('details' in text), 'the fuller records are structured-only');
 	assert('details' in (result.structuredContent as Record<string, unknown>));
 	await registry.shutdown();
 });
 
-Deno.test('B2.6: get_session reports the holder, and stays available while a human holds it', async () => {
+Deno.test('sessions: get_session reports the holder, and stays available while a human holds it', async () => {
 	const { ctx, registry, record } = await harness();
 	const viewer = {
 		id: 'v1',
@@ -566,7 +512,6 @@ Deno.test('B2.6: get_session reports the holder, and stays available while a hum
 	};
 	registry.addViewer(record, viewer);
 	registry.takeControl(record, viewer);
-	// Read-only, so it answers under the lock — which is exactly when a caller wants to know who.
 	const payload = (await tools.browserGetSession({}, ctx)).structuredContent as {
 		human_has_control: boolean;
 		holder: { principal: string; holder_name: string | null } | null;
@@ -579,10 +524,8 @@ Deno.test('B2.6: get_session reports the holder, and stays available while a hum
 	await registry.shutdown();
 });
 
-Deno.test('B2.6: set_session_options reports what took and NAMES what did not', async () => {
+Deno.test('sessions: set_session_options reports what took and NAMES what did not', async () => {
 	const { ctx, registry, record } = await harness();
-	// No CDP client on the fake, so every emulation override fails — which is the case `unsupported`
-	// exists for, and the tool must still succeed rather than failing the whole call for one field.
 	const payload = (await tools.browserSetSessionOptions({
 		locale: 'fr-FR',
 		timezone: 'Europe/Amsterdam',
@@ -594,17 +537,14 @@ Deno.test('B2.6: set_session_options reports what took and NAMES what did not', 
 		state_token: null;
 	};
 
-	// `idle_timeout_s` has a per-session concept now, so it applies with no browser at all.
 	assertEquals(payload.applied.idle_timeout_s, 600);
 	assertEquals(record.idleTimeoutMs, 600_000);
-	// `accept_downloads` is applied through the session's downloads watchdog (A3, E-77); this fake has
-	// none, so it is honestly unsupported rather than silently ignored.
 	assert(payload.unsupported.includes('accept_downloads'));
 	assertEquals(payload.state_token, null);
 	await registry.shutdown();
 });
 
-Deno.test('B2.6: a per-session idle timeout is what the reaper actually uses', async () => {
+Deno.test('sessions: a per-session idle timeout is what the reaper actually uses', async () => {
 	let clock = 1_000_000;
 	const fake = fakeSession();
 	const registry = new SessionRegistry({
@@ -617,21 +557,17 @@ Deno.test('B2.6: a per-session idle timeout is what the reaper actually uses', a
 	const record = await registry.resolve(undefined);
 	await tools.browserSetSessionOptions({ idle_timeout_s: 3_600 }, ctx);
 
-	// Well past the registry-wide 1 s timeout, and nowhere near the session's own hour.
 	clock += 60_000;
 	assertEquals(await registry.reap(), 0, 'the per-session override is what decides');
-	// And a session without an override still reaps on the registry's value.
 	record.idleTimeoutMs = undefined;
 	assertEquals(await registry.reap(), 1);
 	await registry.shutdown();
 });
 
-Deno.test('B2.6/AC-P1-30: a storage-state load names the origins it restored, and nothing else', async () => {
-	// `tests/.scratch` rather than the system temp: the unit tier's write grant is scoped to it, which
-	// is the shipped shape and the reason the grant is worth having.
+Deno.test('sessions: a storage-state load names the origins it restored, and nothing else', async () => {
 	const scratch = fromFileUrl(new URL('../../../tests/.scratch', import.meta.url));
 	await Deno.mkdir(scratch, { recursive: true });
-	const dir = await Deno.makeTempDir({ dir: scratch, prefix: 'ttk-storage-b26-' });
+	const dir = await Deno.makeTempDir({ dir: scratch, prefix: 'ttk-storage-origins-' });
 	try {
 		const seeded = {
 			cookies: [{ name: 'session', value: 'SENTINEL-COOKIE-VALUE', domain: 'a.test', path: '/' }],
@@ -656,19 +592,84 @@ Deno.test('B2.6/AC-P1-30: a storage-state load names the origins it restored, an
 		assertEquals(payload.restored_origins, ['https://a.test', 'https://b.test']);
 		assertEquals(payload.origins, 2);
 		assertEquals(payload.cookies, 1);
-		// SEC-19 / AC-SEC-17: presence without content. Neither the seeded cookie value nor the seeded
-		// storage value may appear anywhere in the result — text block included.
 		const whole = JSON.stringify(result);
 		assert(!whole.includes('SENTINEL-COOKIE-VALUE'), whole);
 		assert(!whole.includes('SENTINEL-STORAGE-VALUE'), whole);
-		// Nor a cookie name or a storage key: the array is origins, and only origins.
 		assert(!whole.includes('"token"'), whole);
 
-		// A save restored nothing, so the key is absent rather than an empty array a caller could read
-		// as "restored no origins".
 		const saved = await tools.browserStorageState({ action: 'save', name: 'login' }, ctx);
 		assert(!('restored_origins' in (saved.structuredContent as Record<string, unknown>)));
 		await registry.shutdown();
+	} finally {
+		await Deno.remove(dir, { recursive: true }).catch(() => {});
+	}
+});
+
+Deno.test("storage state: in owner mode a storage-state name is the caller's own; shared mode keeps the flat layout", async () => {
+	const scratch = fromFileUrl(new URL('../../../tests/.scratch', import.meta.url));
+	await Deno.mkdir(scratch, { recursive: true });
+	const dir = await Deno.makeTempDir({ dir: scratch, prefix: 'ttk-storage-owner-' });
+	try {
+		const seeded = JSON.stringify({ cookies: [{ name: 'sid', value: 'A-SECRET', domain: 'gh.test', path: '/' }] });
+		const fakes: Fake[] = [];
+		const owned = new SessionRegistry({
+			reapIntervalMs: 0,
+			dataDir: dir,
+			ownership: 'owner',
+			launch: () => {
+				const fake = fakeSession();
+				fakes.push(fake);
+				return Promise.resolve(fake.session);
+			},
+		});
+		const alice = { owner: 'apikey:alice', admin: false };
+		const bob = { owner: 'apikey:bob', admin: false };
+		const aliceDir = (await owned.storageDirFor(alice))!;
+		const bobDir = (await owned.storageDirFor(bob))!;
+		assert(aliceDir !== bobDir, 'each owner has its own directory');
+		assert(aliceDir.startsWith(`${dir}/storage/owners/`), aliceDir);
+		assert(!aliceDir.includes('alice'), 'the owner is digested, never written as a path segment');
+		await Deno.mkdir(aliceDir, { recursive: true });
+		await Deno.writeTextFile(`${aliceDir}/github.json`, seeded);
+
+		const aliceCtx: ToolContext = { registry: owned, allowedDomains: [], principal: 'alice', access: alice };
+		const bobCtx: ToolContext = { registry: owned, allowedDomains: [], principal: 'bob', access: bob };
+		const loaded = await tools.browserStorageState({ action: 'load', name: 'github' }, aliceCtx);
+		assertEquals((loaded.structuredContent as { cookies: number }).cookies, 1);
+		const refused = await assertRejects(
+			() => tools.browserStorageState({ action: 'load', name: 'github' }, bobCtx),
+			ToolError,
+			'no saved storage state named github',
+		);
+		assertEquals(refused.code, 'invalid-arguments');
+		await tools.browserStorageState({ action: 'save', name: 'github' }, bobCtx);
+		const bobSave = fakes.flatMap((fake) => fake.dispatched).filter((entry) => entry.name === 'SaveStorageStateEvent')
+			.at(-1);
+		assertEquals((bobSave?.event as { path: string }).path, `${bobDir}/github.json`);
+		assertEquals(await Deno.readTextFile(`${aliceDir}/github.json`), seeded);
+		await Deno.writeTextFile(`${dir}/storage/flat.json`, seeded);
+		await assertRejects(
+			() => tools.browserStorageState({ action: 'load', name: 'flat' }, aliceCtx),
+			ToolError,
+			'no saved storage state named flat',
+		);
+		await assertRejects(() => owned.storageDirFor(undefined), ToolError);
+		await owned.shutdown();
+
+		const fake = fakeSession();
+		const shared = new SessionRegistry({
+			reapIntervalMs: 0,
+			dataDir: dir,
+			launch: () => Promise.resolve(fake.session),
+		});
+		assertEquals(await shared.storageDirFor(alice), `${dir}/storage`);
+		assertEquals(await shared.storageDirFor(undefined), `${dir}/storage`);
+		const flat = await tools.browserStorageState(
+			{ action: 'load', name: 'flat' },
+			{ registry: shared, allowedDomains: [], principal: 'bob', access: bob },
+		);
+		assertEquals((flat.structuredContent as { cookies: number }).cookies, 1);
+		await shared.shutdown();
 	} finally {
 		await Deno.remove(dir, { recursive: true }).catch(() => {});
 	}
@@ -704,7 +705,6 @@ Deno.test('tools: list_tabs reports focus', async () => {
 Deno.test('tools: scroll converts pages into viewport-relative pixels', async () => {
 	const { ctx, registry, fake } = await harness();
 	await tools.browserScroll({ direction: 'down' }, ctx);
-	// The default is 0.75 of a 720px viewport.
 	assertEquals((fake.dispatched.at(-1)?.event as { amount: number }).amount, 540);
 
 	await tools.browserScroll({ direction: 'up', pages: 2 }, ctx);
@@ -714,6 +714,7 @@ Deno.test('tools: scroll converts pages into viewport-relative pixels', async ()
 
 // --- lock enforcement --------------------------------------------------------------
 
+// Every mutating tool's refusal is the `takeover:` test's; this one covers observation under the lock and release.
 Deno.test('tools: a held lock refuses mutation but permits observation', async () => {
 	const { ctx, registry, record } = await harness({
 		tabs: [{ targetId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT1', tabId: 'T1', url: 'https://a.test/', title: 'A' }],
@@ -728,22 +729,9 @@ Deno.test('tools: a held lock refuses mutation but permits observation', async (
 	registry.addViewer(record, viewer);
 	registry.takeControl(record, viewer);
 
-	for (
-		const call of [
-			() => tools.browserNavigate({ url: 'https://a.test/' }, ctx),
-			() => tools.browserClick({ coordinate_x: 1, coordinate_y: 1 }, ctx),
-			() => tools.browserType({ text: 'hi' }, ctx),
-			() => tools.browserPressKey({ key: 'Enter' }, ctx),
-			() => tools.browserScroll({ direction: 'down' }, ctx),
-			() => tools.browserSwitchTab({ tab_id: 'T1' }, ctx),
-		]
-	) {
-		const error = await assertRejects(call, ToolError);
-		assertEquals(error.code, 'human-has-control');
-	}
+	const refused = await assertRejects(() => tools.browserPressKey({ key: 'Enter' }, ctx), ToolError);
+	assertEquals(refused.code, 'human-has-control');
 
-	// Observation is deliberately still available: a model that cannot see is
-	// worse than one that merely cannot act.
 	const tabs = await tools.browserListTabs({}, ctx);
 	assertStringIncludes(textOf(tabs), 'T1');
 	assertStringIncludes(textOf(await tools.browserListSessions({}, ctx)), 'human_has_control');
@@ -801,8 +789,7 @@ Deno.test('tools: navigate with new_session returns a distinct session id', asyn
 	await registry.shutdown();
 });
 
-// ---------------------------------------------------------------------------
-// session files (E-33)
+// --------------------------------------------------------------------------- session files
 // ---------------------------------------------------------------------------
 
 Deno.test('tools: list_files and get_file never create a session', async () => {
@@ -835,7 +822,6 @@ Deno.test('tools: get_file on an unknown id is unknown-file, and never a path', 
 
 Deno.test('tools: a click whose action result names a tracked download appends its metadata', async () => {
 	const fake = fakeSession({ selectorMap: new Map([[3, fakeNode()]]) });
-	// The action layer reports the download it detected; the ledger knows the record.
 	fake.session.eventBus.dispatch = ((event: Record<string, unknown>) => {
 		fake.dispatched.push({ name: event.constructor.name, event });
 		return { eventResult: () => Promise.resolve({ download: { guid: 'G1', completed: true } }) };
@@ -889,9 +875,9 @@ Deno.test('tools: a click with no download keeps the plain text result', async (
 	await registry.shutdown();
 });
 
-// --- B1.5: the element record on the wire -------------------------------------------------------
+// --- the element record on the wire ------------------------------------------------------------
 
-Deno.test('tools: browser_get_state with no new argument keeps the text block byte-identical (additivity, I-4)', async () => {
+Deno.test('tools: browser_get_state with no optional argument keeps the text block byte-identical', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		const result = await tools.browserGetState({}, h.ctx) as {
@@ -899,8 +885,6 @@ Deno.test('tools: browser_get_state with no new argument keeps the text block by
 			structuredContent: Record<string, unknown>;
 		};
 		const frozen = JSON.parse(result.content[0]!.text) as { interactive_elements: Array<Record<string, unknown>> };
-		// The text block is exactly the 0.1.0 payload: five keys per element at most, none of the new
-		// root keys, and rendered with the same two-space indentation.
 		for (const element of frozen.interactive_elements) {
 			for (const key of Object.keys(element)) assert(['index', 'tag', 'label', 'role', 'href'].includes(key), key);
 		}
@@ -908,7 +892,6 @@ Deno.test('tools: browser_get_state with no new argument keeps the text block by
 			assert(!(key in frozen), `${key} leaked into the text block`);
 			assert(key in result.structuredContent, `${key} missing from structuredContent`);
 		}
-		// Omitted `fields` is `core`: geometry and frame identity, no locator (D-035), no heavy field.
 		const rich = result.structuredContent.interactive_elements as Array<Record<string, unknown>>;
 		assert(rich.every((element) => 'bounds' in element && 'frame_id' in element && 'visible' in element));
 		assert(rich.every((element) => !('locator' in element) && !('attrs' in element) && !('input' in element)));
@@ -940,13 +923,11 @@ Deno.test('tools: browser_get_state fields select the record, and the text block
 });
 
 Deno.test('tools: browser_scroll reports the geometry after the scroll, not the cached one before it', async () => {
-	// The cached state says scrollY 0. The live DOM-less read the handler now makes answers what the
-	// page reports after the action; the fake models a browser that moved by the amount asked.
 	const fake = fakeSession({ selectorMap: new Map() });
 	let scrolledTo = 0;
 	(fake.session as unknown as { getBrowserStateSummary: (o: { includeDom?: boolean }) => Promise<unknown> })
 		.getBrowserStateSummary = (options) => {
-			assertEquals(options.includeDom, false, 'the after-read must never rebuild the index table (E-36)');
+			assertEquals(options.includeDom, false, 'the after-read must never rebuild the index table');
 			return Promise.resolve({
 				stateError: null,
 				pageInfo: { scrollX: 0, scrollY: scrolledTo, pixelsAbove: scrolledTo, pixelsBelow: 100, viewportHeight: 720 },
@@ -963,7 +944,7 @@ Deno.test('tools: browser_scroll reports the geometry after the scroll, not the 
 	await registry.shutdown();
 });
 
-// --- B1.6: frames and the locator tools ---------------------------------------------------------
+// --- frames and the locator tools --------------------------------------------------------------
 
 Deno.test('tools: browser_get_frames lists the frames with both honesty markers and the token', async () => {
 	const h = await captureHarness('iframe_crossorigin');
@@ -991,8 +972,6 @@ Deno.test('tools: browser_get_frames lists the frames with both honesty markers 
 Deno.test('tools: browser_locator_candidates resolves the index like an action would, token included', async () => {
 	const h = await captureHarness('iframe_crossorigin');
 	try {
-		// The index is resolved against the held table exactly as an action would resolve it (the
-		// `no-state` and `unknown-index` outcomes are `nodeAt`'s and are proven above).
 		await tools.browserGetState({}, h.ctx);
 		const held = h.record.session.cachedBrowserState!.stateToken!;
 		const result = await tools.browserLocatorCandidates({ index: 15, state_token: held }, h.ctx) as {
@@ -1009,7 +988,6 @@ Deno.test('tools: browser_locator_candidates resolves the index like an action w
 		assertEquals(payload.locators.map((c) => c.kind), ['id', 'aria', 'text']);
 		assertEquals(payload.best, payload.locators[0] ?? null, 'the first unique candidate');
 		assertEquals(payload.state_token, held);
-		// And a stale token is refused rather than answered from a different table.
 		const error = await assertRejects(
 			() => tools.browserLocatorCandidates({ index: 15, state_token: '0000000000000000.0000000000000000' }, h.ctx),
 			ToolError,
@@ -1037,8 +1015,6 @@ Deno.test('tools: browser_verify_locator counts aria and label in memory, refuse
 		assertEquals(result.structuredContent.matches, 1);
 		assertEquals(result.structuredContent.unique, true);
 		assertEquals(result.structuredContent.first?.label, 'Host page button');
-		// The child frame's button is not in the top document: searched there, it names nothing — a
-		// success with matches 0 and first null, never an error.
 		const none = await tools.browserVerifyLocator(
 			{ locator: { kind: 'aria', value: 'role=button[name="Cross origin button"]' } },
 			h.ctx,
@@ -1064,9 +1040,6 @@ Deno.test('tools: browser_verify_locator counts aria and label in memory, refuse
 });
 
 Deno.test('tools: browser_verify_locator discards every DOM search before returning, on success and on failure', async () => {
-	// A fake CDP client that records the DOM search calls. The selector kinds go to the browser, and
-	// a leaked search id is a Chromium-side allocation nobody frees, so the discard is asserted on
-	// both paths rather than assumed.
 	const h = await captureHarness('iframe_crossorigin');
 	try {
 		const calls: string[] = [];
@@ -1087,7 +1060,6 @@ Deno.test('tools: browser_verify_locator discards every DOM search before return
 			},
 			describeNode: ({ nodeId }: { nodeId: number }) => {
 				calls.push(`describeNode:${nodeId}`);
-				// Node 2 maps to the host button's backendNodeId; node 1 maps to nothing the index holds.
 				const button = [...h.record.session.cachedBrowserState!.domState.selectorMap.values()]
 					.find((node) => node.attributes['id'] === 'host-button')!;
 				return Promise.resolve({ node: { backendNodeId: nodeId === 2 ? button.backendNodeId : 999_999 } });
@@ -1138,7 +1110,7 @@ Deno.test('tools: browser_verify_locator discards every DOM search before return
 	}
 });
 
-// --- browser_wait_for (B1.7) --------------------------------------------------
+// --- browser_wait_for --------------------------------------------------------
 
 Deno.test('wait_for: exactly one condition, or invalid-arguments', async () => {
 	const h = await harness();
@@ -1164,7 +1136,6 @@ Deno.test('wait_for: an expired wait is a success carrying met false, never an e
 		assertEquals(payload.met, false);
 		assertEquals(payload.event, null);
 		assertEquals((result as { isError?: boolean }).isError, undefined);
-		// The elapsed time is reported honestly rather than as the budget.
 		assert(typeof payload.after_ms === 'number' && payload.after_ms >= 0);
 	} finally {
 		await h.registry.shutdown();
@@ -1172,8 +1143,6 @@ Deno.test('wait_for: an expired wait is a success carrying met false, never an e
 });
 
 Deno.test('wait_for: network_idle needs a connected session and says so', async () => {
-	// The fake session carries no CDP client, which is exactly the shape a caller
-	// hits between a session being reaped and relaunched.
 	const h = await harness();
 	try {
 		const error = await assertRejects(
@@ -1219,8 +1188,6 @@ Deno.test('wait_for: waiting on the current state_token expires rather than firi
 });
 
 Deno.test('wait_for: a selector predicate on a session with no CDP client expires quietly', async () => {
-	// The search throws and is caught: a page read that cannot run is "not yet",
-	// not a tool failure, because the caller asked whether something is there.
 	const h = await harness();
 	try {
 		const result = await tools.browserWaitFor({ until: { selector: '#nope' }, timeout_ms: 120 }, h.ctx);
@@ -1275,14 +1242,9 @@ Deno.test('wait_for: a closed session ends the wait rather than holding it to th
 	}
 });
 
-// --- B2.7: browser_evaluate ---------------------------------------------------
+// --- browser_evaluate --------------------------------------------------------
 
-/**
- * Wires a capture-backed session to a scripted `Runtime.evaluate` / `Page.getFrameTree` pair.
- *
- * The frame list is the capture's own, so the frame id the handler reports and the OOPIF routing are
- * real; only the two CDP round trips are scripted.
- */
+/** Wires a capture-backed session to a scripted `Runtime.evaluate` / `Page.getFrameTree` pair. */
 function wireEvaluate(
 	record: { session: unknown },
 	answer: (params: Record<string, unknown>) => Promise<unknown>,
@@ -1312,7 +1274,7 @@ function wireEvaluate(
 	return { calls, topFrameId };
 }
 
-Deno.test('B2.7: browser_evaluate returns the value and writes exactly one audit entry', async () => {
+Deno.test('evaluate: browser_evaluate returns the value and writes exactly one audit entry', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		const wired = wireEvaluate(h.record, () => Promise.resolve({ result: { type: 'number', value: 42 } }));
@@ -1338,7 +1300,7 @@ Deno.test('B2.7: browser_evaluate returns the value and writes exactly one audit
 	}
 });
 
-Deno.test('B2.7: the expression body never reaches the audit ledger or the result', async () => {
+Deno.test('evaluate: the expression body never reaches the audit ledger or the result', async () => {
 	const h = await captureHarness('form_attributes');
 	const sentinel = 'Zq8-EXPR-SENTINEL-3vP';
 	try {
@@ -1356,7 +1318,7 @@ Deno.test('B2.7: the expression body never reaches the audit ledger or the resul
 	}
 });
 
-Deno.test('B2.7: a page exception is a SUCCESS result with ok:false, and is still audited', async () => {
+Deno.test('evaluate: a page exception is a SUCCESS result with ok:false, and is still audited', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		wireEvaluate(h.record, () =>
@@ -1371,15 +1333,13 @@ Deno.test('B2.7: a page exception is a SUCCESS result with ok:false, and is stil
 		assertEquals(result.isError, undefined, 'a page exception must not be a tool error');
 		assertEquals(result.structuredContent.ok, false);
 		assertStringIncludes(result.structuredContent.error_text ?? '', 'TypeError');
-		// "Arbitrary code ran here" is the fact the ledger exists for, and an expression that throws
-		// has still run.
 		assertEquals(h.record.audit.read({ principal: 'test' }).entries[0]?.ok, false);
 	} finally {
 		await h.registry.shutdown();
 	}
 });
 
-Deno.test('B2.7: browser_evaluate is refused while a human holds the session', async () => {
+Deno.test('evaluate: browser_evaluate is refused while a human holds the session', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		wireEvaluate(h.record, () => Promise.resolve({ result: { type: 'undefined' } }));
@@ -1393,12 +1353,11 @@ Deno.test('B2.7: browser_evaluate is refused while a human holds the session', a
 	}
 });
 
-Deno.test('B2.7: an unreadable frame URL costs the origin, never the audit record', async () => {
+Deno.test('evaluate: an unreadable frame URL costs the origin, never the audit record', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		const session = h.record.session as unknown as Record<string, unknown>;
 		wireEvaluate(h.record, () => Promise.resolve({ result: { type: 'undefined' } }));
-		// The frame detaches between the evaluation and the ledger write.
 		((session.cdpClient as { send: { Page: { getFrameTree: unknown } } }).send.Page as { getFrameTree: unknown })
 			.getFrameTree = () => Promise.reject(new Error('target closed'));
 		await tools.browserEvaluate({ expression: '1' }, h.ctx);
@@ -1408,21 +1367,8 @@ Deno.test('B2.7: an unreadable frame URL costs the origin, never the audit recor
 	}
 });
 
-/**
- * **S3-R, row 3f / C-15 — the regression ruling R1 exists to prevent.**
- *
- * `browser_evaluate` has accepted `frame_id` since B2.7, and naming the top frame's id has always
- * worked: `frameContext` resolved it to the page session and `Runtime.evaluate` landed in that
- * session's default context, which *is* the top document. A narrow `isTop` would have sent that
- * shipped call to Gate C instead — an unannounced breaking change to a working path.
- *
- * Proved by **equality of the wire**, not by assertion about it: the same expression is sent twice,
- * once naming the root and once omitting `frame_id` (which is the 0.2.0 call by construction), and
- * the two recorded call lists are compared whole — method, order and parameters. `wireEvaluate`
- * scripts only `Runtime.evaluate` and `Page.getFrameTree`, so a Gate C detour would also fail
- * structurally: `client.send.DOM` does not exist on this wire.
- */
-Deno.test('S3-R: browser_evaluate {frame_id: <top id>} is the 0.2.0 call, byte for byte (3f, C-15)', async () => {
+/** **Naming the top frame's id is the same call as omitting `frame_id`.** */
+Deno.test('evaluate: browser_evaluate {frame_id: <top id>} is the omitted-frame_id call, byte for byte', async () => {
 	const named = await captureHarness('form_attributes');
 	const omitted = await captureHarness('form_attributes');
 	try {
@@ -1438,10 +1384,8 @@ Deno.test('S3-R: browser_evaluate {frame_id: <top id>} is the 0.2.0 call, byte f
 			structuredContent: Record<string, unknown>;
 		};
 
-		// The whole wire, in order, with every parameter.
 		assertEquals(wiredNamed.calls, wiredOmitted.calls);
 		assertEquals(wiredNamed.calls.map((call) => call.method), ['Runtime.evaluate', 'Page.getFrameTree']);
-		// And the shape itself, spelled out, so a future edit to the evaluation path has to say so here.
 		assertEquals(wiredNamed.calls[0]?.params, {
 			expression: '6 * 7',
 			returnByValue: true,
@@ -1449,17 +1393,13 @@ Deno.test('S3-R: browser_evaluate {frame_id: <top id>} is the 0.2.0 call, byte f
 			silent: true,
 			timeout: 1000,
 		});
-		// Never the receiver-addressed form: `callFunctionOn` compiles the caller's text as an
-		// expression and carries no renderer-side deadline, which would be a silent contract change.
 		assertEquals(wiredNamed.calls.filter((call) => call.method === 'Runtime.callFunctionOn'), []);
 
-		// The answer too, modulo the ULID that is different by construction.
 		const strip = (payload: Record<string, unknown>) => ({ ...payload, audit_id: '<ulid>', session_id: '<id>' });
 		assertEquals(strip(withId.structuredContent), strip(without.structuredContent));
 		assertEquals(withId.structuredContent.frame_id, wiredNamed.topFrameId);
 		assertEquals(withId.structuredContent.value, 42);
 
-		// One `evaluate` row each, and the origin is the top document's on both.
 		const rowNamed = named.record.audit.read({ principal: 'test' }).entries;
 		const rowOmitted = omitted.record.audit.read({ principal: 'test' }).entries;
 		assertEquals(rowNamed.length, 1);
@@ -1471,7 +1411,7 @@ Deno.test('S3-R: browser_evaluate {frame_id: <top id>} is the 0.2.0 call, byte f
 	}
 });
 
-// --- B2.8: browser_fill_secret, the zoom guard and the audit reader ------------
+// --- browser_fill_secret, the zoom guard and the audit reader -----------------
 
 /** The password input the `form_attributes` capture carries, with its sentinel value. */
 const PASSWORD_INDEX = 6;
@@ -1486,7 +1426,7 @@ interface SecretWire {
 	readonly scale?: number;
 	/**
 	 * Drops the element's frame from the live tree: the page navigated, or Chromium replaced the main
-	 * frame, between the state read and the fill. C-16's one condition.
+	 * frame, between the state read and the fill.
 	 */
 	readonly dropFrame?: boolean;
 }
@@ -1502,8 +1442,6 @@ function wireSecrets(record: { session: unknown }, wire: SecretWire = {}) {
 			Page: {
 				getFrameTree: () => {
 					calls.push('Page.getFrameTree');
-					// The frameset shape SEC-07 names: a top document and a child holding the field. When
-					// the two URLs are equal this is just the ordinary single-document case.
 					return Promise.resolve({
 						frameTree: {
 							frame: { id: 'TOP', url: topUrl },
@@ -1553,16 +1491,6 @@ async function secretHarness(wire: SecretWire = {}) {
 	const secrets = new SecretStore([
 		{ name: 'bank_password', value: BANK_SECRET, domains: ['bank.example.com'] },
 		{ name: 'anywhere', value: 'Zq8-UNPINNED-VALUE-3vP', domains: [] },
-		// Pinned to the capture's own host. Until D-096 this was the URL `browser_type` read through
-		// `getBrowserStateSummary` rather than through the scripted frame tree (finding B2-SR8-1); both
-		// paths now read the element's frame from the frame tree, so on this fixture it is refused.
-		//
-		// The pattern carries an explicit `http://` because the capture's URL is
-		// `http://127.0.0.1:38111/…` and SEC-FH-23 made the pin https-only for a scheme-less pattern.
-		// This is the documented escape hatch (the matcher's M4 scheme rule; SECURITY-AUTH.md §7.1) and the only shape that lets
-		// a credential be typed over plaintext, stated by the operator rather than inherited from a
-		// predicate that never asked. The bare `127.0.0.1` form is now a *refusal* over http, and
-		// `secrets_test.ts` owns that row so this fixture's change cannot quietly delete the rule.
 		{ name: 'local_password', value: 'Zq8-LOCAL-SECRET-3vP', domains: ['http://127.0.0.1'] },
 	]);
 	const dispatched: Array<Record<string, unknown>> = [];
@@ -1577,7 +1505,7 @@ async function secretHarness(wire: SecretWire = {}) {
 	return { ...h, ctx, wired, dispatched, token, secrets, restore: () => (bus.dispatch = original) };
 }
 
-Deno.test('B2.8: a pinned secret is typed into a password field, and neither the value nor its length appears', async () => {
+Deno.test('fill_secret: a pinned secret is typed into a password field, and neither the value nor its length appears', async () => {
 	const f = await secretHarness();
 	try {
 		const result = await tools.browserFillSecret(
@@ -1585,20 +1513,14 @@ Deno.test('B2.8: a pinned secret is typed into a password field, and neither the
 			f.ctx,
 		) as { structuredContent: Record<string, unknown>; content: Array<{ text?: string }> };
 
-		// The value reached the page.
 		assertEquals(f.dispatched.length, 1);
 		assertEquals((f.dispatched[0] as { text?: string }).text, BANK_SECRET);
 		assertEquals((f.dispatched[0] as { isSensitive?: boolean }).isSensitive, true);
 
-		// And nowhere else. Not the value, not a prefix, not the length — E-38's rule, on the surface
-		// that names the credential explicitly.
 		const emitted = [result, f.record.audit.read({ principal: 'test' })];
 		const serialized = JSON.stringify(emitted);
 		assert(!serialized.includes(BANK_SECRET), serialized);
 		assert(!serialized.includes(BANK_SECRET.slice(0, 6)), `a prefix leaked: ${serialized}`);
-		// The length, checked **structurally** rather than as a substring: a two-digit number occurs by
-		// chance inside a frame id or a ULID, and a test that fails on coincidence is one that gets
-		// weakened rather than fixed. What must not exist is a *field whose value is* the length.
 		assertEquals(numbersIn(emitted).filter((value) => value === BANK_SECRET.length), [], 'a length-shaped field');
 
 		assertEquals(result.structuredContent.secret, 'bank_password', 'the NAME is the one thing reported');
@@ -1610,10 +1532,10 @@ Deno.test('B2.8: a pinned secret is typed into a password field, and neither the
 	}
 });
 
-Deno.test('B2.8: the refusals, each with its own code, and nothing is dispatched', async () => {
+Deno.test('fill_secret: the refusals, each with its own code, and nothing is dispatched', async () => {
 	const cases: Array<{ name: string; wire?: SecretWire; args: Record<string, unknown>; code: string }> = [
 		{
-			name: 'a stale state_token (AD-13: a reused backendNodeId in a new document)',
+			name: 'a stale state_token (a reused backendNodeId in a new document)',
 			args: { index: PASSWORD_INDEX, secret: 'bank_password', state_token: 'aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb' },
 			code: 'element-not-found',
 		},
@@ -1629,13 +1551,13 @@ Deno.test('B2.8: the refusals, each with its own code, and nothing is dispatched
 			code: 'navigation-blocked',
 		},
 		{
-			name: 'a scaled visual viewport (SEC-24)',
+			name: 'a scaled visual viewport',
 			wire: { scale: 2 },
 			args: { index: PASSWORD_INDEX, secret: 'bank_password' },
 			code: 'browser-unavailable',
 		},
 		{
-			name: 'a frame whose OWN url is cross-origin to the top document (SEC-07)',
+			name: 'a frame whose OWN url is cross-origin to the top document',
 			wire: { topUrl: 'https://bank.example.com/login', frameUrl: 'https://not-the-bank.example/collect' },
 			args: { index: PASSWORD_INDEX, secret: 'bank_password' },
 			code: 'navigation-blocked',
@@ -1668,7 +1590,6 @@ Deno.test('B2.8: the refusals, each with its own code, and nothing is dispatched
 			assertEquals(error.code, item.code, `${item.name}: ${error.message}`);
 			assertEquals(f.dispatched.length, 0, `${item.name}: a refusal must dispatch nothing`);
 			assertEquals(f.record.audit.read({ principal: 'test' }).entries.length, 0, `${item.name}: no audit entry`);
-			// Not a value in the refusal either: an error string reaches the transcript and the logs.
 			assert(!error.message.includes(BANK_SECRET), `${item.name} leaked the value: ${error.message}`);
 			assert(!error.message.includes('P4ssw0rd'), `${item.name} leaked the field's own value: ${error.message}`);
 		} finally {
@@ -1678,10 +1599,7 @@ Deno.test('B2.8: the refusals, each with its own code, and nothing is dispatched
 	}
 });
 
-Deno.test('B2.8: the frame URL is read AFTER the element resolves and immediately BEFORE the dispatch', async () => {
-	// The ordering is the whole content of SECURITY-AUTH §7.1's rule: the failure mode is a page that
-	// moved between the read and the type, so a read taken earlier proves nothing about where the
-	// value landed. Asserted on the call order rather than on a comment.
+Deno.test('fill_secret: the frame URL is read AFTER the element resolves and immediately BEFORE the dispatch', async () => {
 	const f = await secretHarness();
 	try {
 		await tools.browserFillSecret({ index: PASSWORD_INDEX, secret: 'bank_password', state_token: f.token }, f.ctx);
@@ -1696,24 +1614,9 @@ Deno.test('B2.8: the frame URL is read AFTER the element resolves and immediatel
 	}
 });
 
-/**
- * **S3-R, row 3g / C-16 — the confinement, observed on the handler the widening nearly reached.**
- *
- * `browser_fill_secret` passes `node.frameId ?? undefined`, and in this capture the password input's
- * node carries the **root** frame id: `frames[0].frameId === FORM_FRAME === node.frameId`. So with
- * `isTop` widened, this element's context is `isTop: true` — and had the `liveFrameIdentity`
- * short-circuit been keyed on `isTop` rather than on `named`, every top-document secret fill would
- * have skipped the live-tree search and this refusal would have vanished as a side effect of fixing
- * an unrelated parameter (SEC-FH-15).
- *
- * The caller asserted an id, so the id is checked. Two things are asserted about the *ordering*: the
- * credential is never resolved against a URL, and nothing is dispatched — so no frame URL is put to
- * any use before the refusal. The tree read is what detects the miss and is the last call made.
- */
-Deno.test('S3-R: browser_fill_secret still REFUSES when the live tree no longer holds the element’s frame (3g, C-16)', async () => {
+/** **The confinement holds on a named top frame.** */
+Deno.test('fill_secret: browser_fill_secret still REFUSES when the live tree no longer holds the element’s frame', async () => {
 	const f = await secretHarness({ dropFrame: true });
-	// Did the credential ever get bound to a URL? `substitute` is the one place the pin is applied, so
-	// a call to it is the observable form of "a frame URL was read for a decision".
 	let substitutions = 0;
 	const store = f.secrets as unknown as { substitute: (text: string, url: string) => unknown };
 	const original = store.substitute.bind(f.secrets);
@@ -1730,13 +1633,10 @@ Deno.test('S3-R: browser_fill_secret still REFUSES when the live tree no longer 
 		assertStringIncludes(error.message, 'no longer attached');
 		assertStringIncludes(error.message, FORM_FRAME);
 
-		// Before any URL was put to use: the pin was never applied and nothing reached the page.
 		assertEquals(substitutions, 0, 'the secret was bound to a URL before the frame check refused');
 		assertEquals(f.dispatched.length, 0, 'a refusal must dispatch nothing');
 		assertEquals(f.record.audit.read({ principal: 'test', all: true }).entries.length, 0);
-		// The scale guard, then the one tree read that detected the miss, and nothing after it.
 		assertEquals(f.wired.calls, ['Page.getLayoutMetrics', 'Page.getFrameTree']);
-		// And no value, no prefix, in the refusal the client receives.
 		assert(!error.message.includes(BANK_SECRET), error.message);
 		assert(!error.message.includes(BANK_SECRET.slice(0, 6)), error.message);
 	} finally {
@@ -1746,34 +1646,17 @@ Deno.test('S3-R: browser_fill_secret still REFUSES when the live tree no longer 
 	}
 });
 
-/**
- * **SEC-FH-23 — every frame tree at which the shipped pin let the credential through.**
- *
- * Each row here was measured TYPED against the code as shipped: the `TypeTextEvent` carried the
- * configured value and the ledger recorded the spend — at `"null"` for the opaque shapes, and at
- * `https://evil.example` for the `blob:` one, which is the sharpest of them. The cause was that
- * `SecretStore.#permits` resolved the pin with `isUrlAllowed`, the navigation predicate, which
- * permits `about:blank`, `data:`, `blob:` and plaintext `http:` before it consults any list.
- *
- * Two of the rows carry a second failure that outlived the predicate and is fixed with it: the
- * confinement compared `originOf(frameUrl) !== originOf(topUrl)`, and `originOf` answers the string
- * `"null"` for EVERY opaque origin, so an `about:blank` top and a `data:` child — two different
- * opaque origins, which cannot script each other — compared same-origin. `browser_get_html` had
- * this right; the credential path, which needs it more, did not.
- *
- * What each row asserts is not just the refusal but its cost: nothing dispatched, so nothing was
- * typed, and no ledger row, so nothing recorded a spend at an origin the pin never approved.
- */
-Deno.test('SEC-FH-23: the credential is refused at every opaque and plaintext frame tree, and never dispatched', async () => {
+/** **Every opaque or plaintext frame tree refuses the credential.** */
+Deno.test('fill_secret: the credential is refused at every opaque and plaintext frame tree, and never dispatched', async () => {
 	const rows: Array<{ name: string; wire: SecretWire }> = [
 		{ name: 'top and frame BOTH about:blank', wire: { topUrl: 'about:blank' } },
 		{
-			name: 'top about:blank, frame data: — two DIFFERENT opaque origins that compared equal',
+			name: 'top about:blank, frame data: — two DIFFERENT opaque origins with the same serialization',
 			wire: { topUrl: 'about:blank', frameUrl: 'data:text/html,<input name=p>' },
 		},
 		{ name: 'top and frame BOTH a data: document', wire: { topUrl: 'data:text/html,<input name=p>' } },
 		{
-			name: "top and frame a blob: from the ATTACKER's origin (the ledger recorded the spend there)",
+			name: "top and frame a blob: from the ATTACKER's origin",
 			wire: { topUrl: 'blob:https://evil.example/9f0c-uuid' },
 		},
 		{
@@ -1792,8 +1675,6 @@ Deno.test('SEC-FH-23: the credential is refused at every opaque and plaintext fr
 	];
 	for (const row of rows) {
 		const f = await secretHarness(row.wire);
-		// Did the credential ever get bound to a URL at all? `substitute` is the single place the pin
-		// is applied, so counting calls to it separates "refused after binding" from "never bound".
 		let bound = 0;
 		const store = f.secrets as unknown as { substitute: (text: string, url: string) => { text: string } };
 		const originalSubstitute = store.substitute.bind(f.secrets);
@@ -1828,13 +1709,10 @@ Deno.test('SEC-FH-23: the credential is refused at every opaque and plaintext fr
 });
 
 /**
- * The row the fix is worthless without — SEC-FH-23 is a narrowing, and a narrowing that swallowed
- * the ordinary case would be an outage wearing a control's name.
- *
- * Same handler, same element, same pinned secret: an https top with a same-origin child frame around
- * the password field, which is the shape SEC-07's per-frame read exists for. It fills.
+ * The row the refusals above are worthless without — the pin is a narrowing, and a narrowing that swallowed the
+ * ordinary case would be an outage wearing a control's name.
  */
-Deno.test('SEC-FH-23: an ordinary https fill on the pinned domain still succeeds, frame and all', async () => {
+Deno.test('fill_secret: an ordinary https fill on the pinned domain still succeeds, frame and all', async () => {
 	const f = await secretHarness({
 		topUrl: 'https://bank.example.com/login',
 		frameUrl: 'https://bank.example.com/login/inner',
@@ -1857,15 +1735,100 @@ Deno.test('SEC-FH-23: an ordinary https fill on the pinned domain still succeeds
 });
 
 /**
- * The amplifier, at the tool that carries it: `available_secrets` is an authorization statement.
- *
- * `browser_get_state` runs the pin through `namesFor` to tell the model which server-held credentials
- * are usable on the current page. Sharing `#permits` with the fill path is the property under test —
- * when the predicate was wrong the server did not merely permit the mistake, it proposed it, naming
- * `bank_password` on an attacker-authored `blob:` document. Asserted on the same store the handler
- * uses, at the URLs `browser_get_state` would read.
+ * Exit redaction matches a secret exactly, and a page's `maxlength`, reformatting or CRLF normalisation change the
+ * live value.
  */
-Deno.test('SEC-FH-23: available_secrets stops advertising a pinned secret at an origin the pin refuses', async () => {
+Deno.test('secret marking: browser_fill_secret records a plain text field, and the password predicate then holds for it', async () => {
+	const f = await secretHarness();
+	try {
+		const map = f.record.session.cachedBrowserState!.domState.selectorMap;
+		const entry = [...map].find(([, node]) =>
+			node.nodeName === 'INPUT' && !isPasswordField(node) &&
+			['', 'text'].includes((node.attributes.type ?? '').trim().toLowerCase())
+		);
+		assert(entry !== undefined, 'the fixture has a plain text input');
+		const [index, node] = entry;
+		await tools.browserFillSecret({ index, secret: 'bank_password', state_token: f.token }, f.ctx);
+		assertEquals(f.dispatched.length, 1);
+		assert(isSecretFilled(node), 'the filled field is recorded');
+		assert(isPasswordField(node), 'and the one password predicate now holds for it');
+		assertEquals(recordTextOf(node), '');
+	} finally {
+		f.restore();
+		await f.registry.shutdown();
+	}
+});
+
+/**
+ * End to end over a recorded page whose text field holds a live typed value: once the field is recorded
+ * as secret-filled, the value is on no observation path — not `input.value`, not `text` or the label, and not
+ * the serialized page, whose `value=` the vendored serializer takes from the AX value.
+ */
+Deno.test("secret marking: a recorded secret-filled field's live value leaves no observation path", async () => {
+	const h = await captureHarness('live_value_vs_attribute');
+	try {
+		const fields = resolveFields(['full']);
+		const before = await observe(h.record, { fields, elementLimit: 5000 });
+		const field = before.elements.find((element) =>
+			typeof element.input?.value === 'string' && element.input.value.length >= 6 &&
+			element.input.value !== MASKED_INPUT_VALUE
+		);
+		assert(field !== undefined, 'the fixture has a text field with a live value');
+		const live = field.input!.value!;
+		assert(JSON.stringify(before).includes(live), 'not vacuous');
+		const node = h.record.session.cachedBrowserState!.domState.selectorMap.get(field.index)!;
+		markSecretFilled(node.sessionId, node.backendNodeId); // what browser_fill_secret does, above
+
+		const after = await observe(h.record, { fields, elementLimit: 5000 });
+		const whole = JSON.stringify(after);
+		const at = whole.indexOf(live);
+		assert(at < 0, `the live value leaked: …${whole.slice(Math.max(0, at - 120), at + live.length + 20)}…`);
+		assertEquals(after.elements.find((element) => element.index === field.index)?.input?.value, MASKED_INPUT_VALUE);
+		assertEquals(inputStateOf(node)?.value, MASKED_INPUT_VALUE);
+	} finally {
+		await h.registry.shutdown();
+	}
+});
+
+Deno.test('secret marking: browser_type with a substituted secret records its field too', async () => {
+	const f = await secretHarness();
+	try {
+		const map = f.record.session.cachedBrowserState!.domState.selectorMap;
+		const entry = [...map].find(([index, node]) =>
+			index !== PASSWORD_INDEX && node.nodeName === 'INPUT' && !isPasswordField(node) && !isSecretFilled(node) &&
+			['', 'text'].includes((node.attributes.type ?? '').trim().toLowerCase())
+		);
+		assert(entry !== undefined, 'the fixture has a second plain text field the fill test above did not record');
+		const [index, node] = entry;
+		await tools.browserType(
+			{ index, text: '<secret>bank_password</secret>', state_token: f.token },
+			f.ctx,
+		);
+		assert(isSecretFilled(node));
+	} finally {
+		f.restore();
+		await f.registry.shutdown();
+	}
+});
+
+Deno.test('secret marking: a marked <textarea> is a password field to the predicate and to input.value', () => {
+	const textarea = {
+		...fakeNode('TEXTAREA'),
+		sessionId: 'MARK-SESSION',
+		backendNodeId: 4242,
+		snapshotNode: { textValue: 'line one\r\nZq8-TEXTAREA-SECRET', inputValue: null },
+	} as unknown as EnhancedDomTreeNode;
+	assertEquals(isPasswordField(textarea), false, "a textarea is never a password by the page's word");
+	assertEquals(inputStateOf(textarea)?.value, 'line one\r\nZq8-TEXTAREA-SECRET');
+	markSecretFilled('MARK-SESSION', 4242);
+	assert(isPasswordField(textarea));
+	assertEquals(inputStateOf(textarea)?.value, MASKED_INPUT_VALUE);
+	const elsewhere = { ...textarea, sessionId: 'MARK-OTHER' } as EnhancedDomTreeNode;
+	assertEquals(isPasswordField(elsewhere), false);
+});
+
+/** The amplifier, at the tool that carries it: `available_secrets` is an authorization statement. */
+Deno.test('fill_secret: available_secrets stops advertising a pinned secret at an origin the pin refuses', async () => {
 	const f = await secretHarness();
 	try {
 		for (
@@ -1885,7 +1848,6 @@ Deno.test('SEC-FH-23: available_secrets stops advertising a pinned secret at an 
 				`browser_get_state would still offer bank_password at ${url}: ${JSON.stringify(advertised)}`,
 			);
 		}
-		// And it is still advertised where it belongs, or the model would be told it has nothing.
 		assert(f.secrets.namesFor('https://bank.example.com/login').includes('bank_password'));
 	} finally {
 		f.restore();
@@ -1893,11 +1855,9 @@ Deno.test('SEC-FH-23: available_secrets stops advertising a pinned secret at an 
 	}
 });
 
-Deno.test('B2.8: browser_type REFUSES a <secret> placeholder under a scaled viewport (SEC-24)', async () => {
+Deno.test('fill_secret: browser_type REFUSES a <secret> placeholder under a scaled viewport', async () => {
 	const f = await secretHarness({ scale: 1.5 });
 	try {
-		// The other secret-bearing path. It is the one that would have been forgotten: the guard lives
-		// on `browser_fill_secret` by construction and on `browser_type` only because it was put there.
 		const error = await assertRejects(
 			() => tools.browserType({ index: PASSWORD_INDEX, text: '<secret>local_password</secret>' }, f.ctx),
 			ToolError,
@@ -1906,7 +1866,6 @@ Deno.test('B2.8: browser_type REFUSES a <secret> placeholder under a scaled view
 		assertEquals(error.extras.reason, 'viewport-scaled');
 		assertEquals(f.dispatched.length, 0);
 
-		// And an ORDINARY browser_type pays nothing for the guard: no metrics read at all.
 		f.wired.calls.length = 0;
 		await tools.browserType({ index: PASSWORD_INDEX, text: 'ordinary text' }, f.ctx);
 		assertEquals(f.wired.calls, [], 'a type with no placeholder must not pay for a check with no content');
@@ -1916,10 +1875,9 @@ Deno.test('B2.8: browser_type REFUSES a <secret> placeholder under a scaled view
 	}
 });
 
-Deno.test('B2.8: a browser_type substitution is audited too, so the ledger has no hole in it', async () => {
+Deno.test('fill_secret: a browser_type substitution is audited too, so the ledger has no hole in it', async () => {
 	const f = await secretHarness();
 	try {
-		// D-096: the pin is the element's frame, read from the frame tree — the same URL the fill path reads.
 		await tools.browserType(
 			{ index: PASSWORD_INDEX, text: '<secret>bank_password</secret>', state_token: f.token },
 			f.ctx,
@@ -1937,7 +1895,7 @@ Deno.test('B2.8: a browser_type substitution is audited too, so the ledger has n
 	}
 });
 
-Deno.test('B2.8: browser_audit returns own entries under mcp:invoke and all of them under admin (SEC-08)', async () => {
+Deno.test('fill_secret: browser_audit returns own entries under mcp:invoke and all of them under admin', async () => {
 	const f = await secretHarness();
 	try {
 		f.record.audit.append({
@@ -1961,7 +1919,6 @@ Deno.test('B2.8: browser_audit returns own entries under mcp:invoke and all of t
 		assertEquals(admin.structuredContent.scope, 'all');
 		assertEquals(admin.structuredContent.entries.length, 2);
 
-		// Absent scopes fail closed: every existing ToolContext constructor omits the field.
 		const closed = await tools.browserAudit({}, f.ctx) as { structuredContent: { scope: string } };
 		assertEquals(closed.structuredContent.scope, 'own');
 	} finally {
@@ -1970,7 +1927,7 @@ Deno.test('B2.8: browser_audit returns own entries under mcp:invoke and all of t
 	}
 });
 
-// --- browser_get_html: provenance, truncation and the cross-origin gate (S2, S3) ----------------
+// --- browser_get_html: provenance, truncation and the cross-origin gate -----------------------
 
 /** The structured half of a `browser_get_html` success, validated against its own output schema. */
 function htmlPayload(result: ToolResult): Record<string, unknown> {
@@ -1983,15 +1940,8 @@ function htmlPayload(result: ToolResult): Record<string, unknown> {
 	return payload;
 }
 
-/**
- * **The S2 decision gate, asserted as a list.**
- *
- * `browser_get_html {}` must cost exactly one `Page.getFrameTree` — the read that makes `url` and
- * `frame_id` live rather than remembered — and one `Runtime.evaluate`. No `observe()`, no DOM tree,
- * no touch of the element table (I-FH-6, C-12). The tool's cheapness is a property the request named
- * and it is pinned here as a sequence rather than as a budget.
- */
-Deno.test('S2: browser_get_html {} sends exactly [Page.getFrameTree, Runtime.evaluate] and observes nothing', async () => {
+/** **The default read's cost, asserted as a list.** */
+Deno.test('get_html: browser_get_html {} sends exactly [Page.getFrameTree, Runtime.evaluate] and observes nothing', async () => {
 	const h = await frameCdpHarness('iframe_crossorigin');
 	try {
 		const result = await tools.browserGetHtml({}, h.ctx);
@@ -2008,7 +1958,6 @@ Deno.test('S2: browser_get_html {} sends exactly [Page.getFrameTree, Runtime.eva
 		assertEquals(payload.returned_length, TOP_DOCUMENT.length);
 		assertEquals(payload.truncated, false);
 		assertEquals(payload.media_type, 'text/html');
-		// Same-origin — in fact the top document itself — so no grant was spent and no row was written.
 		assertEquals('audit_id' in payload, false);
 		assertEquals(h.record.audit.read({ principal: 'test', all: true }).entries.length, 0);
 	} finally {
@@ -2016,21 +1965,11 @@ Deno.test('S2: browser_get_html {} sends exactly [Page.getFrameTree, Runtime.eva
 	}
 });
 
-/**
- * **S3-R, row 3d / C-15 — the `browser_get_html` half.**
- *
- * Architecture §5.2: the top document is reached by an omitted `frame_id` **or** by a `frame_id`
- * equal to the tree root's id. Naming it must therefore cost the same as omitting it — the same two
- * CDP calls, the same answer, no scope, no ledger row — while still being *verified*, which is the
- * difference row 3e turns on.
- */
-Deno.test('S3-R: browser_get_html {frame_id: <top id>} is the top document — no scope, no audit row (3d, C-15)', async () => {
+/** **Naming the top frame's id in `browser_get_html` is the same read as omitting it.** */
+Deno.test('get_html: browser_get_html {frame_id: <top id>} is the top document — no scope, no audit row', async () => {
 	const h = await frameCdpHarness('iframe_crossorigin');
 	try {
-		// The default grant. If the named root were treated as a child, the origin comparison would run
-		// and this principal would be refused for reading its own focused document.
 		const result = await tools.browserGetHtml({ frame_id: h.topFrameId }, h.ctx);
-		// The same list the omitted-`frame_id` path spends: Gate C never runs, so no `DOM.*` at all.
 		assertEquals(h.methods(), ['Page.getFrameTree', 'Runtime.evaluate']);
 		assertEquals(h.observations(), 0);
 
@@ -2040,7 +1979,6 @@ Deno.test('S3-R: browser_get_html {frame_id: <top id>} is the top document — n
 		assertEquals(payload.length, TOP_DOCUMENT.length);
 		assertEquals(payload.returned_length, TOP_DOCUMENT.length);
 		assertEquals((result as { content: Array<{ text: string }> }).content[0]?.text, TOP_DOCUMENT);
-		// Same-origin with itself, so no grant was spent and no row was written.
 		assertEquals('audit_id' in payload, false);
 		assertEquals(h.record.audit.read({ principal: 'test', all: true }).entries.length, 0);
 	} finally {
@@ -2048,7 +1986,7 @@ Deno.test('S3-R: browser_get_html {frame_id: <top id>} is the top document — n
 	}
 });
 
-Deno.test('S2: the top document’s frame_id and url are LIVE, not the capture’s memory of them', async () => {
+Deno.test('get_html: the top document’s frame_id and url are LIVE, not the capture’s memory of them', async () => {
 	const h = await frameCdpHarness('iframe_crossorigin', {
 		tree: () => ({ frame: { id: 'F-TOP-AFTER-NAVIGATION', url: 'https://moved.example.com/after' } }),
 	});
@@ -2062,12 +2000,8 @@ Deno.test('S2: the top document’s frame_id and url are LIVE, not the capture�
 	}
 });
 
-/**
- * F-3, which is the defect this slice repairs on the wire: until now `length` reported `HTML_LIMIT`
- * whenever the cap bound the document, so a caller could not tell a 200 000-character page from a
- * 40 MB one — and the number it was given was not the document's.
- */
-Deno.test('S2: a truncated read reports the TRUE length, the returned length, and the frozen notice (F-3)', async () => {
+/** `length` is the document's true length even when the cap binds. */
+Deno.test('get_html: a truncated read reports the TRUE length, the returned length, and the frozen notice', async () => {
 	const huge = `${TOP_DOC_SENTINEL}${'z'.repeat(HTML_LIMIT + 4_000)}`;
 	const h = await frameCdpHarness('iframe_crossorigin', { topHtml: huge });
 	try {
@@ -2076,7 +2010,6 @@ Deno.test('S2: a truncated read reports the TRUE length, the returned length, an
 		assertEquals(payload.length, huge.length, 'the true length must survive truncation');
 		assertEquals(payload.returned_length, HTML_LIMIT);
 		assertEquals(payload.truncated, true);
-		// I-4: the text block is byte for byte the 0.1.0 rendering, the trailing notice included.
 		const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
 		assertEquals(text.length, HTML_LIMIT + `\n\n[truncated at ${HTML_LIMIT} characters]`.length);
 		assertStringIncludes(text, `[truncated at ${HTML_LIMIT} characters]`);
@@ -2086,7 +2019,7 @@ Deno.test('S2: a truncated read reports the TRUE length, the returned length, an
 	}
 });
 
-Deno.test('S2: a named same-process child frame answers with the CHILD’s document and the CHILD’s url', async () => {
+Deno.test('get_html: a named same-process child frame answers with the CHILD’s document and the CHILD’s url', async () => {
 	const h = await frameCdpHarness('iframe_same_site_port', {
 		tree: (top, child) => ({
 			frame: { id: top, url: 'https://example.com/page' },
@@ -2101,10 +2034,8 @@ Deno.test('S2: a named same-process child frame answers with the CHILD’s docum
 		assertEquals(payload.length, CHILD_DOCUMENT.length);
 		const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
 		assertEquals(text, CHILD_DOCUMENT);
-		// The whole point of the parameter: the bytes are the frame's own and never the top document's.
 		assert(!JSON.stringify(result).includes(TOP_DOC_SENTINEL), 'the top document reached a frame read');
 		assertEquals(h.methods().filter((method) => method === 'Runtime.evaluate'), []);
-		// Same origin as the top document, so this needed no extra grant and wrote no row.
 		assertEquals('audit_id' in payload, false);
 		assertEquals(h.record.audit.read({ principal: 'test', all: true }).entries.length, 0);
 	} finally {
@@ -2112,13 +2043,8 @@ Deno.test('S2: a named same-process child frame answers with the CHILD’s docum
 	}
 });
 
-/**
- * C-2 and C-8: the permit side of the gate, and the one row it writes.
- *
- * The frame is cross-origin by **port** and same-process — the shape `isOopif` would have called
- * "not out-of-process, therefore safe" — so this is also the positive half of I-FH-2.
- */
-Deno.test('S3: a cross-origin frame IS readable with the evaluate scope, and writes exactly one audit row', async () => {
+/** The permit side of the gate, and the one row it writes. */
+Deno.test('get_html: a cross-origin frame IS readable with the evaluate scope, and writes exactly one audit row', async () => {
 	const h = await frameCdpHarness('iframe_same_site_port', {
 		tree: (top, child) => ({
 			frame: { id: top, url: 'http://127.0.0.1:38111/iframe_same_site_port.html' },
@@ -2133,12 +2059,10 @@ Deno.test('S3: a cross-origin frame IS readable with the evaluate scope, and wri
 		const entry = entries[0]!;
 		assertEquals(entry.kind, 'read-frame-html');
 		assertEquals(entry.frame_id, h.childFrameId);
-		// Scheme, host and port — never the path or the query, which is where a one-time code lives.
 		assertEquals(entry.origin, 'http://127.0.0.1:38112');
 		assertEquals(entry.ok, true);
 		assertEquals(entry.result_bytes, new TextEncoder().encode(CHILD_DOCUMENT).length);
 		assertEquals(payload.audit_id, entry.audit_id);
-		// I-FH-5 / SEC-FH-6: the ledger is not a second copy of the page.
 		const serialized = JSON.stringify(entries);
 		assert(!serialized.includes('token=SECRET'), 'the frame URL’s query reached the ledger');
 		assert(!serialized.includes('BIL51'), 'a document fragment reached the ledger');
@@ -2148,21 +2072,8 @@ Deno.test('S3: a cross-origin frame IS readable with the evaluate scope, and wri
 	}
 });
 
-/**
- * **S3-R, row 4c — the two size fields carry two different units, deliberately.**
- *
- * `returned_length` is **characters** of the capped HTML, because the rest of this tool's contract
- * (`HTML_LIMIT`, `length`, the truncation notice) is stated in characters and the field exists to
- * spare a caller from recomputing `min(length, HTML_LIMIT)`. `result_bytes` is **UTF-8 bytes**,
- * because it shares a ledger column with the `evaluate` rows, which have measured
- * `new TextEncoder().encode(...).length` since B2.8 — one column meaning characters in some rows and
- * bytes in others would be unreadable.
- *
- * The fixture is multi-byte **on purpose**: an all-ASCII document passes under either reading, so an
- * ASCII test cannot catch the two being given the same unit. The S3 row above uses an ASCII child
- * document and is exactly that weaker statement; this is the one that fails if the units merge.
- */
-Deno.test('S3-R: result_bytes is UTF-8 BYTES and returned_length is CHARACTERS, on a multi-byte document (4c)', async () => {
+/** **The two size fields carry two different units, deliberately.** */
+Deno.test('get_html: result_bytes is UTF-8 BYTES and returned_length is CHARACTERS, on a multi-byte document', async () => {
 	const crossOrigin = {
 		tree: (top: string, child: string) => ({
 			frame: { id: top, url: 'http://127.0.0.1:38111/iframe_same_site_port.html' },
@@ -2172,7 +2083,6 @@ Deno.test('S3-R: result_bytes is UTF-8 BYTES and returned_length is CHARACTERS, 
 	const scoped = (ctx: ToolContext): ToolContext => ({ ...ctx, scopes: new Set(['mcp:invoke', 'evaluate'] as const) });
 	const bytesOf = (text: string) => new TextEncoder().encode(text).length;
 
-	// --- the untruncated case: the two fields must simply disagree ---------------------------------
 	const document = '<html><body><p>日本語の見出し — café naïve — Ω≈ç√</p></body></html>';
 	const h = await frameCdpHarness('iframe_same_site_port', { ...crossOrigin, childHtml: document });
 	try {
@@ -2180,7 +2090,6 @@ Deno.test('S3-R: result_bytes is UTF-8 BYTES and returned_length is CHARACTERS, 
 		const entry = h.record.audit.read({ principal: 'test', all: true }).entries[0]!;
 		assertEquals(payload.returned_length, document.length, 'returned_length is characters');
 		assertEquals(entry.result_bytes, bytesOf(document), 'result_bytes is UTF-8 bytes');
-		// The whole point of the fixture. If this ever holds, the two fields have been given one unit.
 		assert(
 			entry.result_bytes !== payload.returned_length,
 			`the fixture stopped being multi-byte: ${entry.result_bytes} === ${payload.returned_length}`,
@@ -2189,7 +2098,6 @@ Deno.test('S3-R: result_bytes is UTF-8 BYTES and returned_length is CHARACTERS, 
 		await h.registry.shutdown();
 	}
 
-	// --- the truncated case: the notice is server boilerplate and is counted in NEITHER -------------
 	const huge = `<html><body>${'見'.repeat(HTML_LIMIT)}</body></html>`;
 	const capped = huge.slice(0, HTML_LIMIT);
 	const notice = `\n\n[truncated at ${HTML_LIMIT} characters]`;
@@ -2199,50 +2107,26 @@ Deno.test('S3-R: result_bytes is UTF-8 BYTES and returned_length is CHARACTERS, 
 		const payload = htmlPayload(result);
 		const entry = t.record.audit.read({ principal: 'test', all: true }).entries[0]!;
 		assertEquals(payload.truncated, true);
-		assertEquals(payload.length, huge.length, 'the TRUE length survives truncation (F-3)');
+		assertEquals(payload.length, huge.length, 'the TRUE length survives truncation');
 		assertEquals(payload.returned_length, HTML_LIMIT, 'characters before the notice');
 		assertEquals(entry.result_bytes, bytesOf(capped), 'UTF-8 bytes of the capped HTML');
-		// Stated as the difference rather than as a second equality, so the assertion names the thing
-		// it excludes: counting the notice would make the ledger overstate what left the page.
 		assertEquals(
 			bytesOf(capped + notice) - (entry.result_bytes ?? 0),
 			bytesOf(notice),
 			'the truncation notice was counted into result_bytes',
 		);
-		// And the text block still carries the notice, unchanged (I-4).
 		assertStringIncludes((result as { content: Array<{ text: string }> }).content[0]!.text, notice);
 	} finally {
 		await t.registry.shutdown();
 	}
 });
 
-/**
- * **SEC-FH-24 — the page does not get to say how much it sent.**
- *
- * D-057 moved the 200 000-character cap out of the server and into the page. That is a real
- * bandwidth win and it was mistaken for a control. The in-page extraction reads exactly two members
- * of whatever `documentElement.outerHTML` returns — `h.length` and `h.slice(0, limit)` — and
- * `outerHTML` is an ordinary configurable accessor, so a getter returning
- * `{ get length() { return 200001 }, slice() { return <as much as it likes> } }` satisfies the
- * extraction, satisfies `typeof html === 'string'` on the wire (its `slice` really does return a
- * string) and chooses the payload. Measured through the shipped handler in real Chromium:
- * **20 000 034 characters delivered in 564 ms** on `browser_get_html {}` — the default path, no
- * `frame_id`, no scope — reported back as `length: 200001, truncated: true`.
- *
- * Every row below drives that getter's shape through the fake's own reproduction of the in-page
- * arithmetic, so the triple on the wire is *derived from the hostile object* rather than hand-written
- * here, and asserts the two properties the repair owes: the payload is bounded **by the server**, and
- * every number in the response is the server's measurement of the string the server is holding. All
- * three extraction shapes, because the bypass was measured on all three.
- *
- * Against the pre-fix tree each row fails on its first assertion, with `returned_length` reporting
- * the whole payload.
- */
-Deno.test('SEC-FH-24: a hostile outerHTML getter chooses neither the payload nor the numbers, on all three extraction shapes', async () => {
+/** **The page does not get to say how much it sent.** */
+Deno.test('get_html: a hostile outerHTML getter chooses neither the payload nor the numbers, on all three extraction shapes', async () => {
 	const PAYLOAD_CHARS = HTML_LIMIT * 5;
 	const NOTICE = `\n\n[truncated at ${HTML_LIMIT} characters]`;
 	/**
-	 * The getter's return value, exactly as the real-Chromium probe built it: `length` reports one
+	 * The getter's return value, shaped as a real page can build it: `length` reports one
 	 * character over the cap — enough to take the extraction's `slice` branch, and enough to make a
 	 * server that believes the number answer `truncated: true` — and `slice` ignores its arguments.
 	 */
@@ -2250,9 +2134,6 @@ Deno.test('SEC-FH-24: a hostile outerHTML getter chooses neither the payload nor
 		const payload = 'H'.repeat(PAYLOAD_CHARS);
 		return { length: HTML_LIMIT + 1, slice: () => payload };
 	};
-	// Same-origin throughout, deliberately: the measured exploit needs no scope, no `frame_id` and no
-	// cross-origin frame, and a row that had to be granted `evaluate` first would be describing a
-	// smaller defect than the one that shipped.
 	const sameOrigin = (top: string, child: string) => ({
 		frame: { id: top, url: 'https://example.com/page' },
 		childFrames: [{ frame: { id: child, url: 'https://example.com/page/child' } }],
@@ -2288,20 +2169,15 @@ Deno.test('SEC-FH-24: a hostile outerHTML getter chooses neither the payload nor
 			const result = await shape.read(h);
 			const payload = htmlPayload(result);
 			const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
-			// (1) The payload is BOUNDED, and bounded by this process rather than by the page's promise.
 			assertEquals(payload.returned_length, HTML_LIMIT, `${shape.name}: returned_length escaped the cap`);
 			assertEquals(text.length, HTML_LIMIT + NOTICE.length, `${shape.name}: the text block escaped the cap`);
 			assertStringIncludes(text, NOTICE);
-			// (2) The NUMBERS are the server's own. The page claimed 200 001 characters; `length` is
-			// what actually arrived, and it is never allowed to understate the payload it describes.
 			assertEquals(payload.truncated, true, shape.name);
 			assertEquals(payload.length, PAYLOAD_CHARS, `${shape.name}: length must be measured, not believed`);
 			assert(
 				(payload.length as number) >= (payload.returned_length as number),
 				`${shape.name}: length ${payload.length} understates returned_length ${payload.returned_length}`,
 			);
-			// (3) And the row really did exercise the shape it names — otherwise three rows could pass
-			// while one extraction path stayed unmeasured, which is how the bypass shipped on all three.
 			assertEquals(
 				h.methods().filter((method) => method === shape.extraction).length,
 				1,
@@ -2313,16 +2189,8 @@ Deno.test('SEC-FH-24: a hostile outerHTML getter chooses neither the payload nor
 	}
 });
 
-/**
- * SEC-FH-24's honest half, stated as its own row: the repair must not cost F-3.
- *
- * `length` is still the document's TRUE character count whenever the page reports one truthfully —
- * the server floors the page's number with its own measurement and never replaces it, because an
- * honest page's `html` is a slice of the document it measured and is therefore never longer. A fix
- * that simply reported `min(length, HTML_LIMIT)`, or that recomputed `length` from the bytes it
- * received, would pass the hostile row above and re-introduce the defect F-3 repaired.
- */
-Deno.test('SEC-FH-24: an honest page keeps its TRUE length — the clamp floors the number, it does not replace it (F-3)', async () => {
+/** The honest half of the row above: the server-side clamp must not cost the true length. */
+Deno.test('get_html: an honest page keeps its TRUE length — the clamp floors the number, it does not replace it', async () => {
 	const huge = `${TOP_DOC_SENTINEL}${'z'.repeat(HTML_LIMIT * 3)}`;
 	const h = await frameCdpHarness('iframe_crossorigin', { topHtml: huge });
 	try {

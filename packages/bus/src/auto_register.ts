@@ -1,5 +1,5 @@
 /**
- * `on<EventName>` auto-registration (ARCHITECTURE.md §4.5, D-BUS1).
+ * `on<EventName>` auto-registration.
  *
  * Watchdogs and services declare handlers as methods named `on<EventClassName>`; `attach()` calls
  * {@linkcode registerHandlers} to subscribe them all and keeps the returned function for `detach()`.

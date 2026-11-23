@@ -1,14 +1,14 @@
 /**
  * @module
  * Drop detection, auto-reconnect, and the {@linkcode ConnectionPolicy} the bus circuit breaker
- * consumes (ARCHITECTURE.md §7.4, §4.6).
+ * consumes.
  *
  * The policy split is deliberate: `@tykotech/bus` owns *waiting* (the ≤54 s budget in `resilientHandler`)
  * and knows nothing about CDP; this module owns *the truth* — connected or not, reconnecting or not,
  * and which events are lifecycle events that bypass the breaker entirely. The lifecycle list lives
  * here because the bus has no opinion about `BrowserStartEvent`.
  *
- * Reconnect shape (§7.4): **3 attempts, delays 1 s / 2 s / 4 s**, each attempt capped at 15 s, gated
+ * Reconnect shape: **3 attempts, delays 1 s / 2 s / 4 s**, each attempt capped at 15 s, gated
  * on `CdpCloseInfo.intentional === false`. `BrowserReconnectingEvent` per attempt,
  * `BrowserReconnectedEvent` on success, `BrowserErrorEvent('ReconnectionFailed')` after exhaustion.
  * Worst case is 1+15 + 2+15 + 4+15 = 52 s, which is what the 54 s
@@ -32,23 +32,23 @@ import {
 import { BrowserError } from '../errors.ts';
 
 // ---------------------------------------------------------------------------
-// timing constants (ARCHITECTURE.md §7.4, §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// timing constants (load-bearing: the tests pin each value)
 // ---------------------------------------------------------------------------
 
-/** `connect()` overall cap, with teardown-on-timeout so a retry starts clean (§7.4, §8). */
+/** `connect()` overall cap, with teardown-on-timeout so a retry starts clean. */
 export const CONNECT_TIMEOUT_MS = 15_000;
 
-/** Reconnect attempts, including the first (§7.4). */
+/** Reconnect attempts, including the first. */
 export const RECONNECT_MAX_ATTEMPTS = 3;
 
-/** Delay before attempt 1, 2 and 3 respectively (§7.4). */
+/** Delay before attempt 1, 2 and 3 respectively. */
 export const RECONNECT_BACKOFF_MS: readonly number[] = [1_000, 2_000, 4_000];
 
-/** Longest a blocked handler waits mid-reconnect; owned by `@tykotech/bus`, re-exported here (§7.4). */
+/** Longest a blocked handler waits mid-reconnect; owned by `@tykotech/bus`, re-exported here. */
 export { RECONNECT_WAIT_TIMEOUT_MS };
 
 /**
- * The lifecycle events that bypass the circuit breaker (ARCHITECTURE.md §4.6):
+ * The lifecycle events that bypass the circuit breaker:
  * `BrowserStart/Stop/Stopped/Launch/Error/Kill/Reconnecting/Reconnected`.
  *
  * Skipping the breaker for these is what lets a session start, stop, kill, or report an error while
@@ -67,7 +67,7 @@ export const LIFECYCLE_EVENT_NAMES: readonly string[] = [
 
 const LIFECYCLE_EVENT_SET: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_NAMES);
 
-/** `true` for the eight lifecycle events of ARCHITECTURE.md §4.6. */
+/** `true` for the eight lifecycle events in {@linkcode LIFECYCLE_EVENT_NAMES}. */
 export function isLifecycleEventName(eventType: string): boolean {
 	return LIFECYCLE_EVENT_SET.has(eventType);
 }
@@ -86,7 +86,7 @@ export interface TimeoutOutcome<T> {
  * Races a promise against a deadline, always clearing the timer.
  *
  * `@tykotech/bus` has an equivalent internally but does not export it, and a cross-package deep import is
- * forbidden (AGENTS.md §3). Rejections propagate unchanged; only the *timeout* is reported as data,
+ * forbidden. Rejections propagate unchanged; only the *timeout* is reported as data,
  * because both callers here (connect cap, reconnect attempt cap) need to run teardown on it.
  */
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<TimeoutOutcome<T>> {
@@ -113,7 +113,7 @@ export interface ReconnectControllerOptions {
 	readonly bus: EventBus;
 	/**
 	 * Rebuilds the whole connection: new `CdpClient`, new `SessionManager`, root autoAttach, proxy
-	 * auth, and the previous focus target restored if it is still alive (§7.4). Throwing fails one
+	 * auth, and the previous focus target restored if it is still alive. Throwing fails one
 	 * attempt; the controller owns the retry policy, never the connect implementation.
 	 */
 	readonly connect: (signal: AbortSignal) => Promise<void>;
@@ -124,7 +124,7 @@ export interface ReconnectControllerOptions {
 	readonly logger?: BusLogger | undefined;
 	readonly maxAttempts?: number | undefined;
 	readonly backoffMs?: readonly number[] | undefined;
-	/** Per-attempt cap; defaults to the 15 s connect cap of §7.4. */
+	/** Per-attempt cap; defaults to the 15 s connect cap. */
 	readonly attemptTimeoutMs?: number | undefined;
 	/** Injected clock, so `FakeTime` can drive downtime accounting. */
 	readonly now?: (() => number) | undefined;
@@ -193,7 +193,7 @@ export class ReconnectController implements ConnectionPolicy {
 
 	/**
 	 * Called from `CdpClient.onClose`. Auto-reconnect is gated on `intentional === false`: a
-	 * `session.stop()` closed the socket on purpose and must not be fought (§7.4).
+	 * `session.stop()` closed the socket on purpose and must not be fought.
 	 */
 	notifyClosed(info: CdpCloseInfo): Promise<boolean> | null {
 		if (info.intentional || !this.#enabled) return null;

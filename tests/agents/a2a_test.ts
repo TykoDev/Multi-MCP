@@ -12,7 +12,7 @@ import {
 } from '../../packages/agents/mod.ts';
 
 const scopes = new Set(['agent:invoke', 'mcp:invoke']);
-/** A new A2A message each call: a repeated messageId is a retry of the same message (E-3). */
+/** A new A2A message each call: a repeated messageId is a retry of the same message. */
 const fresh = () => ({
 	messageId: crypto.randomUUID(),
 	role: 'ROLE_USER',
@@ -62,7 +62,7 @@ Deno.test('A2A 1.0 contract: PascalCase methods, blocking SendMessage and scoped
 			-32009,
 		);
 		assertEquals((await (await rpc(runtime, 'CreateTaskPushNotificationConfig', {})).json()).error.code, -32003);
-		assertEquals((await (await rpc(runtime, 'GetExtendedAgentCard')).json()).error.code, -32004);
+		assertEquals((await (await rpc(runtime, 'GetExtendedAgentCard')).json()).error.code, -32007);
 		assertEquals(
 			(await (await rpc(runtime, 'SendMessage', {
 				message: fresh(),
@@ -119,7 +119,7 @@ Deno.test('A2A SSE starts with task, emits artifacts/status and ends; cancellati
 	}
 });
 
-Deno.test('AG-14: ListTasks pages on immutable creation order, so a status change between pages skips nothing', async (): Promise<void> => {
+Deno.test('ListTasks pages on immutable creation order, so a status change between pages skips nothing', async (): Promise<void> => {
 	let release: () => void = (): void => {};
 	let calls = 0;
 	const runtime = new AgentRuntime({
@@ -190,7 +190,7 @@ Deno.test('A2A rejects malformed, oversize, missing identity and unsupported con
 	}
 });
 
-Deno.test('E-3: a retried SendMessage (same messageId, same principal) returns the first task and runs once', async () => {
+Deno.test('a retried SendMessage (same messageId, same principal) returns the first task and runs once', async () => {
 	let runs = 0;
 	const runtime = new AgentRuntime({
 		invoke: (): Promise<Record<string, unknown>> => {
@@ -213,7 +213,7 @@ Deno.test('E-3: a retried SendMessage (same messageId, same principal) returns t
 	}
 });
 
-// --- A11: push notifications (AC18) ----------------------------------------------------------------------------
+// --- push notifications ----------------------------------------------------------------------------------------
 
 /**
  * A loopback webhook that records what it receives and answers each delivery with the next status from `statuses`
@@ -269,7 +269,7 @@ function pushRuntime(policy: Partial<PushOptions>, extra: Partial<AgentRuntimeOp
 const stateOf = (delivery: { body: Record<string, unknown> }): string =>
 	String(((delivery.body.statusUpdate as Record<string, unknown>).status as Record<string, unknown>).state);
 
-Deno.test('A11 / AC18: push config CRUD, delivery to a webhook with the token echoed, never read back', async () => {
+Deno.test('push config CRUD, delivery to a webhook with the token echoed, never read back', async () => {
 	const hook = webhook();
 	const fetched: string[] = [];
 	const warnings: string[] = [];
@@ -380,7 +380,7 @@ Deno.test('A11 / AC18: push config CRUD, delivery to a webhook with the token ec
 	}
 });
 
-Deno.test('A11: a 5xx is retried at most three times; a 4xx is not retried', async () => {
+Deno.test('push delivery: a 5xx is retried at most three times; a 4xx is not retried', async () => {
 	const flaky = webhook([503, 503, 200]);
 	const gone = webhook([404]);
 	const failing = webhook([500, 500, 500, 500, 500]);
@@ -407,7 +407,7 @@ Deno.test('A11: a 5xx is retried at most three times; a 4xx is not retried', asy
 	}
 });
 
-Deno.test('A11 / AC18: without an operator push policy every push method answers -32003 and the card says so', async () => {
+Deno.test('without an operator push policy every push method answers -32003 and the card says so', async () => {
 	const runtime = new AgentRuntime({ invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}) });
 	try {
 		assertEquals(
@@ -433,7 +433,7 @@ Deno.test('A11 / AC18: without an operator push policy every push method answers
 });
 
 /**
- * D-154: a stand-in for the gateway's `syncSealer` (whose AES-GCM is proven in `database_test.ts`): reversible, bound to
+ * A stand-in for the gateway's `syncSealer` (whose AES-GCM is proven in `database_test.ts`): reversible, bound to
  * its context, and never containing the plain text.
  */
 const SEALER = {
@@ -446,7 +446,7 @@ const SEALER = {
 	},
 };
 
-Deno.test('A11 / B1 / D-154: push configs persist with their task, the token sealed, and a restart reports the interruption', async () => {
+Deno.test('push configs persist with their task, the token sealed, and a restart reports the interruption', async () => {
 	const hook = webhook();
 	const dir = `tests/.scratch/agent-push-${crypto.randomUUID()}`;
 	const path = `${dir}/agents/tasks.json`;
@@ -486,7 +486,7 @@ Deno.test('A11 / B1 / D-154: push configs persist with their task, the token sea
 	}
 });
 
-Deno.test('D-154: without a sealer a push token is never written, and its config does not survive a restart', async () => {
+Deno.test('without a sealer a push token is never written, and its config does not survive a restart', async () => {
 	const hook = webhook();
 	const dir = `tests/.scratch/agent-push-${crypto.randomUUID()}`;
 	const path = `${dir}/agents/tasks.json`;
@@ -528,13 +528,13 @@ Deno.test('D-154: without a sealer a push token is never written, and its config
 	}
 });
 
-Deno.test('R2-4: a restart drops a stored webhook whose host left the allowlist, before its restart report', async () => {
+Deno.test('a restart drops a stored webhook whose host left the allowlist, before its restart report', async () => {
 	const hook = webhook();
 	const dir = `tests/.scratch/agent-push-${crypto.randomUUID()}`;
 	const path = `${dir}/agents/tasks.json`;
 	const first = pushRuntime({ allowedHosts: [hook.host] }, {
 		persistPath: path,
-		// D-154: sealed, so the token survives the restart and the allowlist is what drops it.
+		// Sealed, so the token survives the restart and the allowlist is what drops it.
 		sealer: SEALER,
 		invoke: (_tool, _args, _owner, _scopes, signal): Promise<Record<string, unknown>> =>
 			new Promise((resolve) => signal?.addEventListener('abort', () => resolve({}), { once: true })),
@@ -578,7 +578,7 @@ Deno.test('R2-4: a restart drops a stored webhook whose host left the allowlist,
 	}
 });
 
-Deno.test('R2-4: every delivery is held to the allowlist as it is then, not as it was when the webhook was set', async () => {
+Deno.test('every delivery is held to the allowlist as it is then, not as it was when the webhook was set', async () => {
 	const hook = webhook();
 	const allowedHosts = [hook.host];
 	const warnings: string[] = [];
@@ -614,7 +614,7 @@ Deno.test('R2-4: every delivery is held to the allowlist as it is then, not as i
 	}
 });
 
-Deno.test('A11: GetExtendedAgentCard returns the caller’s card with one skill per invocable tool', async () => {
+Deno.test('GetExtendedAgentCard returns the caller’s card with one skill per invocable tool', async () => {
 	const runtime = new AgentRuntime({ invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}) });
 	try {
 		const options = { extendedCard: true, httpJson: true };
@@ -649,9 +649,9 @@ Deno.test('A11: GetExtendedAgentCard returns the caller’s card with one skill 
 	}
 });
 
-// --- D-143 (model-providers-ui S0): request metadata, and the card's text skills (§3.11, gate F20) -------------------
+// --- request metadata, and the card's text skills ----------------------------------------------------------------
 
-/** A runtime that records what `a2aInvoke` hands `submit`, then refuses like the S0 runtime does (no backend). */
+/** A runtime that records what `a2aInvoke` hands `submit`, then refuses as a runtime with no text backend does. */
 class RecordingRuntime extends AgentRuntime {
 	readonly submitted: unknown[] = [];
 	override submit(
@@ -668,7 +668,7 @@ class RecordingRuntime extends AgentRuntime {
 
 const textMessage = () => ({ messageId: crypto.randomUUID(), role: 'ROLE_USER', parts: [{ text: 'hello' }] });
 
-Deno.test('D-143 (C5): SendMessage reads provider and model from the request-level metadata and hands them to submit', async () => {
+Deno.test('SendMessage reads provider and model from the request-level metadata and hands them to submit', async () => {
 	const runtime = new RecordingRuntime({ invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}) });
 	try {
 		// `params.metadata` beside `message` and `configuration` (A2A 1.0 `SendMessageRequest.metadata`).
@@ -676,9 +676,9 @@ Deno.test('D-143 (C5): SendMessage reads provider and model from the request-lev
 			message: textMessage(),
 			metadata: { provider: 'openai-main', model: 'gpt-4.1' },
 		})).json();
-		// D-158: every A2A submit names its entrance, so the administrator's A2A switches apply.
+		// Every A2A submit names its entrance, so the administrator's A2A switches apply.
 		assertEquals(runtime.submitted, [{ model: { provider: 'openai-main', model: 'gpt-4.1' }, via: 'a2a' }]);
-		// Without the scope the runtime answers row 2 of §3.10, through the binding's error envelope.
+		// Without model:invoke the runtime refuses before any provider lookup, through the binding's error envelope.
 		assertEquals(sent.error, { code: -32600, message: 'model:invoke scope required' });
 		// The streaming operation reads the same field; push and model options travel together.
 		runtime.submitted.length = 0;
@@ -724,8 +724,7 @@ function provider(id: string): ModelProviderClient {
 	};
 }
 
-Deno.test('D-143 §3.11 / gate F20: the card lists external-agent and builtin-model on their own conditions, and text/plain on either', async () => {
-	const bridge = { url: 'http://127.0.0.1:9', token: 'never-used', agent: 'none' };
+Deno.test('the card lists builtin-model only for a reachable provider, and text/plain only then', async () => {
 	const model = (reachable: boolean): NonNullable<AgentRuntimeOptions['model']> => ({
 		providers: new Map([['p', provider('p')]]),
 		default: 'p',
@@ -734,12 +733,7 @@ Deno.test('D-143 §3.11 / gate F20: the card lists external-agent and builtin-mo
 	});
 	const cases: Array<[string, Omit<AgentRuntimeOptions, 'invoke'>, string[], string[]]> = [
 		['neither', {}, ['tool-invocation'], ['application/json']],
-		['bridge only', { bridge }, ['tool-invocation', 'external-agent'], ['application/json', 'text/plain']],
 		['provider only', { model: model(true) }, ['tool-invocation', 'builtin-model'], ['application/json', 'text/plain']],
-		['both', { bridge, model: model(true) }, ['tool-invocation', 'external-agent', 'builtin-model'], [
-			'application/json',
-			'text/plain',
-		]],
 		// A configured but unreachable provider is no backend: listed nowhere, and text/plain is not offered for it.
 		['unreachable provider', { model: model(false) }, ['tool-invocation'], ['application/json']],
 	];
@@ -765,7 +759,7 @@ Deno.test('D-143 §3.11 / gate F20: the card lists external-agent and builtin-mo
 	}
 });
 
-Deno.test('D-143 (CR-1 / BUG-6): metadata.model without metadata.provider is -32602 "model requires provider" through the binding', async () => {
+Deno.test('metadata.model without metadata.provider is -32602 "model requires provider" through the binding', async () => {
 	const runtime = new RecordingRuntime({ invoke: (): Promise<Record<string, unknown>> => Promise.resolve({}) });
 	try {
 		const sent = await (await rpc(runtime, 'SendMessage', { message: textMessage(), metadata: { model: 'gpt-4.1' } }))

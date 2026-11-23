@@ -1,10 +1,9 @@
 /**
- * `BrowserSession` lifecycle + navigation contract tests (ARCHITECTURE.md §7.4, §7.5;
- * COMPLETIONS-CRITERIA.md §3.2 "BrowserSession lifecycle" and "Navigation readiness" rows;
- * SECURITY-AUTH.md §4.2/§4.3 and build decision B-12 / build-run erratum E-3).
+ * `BrowserSession` lifecycle + navigation contract tests, including the
+ * session's own URL-policy enforcement point.
  *
  * Everything runs against the real {@linkcode ChromeFixture}: a real `Deno.serve` listener, a real
- * WebSocket, real CDP frames, the real `@tykotech/bus`. Nothing is mocked (D-TEST1).
+ * WebSocket, real CDP frames, the real `@tykotech/bus`. Nothing is mocked.
  */
 
 import { assert, assertEquals, assertInstanceOf, assertRejects } from '@std/assert';
@@ -104,10 +103,10 @@ async function waitUntil(predicate: () => boolean, label: string, timeoutMs = 10
 }
 
 // ---------------------------------------------------------------------------
-// §7.4 — the post-connect sequence
+// the post-connect sequence
 // ---------------------------------------------------------------------------
 
-Deno.test('§7.4: the post-connect sequence runs in the speced order', async () => {
+Deno.test('connect: the post-connect sequence runs in its fixed order', async () => {
 	await using h = await sessionHarness({ fixture: { pages: ['https://127.0.0.1/one', 'https://127.0.0.1/two'] } });
 
 	const methods = h.fixture.requests.map((request) => request.method);
@@ -137,7 +136,7 @@ Deno.test('§7.4: the post-connect sequence runs in the speced order', async () 
 	assertEquals(h.session.tabs[0]?.tabId, tabIdFor(h.session.tabs[0]?.targetId ?? ''));
 });
 
-Deno.test('§7.4 step 3: chrome new-tab pages are redirected to about:blank', async () => {
+Deno.test('connect step 3: chrome new-tab pages are redirected to about:blank', async () => {
 	await using h = await sessionHarness({ fixture: { pages: ['chrome://newtab'] } });
 	const navigated = h.fixture.requestsFor('Page.navigate');
 	assertEquals(navigated.length, 1);
@@ -145,7 +144,7 @@ Deno.test('§7.4 step 3: chrome new-tab pages are redirected to about:blank', as
 	assert(CHROME_NEW_TAB_URLS.includes('chrome://new-tab-page'));
 });
 
-Deno.test('§7.4 step 4: a browser with no page targets gets one', async () => {
+Deno.test('connect step 4: a browser with no page targets gets one', async () => {
 	await using h = await sessionHarness({ fixture: { pages: [] } });
 	assertEquals(h.fixture.requestsFor('Target.createTarget').length, 1);
 	assertEquals(h.fixture.requestsFor('Target.createTarget')[0]?.params.url, 'about:blank');
@@ -153,7 +152,7 @@ Deno.test('§7.4 step 4: a browser with no page targets gets one', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// launch vs connect convergence (D-BROWSER1)
+// launch vs connect convergence
 // ---------------------------------------------------------------------------
 
 Deno.test('attach mode: an http(s) cdpUrl goes through the /json/version handshake', async () => {
@@ -260,7 +259,7 @@ Deno.test('the session tears the socket down LAST, so other stop handlers still 
 	await using h = await sessionHarness({ autoStart: false });
 	let sawConnection: boolean | null = null;
 	// Registered *before* `start()` calls `attach()` — which is exactly the ordering rule watchdogs
-	// must follow: handlers run in registration order (E-2), and the session closes the socket.
+	// must follow: handlers run in registration order, and the session closes the socket.
 	h.session.eventBus.on(BrowserStopEvent, () => {
 		sawConnection = h.session.isConnected;
 	}, { wrap: null });
@@ -271,14 +270,14 @@ Deno.test('the session tears the socket down LAST, so other stop handlers still 
 });
 
 // ---------------------------------------------------------------------------
-// B-12 / E-3 — the security enforcement point
+// the security enforcement point
 // ---------------------------------------------------------------------------
 
 // A blocked-domain literal used purely as *data*: the point of these tests is that the matcher
-// test-policy-allow: refuses it before any CDP call, so nothing ever resolves or fetches it (D-TEST1).
+// test-policy-allow: refuses it before any CDP call, so nothing ever resolves or fetches it.
 const BLOCKED_URL = 'https://evil.test/steal';
 
-Deno.test('B-12/E-3: a blocked URL is refused by BrowserSession itself, with NO SecurityWatchdog', async () => {
+Deno.test('security: a blocked URL is refused by BrowserSession itself, with NO SecurityWatchdog', async () => {
 	await using h = await sessionHarness({ profile: { allowedDomains: ['127.0.0.1'] } });
 
 	// The premise of the test: the session is the *only* handler of NavigateToUrlEvent. A regression
@@ -293,7 +292,7 @@ Deno.test('B-12/E-3: a blocked URL is refused by BrowserSession itself, with NO 
 	assertEquals(h.completions.length, 0);
 });
 
-Deno.test('B-12/E-3: the handler method itself throws, independent of any bus wiring', async () => {
+Deno.test('security: the handler method itself throws, independent of any bus wiring', async () => {
 	await using h = await sessionHarness({ profile: { prohibitedDomains: ['evil.test'] } });
 	await assertRejects(
 		() => h.session.onNavigateToUrlEvent(new NavigateToUrlEvent({ url: BLOCKED_URL })),
@@ -302,7 +301,7 @@ Deno.test('B-12/E-3: the handler method itself throws, independent of any bus wi
 	assertEquals(h.fixture.requestsFor('Page.navigate').length, 0);
 });
 
-Deno.test('B-12/E-3 positive control: an allowed URL still navigates', async () => {
+Deno.test('security positive control: an allowed URL still navigates', async () => {
 	await using h = await sessionHarness({ profile: { allowedDomains: ['127.0.0.1'] } });
 	await h.session.eventBus.dispatch(new NavigateToUrlEvent({ url: 'https://127.0.0.1/ok' }));
 	assertEquals(h.fixture.requestsFor('Page.navigate').length, 1);
@@ -402,7 +401,7 @@ Deno.test('getBrowserStateSummary delegates to the DOM watchdog via BrowserState
 	assertEquals((requested as unknown as BrowserStateRequestEvent | null)?.includeScreenshot, false);
 });
 
-Deno.test('G-1: a DOM-less state request never overwrites the index table (E-36)', async () => {
+Deno.test('state: a DOM-less state request never overwrites the index table', async () => {
 	await using h = await sessionHarness();
 	const withDom = {
 		url: 'https://127.0.0.1/x',
@@ -429,8 +428,8 @@ Deno.test('G-1: a DOM-less state request never overwrites the index table (E-36)
 	assertEquals(h.session.cachedBrowserState?.domState.selectorMap.size, 1);
 
 	// This is the exact call `identify()` issues after every navigation and before every secret
-	// substitution. Before E-36 it wrote its empty `selectorMap` over the cache, and the next
-	// `browser_click`/`browser_type` carrying an index failed with `unknown-index` for no reason the
+	// substitution. Writing its empty `selectorMap` over the cache would make the next
+	// `browser_click`/`browser_type` carrying an index fail with `unknown-index` for no reason the
 	// caller could see.
 	const dropped = await h.session.getBrowserStateSummary({ includeDom: false });
 	assertEquals(dropped.url, 'https://127.0.0.1/y', 'the DOM-less read still answers the caller');
@@ -438,7 +437,7 @@ Deno.test('G-1: a DOM-less state request never overwrites the index table (E-36)
 	assertEquals(h.session.cachedBrowserState?.url, 'https://127.0.0.1/x');
 });
 
-Deno.test('G-1: a failed state request clears the index table rather than leaving the old page (E-36)', async () => {
+Deno.test('state: a failed state request clears the index table rather than leaving the old page', async () => {
 	await using h = await sessionHarness();
 	const good = {
 		url: 'https://127.0.0.1/x',
@@ -457,7 +456,7 @@ Deno.test('G-1: a failed state request clears the index table rather than leavin
 	assertEquals(h.session.cachedBrowserState?.domState.selectorMap.size, 1);
 
 	// A read that fails means "I do not know what is on the page". Leaving the previous summary
-	// standing left `nodeAt` resolving indices from a page the browser had already left.
+	// standing would leave `nodeAt` resolving indices from a page the browser has already left.
 	answer = false;
 	const failed = await h.session.getBrowserStateSummary();
 	assert(failed.stateError !== null);
@@ -505,23 +504,23 @@ Deno.test('an intentional close does not trigger auto-reconnect', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// the handler cancellation contract — ERRATUM(E-52), the BrowserSession half
+// the handler cancellation contract, the BrowserSession half
 // ---------------------------------------------------------------------------
 
 /**
  * The context the bus hands a handler, with the signal the test wants.
  *
  * Same shape and the same precedent as `storage_state_test.ts`'s `stopContext`: a `HandlerContext` is
- * a plain value object, so building one directly is a real object, not a mock (D-TEST1).
+ * a plain value object, so building one directly is a real object, not a mock.
  */
 function handlerContext(signal: AbortSignal, timeoutSec = 10): HandlerContext {
 	return { signal, handlerName: 'BrowserSession.probe', timeoutSec };
 }
 
-Deno.test('E-52: an abandoned SwitchTabEvent handler issues no CDP at all', async () => {
+Deno.test('cancellation: an abandoned SwitchTabEvent handler issues no CDP at all', async () => {
 	await using h = await sessionHarness({ fixture: { pages: ['about:blank', 'about:blank'] } });
 	const second = h.fixture.targets[1]?.targetId ?? '';
-	// Deltas, not absolutes: `start()`'s §7.4 sequence has already activated the focused tab, and an
+	// Deltas, not absolutes: `start()`'s connect sequence has already activated the focused tab, and an
 	// absolute `=== 0` here would be a test that passes for the wrong reason on the day it breaks.
 	const before = h.fixture.requests.length;
 	const activatesBefore = h.fixture.requestsFor('Target.activateTarget').length;
@@ -539,7 +538,7 @@ Deno.test('E-52: an abandoned SwitchTabEvent handler issues no CDP at all', asyn
 	assertEquals(h.fixture.requests.length, before, 'no CDP command of any kind reached the browser');
 });
 
-Deno.test('E-52: an abandoned CloseTabEvent handler never sends Target.closeTarget', async () => {
+Deno.test('cancellation: an abandoned CloseTabEvent handler never sends Target.closeTarget', async () => {
 	await using h = await sessionHarness({ fixture: { pages: ['about:blank', 'about:blank'] } });
 	const second = h.fixture.targets[1]?.targetId ?? '';
 	await assertRejects(() =>
@@ -552,7 +551,7 @@ Deno.test('E-52: an abandoned CloseTabEvent handler never sends Target.closeTarg
 	assertEquals(h.fixture.targets.length, 2, 'the tab is still open — the close never happened');
 });
 
-Deno.test('E-52: an abandoned TabCreatedEvent handler applies no viewport override', async () => {
+Deno.test('cancellation: an abandoned TabCreatedEvent handler applies no viewport override', async () => {
 	await using h = await sessionHarness({ profile: { viewport: { width: 800, height: 600 } } });
 	const targetId = h.fixture.targets[0]?.targetId ?? '';
 	const before = h.fixture.requestsFor('Emulation.setDeviceMetricsOverride').length;
@@ -565,7 +564,7 @@ Deno.test('E-52: an abandoned TabCreatedEvent handler applies no viewport overri
 	assertEquals(h.fixture.requestsFor('Emulation.setDeviceMetricsOverride').length, before);
 });
 
-Deno.test('E-52: an abandoned NavigateToUrlEvent handler never issues Page.navigate', async () => {
+Deno.test('cancellation: an abandoned NavigateToUrlEvent handler never issues Page.navigate', async () => {
 	await using h = await sessionHarness();
 	await assertRejects(() =>
 		h.session.onNavigateToUrlEvent(
@@ -581,10 +580,10 @@ Deno.test('E-52: an abandoned NavigateToUrlEvent handler never issues Page.navig
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-94) — the allowlist reaches the SessionManager as the E0 document veto
+// the allowlist reaches the SessionManager as the E0 document veto
 // ---------------------------------------------------------------------------
 
-Deno.test('E-94: an allowlist pauses new targets at the root and hands the E1 matcher down as the document veto', async () => {
+Deno.test('document veto: an allowlist pauses new targets at the root and hands the E1 matcher down as the document veto', async () => {
 	await using h = await sessionHarness({
 		fixture: { pages: ['http://127.0.0.1:8080/start'] },
 		profile: { allowedDomains: ['127.0.0.1'] },
@@ -614,7 +613,7 @@ Deno.test('E-94: an allowlist pauses new targets at the root and hands the E1 ma
 	assertEquals(blocks.map((details) => details.enforcementPoint), ['E0']);
 });
 
-Deno.test('E-94: prohibitedDomains alone arms no document veto — the attach parameters are the donor’s', async () => {
+Deno.test('document veto: prohibitedDomains alone arms none — new targets are not held', async () => {
 	await using h = await sessionHarness({ profile: { prohibitedDomains: ['localhost'] } });
 	const root = h.fixture.requestsFor('Target.setAutoAttach').find((r) => r.sessionId === undefined);
 	assertEquals(root?.params, { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });

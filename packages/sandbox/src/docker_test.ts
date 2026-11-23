@@ -1,16 +1,18 @@
 /**
- * AC6: the Docker backend's workspace lifecycle against a fake Engine API (testing_engine.ts), through the same
- * WorkspaceService the bwrap backend serves: create, exec, diff, live session, caged files, delete; the N3 cleanup
- * after every command; time limits; the registry proxy; startup checks and reconciliation; idle stop. Review R2: the
- * measurement with the container paused (R2-2), the start-up volume check in a folder of its own (R2-3), deployment
- * scoping (R2-5) and replacing a container whose body or image changed (R2-6).
+ * The Docker backend's workspace lifecycle against a fake Engine API (testing_engine.ts), through the same
+ * WorkspaceService the bwrap backend serves: create, exec, diff, live session, caged files, delete; the cleanup
+ * after every command; time limits; the registry proxy; startup checks and reconciliation; idle stop. The
+ * measurement with the container paused, the start-up volume check in a folder of its own, deployment
+ * scoping and replacing a container whose body or image changed.
  */
 import { assert, assertEquals, assertNotEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { proxyEnv } from './cage.ts';
 import { treeUsage } from './disk.ts';
-import { DockerSandbox, type ProxyHandle } from './docker.ts';
+import { DockerSandbox } from './docker.ts';
+import type { ProxyHandle } from './proxy.ts';
 import { CLEANUP_SCRIPT, containerBody, createFor, deploymentId, KILL_SCRIPT, WRAPPER } from './docker_spec.ts';
 import { Engine } from './engine.ts';
+import { GateError } from './gate.ts';
 import { LIMITS } from './limits.ts';
 import { cloneScript } from './clone.ts';
 import { type OpenEgress } from './proxy.ts';
@@ -38,6 +40,7 @@ const player: Player = (exec) => {
 	const command = exec.args[0] ?? '';
 	if (command.startsWith('echo ')) return { output: `${command.slice(5)}\n` };
 	if (command === 'serve &') return { output: 'started\n', stray: true };
+	if (command === 'hop &') return { output: 'started\n', hopper: true };
 	if (command.startsWith('sleep')) return { hang: true };
 	if (command === 'cat') return { output: exec.stdin };
 	return { exitCode: 0 };
@@ -166,7 +169,7 @@ async function until(ready: () => boolean): Promise<void> {
 	assert(ready(), 'timed out waiting');
 }
 
-Deno.test('AC6 docker backend: create provisions in a container, then gives it the read-only .git; exact bodies', async () => {
+Deno.test('docker backend: create provisions in a container, then gives it the read-only .git; exact bodies', async () => {
 	const f = await fixture();
 	try {
 		const created = await f.service.call('alice', 'create', { files: { 'a.txt': 'one\n' } });
@@ -190,7 +193,7 @@ Deno.test('AC6 docker backend: create provisions in a container, then gives it t
 		// The socket folder and home exist for the subpath mounts.
 		assert((await Deno.stat(`${f.sockDir}/${id}`)).isDirectory);
 		assert((await Deno.stat(`${f.workDir}/.sandbox/${id}/home`)).isDirectory);
-		// R2-3: the volume was checked at start-up, in a container of its own; it and its folders are gone again.
+		// The volume was checked at start-up, in a container of its own; it and its folders are gone again.
 		const check = creates[0]!;
 		assert(!check.path.endsWith(id), check.path);
 		assertEquals((check.body as { Labels: Record<string, string> }).Labels['eu.tykotech.owner'], '0'.repeat(64));
@@ -204,7 +207,7 @@ Deno.test('AC6 docker backend: create provisions in a container, then gives it t
 	}
 });
 
-Deno.test('AC6 docker backend: a command is one exec, its body fixed; N3: a cleanup exec follows every command', async () => {
+Deno.test('docker backend: a command is one exec, its body fixed; a cleanup exec follows every command', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -232,7 +235,7 @@ Deno.test('AC6 docker backend: a command is one exec, its body fixed; N3: a clea
 		);
 		assert(body.Env.includes('FOO=bar') && body.Env.includes('HOME=/home/sandbox'));
 		assert(!body.Env.some((e) => e.startsWith('HTTPS_PROXY=')), 'no proxy without registries');
-		// N3: the exec right after the command is the cleanup, sparing nothing of the command.
+		// The exec right after the command is the cleanup, sparing nothing of the command.
 		const cleanup = bodies[at + 1]!;
 		assertEquals(cleanup.Cmd.slice(0, 4), ['/bin/sh', '-c', CLEANUP_SCRIPT, 'harbour-sandbox']);
 		assertEquals(cleanup.WorkingDir, '/');
@@ -250,7 +253,7 @@ Deno.test('AC6 docker backend: a command is one exec, its body fixed; N3: a clea
 	}
 });
 
-Deno.test('N3 docker backend: what a command leaves running is killed when it ends', async () => {
+Deno.test('docker backend: what a command leaves running is killed when it ends', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -265,7 +268,7 @@ Deno.test('N3 docker backend: what a command leaves running is killed when it en
 	}
 });
 
-Deno.test('AC6 docker backend: a time limit kills the process group by a second exec, then cleans up', async () => {
+Deno.test('docker backend: a time limit kills the process group by a second exec, then cleans up', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -285,7 +288,7 @@ Deno.test('AC6 docker backend: a time limit kills the process group by a second 
 	}
 });
 
-Deno.test('AC6 docker backend: diff and caged file operations run in the container', async () => {
+Deno.test('docker backend: diff and caged file operations run in the container', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -295,7 +298,7 @@ Deno.test('AC6 docker backend: diff and caged file operations run in the contain
 		const script = f.fake.execBodies.find((b) => b.Cmd[4]?.includes('GIT_INDEX_FILE'))!.Cmd[4]!;
 		assertStringIncludes(script, 'GIT_INDEX_FILE=/home/sandbox/.harbour-diff/index');
 		const { session_id } = await f.service.call('alice', 'session_open', { workspace_id });
-		// D-077: with a session open, reads and writes run in the container, never on the service's own path.
+		// With a session open, reads and writes run in the container, never on the service's own path.
 		assertEquals(await f.service.call('alice', 'read', { workspace_id, path: 'x.txt' }), {
 			content: 'caged text',
 			bytes: 10,
@@ -306,14 +309,14 @@ Deno.test('AC6 docker backend: diff and caged file operations run in the contain
 		await assertRejects(() => Deno.stat(`${f.workDir}/${workspace_id}/x.txt`));
 		const cleanups = f.fake.cleanups.length;
 		await f.service.call('alice', 'session_close', { session_id });
-		// The teardown logs its end last, after the N3 cleanup.
+		// The teardown logs its end last, after the cleanup.
 		await until(() => f.fake.cleanups.length > cleanups && f.logs.some((l) => l.event === 'session.ended'));
 	} finally {
 		await f.cleanup();
 	}
 });
 
-Deno.test('AC6 docker backend: a live session is a shell exec fed its input; closing it kills it and cleans up', async () => {
+Deno.test('docker backend: a live session is a shell exec fed its input; closing it kills it and cleans up', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -338,14 +341,14 @@ Deno.test('AC6 docker backend: a live session is a shell exec fed its input; clo
 		}
 		assertEquals([read.ended, read.killed], [true, 'closed']);
 		assertEquals(f.fake.kills.at(-1)!.pgid, session.sid);
-		// The teardown logs its end last, after the N3 cleanup.
+		// The teardown logs its end last, after the cleanup.
 		await until(() => f.fake.cleanups.length > cleanups && f.logs.some((l) => l.event === 'session.ended'));
 	} finally {
 		await f.cleanup();
 	}
 });
 
-Deno.test('N3 docker backend: the proxy socket exists only while a registries-mode command runs', async () => {
+Deno.test('docker backend: the proxy socket exists only while a registries-mode command runs', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -373,7 +376,7 @@ Deno.test('N3 docker backend: the proxy socket exists only while a registries-mo
 	}
 });
 
-Deno.test('AC6 docker backend: delete removes the container and the workspace state', async () => {
+Deno.test('docker backend: delete removes the container and the workspace state', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -399,7 +402,7 @@ Deno.test('AC6 docker backend: delete removes the container and the workspace st
 	}
 });
 
-Deno.test('AC6 / R2-5 docker backend: reconciliation removes orphans, stops running ones, touches no other deployment', async () => {
+Deno.test('docker backend: reconciliation removes orphans, stops running ones, touches no other deployment', async () => {
 	const owned = '11111111-2222-4333-8444-555555555555';
 	const idle = '22222222-3333-4444-8555-666666666666';
 	const stolen = '33333333-4444-4555-8666-777777777777';
@@ -425,8 +428,8 @@ Deno.test('AC6 / R2-5 docker backend: reconciliation removes orphans, stops runn
 		const paused = fake.plant(name(frozen), label(frozen), true);
 		paused.paused = true;
 		planted.frozen = paused.id;
-		// From before deployments were labelled: no name of this service finds it again.
-		planted.legacy = fake.plant(`ttk-sandbox-${idle}`, label(idle, alice, null), true).id;
+		// Without a deployment label: no name of this service finds it again.
+		planted.undeployed = fake.plant(`ttk-sandbox-${idle}`, label(idle, alice, null), true).id;
 		// Another deployment's, though on this volume, and another sandbox's on its own volume: both left alone.
 		planted.foreign = fake.plant(name(owned, elsewhere), label(owned, alice, elsewhere), true).id;
 		planted.other = fake.plant(`other-${orphan}`, label(orphan), true, 'someone-elses-code').id;
@@ -436,7 +439,7 @@ Deno.test('AC6 / R2-5 docker backend: reconciliation removes orphans, stops runn
 		assertEquals(containers.get(planted.owned!)?.running, false);
 		assertEquals(containers.get(planted.idle!)?.running, false);
 		assertEquals([containers.get(planted.frozen!)?.running, containers.get(planted.frozen!)?.paused], [false, false]);
-		for (const gone of ['stolen', 'orphan', 'unlabelled', 'legacy']) {
+		for (const gone of ['stolen', 'orphan', 'unlabelled', 'undeployed']) {
 			assertEquals(containers.has(planted[gone]!), false, gone);
 		}
 		assertEquals(containers.get(planted.foreign!)?.running, true);
@@ -447,7 +450,7 @@ Deno.test('AC6 / R2-5 docker backend: reconciliation removes orphans, stops runn
 	}
 });
 
-Deno.test('D-108 docker backend: start refuses a daemon below API 1.45 and a missing volume', async () => {
+Deno.test('docker backend: start refuses a daemon below API 1.45 and a missing volume', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const old = new FakeEngine({ workDir: 'tests/.scratch' });
 	old.pingStatus = 400;
@@ -472,7 +475,7 @@ Deno.test('D-108 docker backend: start refuses a daemon below API 1.45 and a mis
 	await noVolume.settle();
 });
 
-Deno.test('R2-5 docker backend: start refuses a code volume its containers do not see as the service does', async () => {
+Deno.test('docker backend: start refuses a code volume its containers do not see as the service does', async () => {
 	const p = await parts();
 	try {
 		p.fake.volumeMismatch = true;
@@ -491,11 +494,12 @@ Deno.test('R2-5 docker backend: start refuses a code volume its containers do no
 	}
 });
 
-Deno.test('R2-3 docker backend: a volume check that never answers fails start-up in bounded time', async () => {
+Deno.test('docker backend: a volume check that never answers fails start-up in bounded time', async () => {
 	const p = await parts();
 	try {
 		p.fake.volumeCheckHangs = true;
-		const docker = p.backend({ checkTimeoutMs: 300 });
+		// Long enough that container setup finishes under a loaded parallel run, so the deadline hits the hung exec.
+		const docker = p.backend({ checkTimeoutMs: 1_000 });
 		const began = performance.now();
 		await assertRejects(() => docker.start(), Error, 'did not finish');
 		docker.close();
@@ -510,18 +514,21 @@ Deno.test('R2-3 docker backend: a volume check that never answers fails start-up
 	}
 });
 
-Deno.test('R2-3 docker backend: the volume check never writes in a workspace’s home, whatever was left there', async () => {
+Deno.test('docker backend: the volume check never writes in a workspace’s home, whatever was left there', async () => {
 	const existing = '66666666-7777-4888-8999-aaaaaaaaaaaa';
 	const linked = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
 	const f = await fixture(async (_fake, workDir) => {
 		await plantWorkspace(workDir, existing);
-		// A file a command left at the very name the check used to write, in the workspace's own home.
+		// A file a command left at the check's own file name, in the workspace's own home.
 		await Deno.writeTextFile(`${workDir}/.sandbox/${existing}/home/.harbour-volume-check`, 'mine');
 		if (posix) {
 			// And a link there to a file of the service's: a write through it would land outside the workspace.
 			await plantWorkspace(workDir, linked);
 			await Deno.writeTextFile(`${workDir}/canary.txt`, 'canary');
-			await Deno.symlink(`${workDir}/canary.txt`, `${workDir}/.sandbox/${linked}/home/.harbour-volume-check`);
+			await Deno.symlink(
+				await Deno.realPath(`${workDir}/canary.txt`),
+				`${workDir}/.sandbox/${linked}/home/.harbour-volume-check`,
+			);
 		}
 	});
 	try {
@@ -536,7 +543,7 @@ Deno.test('R2-3 docker backend: the volume check never writes in a workspace’s
 	}
 });
 
-Deno.test('R2-2 docker backend: disk use is measured by the service with the container paused, never by an exec in it', async () => {
+Deno.test('docker backend: disk use is measured by the service with the container paused, never by an exec in it', async () => {
 	const f = await fixture();
 	try {
 		const workspace_id = (await f.service.call('alice', 'create', {})).workspace_id as string;
@@ -561,7 +568,7 @@ Deno.test('R2-2 docker backend: disk use is measured by the service with the con
 			`POST /containers/${container.id}/pause`,
 			`POST /containers/${container.id}/unpause`,
 		]);
-		// Nothing measures inside the container any more: no du, no find.
+		// Nothing measures inside the container: no du, no find.
 		for (const body of f.fake.execBodies) {
 			assert(!/\bdu -s|\bfind \/workspace/.test(body.Cmd.join('\n')), body.Cmd.join(' '));
 		}
@@ -575,14 +582,14 @@ Deno.test('R2-2 docker backend: disk use is measured by the service with the con
 	}
 });
 
-Deno.test('R2-2 docker backend: a measurement that fails counts as over budget, so the command may only clean up', async () => {
+Deno.test('docker backend: a measurement that fails counts as over budget, so the command may only clean up', async () => {
 	const f = await fixture();
 	try {
 		const workspace_id = (await f.service.call('alice', 'create', {})).workspace_id as string;
 		f.control.failMeasure = true;
 		const result = await f.service.call('alice', 'exec', { workspace_id, command: 'echo cleanup' });
 		assertEquals([result.output, result.cleanupOnly, result.overBudget], ['cleanup\n', true, true]);
-		// The command could write no file data (SB-7), and the failure was logged.
+		// The command could write no file data, and the failure was logged.
 		const body = f.fake.execBodies.find((b) => b.Cmd[5] === 'echo cleanup')!;
 		assertStringIncludes(body.Cmd[4]!, 'ulimit -f 0');
 		assert(f.logs.some((l) => l.event === 'docker.measure_failed' && l.fields.runId === workspace_id));
@@ -595,7 +602,7 @@ Deno.test('R2-2 docker backend: a measurement that fails counts as over budget, 
 	}
 });
 
-Deno.test('R2-2 docker backend: a container that cannot be unpaused is stopped, never left frozen', async () => {
+Deno.test('docker backend: a container that cannot be unpaused is stopped, never left frozen', async () => {
 	const f = await fixture();
 	try {
 		const workspace_id = (await f.service.call('alice', 'create', {})).workspace_id as string;
@@ -613,7 +620,7 @@ Deno.test('R2-2 docker backend: a container that cannot be unpaused is stopped, 
 	}
 });
 
-Deno.test('R2-6 docker backend: a container whose body or image changed since is replaced; an identical one is kept', async () => {
+Deno.test('docker backend: a container whose body or image changed since is replaced; an identical one is kept', async () => {
 	const f = await fixture();
 	try {
 		const workspace_id = (await f.service.call('alice', 'create', {})).workspace_id as string;
@@ -632,7 +639,7 @@ Deno.test('R2-6 docker backend: a container whose body or image changed since is
 		let next = await f.restart();
 		await next.service.call('alice', 'exec', { workspace_id, command: 'echo kept' });
 		assertEquals(f.fake.containerOf(workspace_id)!.id, first.id);
-		// What an earlier release created: a field the old match never compared (CapDrop), under that body's hash.
+		// A container whose body differs in a field outside the hash's view (CapDrop), under another body's hash.
 		first.body = {
 			...first.body,
 			Labels: { ...(first.body.Labels as Record<string, string>), 'eu.tykotech.body': 'e'.repeat(64) },
@@ -657,7 +664,7 @@ Deno.test('R2-6 docker backend: a container whose body or image changed since is
 	}
 });
 
-Deno.test('D-108 docker backend: idle containers stop, and start again on demand; one stopped behind its back too', async () => {
+Deno.test('docker backend: idle containers stop, and start again on demand; one stopped behind its back too', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -679,7 +686,7 @@ Deno.test('D-108 docker backend: idle containers stop, and start again on demand
 	}
 });
 
-/** R12: a clone step's egress as the backend opens it, recorded; the fake container never connects to it. */
+/** A clone step's egress as the backend opens it, recorded; the fake container never connects to it. */
 function recordingEgress(opened: Array<{ path: string; runId: string; closed: boolean }>): OpenEgress {
 	return (path, _deps, runId) => {
 		const handle = {
@@ -698,7 +705,7 @@ function recordingEgress(opened: Array<{ path: string; runId: string; closed: bo
 	};
 }
 
-Deno.test('R12 docker backend: a clone runs once in the provisioning container, then .git is mounted read-only', async () => {
+Deno.test('docker backend: a clone runs once in the provisioning container, then .git is mounted read-only', async () => {
 	const f = await fixture();
 	try {
 		const commit = 'c'.repeat(40);
@@ -751,7 +758,7 @@ Deno.test('R12 docker backend: a clone runs once in the provisioning container, 
 	}
 });
 
-Deno.test('R12 docker backend: a failed clone removes its container and every folder it had', async () => {
+Deno.test('docker backend: a failed clone removes its container and every folder it had', async () => {
 	const f = await fixture();
 	try {
 		f.fake.player = (exec) =>
@@ -781,6 +788,138 @@ Deno.test('R12 docker backend: a failed clone removes its container and every fo
 			await assertRejects(() => Deno.stat(path), Deno.errors.NotFound, path);
 		}
 		assertEquals((await service.call('alice', 'list', {})).workspaces, []);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+Deno.test('docker backend: a session’s marker outlives its cleanup, so file operations stay in the container', async () => {
+	const f = await fixture();
+	try {
+		const { workspace_id } = await f.service.call('alice', 'create', {});
+		const id = workspace_id as string;
+		const { session_id } = await f.service.call('alice', 'session_open', { workspace_id });
+		let release!: () => void;
+		f.fake.cleanupHold = new Promise<void>((resolve) => release = resolve);
+		const cleanupExecs = () => f.fake.execBodies.filter((b) => b.Cmd[2] === CLEANUP_SCRIPT).length;
+		const before = cleanupExecs();
+		await f.service.call('alice', 'session_close', { session_id });
+		// The shell is gone and its teardown's cleanup has started, but not finished: the marker is still set...
+		await until(() => cleanupExecs() > before);
+		assertNotEquals(f.docker.sessionOf(id), null);
+		// ...so a read now is routed into the container, never the service's own path.
+		const reading = f.service.call('alice', 'read', { workspace_id, path: 'x.txt' });
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		f.fake.cleanupHold = null;
+		release();
+		assertEquals(await reading, { content: 'caged text', bytes: 10 });
+		await until(() => f.logs.some((l) => l.event === 'session.ended'));
+		assertEquals(f.docker.sessionOf(id), null);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+Deno.test('docker backend: a cleanup that cannot prove the container empty stops it', async () => {
+	const f = await fixture();
+	try {
+		const { workspace_id } = await f.service.call('alice', 'create', {});
+		const id = workspace_id as string;
+		const result = await f.service.call('alice', 'exec', { workspace_id, command: 'hop &' });
+		assertEquals(result.output, 'started\n');
+		const container = f.fake.containerOf(id)!;
+		// The cleanup exited 3 (not every process was proven gone): the container was stopped, which spares nothing.
+		assert(f.logs.some((l) => l.event === 'docker.cleanup_failed'));
+		assert(f.fake.trail.includes(`POST /containers/${container.id}/stop`), f.fake.trail.join('\n'));
+		assertEquals([container.running, container.strays], [false, []]);
+		// With nothing left running, the service's own path is safe again: the write lands on the volume.
+		assertEquals(f.docker.cagesFiles(id), false);
+		await f.service.call('alice', 'write', { workspace_id, path: 'y.txt', content: 'hi' });
+		assertEquals(await Deno.readTextFile(`${f.workDir}/${id}/y.txt`), 'hi');
+	} finally {
+		await f.cleanup();
+	}
+});
+
+Deno.test('docker backend: while the container runs, file operations run in it, session or not', async () => {
+	const f = await fixture();
+	try {
+		const { workspace_id } = await f.service.call('alice', 'create', {});
+		const id = workspace_id as string;
+		// Created and stopped: nothing of the workspace can run, so the service's path serves.
+		assertEquals(f.docker.cagesFiles(id), false);
+		await f.service.call('alice', 'exec', { workspace_id, command: 'echo hi' });
+		assertEquals(f.docker.sessionOf(id), null);
+		assertEquals(f.docker.cagesFiles(id), true);
+		assertEquals(await f.service.call('alice', 'read', { workspace_id, path: 'x.txt' }), {
+			content: 'caged text',
+			bytes: 10,
+		});
+		await f.service.call('alice', 'write', { workspace_id, path: 'x.txt', content: 'hello' });
+		assert(f.fake.execBodies.some((b) => b.Env.includes('TTK_PATH=x.txt') && b.AttachStdin));
+		await assertRejects(() => Deno.stat(`${f.workDir}/${id}/x.txt`));
+		// Once the idle sweep stops it, the service's own path serves again.
+		await f.docker.stopIdle(Date.now() + LIMITS.containerIdleMs + 1);
+		assertEquals(f.docker.cagesFiles(id), false);
+		await f.service.call('alice', 'write', { workspace_id, path: 'x.txt', content: 'host' });
+		assertEquals(await Deno.readTextFile(`${f.workDir}/${id}/x.txt`), 'host');
+		// After a restart this process knows nothing of the container (its stop at reconciliation may have failed).
+		const { docker } = await f.restart();
+		assertEquals(docker.cagesFiles(id), true);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+Deno.test('docker backend: one owner keeps at most its share of live sessions; another owner still opens one', async () => {
+	const f = await fixture();
+	try {
+		const ids: string[] = [];
+		for (let i = 0; i < LIMITS.ownerSessions + 1; i++) {
+			ids.push((await f.service.call('alice', 'create', {})).workspace_id as string);
+		}
+		const opened: string[] = [];
+		for (const id of ids.slice(0, LIMITS.ownerSessions)) {
+			opened.push((await f.service.call('alice', 'session_open', { workspace_id: id })).session_id as string);
+		}
+		const refused = await assertRejects(
+			() => f.service.call('alice', 'session_open', { workspace_id: ids.at(-1) }),
+			GateError,
+		);
+		assertEquals([refused.status, refused.code], [429, 'busy']);
+		assertEquals(f.docker.sessionOf(ids.at(-1)!), null);
+		const bobs = (await f.service.call('bob', 'create', {})).workspace_id as string;
+		const bob = await f.service.call('bob', 'session_open', { workspace_id: bobs });
+		// A closed session gives its owner the slot back once its teardown is done.
+		await f.service.call('alice', 'session_close', { session_id: opened[0] });
+		await until(() => f.docker.sessionOf(ids[0]!) === null);
+		const again = await f.service.call('alice', 'session_open', { workspace_id: ids.at(-1) });
+		for (const session_id of [...opened.slice(1), again.session_id, bob.session_id]) {
+			await f.service.call(session_id === bob.session_id ? 'bob' : 'alice', 'session_close', { session_id });
+		}
+		await until(() => [...ids, bobs].every((id) => f.docker.sessionOf(id) === null));
+	} finally {
+		await f.cleanup();
+	}
+});
+
+Deno.test('docker backend: an owner’s second command waits behind its first; another owner’s runs beside it', async () => {
+	const f = await fixture();
+	try {
+		const first = (await f.service.call('alice', 'create', {})).workspace_id as string;
+		const second = (await f.service.call('alice', 'create', {})).workspace_id as string;
+		const bobs = (await f.service.call('bob', 'create', {})).workspace_id as string;
+		const done: string[] = [];
+		const long = f.service.call('alice', 'exec', { workspace_id: first, command: 'sleep 100', timeout_ms: 1_000 })
+			.then(() => done.push('alice-long'));
+		await until(() => f.fake.execBodies.some((b) => b.Cmd[5] === 'sleep 100'));
+		const queued = f.service.call('alice', 'exec', { workspace_id: second, command: 'echo queued' })
+			.then(() => done.push('alice-queued'));
+		await f.service.call('bob', 'exec', { workspace_id: bobs, command: 'echo bob' }).then(() => done.push('bob'));
+		// Bob was not held up; Alice's second waited for her first, though a shared slot was free.
+		assertEquals(done, ['bob']);
+		await Promise.all([long, queued]);
+		assertEquals(done, ['bob', 'alice-long', 'alice-queued']);
 	} finally {
 		await f.cleanup();
 	}

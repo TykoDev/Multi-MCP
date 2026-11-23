@@ -1,16 +1,15 @@
 /**
  * @module
- * `RecordingWatchdog` ○ — screencast frame capture (ARCHITECTURE.md §6.12).
+ * `RecordingWatchdog` ○ — screencast frame capture.
  *
  * > when `recordVideoDir` is set: `Page.startScreencast` on the focused session, frame ack +
- * > buffering, restart on focus change. v1 captures and stores frames; **mp4 encoding is deferred
- * > (D-SCOPE1)**.
+ * > buffering, restart on focus change. Frames are captured and stored; **there is no mp4 encoding**.
  *
  * So this file ends at "a directory full of numbered frames plus a manifest". There is no encoder, no
- * ffmpeg shell-out, and no dependency that would need one — D-SCOPE1 puts encoding out of v1 and
- * ARCHITECTURE.md §8 additionally forbids CPU-heavy work in the core path.
+ * ffmpeg shell-out, and no dependency that would need one — encoding is out of scope, and CPU-heavy
+ * work does not belong in the core path.
  *
- * ## The three mechanisms §6.12 names
+ * ## The three mechanisms
  *
  * - **`Page.startScreencast` on the focused session.** Screencast is per-target; only the tab the
  *   agent is looking at is worth recording.
@@ -20,11 +19,10 @@
  * - **Restart on focus change.** `AgentFocusChangedEvent` stops the old session's screencast and
  *   starts one on the new session, so the recording follows the agent across tabs.
  *
- * ## Buffering, and the bound on it (ERRATUM(M1-watchdogs-rest-9))
+ * ## Buffering, and the bound on it
  *
- * §6.12 says "buffering" without a bound, a frame format, or a quality. A JPEG frame runs 30–150 kB,
- * so an unbounded buffer on a long run is an OOM with extra steps. Frames are held in memory (that is
- * what "buffering" means) up to {@linkcode RECORDING_MAX_BUFFERED_FRAMES}, oldest dropped and
+ * A JPEG frame runs 30–150 kB, so an unbounded buffer on a long run is an OOM with extra steps.
+ * Frames are held in memory up to {@linkcode RECORDING_MAX_BUFFERED_FRAMES}, oldest dropped and
  * counted, and written to disk exactly once, in {@linkcode RecordingWatchdog.flush}, from the
  * `BrowserStopEvent` handler. No background IO: a write started from a CDP callback would outlive
  * `detach()` and the op sanitizer would (correctly) call that a leak.
@@ -63,7 +61,7 @@ export function recordingFrameFilename(index: number): string {
 	return `frame-${String(index).padStart(6, '0')}.${RECORDING_FRAME_FORMAT}`;
 }
 
-/** The conditional-attachment predicate (ARCHITECTURE.md §6.12). */
+/** The conditional-attachment predicate (`recordVideoDir` set). */
 export function shouldAttachRecordingWatchdog(profile: Pick<BrowserProfile, 'recordVideoDir'>): boolean {
 	return profile.recordVideoDir !== null;
 }
@@ -78,7 +76,7 @@ export interface RecordedFrame {
 	readonly data: string;
 	readonly targetId: TargetId | null;
 	readonly metadata: CdpEventParams['Page.screencastFrame']['metadata'];
-	/** ISO-8601 reception time (wall clock), matching the event-envelope spelling of §5.1. */
+	/** ISO-8601 reception time (wall clock), matching the event-envelope spelling. */
 	readonly receivedAt: string;
 }
 
@@ -91,7 +89,7 @@ export interface RecordingManifestFrame {
 	readonly metadata: CdpEventParams['Page.screencastFrame']['metadata'];
 }
 
-/** `frames.json`: everything an encoder would need, minus the encoder (D-SCOPE1). */
+/** `frames.json`: everything an encoder would need, minus the encoder. */
 export interface RecordingManifest {
 	readonly version: number;
 	readonly format: typeof RECORDING_FRAME_FORMAT;
@@ -121,7 +119,7 @@ export class RecordingWatchdog extends BaseWatchdog {
 
 	readonly #frames: RecordedFrame[] = [];
 	/**
-	 * Frames already on disk, accumulated across flushes (ERRATUM(CANCEL-1)).
+	 * Frames already on disk, accumulated across flushes.
 	 *
 	 * A budget-truncated flush re-queues its remainder and a later flush finishes it; the manifest is
 	 * rewritten each time and must describe **every** frame in the directory, not just the last pass's.
@@ -183,7 +181,7 @@ export class RecordingWatchdog extends BaseWatchdog {
 		await this.restart(null, context);
 	}
 
-	/** "restart on focus change" (§6.12): stop the old screencast, start one on the new target. */
+	/** "restart on focus change": stop the old screencast, start one on the new target. */
 	async onAgentFocusChangedEvent(event: AgentFocusChangedEvent, context?: HandlerContext): Promise<void> {
 		if (!shouldAttachRecordingWatchdog(this.profile)) return;
 		if (event.targetId === this.#castTargetId) return;
@@ -194,11 +192,11 @@ export class RecordingWatchdog extends BaseWatchdog {
 	/**
 	 * Stops the screencast and writes the frames.
 	 *
-	 * Registered before `BrowserSession`'s own stop handler, which is what closes the socket (E-16),
+	 * Registered before `BrowserSession`'s own stop handler, which is what closes the socket,
 	 * so `Page.stopScreencast` still has a transport to travel on.
 	 *
-	 * ERRATUM(CANCEL-1): the `HandlerContext` is read, for the reason ERRATUM(KILL-1) states — see
-	 * {@linkcode RecordingWatchdog.flush}, which is where the 301 filesystem writes were.
+	 * The `HandlerContext` is read so the flush stays inside the stop budget — see
+	 * {@linkcode RecordingWatchdog.flush}, which is where the filesystem writes are.
 	 */
 	async onBrowserStopEvent(_event: BrowserStopEvent, context?: HandlerContext): Promise<void> {
 		if (!shouldAttachRecordingWatchdog(this.profile)) return;
@@ -244,7 +242,7 @@ export class RecordingWatchdog extends BaseWatchdog {
 				format: RECORDING_FRAME_FORMAT,
 				quality: RECORDING_FRAME_QUALITY,
 				// CDP exposes no frame *rate*; `recordVideoFramerate` is carried in the manifest as the
-				// intended playback rate instead (ERRATUM(M1-watchdogs-rest-9)).
+				// intended playback rate instead.
 				everyNthFrame: 1,
 				...(size === null ? {} : { maxWidth: size.width, maxHeight: size.height }),
 			}, session.sessionId);
@@ -277,20 +275,22 @@ export class RecordingWatchdog extends BaseWatchdog {
 	 * Writes the buffered frames plus {@linkcode RECORDING_MANIFEST_FILENAME} into `recordVideoDir`
 	 * and clears the buffer. The only place this module touches the filesystem.
 	 *
-	 * ERRATUM(CANCEL-1): this loop was up to {@linkcode RECORDING_MAX_BUFFERED_FRAMES} + 1 sequential
-	 * `Deno.writeFile` calls with nothing checked between them — structurally the same defect
-	 * ERRATUM(KILL-3) fixed in the profile sweep, and reached from the same 45 s `BrowserStopEvent`.
-	 * The budget is now consulted **between frames**, which is the only cancellation on offer: a single
-	 * `Deno.writeFile` takes no signal and racing it with a timer stops the awaiting, not the write.
+	 * The loop writes up to {@linkcode RECORDING_MAX_BUFFERED_FRAMES} + 1 sequential `Deno.writeFile`
+	 * calls from the 45 s `BrowserStopEvent`, so the budget is consulted **between frames**, which is
+	 * the only cancellation on offer: a single `Deno.writeFile` takes no signal and racing it with a
+	 * timer stops the awaiting, not the write.
 	 *
-	 * The deliberate asymmetry, in the shape ERRATUM(KILL-1) chose: **frames are droppable, the
+	 * The deliberate asymmetry, the same one the kill handler makes: **frames are droppable, the
 	 * manifest is not.** An unwritten frame is re-queued into `#frames`, so a later flush resumes it
 	 * and the recording is at worst short a few frames at the tail — which is what
 	 * {@linkcode RECORDING_MAX_BUFFERED_FRAMES} already does to a long run anyway. A directory of
-	 * numbered JPEGs with no `frames.json` is a different thing entirely: D-SCOPE1 defers the encoder,
-	 * so the manifest *is* the deliverable, and the frames without it are undated, unsized and unowned.
+	 * numbered JPEGs with no `frames.json` is a different thing entirely: there is no encoder, so the
+	 * manifest *is* the deliverable, and the frames without it are undated, unsized and unowned.
 	 * The manifest write is therefore started even on the abort path — one small bounded operation,
 	 * the same trade `launched.close()` gets in the kill handler.
+	 *
+	 * `budget` defaults to unbudgeted so a direct call (a test, a caller outside a dispatch) is never
+	 * cut short by a zero budget.
 	 *
 	 * `budget` defaults to unbudgeted so a direct call (a test, a caller outside a dispatch) keeps the
 	 * old behaviour rather than silently receiving a zero budget.
@@ -388,7 +388,7 @@ export class RecordingWatchdog extends BaseWatchdog {
 	#ack(screencastSessionId: number, sessionId: SessionId | undefined): void {
 		let call: Promise<unknown>;
 		try {
-			// Bare `this.cdp` on purpose (ERRATUM(E-52) allowlist): this runs from Chrome's
+			// Bare `this.cdp` on purpose: this runs from Chrome's
 			// `Page.screencastFrame` listener, which has no dispatch and therefore no context to bind.
 			// It is also the flow-control ack — a skipped one ends the stream.
 			call = this.cdp.send.Page.screencastFrameAck({ sessionId: screencastSessionId }, sessionId);

@@ -1,8 +1,6 @@
 /**
- * R12 (design §2.19, AC33): `sandbox_clone` through the gateway's own MCP mount, against a fake sandbox service whose
- * `/healthz` says whether it clones. Offered only while the sandbox is up and says `clone: true`; otherwise absent
- * from `tools/list`, and a call answers `feature-unavailable` naming the sandbox's switches, without a `feature`
- * extra. The admin diagnostics carry the same fact.
+ * `sandbox_clone` through the gateway's own MCP mount, against a fake sandbox service whose `/healthz` says whether it
+ * clones.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { SessionRegistry } from '@tykotech/mcp';
@@ -31,7 +29,7 @@ const LIMITS = {
 async function gatewayWith(
 	health: { ok: boolean; clone?: boolean },
 	watched = false,
-	/** R3-9: what the sandbox answers a clone with, in place of a landed clone. */
+	/** What the sandbox answers a clone with, in place of a landed clone. */
 	failure?: { status: number; body: Record<string, unknown> },
 ) {
 	const admin = await generateApiKey('admin', ['admin']);
@@ -119,7 +117,7 @@ async function gatewayWith(
 	};
 }
 
-Deno.test('R12 gateway: sandbox_clone is offered, and reaches the clone operation, only when /healthz says clone', async () => {
+Deno.test('sandbox clone: sandbox_clone is offered, and reaches the clone operation, only when /healthz says clone', async () => {
 	const g = await gatewayWith({ ok: true, clone: true });
 	try {
 		assert((await g.listed(g.coder)).includes('sandbox_clone'));
@@ -143,8 +141,8 @@ Deno.test('R12 gateway: sandbox_clone is offered, and reaches the clone operatio
 	}
 });
 
-Deno.test('R12 gateway: without clone on the sandbox, sandbox_clone is withheld and names the sandbox switches', async () => {
-	// A sandbox that says false, and one from before R12 that says nothing.
+Deno.test('sandbox clone: without clone on the sandbox, sandbox_clone is withheld and names the sandbox switches', async () => {
+	// A sandbox that says false, and one that says nothing about cloning.
 	for (const health of [{ ok: true, clone: false }, { ok: true }]) {
 		const g = await gatewayWith(health);
 		try {
@@ -164,7 +162,7 @@ Deno.test('R12 gateway: without clone on the sandbox, sandbox_clone is withheld 
 	}
 });
 
-Deno.test('R3-9 gateway: a failed clone says why in fixed words, under feature-unavailable, echoing nothing upstream', async () => {
+Deno.test('sandbox clone: a failed clone says why in fixed words, under feature-unavailable, echoing nothing upstream', async () => {
 	// What the sandbox service answers (workspaces.ts), plus an upstream diagnostic that must never reach the caller.
 	const upstream = 'fatal: unable to access https://x-access-token:ghp_upstream_secret@github.com/acme/app.git';
 	const cases: [number, string, string][] = [
@@ -202,9 +200,10 @@ Deno.test('R3-9 gateway: a failed clone says why in fixed words, under feature-u
 	}
 });
 
-Deno.test('FXC-N1 (AC27): sandbox_clone keeps all five R3-9 texts exactly; other codes read the general sandbox table', async () => {
+Deno.test('sandbox clone: sandbox_clone keeps its five own failure texts exactly; other codes read the general sandbox table', async () => {
 	const upstream = 'fatal: unable to access https://x-access-token:ghp_upstream_secret@github.com/acme/app.git';
-	// R3-9's words, verbatim (F6): the general table's entries for run_busy, busy and over_budget must not replace them.
+	// The clone's own words, verbatim: the general table's entries for run_busy, busy and over_budget must not replace
+	// them.
 	const own: [number, string, string][] = [
 		[
 			502,
@@ -250,7 +249,7 @@ Deno.test('FXC-N1 (AC27): sandbox_clone keeps all five R3-9 texts exactly; other
 	}
 });
 
-Deno.test('R12 gateway: a sandbox that clones but is down withholds sandbox_clone with the D-082 reason', async () => {
+Deno.test('sandbox clone: a sandbox that clones but is down withholds sandbox_clone with the service-health reason', async () => {
 	const g = await gatewayWith({ ok: false, clone: true }, true);
 	try {
 		assert(!(await g.listed(g.coder)).includes('sandbox_clone'));

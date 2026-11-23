@@ -1,12 +1,7 @@
 /**
- * R8 — per-principal session ownership at the gateway's own surfaces (design §2.16, D-128, AC28): the admin REST
- * session routes, the file route, the SSE event stream, the live-ticket mint, the recordings route (F26: with an
- * injected recorder whose encoder is not a real `ffmpeg`) and the configuration refusal. The MCP surfaces are covered
- * in `packages/mcp/src/ownership_test.ts`; the live-view upgrade, with a real browser, in
- * `tests/e2e/ownership_e2e_test.ts`.
- *
- * Every request runs against the app's own `fetch` with no bound port, as `eventstream_test.ts` does, so a stream body
- * this test opens is one it owns and cancels.
+ * Per-principal session ownership at the gateway's own surfaces: the admin REST session routes, the file route, the SSE
+ * event stream, the live-ticket mint, the recordings route (with an injected recorder whose encoder is not a real
+ * `ffmpeg`) and the configuration refusal.
  */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import type { BrowserSession } from '@tykotech/browser';
@@ -65,8 +60,8 @@ async function launcher(dir: string) {
 }
 
 /**
- * An encoder that is not `ffmpeg` (F26): it keeps what the recorder writes and, when stdin closes, writes it to the
- * output path the recorder named — so the route serves a real file without `--allow-run`.
+ * An encoder that is not `ffmpeg`: it keeps what the recorder writes and, when stdin closes, writes it to the output
+ * path the recorder named — so the route serves a real file without `--allow-run`.
  */
 const fakeEncoder: EncoderSpawn = (_command, options) => {
 	const path = options.args.at(-1)!;
@@ -158,18 +153,18 @@ async function rig(ownership: SessionOwnership): Promise<Rig> {
 
 const access = (owner: string, admin = false) => ({ owner, admin });
 
-Deno.test('R8: sessionAccessOf is the realm-qualified owner and the admin scope', () => {
-	const principal: Principal = { kind: 'oauth', id: 'sub-1', scopes: new Set(['mcp:invoke', 'admin']) };
-	assertEquals(sessionAccessOf(principal), { owner: 'oauth:sub-1', admin: true });
+Deno.test('ownership: sessionAccessOf is the realm-qualified owner and the admin scope', () => {
+	const principal: Principal = { kind: 'api-key', id: 'sub-1', scopes: new Set(['mcp:invoke', 'admin']) };
+	assertEquals(sessionAccessOf(principal), { owner: 'api-key:sub-1', admin: true });
 	assertEquals(
 		sessionAccessOf({ kind: 'anonymous-loopback', id: 'anonymous:127.0.0.1', scopes: new Set(['mcp:invoke']) }),
 		{ owner: 'anonymous-loopback:local', admin: false },
 	);
 });
 
-Deno.test('R8 (AC28): TTK_SESSION_OWNERSHIP parses shared|owner case-insensitively and refuses owner in a cluster', () => {
+Deno.test('ownership: TTK_SESSION_OWNERSHIP parses shared|owner case-insensitively', () => {
 	assert((ENV_NAMES as readonly string[]).includes('TTK_SESSION_OWNERSHIP'), 'read by every processEnv caller');
-	// D-150: unset is `owner` on a single node (an empty value is unset).
+	// Unset is `owner` (an empty value is unset).
 	assertEquals(loadConfig({}).sessionOwnership, 'owner');
 	assertEquals(loadConfig({ TTK_SESSION_OWNERSHIP: '  ' }).sessionOwnership, 'owner');
 	assertEquals(loadConfig({}).featureNotes.filter((note) => note.includes('TTK_SESSION_OWNERSHIP')), []);
@@ -177,26 +172,9 @@ Deno.test('R8 (AC28): TTK_SESSION_OWNERSHIP parses shared|owner case-insensitive
 	assertEquals(loadConfig({ TTK_SESSION_OWNERSHIP: 'Shared' }).sessionOwnership, 'shared');
 	const bad = assertThrows(() => loadConfig({ TTK_SESSION_OWNERSHIP: 'private' }), ConfigError);
 	assertStringIncludes(bad.message, 'TTK_SESSION_OWNERSHIP');
-	const clustered = assertThrows(
-		() => loadConfig({ TTK_SESSION_OWNERSHIP: 'owner', TTK_CLUSTER_KV: 'tests/.scratch/kv' }),
-		ConfigError,
-	);
-	assertStringIncludes(clustered.message, 'TTK_SESSION_OWNERSHIP');
-	assertStringIncludes(clustered.message, 'TTK_CLUSTER_KV');
-	assertEquals(
-		loadConfig({ TTK_SESSION_OWNERSHIP: 'shared', TTK_CLUSTER_KV: 'tests/.scratch/kv' }).sessionOwnership,
-		'shared',
-	);
-	// D-150: unset in a cluster is `shared`, not a refusal, and one note says why; only a named `owner` refuses.
-	const defaulted = loadConfig({ TTK_CLUSTER_KV: 'tests/.scratch/kv' });
-	assertEquals(defaulted.sessionOwnership, 'shared');
-	const notes = defaulted.featureNotes.filter((note) => note.includes('TTK_SESSION_OWNERSHIP'));
-	assertEquals(notes.length, 1);
-	assertStringIncludes(notes[0] ?? '', 'TTK_SESSION_OWNERSHIP is unset and resolves to shared');
-	assertStringIncludes(notes[0] ?? '', 'TTK_CLUSTER_KV');
 });
 
-Deno.test("R8 (AC28): bob reaches none of alice's session through the file route or the event stream", async () => {
+Deno.test("ownership: bob reaches none of alice's session through the file route or the event stream", async () => {
 	const r = await rig('owner');
 	try {
 		const a = await r.registry.resolve(undefined, access(ALICE_OWNER));
@@ -228,7 +206,7 @@ Deno.test("R8 (AC28): bob reaches none of alice's session through the file route
 	}
 });
 
-Deno.test("R8 (AC28): a live ticket for another owner's session is unknown-session; the ticket carries the access", async () => {
+Deno.test("ownership: a live ticket for another owner's session is unknown-session; the ticket carries the access", async () => {
 	const r = await rig('owner');
 	try {
 		const a = await r.registry.resolve(undefined, access(ALICE_OWNER));
@@ -261,7 +239,7 @@ Deno.test("R8 (AC28): a live ticket for another owner's session is unknown-sessi
 	}
 });
 
-Deno.test('R8 / F4 (AC28): the admin REST session routes look sessions up as the admin; non-admins stay refused', async () => {
+Deno.test('ownership: the admin REST session routes look sessions up as the admin; non-admins stay refused', async () => {
 	const r = await rig('owner');
 	try {
 		const a = await r.registry.resolve(undefined, access(ALICE_OWNER));
@@ -309,7 +287,7 @@ Deno.test('R8 / F4 (AC28): the admin REST session routes look sessions up as the
 	}
 });
 
-Deno.test('RV-7: in owner mode the admin session list names each session’s owner; shared mode names none', async () => {
+Deno.test('ownership: in owner mode the admin session list names each session’s owner; shared mode names none', async () => {
 	const owned = await rig('owner');
 	try {
 		const a = await owned.registry.resolve(undefined, access(ALICE_OWNER));
@@ -334,7 +312,7 @@ Deno.test('RV-7: in owner mode the admin session list names each session’s own
 	}
 });
 
-Deno.test("R8 / F26 (AC28): a recording is its starter's — others are not found, admin reads all", async () => {
+Deno.test("ownership: a recording is its starter's — others are not found, admin reads all", async () => {
 	const r = await rig('owner');
 	try {
 		const a = await r.registry.resolve(undefined, access(ALICE_OWNER));
@@ -377,7 +355,7 @@ Deno.test("R8 / F26 (AC28): a recording is its starter's — others are not foun
 	}
 });
 
-Deno.test('R8 (AC27): shared mode serves every route to every holder of its scope, as before', async () => {
+Deno.test('ownership: shared mode serves every route to every holder of its scope', async () => {
 	const r = await rig('shared');
 	try {
 		const a = await r.registry.resolve(undefined, access(ALICE_OWNER));

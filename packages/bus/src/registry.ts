@@ -1,5 +1,5 @@
 /**
- * Event-name registry (ARCHITECTURE.md §4.1, D-BUS1).
+ * Event-name registry.
  *
  * Event names MUST be globally unique AND MUST NOT be substrings of one another. The substring rule
  * exists because downstream tooling (log greps, `TIMEOUT_<EventClassName>` env vars, prompt

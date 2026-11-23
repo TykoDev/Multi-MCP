@@ -1,39 +1,37 @@
 /**
  * `dom-extraction` unit tier — recorded CDP payloads in, `EnhancedDomTreeNode` IR out.
  *
- * Every test here replays a fixture from `packages/core/fixtures/dom/`, captured from real headless
- * Chrome 145 against the **shared** corpus in `tests/fixtures/pages/` — the same bytes the Python
- * reference was recorded against. A recorded payload is data, not a mock (D-TEST1): this is the same
+ * Every test here replays a fixture from `packages/browser/fixtures/dom/`, captured from real headless
+ * Chrome 145 against the **shared** corpus in `tests/fixtures/pages/` — the same bytes the reference
+ * goldens were recorded against. A recorded payload is data, not a mock: this is the same
  * merge code the browser path runs, and no CDP client, event bus or HTTP surface is faked anywhere in
  * the file.
  *
- * **This file is the R1 audit surface.** Each heuristic in the merge is named below with the test that
+ * **This file is the merge's parity audit surface.** Each heuristic in the merge is named below with the test that
  * pins it; if a heuristic changes, exactly one of these fails, which is the whole point.
  *
- * | # | Heuristic | Test | Corpus page |
- * |---|---|---|---|
- * | H1 | three-tree join on `backendNodeId` | "joins all three trees" | `form_attributes`, `visibility_edge_cases` |
- * | H2 | exactly the 10 whitelisted computed styles | "requests and decodes exactly the whitelist" | `form_attributes` |
- * | H3 | CSS visibility gate (display / visibility / opacity) | "CSS gate" | `visibility_edge_cases` |
- * | H4 | `opacity:0` propagates to descendants | "opacity propagates" | `visibility_edge_cases` |
- * | H5 | zero-area bounding-box filter | "bbox filter" | `visibility_edge_cases` |
- * | H6 | frame-chain viewport test, ±1000 px vertical slack | "viewport slack" | `scroll_page`, `visibility_edge_cases` |
- * | H7 | page-absolute geometry: DPR, frame content box, frame scroll | "absolute geometry" | `iframe_nested`, `iframe_oopif_scrolled` |
- * | H8 | same-origin pierce vs OOPIF session recursion | "frame traversal" | `iframe_nested`, `iframe_same_site_port`, `iframe_crossorigin` |
- * | H9 | shadow roots out of `childrenNodes`, type preserved | "shadow roots" | `shadow_open`, `shadow_closed`, `form_attributes`, `select_native` |
- * | H10 | `isClickable` / `paintOrder` / `stackingContexts` decode | "paint order and clickability" | `occlusion_paint_order`, `stacking_contexts`, `js_click_listeners` |
- * | H11 | listener census index alignment + caps + delegation | "listener census" | `js_click_listeners` |
- * | H12 | AX property whitelist, relation drop, non-ignored preference | "AX projection" | `form_attributes`, `radio_checkbox_group`, `react_controlled_inputs` |
- * | H13 | capture context (`targetId`/`frameId`/`sessionId`) per node | "capture context" | `iframe_crossorigin` |
- * | H14 | `hiddenElementsInfo` cap + ordering | "hidden element hints" | `iframe_hidden_elements`, `iframe_oopif_scrolled` |
- * | H15 | attribute folding, node-type normalisation | "structural decoding" | `form_attributes`, `baseline_button`, `svg_children` |
- * | H16 | budget / recovery contract | "recovery state" | `empty_page` |
+ * | Heuristic | Test | Corpus page |
+ * |---|---|---|
+ * | three-tree join on `backendNodeId` | "joins all three trees" | `form_attributes`, `visibility_edge_cases` |
+ * | exactly the 10 whitelisted computed styles | "requests and decodes exactly the whitelist" | `form_attributes` |
+ * | CSS visibility gate (display / visibility) | "CSS gate" | `visibility_edge_cases`, `visibility_collapse` |
+ * | `opacity:0` is not a hiding signal | "opacity is NOT part of the visibility gate" | `visibility_edge_cases` |
+ * | no zero-area gate | "there is no area gate" | `visibility_edge_cases` |
+ * | frame-chain viewport test, ±1000 px vertical slack | "viewport slack" | `scroll_page`, `visibility_edge_cases` |
+ * | page-absolute geometry: DPR, frame content box, frame scroll | "absolute geometry" | `iframe_nested`, `iframe_oopif_scrolled` |
+ * | same-origin pierce vs OOPIF session recursion | "frame traversal" | `iframe_nested`, `iframe_same_site_port`, `iframe_crossorigin` |
+ * | shadow roots out of `childrenNodes`, type preserved | "shadow roots" | `shadow_open`, `shadow_closed`, `form_attributes`, `select_native` |
+ * | `isClickable` / `paintOrder` / `stackingContexts` decode | "paint order and clickability" | `occlusion_paint_order`, `stacking_contexts`, `js_click_listeners` |
+ * | listener census index alignment + caps + delegation | "listener census" | `js_click_listeners` |
+ * | AX property whitelist, relation drop, non-ignored preference | "AX projection" | `form_attributes`, `radio_checkbox_group`, `react_controlled_inputs` |
+ * | capture context (`targetId`/`frameId`/`sessionId`) per node | "capture context" | `iframe_crossorigin` |
+ * | `hiddenElementsInfo` cap + ordering | "hidden element hints" | `iframe_hidden_elements`, `iframe_oopif_scrolled` |
+ * | attribute folding, node-type normalisation | "structural decoding" | `form_attributes`, `baseline_button`, `svg_children` |
+ * | budget / recovery contract | "recovery state" | `empty_page` |
  *
- * ERRATUM(M1-dom-test-repair): the corpus moved from 30 programmatic pages to the 32 shared static
- * pages, so every heuristic above changed page. Two legs could not follow it and are called out at
- * their test: `visibility: collapse` (no corpus page uses it — pinned on the primitive instead) and a
- * top-level *scrolled* document (no corpus page scrolls the main frame — pinned on a capture derived
- * from a recorded one, exactly as the H11 census-mismatch test derives its own).
+ * One leg has no corpus page and is called out at its test: a top-level *scrolled* document (no
+ * corpus page scrolls the main frame — pinned on a capture derived from a recorded one, exactly as
+ * the census-mismatch test derives its own).
  */
 
 import { assert, assertAlmostEquals, assertEquals, assertGreater, assertLess, assertNotEquals } from '@std/assert';
@@ -126,7 +124,7 @@ function geometryOf(root: EnhancedDomTreeNode): Map<string, string> {
 // corpus-wide invariants
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: the recorded corpus covers the ≥20 pages COMPLETIONS-CRITERIA §3.2 asks for', async () => {
+Deno.test('dom-extraction: the recorded corpus covers at least 20 pages', async () => {
 	const names = DOM_FIXTURE_PAGES.map((page) => page.name);
 	assertGreater(names.length, 19);
 	assertEquals(new Set(names).size, names.length, 'fixture page names must be unique');
@@ -166,10 +164,10 @@ Deno.test('dom-extraction: the merge is deterministic apart from node uuids', as
 });
 
 // ---------------------------------------------------------------------------
-// H1 — the three-tree join
+// the three-tree join
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: joins all three trees on backendNodeId (H1)', async () => {
+Deno.test('dom-extraction: joins all three trees on backendNodeId', async () => {
 	const root = await loadTree('form_attributes');
 	const button = findByTag(root, 'BUTTON').find((node) => node.attributes.type === 'submit');
 	assert(button !== undefined);
@@ -199,12 +197,11 @@ Deno.test('dom-extraction: joins all three trees on backendNodeId (H1)', async (
 });
 
 // ---------------------------------------------------------------------------
-// H2 — the computed-style whitelist
+// the computed-style whitelist
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: requests and decodes exactly the 10 whitelisted computed styles (H2)', async () => {
-	// The list is normative, not advisory: DATA-MODEL §6.2 states that asking for more crashes Chrome
-	// on heavy sites, so the request array must be the seam constant itself.
+Deno.test('dom-extraction: requests and decodes exactly the 10 whitelisted computed styles', async () => {
+	// The list is normative, not advisory: asking for more crashes Chrome on heavy sites, so the request array must be the seam constant itself.
 	assertEquals([...SNAPSHOT_COMPUTED_STYLES], [...REQUIRED_COMPUTED_STYLES]);
 	assertEquals(SNAPSHOT_COMPUTED_STYLES.length, 10);
 
@@ -226,10 +223,10 @@ Deno.test('dom-extraction: requests and decodes exactly the 10 whitelisted compu
 });
 
 // ---------------------------------------------------------------------------
-// H3/H4/H5 — the CSS gate, opacity propagation, the bbox filter
+// the CSS gate, opacity propagation, the bbox filter
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: CSS gate rejects display:none, visibility:hidden and collapse (H3)', async () => {
+Deno.test('dom-extraction: CSS gate rejects display:none, visibility:hidden and collapse', async () => {
 	const root = await loadTree('visibility_edge_cases');
 	assertEquals(byId(root, 'v-visible').isVisible, true);
 	assertEquals(byId(root, 'v-display-none').isVisible, false);
@@ -241,8 +238,7 @@ Deno.test('dom-extraction: CSS gate rejects display:none, visibility:hidden and 
 	assertEquals(passesCssGate(byId(root, 'v-display-none').snapshotNode), false);
 	assertEquals(byId(root, 'v-visibility-hidden').snapshotNode?.computedStyles?.visibility, 'hidden');
 
-	// `visibility: collapse` is fixture-backed again (`visibility_collapse.html`, added by M1-parity-fixes
-	// to restore the leg the corpus reconciliation dropped). Inside a table it removes the row the way
+	// `visibility: collapse` is fixture-backed by `visibility_collapse.html`. Inside a table it removes the row the way
 	// `display: none` does — Chrome emits no layout row at all, which is the strongest form of the gate —
 	// and outside one it behaves as `visibility: hidden`, which a descendant can undo.
 	const collapsed = await loadTree('visibility_collapse');
@@ -252,7 +248,7 @@ Deno.test('dom-extraction: CSS gate rejects display:none, visibility:hidden and 
 	assertEquals(byId(collapsed, 'vc-b4').isVisible, false, 'outside a table, collapse reads as hidden');
 	assertEquals(byId(collapsed, 'vc-block').snapshotNode?.computedStyles?.visibility, 'collapse');
 	// Inherited, and reversible by an explicit `visibility: visible` — which is exactly why the gate is
-	// per-node and not propagated the way opacity once was.
+	// per-node and not propagated.
 	assertEquals(byId(collapsed, 'vc-outer').isVisible, false);
 	assertEquals(byId(collapsed, 'vc-b5').snapshotNode?.computedStyles?.visibility, 'visible');
 	assertEquals(byId(collapsed, 'vc-b5').isVisible, true, 'a descendant can undo an inherited collapse');
@@ -263,10 +259,9 @@ Deno.test('dom-extraction: CSS gate rejects display:none, visibility:hidden and 
 	assertEquals(passesCssGate(styledSnapshot(null)), false, 'no layout row is the strongest signal');
 });
 
-Deno.test('dom-extraction: opacity is NOT part of the visibility gate (H4)', async () => {
-	// ERRATUM(M1-parity-12): this leg used to assert the opposite — an `opacity: 0` wrapper hid its
-	// subtree. The reference indexes `#v-opacity-zero` and renders its sibling span's text, so opacity
-	// is not a hiding signal at all: neither on the node nor propagated (DECISION-REGISTER §9.6 (E-23)).
+Deno.test('dom-extraction: opacity is NOT part of the visibility gate', async () => {
+	// The reference indexes `#v-opacity-zero` and renders its sibling span's text, so opacity is not a
+	// hiding signal at all: neither on the node nor propagated.
 	const root = await loadTree('visibility_edge_cases');
 	const wrapper = byId(root, 'v-opacity-zero').parentNode;
 	assert(wrapper !== null);
@@ -279,10 +274,9 @@ Deno.test('dom-extraction: opacity is NOT part of the visibility gate (H4)', asy
 	assertEquals(byId(root, 'v-opacity-zero').isVisible, true);
 });
 
-Deno.test('dom-extraction: a zero-area box is visible; there is no area gate (H5)', async () => {
-	// ERRATUM(M1-parity-12): this leg used to assert that a zero-area box is invisible. §6.1 names a CSS
-	// gate and a frame-chain viewport test and no third gate, and the reference indexes both
-	// `#v-zero-size` (0x0) and `#l-empty` (an anchor with no content at all).
+Deno.test('dom-extraction: a zero-area box is visible; there is no area gate', async () => {
+	// Visibility is a CSS gate and a frame-chain viewport test and no third gate, and the reference
+	// indexes both `#v-zero-size` (0x0) and `#l-empty` (an anchor with no content at all).
 	const root = await loadTree('visibility_edge_cases');
 	const box = byId(root, 'v-zero-size');
 	assert(box.absolutePosition !== null);
@@ -295,7 +289,7 @@ Deno.test('dom-extraction: a zero-area box is visible; there is no area gate (H5
 	assert(label.absolutePosition !== null);
 	assertGreater(label.absolutePosition.width * label.absolutePosition.height, 0);
 	// The ancestor `overflow:hidden` clip chain is deliberately outside the gate, so the clipped child
-	// reads visible too — §6.1 specifies the FRAME chain, not an arbitrary clip chain.
+	// reads visible too — the viewport test walks the FRAME chain, not an arbitrary clip chain.
 	assertEquals(label.isVisible, true);
 
 	// The viewport test is written on the rect's edges, not on its area, which is what lets a degenerate
@@ -306,10 +300,10 @@ Deno.test('dom-extraction: a zero-area box is visible; there is no area gate (H5
 });
 
 // ---------------------------------------------------------------------------
-// H6 — the frame-chain viewport test
+// the frame-chain viewport test
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: the viewport test grants ±1000px of vertical slack and none horizontally (H6)', async () => {
+Deno.test('dom-extraction: the viewport test grants ±1000px of vertical slack and none horizontally', async () => {
 	assertEquals(VIEWPORT_VERTICAL_SLACK_PX, 1000);
 	// 900 px viewport, 400 px blocks: the control at y≈1697 is inside viewport+1000, the one at y≈2097
 	// is not. This only holds at the manifest's recorded 1280×900 viewport.
@@ -337,12 +331,12 @@ Deno.test('dom-extraction: the viewport test grants ±1000px of vertical slack a
 	assertEquals(computeVisibility(1, null, null, viewport, 1000), false);
 });
 
-Deno.test('dom-extraction: a scrolled document moves the test band and nothing else (H6)', async () => {
-	// ERRATUM(M1-dom-test-repair): no page in the shared corpus scrolls the *main* frame, so the band
-	// is moved here instead — `layoutMetrics.scrollY` is the only input the merge reads for it
-	// (`visibleRect.y = metrics.scrollY`). Same technique as the H11 census-mismatch test: the recorded
-	// geometry is untouched, one scalar of the capture is not. The frame-level equivalent against a
-	// genuinely scrolled document is the `iframe_oopif_scrolled` test under H7.
+Deno.test('dom-extraction: a scrolled document moves the test band and nothing else', async () => {
+	// No page in the shared corpus scrolls the *main* frame, so the band is moved here instead —
+	// `layoutMetrics.scrollY` is the only input the merge reads for it (`visibleRect.y =
+	// metrics.scrollY`). Same technique as the census-mismatch test: the recorded geometry is
+	// untouched, one scalar of the capture is not. The frame-level equivalent against a genuinely
+	// scrolled document is the `iframe_oopif_scrolled` inner-frame scroll test.
 	const capture = await loadCapture('scroll_page');
 	assertEquals(capture.sessions[0]?.layoutMetrics.scrollY, 0, 'the recorded page is at the top');
 	const scrolled: DomCapture = {
@@ -372,10 +366,10 @@ Deno.test('dom-extraction: a scrolled document moves the test band and nothing e
 });
 
 // ---------------------------------------------------------------------------
-// H7/H8 — geometry composition and frame traversal
+// geometry composition and frame traversal
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: frame geometry composes through the content box (H7)', async () => {
+Deno.test('dom-extraction: frame geometry composes through the content box', async () => {
 	const root = await loadTree('iframe_nested');
 	const frame = byId(root, 'frame-depth-1');
 	assert(frame.contentDocument !== null);
@@ -400,7 +394,7 @@ Deno.test('dom-extraction: frame geometry composes through the content box (H7)'
 	assertGreater(inner.absolutePosition.y, document.absolutePosition.y);
 });
 
-Deno.test('dom-extraction: an inner-frame scroll offset is subtracted from child geometry (H7)', async () => {
+Deno.test('dom-extraction: an inner-frame scroll offset is subtracted from child geometry', async () => {
 	const capture = await loadCapture('iframe_oopif_scrolled');
 	// The child document is genuinely scrolled: `frame_prescrolled.html` runs `scrollTo(0, 260)`.
 	assertEquals(capture.sessions.map((session) => session.layoutMetrics.scrollY), [0, 260]);
@@ -422,7 +416,7 @@ Deno.test('dom-extraction: an inner-frame scroll offset is subtracted from child
 	assertLess(first.absolutePosition.y, 0);
 });
 
-Deno.test('dom-extraction: nested same-origin frames accumulate offsets in one session (H8)', async () => {
+Deno.test('dom-extraction: nested same-origin frames accumulate offsets in one session', async () => {
 	const capture = await loadCapture('iframe_nested');
 	assertEquals(capture.sessions.length, 1, 'same-site frames stay in-process and are pierced');
 	const root = await loadTree('iframe_nested');
@@ -441,8 +435,8 @@ Deno.test('dom-extraction: nested same-origin frames accumulate offsets in one s
 	assertNotEquals(inner.frameId, outer.frameId);
 });
 
-Deno.test('dom-extraction: a cross-origin but same-site frame is still pierced (H8)', async () => {
-	// FINDING(M1-dom-test-repair): `iframe_same_site_port` points at `http://127.0.0.1:38112`, which
+Deno.test('dom-extraction: a cross-origin but same-site frame is still pierced', async () => {
+	// `iframe_same_site_port` points at `http://127.0.0.1:38112`, which
 	// nothing bound at record time (the secondary origin binds the *host* `localhost`), so the frame
 	// that got captured is Chrome's network-error document. The heuristic under test survives intact —
 	// a same-site child is inlined by `DOM.getDocument` into the host session rather than recursed into
@@ -458,7 +452,7 @@ Deno.test('dom-extraction: a cross-origin but same-site frame is still pierced (
 	assertNotEquals(frame.contentDocument.frameId, frame.frameId, 'one session, but its own frame');
 });
 
-Deno.test('dom-extraction: an OOPIF recurses into its own session and id space (H8, H13)', async () => {
+Deno.test('dom-extraction: an OOPIF recurses into its own session and id space', async () => {
 	const capture = await loadCapture('iframe_crossorigin');
 	assertEquals(capture.sessions.length, 2, 'a cross-site frame gets its own target');
 	const merged = mergeDomTrees(capture);
@@ -485,7 +479,7 @@ Deno.test('dom-extraction: an OOPIF recurses into its own session and id space (
 	assertGreater(inner.absolutePosition.x, frame.absolutePosition.x);
 });
 
-Deno.test('dom-extraction: every node carries its capture context (H13)', async () => {
+Deno.test('dom-extraction: every node carries its capture context', async () => {
 	const merged = mergeDomTrees(await loadCapture('iframe_crossorigin'));
 	assert(merged.root !== null);
 	const sessions = new Set<string>();
@@ -499,10 +493,10 @@ Deno.test('dom-extraction: every node carries its capture context (H13)', async 
 });
 
 // ---------------------------------------------------------------------------
-// H9 — shadow DOM
+// shadow DOM
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: shadow roots are captured out of childrenNodes with their type (H9)', async () => {
+Deno.test('dom-extraction: shadow roots are captured out of childrenNodes with their type', async () => {
 	for (
 		const [name, hostId, expected] of [
 			['shadow_open', 'open-host-a', 'open'],
@@ -535,7 +529,7 @@ Deno.test('dom-extraction: shadow roots are captured out of childrenNodes with t
 	assertEquals(openInClosed.parentNode?.nodeType, 11, 'its host lives inside the closed root above it');
 });
 
-Deno.test('dom-extraction: user-agent shadow roots are captured and marked (H9)', async () => {
+Deno.test('dom-extraction: user-agent shadow roots are captured and marked', async () => {
 	const dateInput = byId(await loadTree('form_attributes'), 'f-date');
 	assert(dateInput.shadowRoots !== null);
 	assertEquals(dateInput.shadowRoots[0]?.shadowRootType, 'user-agent');
@@ -548,10 +542,10 @@ Deno.test('dom-extraction: user-agent shadow roots are captured and marked (H9)'
 });
 
 // ---------------------------------------------------------------------------
-// H10 — paint order, stacking contexts, Chrome-detected clickability
+// paint order, stacking contexts, Chrome-detected clickability
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: paint order, stacking contexts and isClickable decode faithfully (H10)', async () => {
+Deno.test('dom-extraction: paint order, stacking contexts and isClickable decode faithfully', async () => {
 	const root = await loadTree('occlusion_paint_order');
 	const under = byId(root, 'occluded-button');
 	const over = byId(root, 'cover-layer');
@@ -577,7 +571,7 @@ Deno.test('dom-extraction: paint order, stacking contexts and isClickable decode
 	assertEquals(under.isVisible, true, 'the visibility gate cannot see occlusion');
 	assertEquals(over.isVisible, true);
 
-	// `stackingContexts` is CDP's `RareBooleanData`, encoded 1/0 (ERRATUM M1-dom-extract-2).
+	// `stackingContexts` is CDP's `RareBooleanData`, encoded 1/0.
 	const stacking = await loadTree('stacking_contexts');
 	assertEquals(byId(stacking, 'l-mid').snapshotNode?.stackingContexts, 1, 'transform creates one');
 	assertEquals(byId(stacking, 'l-opacity').snapshotNode?.stackingContexts, 1, 'opacity < 1 creates one');
@@ -596,10 +590,10 @@ Deno.test('dom-extraction: paint order, stacking contexts and isClickable decode
 });
 
 // ---------------------------------------------------------------------------
-// H11 — the getEventListeners census
+// the getEventListeners census
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: the listener census attributes hits to the right nodes (H11)', async () => {
+Deno.test('dom-extraction: the listener census attributes hits to the right nodes', async () => {
 	const merged = mergeDomTrees(await loadCapture('js_click_listeners'));
 	assert(merged.root !== null);
 	assertEquals(merged.warnings, [], 'a census/DOM element-count mismatch would have been reported');
@@ -629,7 +623,7 @@ Deno.test('dom-extraction: the listener census attributes hits to the right node
 	assertEquals(byId(root, 'js-cursor-pointer').snapshotNode?.cursorStyle, 'pointer');
 });
 
-Deno.test('dom-extraction: a census/DOM element-count mismatch drops the frame instead of shifting it (H11)', async () => {
+Deno.test('dom-extraction: a census/DOM element-count mismatch drops the frame instead of shifting it', async () => {
 	const capture = await loadCapture('js_click_listeners');
 	const session = capture.sessions[0];
 	assert(session?.listeners != null);
@@ -653,16 +647,16 @@ Deno.test('dom-extraction: a census/DOM element-count mismatch drops the frame i
 	assertEquals(walkTree(merged.root).filter((node) => node.hasJsClickListener).length, 0);
 });
 
-Deno.test('dom-extraction: the census caps are the speced 10k elements / 100 listeners (H11)', () => {
+Deno.test('dom-extraction: the census caps are 10k elements / 100 listeners', () => {
 	assertEquals(LISTENER_CENSUS_MAX_ELEMENTS, 10_000);
 	assertEquals(LISTENER_CENSUS_MAX_LISTENERS, 100);
 });
 
 // ---------------------------------------------------------------------------
-// H12 — the AX projection
+// the AX projection
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: AX properties are whitelisted, scalar-only, and keep CDP spelling (H12)', async () => {
+Deno.test('dom-extraction: AX properties are whitelisted, scalar-only, and keep CDP spelling', async () => {
 	const root = await loadTree('form_attributes');
 	const listbox = byId(root, 'aria-listbox-target');
 	assertEquals(listbox.axNode?.role, 'listbox');
@@ -674,11 +668,11 @@ Deno.test('dom-extraction: AX properties are whitelisted, scalar-only, and keep 
 	assertEquals(options[1]?.axNode?.properties?.find((p) => p.name === 'selected')?.value, false);
 
 	// `aria-describedby` is relation-valued; it cannot be represented as string|boolean|null and is
-	// dropped rather than encoded (ERRATUM M1-dom-extract-4).
+	// dropped rather than encoded.
 	const described = byId(root, 'f-aria');
 	assertEquals(described.attributes['aria-describedby'], 'pw-help', 'the markup relation is still there');
 	assertEquals(described.axNode?.properties?.find((p) => p.name === 'describedby'), undefined);
-	// CDP spells it `hasPopup`; DATA-MODEL §6.5 spells the *emitted attribute* `haspopup`. The IR keeps
+	// CDP spells it `hasPopup`; the serializer spells the *emitted attribute* `haspopup`. The IR keeps
 	// the wire spelling — case folding for emission is the serializer's job.
 	assertEquals(described.axNode?.properties?.find((p) => p.name === 'hasPopup')?.value, 'listbox');
 
@@ -704,13 +698,13 @@ Deno.test('dom-extraction: AX properties are whitelisted, scalar-only, and keep 
 	}
 });
 
-Deno.test('dom-extraction: form controls keep their live value alongside the markup attribute (H12)', async () => {
+Deno.test('dom-extraction: form controls keep their live value alongside the markup attribute', async () => {
 	const root = await loadTree('react_controlled_inputs');
 	const input = byId(root, 'ctrl-text');
 	assertEquals(input.attributes.value, 'initial-state', 'the markup attribute survives the merge');
 	assertEquals(input.axNode?.role, 'textbox');
 
-	// §6.5 makes the *live* value the override source, and it reaches the IR through a channel the
+	// The serializer makes the *live* value the override source, and it reaches the IR through a channel the
 	// attribute cannot reach: Chrome's user-agent shadow root, whose inner editor carries the rendered
 	// text. The merge preserves both so the serializer can choose.
 	const shadowRoot = input.shadowRoots?.[0];
@@ -723,10 +717,9 @@ Deno.test('dom-extraction: form controls keep their live value alongside the mar
 	assertEquals(byId(root, 'mirror').childrenNodes[0]?.nodeValue, 'mirror: initial-state');
 });
 
-Deno.test('dom-extraction: the live value and the markup attribute really can disagree (H12b)', async () => {
-	// The leg the corpus reconciliation dropped, restored by `live_value_vs_attribute.html`: every write
-	// on that page sets the DOM *property* and never the attribute, which is the exact state §6.5's
-	// "AX value overrides DOM value" rule exists for. Without a page where they disagree the rule is
+Deno.test('dom-extraction: the live value and the markup attribute really can disagree', async () => {
+	// Every write on `live_value_vs_attribute.html` sets the DOM *property* and never the attribute,
+	// which is the exact state the "AX value overrides DOM value" rule exists for. Without a page where they disagree the rule is
 	// unfalsifiable — every assertion passes whether the override fires or not.
 	const root = await loadTree('live_value_vs_attribute');
 	const axProperty = (node: EnhancedDomTreeNode, name: string): string | null => {
@@ -756,8 +749,8 @@ Deno.test('dom-extraction: the live value and the markup attribute really can di
 	assertEquals(axProperty(options[2] as EnhancedDomTreeNode, 'selected'), 'true', 'the AX tree says Gamma');
 
 	// Recorded as a limit, not asserted away: a plain text input's live value reaches the AX tree only
-	// through `AXNode.value`, a field `EnhancedAxNode` (§6.2) does not model, so the override cannot see
-	// it. The user-agent shadow editor still carries it, which is the channel H12 pins.
+	// through `AXNode.value`, a field `EnhancedAxNode` does not model, so the override cannot see
+	// it. The user-agent shadow editor still carries it, which is the channel the previous test pins.
 	const text = byId(root, 'lv-text');
 	assertEquals(text.attributes.value, 'markup-only-value');
 	assertEquals(axProperty(text, 'valuetext'), null);
@@ -767,9 +760,8 @@ Deno.test('dom-extraction: the live value and the markup attribute really can di
 	assert(live.includes('live-typed-value'), `the inner editor lost the live value: ${JSON.stringify(live)}`);
 });
 
-Deno.test('dom-extraction: page-absolute geometry does not move with the scroll offset (H6b)', async () => {
-	// The leg the corpus reconciliation dropped, restored by `scroll_page_prescrolled.html`: the recorded
-	// 25 all capture at rest, so "DOMSnapshot bounds are document coordinates" had no fixture that could
+Deno.test('dom-extraction: page-absolute geometry does not move with the scroll offset', async () => {
+	// `scroll_page_prescrolled.html` exists for this: every other page captures at rest, so none could
 	// tell a document-coordinate implementation from a viewport-relative one. Here the main frame is
 	// scrolled 2000px before the capture and the two pages are otherwise identical block-for-block.
 	const rest = await loadTree('scroll_page');
@@ -793,14 +785,14 @@ Deno.test('dom-extraction: page-absolute geometry does not move with the scroll 
 });
 
 // ---------------------------------------------------------------------------
-// H14 — iframe hidden-element hints
+// iframe hidden-element hints
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: iframe hidden-element hints are capped and distance-sorted (H14)', async () => {
-	// ERRATUM(M1-parity-15): a hint means "the serializer did not render this", so the candidate set is
-	// gated on `isVisible === false`. `iframe_hidden_elements`' rows sit inside the ±1000px slack and are
-	// therefore rendered — they produce no hints any more, and `iframe_hidden_far` was added to put
-	// frame content genuinely outside the band.
+Deno.test('dom-extraction: iframe hidden-element hints are capped and distance-sorted', async () => {
+	// A hint means "the serializer did not render this", so the candidate set is gated on
+	// `isVisible === false`. `iframe_hidden_elements`' rows sit inside the ±1000px slack and are
+	// therefore rendered — they produce no hints, and `iframe_hidden_far` puts frame content genuinely
+	// outside the band.
 	const near = byId(await loadTree('iframe_hidden_elements'), 'ihe-frame');
 	assertEquals(near.hasHiddenContent, false, 'content inside the slack is rendered, not hinted at');
 
@@ -836,10 +828,10 @@ Deno.test('dom-extraction: iframe hidden-element hints are capped and distance-s
 });
 
 // ---------------------------------------------------------------------------
-// H15 — structural decoding
+// structural decoding
 // ---------------------------------------------------------------------------
 
-Deno.test("dom-extraction: attributes fold from CDP's flat pair list (H15)", async () => {
+Deno.test("dom-extraction: attributes fold from CDP's flat pair list", async () => {
 	assertEquals(foldAttributes(['a', '1', 'b', '2']), { a: '1', b: '2' });
 	assertEquals(foldAttributes(['a', '1', 'dangling']), { a: '1' }, 'an odd tail is dropped, not guessed');
 	assertEquals(foldAttributes(undefined), {});
@@ -859,7 +851,7 @@ Deno.test("dom-extraction: attributes fold from CDP's flat pair list (H15)", asy
 	assertEquals(byId(root, 'f-empty-value').attributes.value, '', 'and so does an explicitly empty one');
 });
 
-Deno.test('dom-extraction: document, doctype and comment nodes report unknown visibility (H15)', async () => {
+Deno.test('dom-extraction: document, doctype and comment nodes report unknown visibility', async () => {
 	const root = await loadTree('baseline_button');
 	assertEquals(root.nodeType, 9);
 	assertEquals(root.isVisible, null);
@@ -876,7 +868,7 @@ Deno.test('dom-extraction: document, doctype and comment nodes report unknown vi
 	assert(text.some((node) => node.isVisible === false), '<style>/<head> text is not visible');
 });
 
-Deno.test('dom-extraction: SVG survives as a subtree with geometry (H15)', async () => {
+Deno.test('dom-extraction: SVG survives as a subtree with geometry', async () => {
 	const root = await loadTree('svg_children');
 	const svg = byId(root, 'plain-svg');
 	assertEquals(svg.nodeName, 'svg', 'CDP reports SVG element names in their original case');
@@ -891,16 +883,16 @@ Deno.test('dom-extraction: SVG survives as a subtree with geometry (H15)', async
 });
 
 // ---------------------------------------------------------------------------
-// H16 — budget and recovery
+// budget and recovery
 // ---------------------------------------------------------------------------
 
-Deno.test('dom-extraction: the budget constants are ARCHITECTURE §6.7 verbatim (H16)', () => {
+Deno.test('dom-extraction: the budget constants are pinned verbatim', () => {
 	assertEquals(DOM_BUILD_BUDGET_MS, 20_000);
 	assertEquals(NETWORK_PROBE_MAX_MS, 2_000);
 	assertEquals(NETWORK_STABILITY_MS, 300);
 });
 
-Deno.test('dom-extraction: the recovery state is empty, flagged, and carries browserErrors (H16)', () => {
+Deno.test('dom-extraction: the recovery state is empty, flagged, and carries browserErrors', () => {
 	const state = recoveryState(['DOM build exceeded its 20000 ms budget'], { timedOut: true, durationMs: 20_001 });
 	assertEquals(state.root, null);
 	assertEquals(state.nodeCount, 0);
@@ -910,14 +902,14 @@ Deno.test('dom-extraction: the recovery state is empty, flagged, and carries bro
 	assertEquals(state.browserErrors.length, 1);
 });
 
-Deno.test('dom-extraction: a capture with no sessions degrades instead of throwing (H16)', () => {
+Deno.test('dom-extraction: a capture with no sessions degrades instead of throwing', () => {
 	const result = extractFromCapture({ rootSessionId: 'gone', sessions: [], warnings: [] });
 	assertEquals(result.root, null);
 	assertEquals(result.nodeCount, 0);
 	assertEquals(result.warnings, ['capture carried no sessions']);
 });
 
-Deno.test('dom-extraction: an empty page still yields a usable document root (H16)', async () => {
+Deno.test('dom-extraction: an empty page still yields a usable document root', async () => {
 	const root = await loadTree('empty_page');
 	assertEquals(root.nodeType, 9);
 	assertEquals(maybeById(root, 'nothing'), null);

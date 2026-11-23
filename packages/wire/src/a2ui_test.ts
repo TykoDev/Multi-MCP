@@ -65,7 +65,7 @@ Deno.test('A2UI envelope validates exactly one versioned command and rejects fun
 	validateA2uiTree([{ id: 'root', component: 'Column', children: ['missing'] }]);
 });
 
-// --- D-111: the v0.9 basic catalog, the Html extension, media URLs and themes -------------------------------------
+// --- the v0.9 basic catalog, the Html extension, media URLs and themes ------------------------------------------
 
 const PNG = `data:image/png;base64,${btoa('\x89PNG\r\n\x1a\n')}`;
 const MP4 = `data:video/mp4;base64,${btoa('ftypisom')}`;
@@ -94,19 +94,9 @@ const CATALOG_CASES: Array<{ ok: Record<string, unknown>; bad: Record<string, un
 		why: 'a name outside the sprite vocabulary shape',
 	},
 	{
-		ok: { id: 'l', component: 'List', children: ['a', 'b'], direction: 'horizontal' },
-		bad: { id: 'l', component: 'List', children: ['a'], direction: 'diagonal' },
-		why: 'an unknown direction',
-	},
-	{
 		ok: { id: 't', component: 'Tabs', tabs: [{ title: 'One', child: 'a' }, { title: { path: '/t' }, child: 'b' }] },
 		bad: { id: 't', component: 'Tabs', tabs: [] },
 		why: 'no tabs',
-	},
-	{
-		ok: { id: 'm', component: 'Modal', trigger: 'open', content: 'body' },
-		bad: { id: 'm', component: 'Modal', trigger: 'open' },
-		why: 'a modal without content',
 	},
 	{
 		ok: { id: 's', component: 'Slider', label: 'Volume', min: 0, max: 10, step: 0.5, value: { path: '/v' } },
@@ -159,45 +149,18 @@ const CATALOG_CASES: Array<{ ok: Record<string, unknown>; bad: Record<string, un
 		bad: { id: 'h', component: 'Html', html: 'x'.repeat(128 * 1024 + 1) },
 		why: 'a document over 128 KiB',
 	},
-	{
-		ok: { id: 'h', component: 'Html', html: '<p>ok</p>' },
-		bad: { id: 'h', component: 'Html', html: '<p>ok</p>', height: 39 },
-		why: 'a frame shorter than 40 px',
-	},
-	{
-		ok: { id: 'x', component: 'Text', text: 'Title', variant: 'h2' },
-		bad: { id: 'x', component: 'Text', text: 'Title', variant: 'h7' },
-		why: 'an unknown text variant',
-	},
 ];
 
-Deno.test('D-111: every v0.9 basic catalog component and Html validates, and each refuses its unsafe variant', () => {
-	const seen = new Set<string>();
+Deno.test('catalog components validate, and each refuses its unsafe variant and unknown properties', () => {
 	for (const { ok, bad, why } of CATALOG_CASES) {
 		const accepted = A2uiComponentSchema.safeParse(ok);
 		assertEquals(accepted.success, true, `${ok.component} should validate: ${JSON.stringify(accepted.error)}`);
 		assertEquals(A2uiComponentSchema.safeParse(bad).success, false, `${bad.component} accepted ${why}`);
-		// Strictness: an unknown property is refused rather than carried to the renderer.
 		assertEquals(A2uiComponentSchema.safeParse({ ...ok, onClick: 'x' }).success, false);
-		seen.add(String(ok.component));
 	}
-	assertEquals([...seen].sort(), [
-		'AudioPlayer',
-		'ChoicePicker',
-		'DateTimeInput',
-		'Html',
-		'Icon',
-		'Image',
-		'List',
-		'Modal',
-		'Slider',
-		'Tabs',
-		'Text',
-		'Video',
-	]);
 });
 
-Deno.test('D-111: media URLs are inline data of a fixed type or a plain share path, nothing that fetches elsewhere', () => {
+Deno.test('media URLs are inline data of a fixed type or a plain share path, nothing that fetches elsewhere', () => {
 	assertEquals(parseA2uiMediaUrl(PNG, 'image'), { kind: 'data', mime: 'image/png' });
 	assertEquals(parseA2uiMediaUrl('ttk://share/a/b%20c.png', 'image'), { kind: 'share', path: 'a/b c.png' });
 	for (
@@ -225,7 +188,7 @@ Deno.test('D-111: media URLs are inline data of a fixed type or a plain share pa
 	assertEquals(parseA2uiMediaUrl(`data:audio/mp4;base64,${btoa('m4a')}`, 'audio').kind, 'data');
 });
 
-Deno.test('D-111: createSurface takes a closed theme, and nothing in it can carry CSS of its own', () => {
+Deno.test('createSurface takes a closed theme, and nothing in it can carry CSS of its own', () => {
 	const create = (theme: unknown) => ({
 		version: 'v0.9',
 		createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID, theme },
@@ -247,7 +210,7 @@ Deno.test('D-111: createSurface takes a closed theme, and nothing in it can carr
 	) assertEquals(A2uiMessageSchema.safeParse(create(theme)).success, false, JSON.stringify(theme));
 });
 
-Deno.test('D-111: tabs and modals are adjacency — cycles, depth and the rendered-node bound see them', () => {
+Deno.test('tabs and modals are adjacency — cycles, depth and the rendered-node bound see them', () => {
 	assertEquals(
 		a2uiChildren({ id: 't', component: 'Tabs', tabs: [{ title: 'a', child: 'x' }, { title: 'b', child: 'y' }] }),
 		['x', 'y'],

@@ -1,9 +1,6 @@
 /**
- * D-156: SlopLord as the gateway mounts it — its public card, its JSON-RPC and HTTP+JSON endpoints behind the same
- * bearer gate as `/a2a`, `agent` on `POST /api/v1/agent/tasks`, and the providers route's `agents` list. The positive
- * path runs the real loop on the loopback fake provider against a stubbed sandbox service, through the gateway's own
- * executor: SlopLord's prompt reaches the provider, its tools are the allowlist narrowed by the caller's rights, and
- * `sandbox_create` → `sandbox_exec` reach the sandbox.
+ * SlopLord as the gateway mounts it — its public card, its JSON-RPC and HTTP+JSON endpoints behind the same bearer gate
+ * as `/a2a`, `agent` on `POST /api/v1/agent/tasks`, and the providers route's `agents` list.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { SANDBOX_EXECUTE_SCOPE_REQUIRED, SLOPLORD, SLOPLORD_SYSTEM_PROMPT, SLOPLORD_TOOLS } from '@tykotech/agents';
@@ -124,7 +121,7 @@ function message(text: string): Record<string, unknown> {
 	return { messageId: crypto.randomUUID(), role: 'ROLE_USER', parts: [{ text }] };
 }
 
-Deno.test('D-156: without the sandbox the public card is honest and every entrance refuses with the fixed text', async () => {
+Deno.test('sloplord: without the sandbox the public card is honest and every entrance refuses with the fixed text', async () => {
 	await using h = await harness();
 	// Public: no credential. Metadata only, and it says nothing is accepted here.
 	const card = await h.request(CARD, null);
@@ -147,12 +144,17 @@ Deno.test('D-156: without the sandbox the public card is honest and every entran
 	await scopeless.body?.cancel();
 	// JSON-RPC, HTTP+JSON and REST: the runtime's one -32004 text.
 	const rpc = await h.rpc(BASE, h.keys.coder, 'SendMessage', { message: message('hi') });
-	assertEquals(rpc.error, { code: -32004, message: SLOPLORD.unavailable });
+	const error = rpc.error as { code: number; message: string; data: { reason: string }[] };
+	assertEquals([error.code, error.message, error.data[0]?.reason], [
+		-32004,
+		SLOPLORD.unavailable,
+		'UNSUPPORTED_OPERATION',
+	]);
 	const rest = await h.request(`${BASE}/v1/message:send`, h.keys.coder, { message: message('hi') }, {
 		'a2a-version': '1.0',
 	});
 	assertEquals(rest.status, 400);
-	assertEquals((await rest.json()).detail, SLOPLORD.unavailable);
+	assertEquals((await rest.json()).error.message, SLOPLORD.unavailable);
 	const task = await h.request('/api/v1/agent/tasks', h.keys.coder, { message: 'hi', agent: 'sloplord' });
 	assertEquals(task.status, 400);
 	assertEquals((await task.json()).detail, SLOPLORD.unavailable);
@@ -170,7 +172,7 @@ Deno.test('D-156: without the sandbox the public card is honest and every entran
 	}]);
 });
 
-Deno.test('D-156: with a provider and the sandbox, a message to SlopLord runs its prompt and allowlist through the sandbox', async () => {
+Deno.test('sloplord: with a provider and the sandbox, a message to SlopLord runs its prompt and allowlist through the sandbox', async () => {
 	const fake = startFakeProvider();
 	const calls: string[] = [];
 	try {

@@ -1,7 +1,7 @@
 /**
  * Console-formatting helpers for the bus.
  *
- * All console formatting lives here behind `_log`-prefixed helpers (AGENTS.md §3) so the dispatch
+ * All console formatting lives here behind `_log`-prefixed helpers so the dispatch
  * path stays free of presentation logic.
  */
 
@@ -33,7 +33,7 @@ function _logValue(value: unknown): string {
 /**
  * Default logger: warnings and errors go to stderr, debug is dropped.
  *
- * Library import MUST NOT install `@std/log` handlers as a side effect (OBSERVABILITY §1.2), so the
+ * Library import MUST NOT install `@std/log` handlers as a side effect, so the
  * bus writes through `console` and lets embedders inject `@tykotech/browser`'s facade instead.
  */
 export const consoleBusLogger: BusLogger = {

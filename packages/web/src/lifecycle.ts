@@ -1,14 +1,7 @@
 /**
- * Screen lifecycle: what to tear down when a screen is replaced, and what to
- * forget when the credential changes.
- *
- * Screens used to tear themselves down on `hashchange`, but the router also
- * re-renders a route *without* a hash change — clicking the rail item for the
- * screen already open calls `navigate` with the current hash. That re-render
- * replaced the DOM and left the old screen's work running: the Agents poller
- * (two requests every three seconds, against a 120-per-minute budget) and the
- * Live View socket, canvas and reconnect loop. The router now runs every
- * registered teardown before it renders anything, whatever caused the render.
+ * Screen lifecycle: what to tear down when a screen is replaced, and what to forget when the credential changes.
+ * The router runs every teardown before it renders, whatever caused the render: a click on the current route
+ * re-renders with no hash change, and a screen that only listened for `hashchange` would leak its pollers and sockets.
  */
 
 const leaving: Array<() => void> = [];
@@ -19,13 +12,13 @@ export function onLeave(teardown: () => void): void {
 	leaving.push(teardown);
 }
 
-/** Runs and forgets every pending teardown. Called by the router before each render. */
+/** Runs and forgets every pending teardown; one that throws does not keep the others from running. */
 export function leaveScreen(): void {
 	for (const teardown of leaving.splice(0)) {
 		try {
 			teardown();
 		} catch {
-			// One screen's failed teardown must not keep the next screen from rendering.
+			// The next screen must still render.
 		}
 	}
 }
@@ -41,7 +34,7 @@ export function signOut(): void {
 		try {
 			forget();
 		} catch {
-			// Forgetting is best-effort per hook; the others must still run.
+			// Best-effort per hook; the others must still run.
 		}
 	}
 }

@@ -1,5 +1,5 @@
 /**
- * `DOMSnapshot` decoding units (DATA-MODEL §6.2).
+ * `DOMSnapshot` decoding units.
  *
  * The fixture corpus proves the decode against real Chrome payloads; this file pins the wire-format
  * edge cases that a fixture cannot reach on demand — a device pixel ratio other than 1, a malformed
@@ -173,7 +173,7 @@ Deno.test('dom-snapshot: a node with no layout row keeps isClickable but loses g
 });
 
 Deno.test('dom-snapshot: bounds divide by the device pixel ratio, clientRects and scrollRects do not', () => {
-	// DATA-MODEL §6.2 marks `bounds` as device px and the other two as raw; a 2x screen must not
+	// `bounds` is in device px and the other two are not; a 2x screen must not
 	// halve `clientLeft`, which is already CSS px in Chrome's encoding.
 	const decoded = decodeSnapshot(snapshotFixture(), 2);
 	const iframe = decoded.byBackendNodeId.get(103);
@@ -188,7 +188,7 @@ Deno.test('dom-snapshot: bounds divide by the device pixel ratio, clientRects an
 
 Deno.test('dom-snapshot: stacking contexts encode as 1/0 and paint order compares later-on-top', () => {
 	const decoded = decodeSnapshot(snapshotFixture(), 1);
-	// ERRATUM(M1-dom-extract-2): the seam types this `number | null` while CDP models it as a boolean.
+	// The seam types this `number | null` while CDP models it as a boolean.
 	assertEquals(decoded.byBackendNodeId.get(103)?.stackingContexts, 1);
 	assertEquals(decoded.byBackendNodeId.get(101)?.stackingContexts, 0);
 	assertEquals(decoded.byBackendNodeId.get(102)?.stackingContexts, null, 'no layout row, no answer');

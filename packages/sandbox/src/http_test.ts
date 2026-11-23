@@ -21,7 +21,7 @@ Deno.test('sandbox HTTP: bearer gate precedes parsing; authenticated principal e
 	assertEquals(called, false);
 	const health = await handler(new Request('http://sandbox/healthz'));
 	assertEquals(health.status, 200);
-	// D-108: unauthenticated, and saying only whether it is ready, which backend runs commands, and (R12) whether it
+	// Unauthenticated, and saying only whether it is ready, which backend runs commands, and whether it
 	// clones.
 	assertEquals(await health.json(), { ok: true, backend: 'bwrap', clone: false });
 	const client = new SandboxClient({
@@ -102,7 +102,7 @@ Deno.test('sandbox client: a credential-shaped lowercase error code is never pro
 	assertEquals(error.message.includes(lowerToken), false);
 });
 
-Deno.test('SB-6 sandbox HTTP: a reply as long as the service ever sends is accepted; a longer one is never sent', async (): Promise<void> => {
+Deno.test('sandbox HTTP: a reply as long as the service ever sends is accepted; a longer one is never sent', async (): Promise<void> => {
 	let reply: Record<string, unknown> = {};
 	const handler = await createSandboxHandler({
 		health: () => Promise.resolve({ ok: true, backend: 'bwrap' as const, clone: false }),
@@ -122,7 +122,7 @@ Deno.test('SB-6 sandbox HTTP: a reply as long as the service ever sends is accep
 	assertEquals(error.code, 'too_large');
 });
 
-Deno.test('SB-10 sandbox HTTP: a request cancelled while it queued is reported as cancelled', async (): Promise<void> => {
+Deno.test('sandbox HTTP: a request cancelled while it queued is reported as cancelled', async (): Promise<void> => {
 	const handler = await createSandboxHandler({
 		health: () => Promise.resolve({ ok: true, backend: 'bwrap' as const, clone: false }),
 		call: (): Promise<Record<string, unknown>> =>
@@ -139,7 +139,7 @@ Deno.test('SB-10 sandbox HTTP: a request cancelled while it queued is reported a
 	assertEquals(await response.json(), { error: 'cancelled' });
 });
 
-Deno.test('D-108 sandbox client: the backend comes from /healthz, and only a known name is kept', async (): Promise<void> => {
+Deno.test('sandbox client: the backend comes from /healthz, and only a known name is kept', async (): Promise<void> => {
 	for (
 		const [reply, expected] of [
 			[{ ok: true, backend: 'docker' }, 'docker'],
@@ -160,7 +160,7 @@ Deno.test('D-108 sandbox client: the backend comes from /healthz, and only a kno
 	}
 });
 
-Deno.test('C15 sandbox client: a caged file operation that timed out or failed keeps its code', async (): Promise<void> => {
+Deno.test('sandbox client: a caged file operation that timed out or failed keeps its code', async (): Promise<void> => {
 	for (const [code, status] of [['file_timeout', 504], ['file_failed', 500]] as const) {
 		const client = new SandboxClient({
 			url: 'http://sandbox',
@@ -172,7 +172,7 @@ Deno.test('C15 sandbox client: a caged file operation that timed out or failed k
 	}
 });
 
-Deno.test('R12 sandbox HTTP: clone is an operation behind the bearer gate, and /healthz says whether it is offered', async (): Promise<void> => {
+Deno.test('sandbox HTTP: clone is an operation behind the bearer gate, and /healthz says whether it is offered', async (): Promise<void> => {
 	const seen: string[] = [];
 	const handler = await createSandboxHandler({
 		health: () => Promise.resolve({ ok: true, backend: 'docker' as const, clone: true }),
@@ -199,12 +199,12 @@ Deno.test('R12 sandbox HTTP: clone is an operation behind the bearer gate, and /
 	assertEquals(seen, ['clone']);
 });
 
-Deno.test('R12 sandbox client: clone comes from /healthz only as a boolean, and its failures keep their codes', async (): Promise<void> => {
+Deno.test('sandbox client: clone comes from /healthz only as a boolean, and its failures keep their codes', async (): Promise<void> => {
 	for (
 		const [reply, expected] of [
 			[{ ok: true, backend: 'bwrap', clone: true }, true],
 			[{ ok: true, backend: 'bwrap', clone: false }, false],
-			// A service from before R12 says nothing; so does one that answers something other than a boolean.
+			// A service that does not report clone says nothing; so does one that answers something other than a boolean.
 			[{ ok: true, backend: 'bwrap' }, null],
 			[{ ok: true, backend: 'bwrap', clone: 'yes' }, null],
 		] as const

@@ -1,10 +1,9 @@
 /**
- * `dom-serializer` tier-1 suite (OBSERVABILITY-TESTING-CICD §4.2): IR fixtures in → §6.4 text out,
- * compared byte-exact against checked-in goldens, plus the §6.3 index rules R6.1–R6.4.
+ * `dom-serializer` unit suite: IR fixtures in → text out, compared byte-exact against checked-in
+ * goldens, plus the index rules (assignment, new-element marking, reverse map, budget fail-safe).
  *
- * Every golden in `fixtures/serializer/` was authored from DATA-MODEL §6.4/§6.5 by hand — they are the
- * regression contract *today*, and the Python-recorded corpus COMPLETIONS-CRITERIA §3.2 asks for drops
- * in later as a second comparison against the same fixture trees.
+ * Every golden in `fixtures/serializer/` is hand-authored; together they are the serializer's
+ * regression contract.
  */
 
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
@@ -41,7 +40,7 @@ for (const name of GOLDEN_CASES) {
 	});
 }
 
-Deno.test('dom-serializer: R6.2 new-element marking across two consecutive states', async () => {
+Deno.test('dom-serializer: new-element marking across two consecutive states', async () => {
 	const before = await loadFixture('new_marking_before');
 	const after = await loadFixture('new_marking_after');
 
@@ -54,22 +53,22 @@ Deno.test('dom-serializer: R6.2 new-element marking across two consecutive state
 	assertEquals(second.text, await loadGolden('new_marking_after'));
 });
 
-Deno.test('dom-serializer: R6.2 an explicitly empty previous set marks every element new', async () => {
+Deno.test('dom-serializer: an explicitly empty previous set marks every element new', async () => {
 	const { ir } = await loadFixture('new_marking_before');
 	const result = serializeDomState(ir, { previousKeys: new Set<string>() });
 	assertEquals(result.text.split('\n').filter((line) => line.startsWith('*[')).length, 2);
 });
 
-Deno.test('dom-serializer: R6.1 selectorMap indices are backendNodeIds until they collide', async () => {
+Deno.test('dom-serializer: selectorMap indices are backendNodeIds unless they collide', async () => {
 	const { ir } = await loadFixture('selector_collision');
 	const result = serializeDomState(ir);
 	const entries = [...result.state.selectorMap.entries()];
-	// 600 is the host <iframe>, which the reference indexes like any other control (E-23 item 4), and
+	// 600 is the host <iframe>, which the reference indexes like any other control, and
 	// which is assigned before its own content because index assignment is document order.
 	assertEquals(entries.map(([index]) => index).sort((a, b) => a - b), [500, 600, 700, 701]);
 	assertEquals(entries.map(([index]) => index), [500, 600, 701, 700], 'document order, host frame first');
 
-	// CC §3.2: index ↔ backendNodeId stability. Every index either *is* the node's backend id, or is a
+	// Index ↔ backendNodeId stability. Every index either *is* the node's backend id, or is a
 	// synthetic allocated above the reserved pool because that id was already taken.
 	const reserved = 700;
 	for (const [index, node] of entries) {
@@ -80,7 +79,7 @@ Deno.test('dom-serializer: R6.1 selectorMap indices are backendNodeIds until the
 	assertEquals(collided?.backendNodeId, 500);
 	assertEquals(collided?.sessionId, 'session-oopif');
 
-	// R6.3 — the reverse map is keyed by (sessionId, backendNodeId), which is what makes the two
+	// The reverse map is keyed by (sessionId, backendNodeId), which is what makes the two
 	// same-numbered nodes distinguishable at all.
 	assertEquals(result.reverseMap.get(selectorKey('session-main', 500)), 500);
 	assertEquals(result.reverseMap.get(selectorKey('session-oopif', 500)), 701);
@@ -97,7 +96,7 @@ Deno.test('dom-serializer: paint-order filtering is a profile switch, not a law 
 	assert(unfiltered.text.includes('Under the modal'));
 });
 
-Deno.test('dom-serializer: occluded nodes keep their §6.3 flags but never reach the selector map', async () => {
+Deno.test('dom-serializer: occluded nodes keep their flags but never reach the selector map', async () => {
 	const { ir } = await loadFixture('paint_order');
 	const result = serializeDomState(ir);
 	const flatten = (node: { children: unknown[] } | null): Record<string, unknown>[] => {
@@ -112,7 +111,7 @@ Deno.test('dom-serializer: occluded nodes keep their §6.3 flags but never reach
 	assertEquals(occluded[0]?.['selectorIndex'], null);
 });
 
-/** A page wide enough to blow the §6.4 cap. */
+/** A page wide enough to blow the 40k cap. */
 function bigPage(buttons: number): FixtureNode {
 	const children: FixtureNode[] = [];
 	for (let index = 0; index < buttons; index++) {
@@ -127,9 +126,8 @@ function bigPage(buttons: number): FixtureNode {
 }
 
 Deno.test('dom-serializer: the 40k cap is opt-in — the serializer never truncates by default', () => {
-	// ERRATUM(M1-corpus-1). Pinned against the recorded corpus: the reference's serialized output for
-	// the equivalent page is 225 423 chars with its tail intact, so §6.4's cap belongs to the prompt
-	// layer (M2), not here. A default cap would silently drop page content the reference exposes.
+	// Pinned against the recorded corpus: the reference's serialized output for the equivalent page is
+	// 225 423 chars with its tail intact, so the cap belongs to the prompt layer, not here. A default cap would silently drop page content the reference exposes.
 	const ir = buildIr(bigPage(1200));
 	const uncapped = serializeDomState(ir);
 	assert(
@@ -157,7 +155,7 @@ Deno.test('dom-serializer: the truncation boundary is exclusive', () => {
 	assertEquals(clipped.text, 'abcdefghi');
 });
 
-Deno.test('dom-serializer: R6.4 a blown budget yields an empty selectorMap, not a partial one', () => {
+Deno.test('dom-serializer: a blown budget yields an empty selectorMap, not a partial one', () => {
 	const ir = buildIr(bigPage(400));
 	const control = serializeDomState(ir);
 	assertEquals(control.stateError, null);
@@ -175,7 +173,7 @@ Deno.test('dom-serializer: R6.4 a blown budget yields an empty selectorMap, not 
 	assertEquals(result.reverseMap.size, 0);
 });
 
-Deno.test('dom-serializer: R6.4 the fail-safe state carries stateError and nothing actionable', () => {
+Deno.test('dom-serializer: the fail-safe state carries stateError and nothing actionable', () => {
 	const state = failSafeDomState('BrowserStateRequestEvent timed out');
 	assertEquals(state.stateError, 'BrowserStateRequestEvent timed out');
 	assertEquals(state.state.selectorMap.size, 0);
@@ -184,7 +182,7 @@ Deno.test('dom-serializer: R6.4 the fail-safe state carries stateError and nothi
 	assert((failSafeDomState().stateError ?? '').length > 0, 'the default reason must say something');
 });
 
-Deno.test('dom-serializer: R6.3 stale-node CDP errors are recognised as "rebuild", not "crash"', () => {
+Deno.test('dom-serializer: stale-node CDP errors are recognised as "rebuild", not "crash"', () => {
 	assert(isStaleNodeIdError(new Error('No node with given id found')));
 	assert(isStaleNodeIdError('Could not find node with given id'));
 	assert(isStaleNodeIdError({ message: 'Node with given id does not belong to the document' }));
@@ -209,10 +207,9 @@ Deno.test('dom-serializer: page markers appear only when the page is scrolled to
 });
 
 Deno.test("dom-serializer: the extraction half's derived members render byte-identical goldens", async () => {
-	// The seam of ERRATUM(M1-dom-serialize-1). `serialize_derived.ts` exists so this suite can run
-	// before `derived.ts` lands; now that it has, injecting the real implementation must not move a
-	// single byte. If this test ever fails, one of the two implementations of §6.1's derived members
-	// has drifted — which is a serialization drift (R1), not a test problem.
+	// Injecting the extraction half's implementation must not move a single byte. If this test ever
+	// fails, the derived members the serializer sees have drifted from the extraction half's — which
+	// is a serialization drift, not a test problem.
 	const derived: SerializerDerived = domNodeDerived;
 	for (const name of GOLDEN_CASES) {
 		const { file, ir } = await loadFixture(name);
@@ -221,7 +218,7 @@ Deno.test("dom-serializer: the extraction half's derived members render byte-ide
 	}
 });
 
-Deno.test('dom-serializer: the selector map is rebuilt from scratch on every request (R6.3)', async () => {
+Deno.test('dom-serializer: the selector map is rebuilt from scratch on every request', async () => {
 	const { ir } = await loadFixture('new_marking_before');
 	const first = serializeDomState(ir);
 	const second = serializeDomState(ir, { previousKeys: first.keys });

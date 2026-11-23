@@ -1,7 +1,7 @@
 /**
- * Tier-1 profile suite: launch-arg composition/dedup, display resolution, directory resolution
- * (DATA-MODEL.md §5.2, ARCHITECTURE.md §6.1, ROADMAP.md R8). Pure — no filesystem, no environment
- * read, no process spawn, so it runs under the §3.6 test matrix with nothing but `--allow-read=.`.
+ * Tier-1 profile suite: launch-arg composition/dedup, display resolution, directory resolution.
+ * Pure — no filesystem, no environment read, no process spawn, so it needs nothing but
+ * `--allow-read=.`.
  */
 
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
@@ -72,7 +72,7 @@ Deno.test('args: an explicit profile arg beats the composed default, in the defa
 });
 
 // ---------------------------------------------------------------------------
-// --user-data-dir (ARCHITECTURE.md §6.1)
+// --user-data-dir
 // ---------------------------------------------------------------------------
 
 Deno.test('user-data-dir: always present, even when all defaults are ignored', () => {
@@ -113,7 +113,7 @@ Deno.test('args: profile args cannot smuggle in owned switches', () => {
 });
 
 // ---------------------------------------------------------------------------
-// headless / display detection (ROADMAP.md R8)
+// headless / display detection
 // ---------------------------------------------------------------------------
 
 Deno.test.each([
@@ -148,10 +148,10 @@ Deno.test('headless: the OS defaults to the running platform', () => {
 });
 
 // ---------------------------------------------------------------------------
-// viewport / screen invariants (DATA-MODEL.md §5.2)
+// viewport / screen invariants
 // ---------------------------------------------------------------------------
 
-Deno.test('display: headless defaults to 1920x1080 in viewport mode (R8)', () => {
+Deno.test('display: headless defaults to 1920x1080 in viewport mode', () => {
 	const resolved = resolve({ headless: true });
 	assertEquals(DEFAULT_SCREEN, { width: 1920, height: 1080 });
 	assertEquals(resolved.screen, DEFAULT_SCREEN);
@@ -197,7 +197,7 @@ Deno.test('display: an explicit viewport forces viewport mode on a headful profi
 	assertEquals(resolved.noViewport, false);
 	assertEquals(resolved.viewport, { width: 800, height: 600 });
 	assertEquals(resolved.deviceScaleFactor, 1);
-	// The screen stays the R8 default: a viewport is emulation, not a display measurement.
+	// The screen stays the 1920x1080 default: a viewport is emulation, not a display measurement.
 	assertEquals(resolved.screen, DEFAULT_SCREEN);
 });
 
@@ -259,7 +259,7 @@ Deno.test('profile-directory: defaults to Default and is emitted as an arg', () 
 });
 
 // ---------------------------------------------------------------------------
-// the rest of the §5.2 arg surface
+// the rest of the profile arg surface
 // ---------------------------------------------------------------------------
 
 Deno.test('args: sandbox, devtools, and user agent', () => {
@@ -312,7 +312,7 @@ Deno.test('args: the disable-security group and the cross-origin-iframe switch s
 	const both = resolve({ disableSecurity: true, crossOriginIframes: false });
 	assertEquals(both.args.filter((arg) => argKey(arg) === '--disable-features').length, 1);
 
-	// The I-11 default (crossOriginIframes: true) touches nothing.
+	// The default (crossOriginIframes: true) touches nothing.
 	assert(!has(resolve().args, '--disable-features'));
 	assert(!has(resolve({ crossOriginIframes: true }).args, '--disable-site-isolation-trials'));
 });
@@ -364,7 +364,7 @@ Deno.test('launch plan: is accepted by @tykotech/cdp LaunchOptions and carries t
 });
 
 Deno.test('seam: a full BrowserProfile from types.ts resolves without adaptation', () => {
-	// Compile-time half: the peer-owned §5.2 declaration must satisfy this module's input type.
+	// Compile-time half: the `BrowserProfile` declaration must satisfy this module's input type.
 	const profile: BrowserProfileLaunchInput = createBrowserProfile({
 		userDataDir: PROFILE_DIR,
 		headless: true,
@@ -374,7 +374,7 @@ Deno.test('seam: a full BrowserProfile from types.ts resolves without adaptation
 	assertEquals(resolved.headless, true);
 	assertEquals(resolved.profileDirectory, DEFAULT_PROFILE_DIRECTORY);
 	assertEquals(valueOf(resolved.args, '--user-data-dir'), PROFILE_DIR);
-	// The default `ignoreDefaultArgs: []` (types.ts ERRATUM M1-events-types-3) drops nothing.
+	// The default `ignoreDefaultArgs: []` drops nothing.
 	assert(has(resolved.args, '--window-size'));
 	// chromiumSandbox defaults to true, so no --no-sandbox unless the docker probe flips it.
 	assert(!has(resolved.args, '--no-sandbox'));

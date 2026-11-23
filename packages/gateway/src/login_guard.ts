@@ -1,21 +1,4 @@
-/**
- * D-078: failed sign-ins slow their author down.
- *
- * `/api/v1/auth/login` is public, so the per-principal rate limiter never sees it: there is no principal until
- * the guess is right. Two counters stand in for it, each with exponential backoff once its free failures are
- * spent:
- *
- * - per source address, up to `source.maxMs` (15 min): one host guessing many accounts or many API keys;
- * - per username, up to `user.maxMs` (60 s): many hosts guessing one account. Its ceiling is deliberately low,
- *   because anyone can spend an account's failures: a long block would hand every stranger a way to keep the
- *   administrator out (no hard lockout — D-078).
- *
- * A success clears that username's counter only. The source counter decays with its window, so signing in to
- * one's own account cannot buy a fresh guessing budget for someone else's.
- *
- * Behind a reverse proxy every request has the proxy's address; the username counter still applies, and the
- * deployment guide says to rate-limit the login route at the proxy.
- */
+/** Failed sign-ins slow their author down. */
 
 export interface BackoffPolicy {
 	/** Failures allowed before the first delay. */

@@ -211,7 +211,7 @@ const listed = async (service: WorkspaceService, principal: string) =>
 const temporaries = async (dir: string) =>
 	(await Array.fromAsync(Deno.readDir(dir))).filter((entry) => entry.name.startsWith('.tmp-'));
 
-Deno.test("SB-1 workspace: an owner's workspaces share one disk quota, kept in their records", async (): Promise<void> => {
+Deno.test("workspace: an owner's workspaces share one disk quota, kept in their records", async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const ids = [];
@@ -244,7 +244,7 @@ Deno.test("SB-1 workspace: an owner's workspaces share one disk quota, kept in t
 	}
 });
 
-Deno.test('SB-1 workspace: while a command runs its record holds the worst case, then what was measured', async (): Promise<void> => {
+Deno.test('workspace: while a command runs its record holds the worst case, then what was measured', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -262,10 +262,10 @@ Deno.test('SB-1 workspace: while a command runs its record holds the worst case,
 		finish({ ...result, diskBytes: 4096 });
 		await executing;
 		assertEquals((await record(f.root, workspace_id)).disk_bytes, 4096);
-		// A record from before disk use was kept is measured once at start-up.
-		const legacy = await record(f.root, workspace_id);
-		delete legacy.disk_bytes;
-		await Deno.writeTextFile(`${f.root}/.owners/${workspace_id}.json`, JSON.stringify(legacy));
+		// A record that holds no disk use is measured once at start-up.
+		const unmeasured = await record(f.root, workspace_id);
+		delete unmeasured.disk_bytes;
+		await Deno.writeTextFile(`${f.root}/.owners/${workspace_id}.json`, JSON.stringify(unmeasured));
 		f.backend.diskUsage = (): Promise<number> => Promise.resolve(8192);
 		await new WorkspaceService(f.root, f.backend).initialize();
 		assertEquals((await record(f.root, workspace_id)).disk_bytes, 8192);
@@ -274,7 +274,7 @@ Deno.test('SB-1 workspace: while a command runs its record holds the worst case,
 	}
 });
 
-Deno.test('SB-3 workspace: seed files are checked against the budget once, not measured one by one', async (): Promise<void> => {
+Deno.test('workspace: seed files are checked against the budget once, not measured one by one', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		let measured = 0;
@@ -293,7 +293,7 @@ Deno.test('SB-3 workspace: seed files are checked against the budget once, not m
 	}
 });
 
-Deno.test('SB-4 workspace: a damaged record is skipped, never fatal, and records are replaced whole', async (): Promise<void> => {
+Deno.test('workspace: a damaged record is skipped, never fatal, and records are replaced whole', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const { limits, ...created } = await f.service.call('alice', 'create', { name: 'kept' });
@@ -311,7 +311,7 @@ Deno.test('SB-4 workspace: a damaged record is skipped, never fatal, and records
 	}
 });
 
-Deno.test('SB-4 workspace: removal finishes what a crash between its two deletions left', async (): Promise<void> => {
+Deno.test('workspace: removal finishes what a crash between its two deletions left', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -324,7 +324,7 @@ Deno.test('SB-4 workspace: removal finishes what a crash between its two deletio
 	}
 });
 
-Deno.test('SB-4 workspace: the sweep removes only old leftovers without an owner record', async (): Promise<void> => {
+Deno.test('workspace: the sweep removes only old leftovers without an owner record', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const owned = (await f.service.call('alice', 'create', {})).workspace_id as string;
@@ -361,7 +361,7 @@ Deno.test('SB-4 workspace: the sweep removes only old leftovers without an owner
 	}
 });
 
-Deno.test('SB-5 workspace: a write replaces the file through a rename and keeps nothing half-written', async (): Promise<void> => {
+Deno.test('workspace: a write replaces the file through a rename and keeps nothing half-written', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -378,7 +378,7 @@ Deno.test('SB-5 workspace: a write replaces the file through a rename and keeps 
 	}
 });
 
-Deno.test('SB-7 workspace: over its budget a file may still be shrunk, but nothing may grow', async (): Promise<void> => {
+Deno.test('workspace: over its budget a file may still be shrunk, but nothing may grow', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -399,7 +399,7 @@ Deno.test('SB-7 workspace: over its budget a file may still be shrunk, but nothi
 	}
 });
 
-Deno.test('SB-8 workspace: a busy workspace is still listed, marked busy', async (): Promise<void> => {
+Deno.test('workspace: a busy workspace is still listed, marked busy', async (): Promise<void> => {
 	const f = await fixture();
 	try {
 		const { limits, ...created } = await f.service.call('alice', 'create', {});
@@ -423,7 +423,7 @@ Deno.test('SB-8 workspace: a busy workspace is still listed, marked busy', async
 	}
 });
 
-Deno.test('workspace: with a live session, file operations run caged and never touch the tree (D-077)', async () => {
+Deno.test('workspace: with a live session, file operations run caged and never touch the tree', async () => {
 	const f = await fixture();
 	try {
 		const { workspace_id } = await f.service.call('alice', 'create', {});
@@ -454,7 +454,7 @@ Deno.test('workspace: with a live session, file operations run caged and never t
 	}
 });
 
-// --- R12: a workspace from a git remote (design §2.19) ---------------------------------------------------------
+// --- a workspace from a git remote ---------------------------------------------------------------
 
 const COMMIT = '80445e2e21d609fd261502c216b1847b40923c7d';
 const TOKEN = 'ghp_workspace_test_token_0123456789';
@@ -509,7 +509,7 @@ async function cloning(settings: Partial<CloneSettings> = {}) {
 	return { ...f, service, requests, removed, hosts, forwarded, left };
 }
 
-Deno.test('R12 workspace: a public clone runs once in the provisioning step with the git hosts, then is a workspace', async () => {
+Deno.test('workspace: a public clone runs once in the provisioning step with the git hosts, then is a workspace', async () => {
 	const f = await cloning();
 	try {
 		const { limits, ...cloned } = await f.service.call('alice', 'clone', {
@@ -560,7 +560,7 @@ Deno.test('R12 workspace: a public clone runs once in the provisioning step with
 	}
 });
 
-Deno.test('R12 workspace: a credentialed clone goes through the forwarder for that remote; no credential reaches the step', async () => {
+Deno.test('workspace: a credentialed clone goes through the forwarder for that remote; no credential reaches the step', async () => {
 	const f = await cloning();
 	try {
 		const cloned = await f.service.call('alice', 'clone', { remote: 'app' });
@@ -580,7 +580,7 @@ Deno.test('R12 workspace: a credentialed clone goes through the forwarder for th
 	}
 });
 
-Deno.test('R12 workspace: every refusal comes before the disk or the network', async () => {
+Deno.test('workspace: every refusal comes before the disk or the network', async () => {
 	const f = await cloning();
 	try {
 		const refused: [Record<string, unknown>, string][] = [
@@ -624,7 +624,7 @@ Deno.test('R12 workspace: every refusal comes before the disk or the network', a
 	}
 });
 
-Deno.test('R12 workspace: a failed, timed-out, oversized or cancelled clone leaves nothing behind', async () => {
+Deno.test('workspace: a failed, timed-out, oversized or cancelled clone leaves nothing behind', async () => {
 	const f = await cloning();
 	try {
 		const outcomes: [Partial<ExecResult>, string][] = [
@@ -665,7 +665,7 @@ Deno.test('R12 workspace: a failed, timed-out, oversized or cancelled clone leav
 	}
 });
 
-Deno.test('R12 workspace: while it clones, the workspace is listed busy at its full budget, creates go on, remove cancels it', async () => {
+Deno.test('workspace: while it clones, the workspace is listed busy at its full budget, creates go on, remove cancels it', async () => {
 	const f = await cloning();
 	try {
 		let started!: (id: string) => void;
@@ -727,7 +727,7 @@ const WORKSPACE_OPERATIONS = [
 	['diff', {}],
 ] as const;
 
-Deno.test('R3-1 workspace: a record still provisioning answers run_busy to everything but remove', async () => {
+Deno.test('workspace: a record still provisioning answers run_busy to everything but remove', async () => {
 	const f = await cloning();
 	try {
 		// The state the clone race exposed: the record is listed, marked provisioning, and no lock is held on it.
@@ -764,7 +764,7 @@ Deno.test('R3-1 workspace: a record still provisioning answers run_busy to every
 	}
 });
 
-Deno.test('R3-1 workspace: no session or command gets in while the clone writes its record, and .git is read-only after', async () => {
+Deno.test('workspace: no session or command gets in while the clone writes its record, and .git is read-only after', async () => {
 	const f = await cloning();
 	/** For every cage the backend was asked for: what it was, and whether `.git` existed when it was asked. */
 	const cages: { kind: string; git: boolean }[] = [];
@@ -779,7 +779,7 @@ Deno.test('R3-1 workspace: no session or command gets in while the clone writes 
 		cages.push({ kind: 'session', git: await gitThere(req.runId) });
 		return await openSession.call(f.backend, owner, req, quota);
 	};
-	// The window the reviewer widened (r3_clone_race.ts): the record is renamed into place, and the service syncs its
+	// The race window: the record is renamed into place, and the service syncs its
 	// folder before it goes on. Held open here until the test has tried everything.
 	const owners = `${f.root}/.owners`;
 	const open = Deno.open;
@@ -835,7 +835,7 @@ Deno.test('R3-1 workspace: no session or command gets in while the clone writes 
 	}
 });
 
-Deno.test('R12 workspace: a clone a restart interrupted is discarded at start-up', async () => {
+Deno.test('workspace: a clone a restart interrupted is discarded at start-up', async () => {
 	const f = await cloning();
 	try {
 		const id = '0f0e8c6a-3d2b-4c1a-9e8f-7a6b5c4d3e2f';

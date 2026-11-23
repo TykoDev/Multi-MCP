@@ -1,20 +1,15 @@
 /**
- * R8 — per-principal session ownership (`TTK_SESSION_OWNERSHIP`, design §2.16, D-128), at the registry and at every
- * MCP surface that looks a session up: tools, resources, notifications and capabilities. The gateway's own surfaces
- * (admin REST, files, SSE, live tickets, recordings) are covered in `packages/gateway/src/session_ownership_test.ts`.
- *
- * `shared` mode must be byte-for-byte what it was (AC27): the shared-mode cases here pin the S0 pass-through
- * semantics, and every pre-existing test runs in `shared` mode unchanged.
+ * Per-principal session ownership (`TTK_SESSION_OWNERSHIP`), at the registry and at every MCP surface that looks a
+ * session up: tools, resources, notifications and capabilities.
  */
+import { blankSession } from '../fixtures/capture_session.ts';
 import { assert, assertEquals, assertNotEquals, assertRejects, assertStringIncludes } from '@std/assert';
-import { McpServer } from '@modelcontextprotocol/server';
-import type { AuthInfo, CallToolResult } from '@modelcontextprotocol/server';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
+import { type AuthInfo, type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { dispatchToolCall } from './dispatch.ts';
 import { ToolError } from './errors.ts';
 import {
 	CHILD_ENV_BLANKED,
+	CHILD_ENV_LAUNCHER_BLANKED,
 	childEnvOverrides,
 	DEFAULT_SESSION_ID,
 	type SessionAccess,
@@ -22,26 +17,12 @@ import {
 	sessionProfile,
 	SessionRegistry,
 } from './registry.ts';
-import { resourceUris } from './resources.ts';
-import { watchResourceChanges } from './resource_notifications.ts';
+import { resourceUris, watchResourceChanges } from './resources.ts';
 import { capabilitiesFor, createBuildServer, registerCatalog, serverSessionAccess } from './server.ts';
 
 const ALICE: SessionAccess = { owner: 'api-key:alice', admin: false };
 const BOB: SessionAccess = { owner: 'api-key:bob', admin: false };
 const ADMIN: SessionAccess = { owner: 'api-key:root', admin: true };
-
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'ownership-test' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
 
 function registry(ownership?: SessionOwnership, extra: { dataDir?: string; launchDelayMs?: number } = {}) {
 	const launched: string[] = [];
@@ -52,7 +33,7 @@ function registry(ownership?: SessionOwnership, extra: { dataDir?: string; launc
 		launch: async (id) => {
 			launched.push(id);
 			if (extra.launchDelayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, extra.launchDelayMs));
-			return fakeSession();
+			return blankSession();
 		},
 	});
 	return { sessions, launched };
@@ -88,9 +69,9 @@ function errorCode(result: CallToolResult): string | undefined {
 	return (result.structuredContent as { error?: { code?: string } } | undefined)?.error?.code;
 }
 
-// --- shared mode: the S0 pass-through, unchanged --------------------------------------------------------------------
+// --- shared mode: the pass-through ----------------------------------------------------------------------------------
 
-Deno.test('R8 shared: the default mode, every caller reaches every session and `default` is one session', async () => {
+Deno.test('shared: the default mode, every caller reaches every session and `default` is one session', async () => {
 	const { sessions } = registry();
 	try {
 		assertEquals(sessions.ownership, 'shared');
@@ -114,7 +95,7 @@ Deno.test('R8 shared: the default mode, every caller reaches every session and `
 
 // --- owner mode at the registry ---------------------------------------------------------------------------------------
 
-Deno.test('R8 owner: `default` is per owner, `default-<ulid>`, and owned by its creator', async () => {
+Deno.test('owner: `default` is per owner, `default-<ulid>`, and owned by its creator', async () => {
 	const { sessions, launched } = registry('owner');
 	try {
 		const a = await sessions.resolve(undefined, ALICE);
@@ -134,7 +115,7 @@ Deno.test('R8 owner: `default` is per owner, `default-<ulid>`, and owned by its 
 	}
 });
 
-Deno.test("R8 owner: another owner's session is unknown-session — never forbidden — and admin reaches all", async () => {
+Deno.test("owner: another owner's session is unknown-session — never forbidden — and admin reaches all", async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.createNew('alice', undefined, ALICE);
@@ -160,7 +141,7 @@ Deno.test("R8 owner: another owner's session is unknown-session — never forbid
 	}
 });
 
-Deno.test('R8 owner: no access at all fails closed', async () => {
+Deno.test('owner: no access at all fails closed', async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.resolve(undefined, ALICE);
@@ -175,7 +156,7 @@ Deno.test('R8 owner: no access at all fails closed', async () => {
 	}
 });
 
-Deno.test("R8 owner: an admin's default and created sessions are the admin's own", async () => {
+Deno.test("owner: an admin's default and created sessions are the admin's own", async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.resolve(undefined, ALICE);
@@ -190,7 +171,7 @@ Deno.test("R8 owner: an admin's default and created sessions are the admin's own
 	}
 });
 
-Deno.test("R8 owner: two first calls from one owner share one browser; closing it frees the owner's default", async () => {
+Deno.test("owner: two first calls from one owner share one browser; closing it frees the owner's default", async () => {
 	const { sessions, launched } = registry('owner', { launchDelayMs: 20 });
 	try {
 		const [first, second] = await Promise.all([sessions.resolve(undefined, ALICE), sessions.resolve(undefined, ALICE)]);
@@ -205,7 +186,7 @@ Deno.test("R8 owner: two first calls from one owner share one browser; closing i
 	}
 });
 
-Deno.test('R8 owner (F4): the profile-held refusal names the session only to a caller who could reach it', async () => {
+Deno.test('owner: the profile-held refusal names the session only to a caller who could reach it', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const dataDir = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'ownership-profile-' });
 	const { sessions } = registry('owner', { dataDir });
@@ -225,7 +206,7 @@ Deno.test('R8 owner (F4): the profile-held refusal names the session only to a c
 	}
 });
 
-Deno.test('R8 shared (F4): the profile-held refusal is unchanged', async () => {
+Deno.test('shared: the profile-held refusal names the holding session to any caller', async () => {
 	await Deno.mkdir('tests/.scratch', { recursive: true });
 	const dataDir = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'ownership-profile-' });
 	const { sessions } = registry(undefined, { dataDir });
@@ -241,7 +222,7 @@ Deno.test('R8 shared (F4): the profile-held refusal is unchanged', async () => {
 
 // --- owner mode at the tools ------------------------------------------------------------------------------------------
 
-Deno.test("R8 owner: tools never reach another owner's session; list, health and close filter", async () => {
+Deno.test("owner: tools never reach another owner's session; list, health and close filter", async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.createNew('alice', undefined, ALICE);
@@ -285,10 +266,9 @@ Deno.test("R8 owner: tools never reach another owner's session; list, health and
 	}
 });
 
-Deno.test('R8 owner: browser_navigate {new_session} creates a session the caller owns', async () => {
+Deno.test('owner: browser_navigate {new_session} creates a session the caller owns', async () => {
 	const { sessions } = registry('owner');
 	try {
-		// The navigation itself fails on the stand-in browser; the creation is what this asserts.
 		await call(sessions, ALICE, 'browser_navigate', { url: 'https://example.com/', new_session: true });
 		const created = sessions.records;
 		assertEquals(created.length, 1);
@@ -299,7 +279,7 @@ Deno.test('R8 owner: browser_navigate {new_session} creates a session the caller
 	}
 });
 
-Deno.test('R8 owner: the agent tools resolve with the caller access', async () => {
+Deno.test('owner: the agent tools resolve with the caller access', async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.createNew(undefined, undefined, ALICE);
@@ -324,7 +304,7 @@ Deno.test('R8 owner: the agent tools resolve with the caller access', async () =
 	}
 });
 
-Deno.test('R8 owner: browser_record binds a recording to its starter through the controller', async () => {
+Deno.test('owner: browser_record binds a recording to its starter through the controller', async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.resolve(undefined, ALICE);
@@ -362,7 +342,7 @@ Deno.test('R8 owner: browser_record binds a recording to its starter through the
 
 // --- capabilities, resources and notifications ---------------------------------------------------------------------
 
-Deno.test('R8: capabilities.tykotech.sessions reports the mode to mcp:invoke holders only', () => {
+Deno.test('ownership: capabilities.tykotech.sessions reports the mode to mcp:invoke holders only', () => {
 	for (const ownership of ['shared', 'owner'] as const) {
 		const { sessions } = registry(ownership);
 		const caps = capabilitiesFor({ registry: sessions, version: '0' }, authOf(ALICE));
@@ -373,7 +353,7 @@ Deno.test('R8: capabilities.tykotech.sessions reports the mode to mcp:invoke hol
 	}
 });
 
-Deno.test('R8 owner: a built server carries its caller access for its notification watcher', async () => {
+Deno.test('owner: a built server carries its caller access for its notification watcher', async () => {
 	const { sessions } = registry('owner');
 	const build = createBuildServer({ registry: sessions, version: '0' });
 	const built = await build({ authInfo: authOf(ADMIN), era: 'legacy' } as never) as McpServer;
@@ -402,7 +382,7 @@ function notifyHarness() {
 	return { server, sent };
 }
 
-Deno.test("R8 owner: a connection hears only of its own sessions' changes", async () => {
+Deno.test("owner: a connection hears only of its own sessions' changes", async () => {
 	const { sessions } = registry('owner');
 	try {
 		const early = await sessions.createNew(undefined, undefined, BOB);
@@ -423,12 +403,11 @@ Deno.test("R8 owner: a connection hears only of its own sessions' changes", asyn
 	}
 });
 
-Deno.test('R8 owner: page changes of a foreign session send no resource update', async () => {
+Deno.test('owner: page changes of a foreign session send no resource update', async () => {
 	const { sessions } = registry('owner');
 	try {
 		const a = await sessions.createNew(undefined, undefined, ALICE);
 		const h = notifyHarness();
-		// A stand-in registry that forwards to the real one, so a page change can be fired by hand.
 		const watchers = new Set<(change: Change) => void>();
 		const stand = {
 			ownership: sessions.ownership,
@@ -453,9 +432,9 @@ Deno.test('R8 owner: page changes of a foreign session send no resource update',
 	}
 });
 
-// --- R7 child environments --------------------------------------------------------------------------------------------
+// --- child environments -----------------------------------------------------------------------------------------------
 
-Deno.test('D-127: every launch profile blanks the OTel and inline-secret names, and only them', () => {
+Deno.test('child environment: every launch profile blanks the OTel and inline-secret names, and only them', () => {
 	const profile = sessionProfile({
 		headless: true,
 		downloadsDir: '/data/downloads/x',
@@ -490,8 +469,6 @@ Deno.test('D-127: every launch profile blanks the OTel and inline-secret names, 
 			'TTK_SECRETS',
 			'TTK_ADMIN_USER',
 			'TTK_SANDBOX_TOKEN',
-			'TTK_AGENT_BRIDGE_TOKEN',
-			// D-143 / D-145: the three model-key names an operator shell may export; never read by the gateway.
 			'ANTHROPIC_API_KEY',
 			'OPENAI_API_KEY',
 			'TTK_MODEL_API_KEY',
@@ -499,14 +476,16 @@ Deno.test('D-127: every launch profile blanks the OTel and inline-secret names, 
 	) {
 		assertEquals(env[name], '', `${name} is blanked`);
 	}
-	assertEquals(Object.keys(env).length, 25);
-	assertEquals([...CHILD_ENV_BLANKED].sort(), Object.keys(env).sort());
-	// No `clearEnv`, and nothing a browser needs is touched: proxies, locale and time zone still inherit (F6).
+	assertEquals(env.CHROMIUM_FLAGS, '', 'CHROMIUM_FLAGS is blanked');
+	assertEquals(env.CHROMIUM_USER_FLAGS, '', 'CHROMIUM_USER_FLAGS is blanked');
+	assertEquals(Object.keys(env).length, 26);
+	assertEquals([...CHILD_ENV_BLANKED, ...CHILD_ENV_LAUNCHER_BLANKED].sort(), Object.keys(env).sort());
+	assertEquals(CHILD_ENV_BLANKED.includes('CHROMIUM_FLAGS'), false);
+	assertEquals(childEnvOverrides().CHROMIUM_FLAGS, '', "the recorder's ffmpeg gets the same overrides");
 	for (const kept of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'LANG', 'TZ', 'PATH', 'HOME']) {
 		assertEquals(kept in env, false, `${kept} is not overridden`);
 	}
 	assertEquals('clearEnv' in profile, false);
-	// A fresh object each time: a caller adding to one cannot change the next child's.
 	const first = childEnvOverrides();
 	first.EXTRA = 'x';
 	assertEquals('EXTRA' in childEnvOverrides(), false);

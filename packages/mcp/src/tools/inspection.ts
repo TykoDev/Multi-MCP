@@ -1,41 +1,24 @@
-/**
- * Inspection handlers (R4, design §2.6, D-116): `browser_network_log`, `browser_console_log`, `browser_har_export`.
- *
- * Reads only. None of them launches a browser — there is nothing to inspect in a session that does not exist —
- * and none takes the takeover lock, because reading what the browser already did is observation, not
- * interference.
- *
- * ## What leaves, and under which grant
- *
- * The log redacts credentials by header name at mint; what is decided here is the projection. Without
- * `network:read` a caller sees origin + path + `has_query` for every request and, inside header values, every URL
- * cut the same way (F3). `include_full_urls` and `body_for` need the scope and answer `scope-required` — whose
- * message never names a scope (CONNECTORS §1.5) — without it. Every string that leaves passes the server's own
- * secret redaction (`SecretStore.redact`): a configured secret the model typed into a page, as written, never comes
- * back through a URL, a header, a console line or a body. Encoded variants (URL-encoded, base64) are a stated
- * residual.
- */
+/** Inspection handlers: `browser_network_log`, `browser_console_log`, `browser_har_export`. */
 import { decodeBase64, encodeBase64 } from '@std/encoding/base64';
 import type { EventKind } from '@tykotech/wire';
 import { ToolError } from '../errors.ts';
 import { formatCursor, parseCursor } from '../events.ts';
-import { buildHar, HAR_MAX_BYTES } from '../har.ts';
-import { type NetworkEntry, projectHeaders, utf8Length } from '../network_log.ts';
-import { CONSOLE_LEVELS, type ConsoleLevel } from '../page_console.ts';
+import { buildHar, HAR_MAX_BYTES, type NetworkEntry, projectHeaders, utf8Length } from '../network_log.ts';
+import { CONSOLE_LEVELS, type ConsoleLevel } from '../page_producers.ts';
 import type { SessionRecord } from '../registry.ts';
 import { json, resource, type ToolContext, type ToolResult } from '../types.ts';
 import { peekSession } from './shared.ts';
 
-/** The most response body `browser_network_log {body_for}` returns (design §2.6). */
+/** The most response body `browser_network_log {body_for}` returns. */
 export const NETWORK_BODY_LIMIT_BYTES = 256 * 1024;
 
 /** Default page size of the two log readers. */
 const DEFAULT_LIMIT = 100;
 
-/** The scope that unlocks full URLs, header URL values and bodies (design §2.2). */
+/** The scope that unlocks full URLs, header URL values and bodies. */
 const NETWORK_SCOPE = 'network:read';
 
-/** What a caller without the scope is told. Deliberately names no scope (CONNECTORS §1.5). */
+/** What a caller without the scope is told. Deliberately names no scope. */
 const NETWORK_REFUSAL = 'this credential cannot read full request URLs or response bodies';
 
 /** The server's secret redaction, or the identity when the deployment configured no secrets. */
@@ -50,7 +33,7 @@ function holdsNetworkScope(ctx: ToolContext): boolean {
 }
 
 /** One log entry as this caller may see it. */
-export function projectEntry(
+function projectEntry(
 	entry: NetworkEntry,
 	options: { readonly fullUrls: boolean; readonly headers: boolean; readonly headerUrls: boolean },
 	redact: (text: string) => string,
@@ -84,7 +67,7 @@ export function projectEntry(
 	return out;
 }
 
-/** `browser_network_log` (R4). */
+/** `browser_network_log`. */
 export async function browserNetworkLog(
 	args: {
 		session_id?: string;
@@ -158,7 +141,7 @@ async function responseBody(
 			truncated,
 		};
 	}
-	// Review R2-7: redacted whole, then cut — a configured secret straddling the cap is replaced, not halved. `bytes`
+	// Redacted whole, then cut — a configured secret straddling the cap is replaced, not halved. `bytes`
 	// is still the body's own size.
 	const bytes = utf8Length(answer.body);
 	const encoded = new TextEncoder().encode(redact(answer.body));
@@ -174,7 +157,7 @@ async function responseBody(
 	};
 }
 
-/** `browser_console_log` (R4). */
+/** `browser_console_log`. */
 // deno-lint-ignore require-await -- a handler is always awaited; a synchronous throw would escape the result mapping.
 export async function browserConsoleLog(
 	args: { session_id?: string; since?: string; limit?: number; levels?: ConsoleLevel[] },
@@ -227,7 +210,7 @@ export async function browserConsoleLog(
 	});
 }
 
-/** `browser_har_export` (R4). */
+/** `browser_har_export`. */
 // deno-lint-ignore require-await -- a handler is always awaited; a synchronous throw would escape the result mapping.
 export async function browserHarExport(
 	args: { session_id?: string; max_entries?: number; include_full_urls?: boolean },

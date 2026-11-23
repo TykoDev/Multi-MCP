@@ -1,9 +1,4 @@
-/**
- * The event ring's bounds, its gap contract and its refcount (report_design.md §7.3).
- *
- * Each of the three bounds is overflowed by a test rather than asserted from the
- * constant, because a bound whose enforcement is never exercised is a comment.
- */
+/** The event ring's bounds, its gap contract and its refcount. */
 
 import { assert, assertEquals, assertNotEquals, assertRejects } from '@std/assert';
 import {
@@ -20,11 +15,9 @@ import {
 	formatCursor,
 	loggedPath,
 	MAX_EVENT_BYTES,
-	MAX_RING_BYTES,
 	navigationTarget,
 	NetworkIdleCounter,
 	parseCursor,
-	RING_CAPACITY,
 	SessionEventRing,
 	stripMatrixParams,
 	STRUCTURAL_RATE_PER_SECOND,
@@ -37,11 +30,6 @@ function clock(start = 1_760_000_000_000): { now: () => number; advance: (ms: nu
 }
 
 Deno.test('kinds: every content kind is rate-capped as one, and the two lists cannot drift', () => {
-	// `SSE_ONLY_EVENT_KINDS` answers "may a `view:watch` holder see this"; the
-	// ring's `CONTENT_KINDS` answers "how fast may a page mint it". Different
-	// questions, but a kind that is page content is by construction a kind a page
-	// can spin, so one list must contain the other. `focus` was in exactly the
-	// gap: withheld from the socket as content, budgeted at the structural rate.
 	for (const kind of SSE_ONLY_EVENT_KINDS) {
 		const ring = new SessionEventRing({ capacity: 4096, maxRingBytes: 8 * 1024 * 1024, now: () => 1000 });
 		let admitted = 0;
@@ -52,11 +40,7 @@ Deno.test('kinds: every content kind is rate-capped as one, and the two lists ca
 	}
 });
 
-Deno.test('kinds: a live-view socket filter admits no content kind, asserted at the ring (B1.8/B1.9)', () => {
-	// The transport filters through `WS_EVENT_KINDS`, and `socketevents_test.ts`
-	// proves the transport does it. This pins the same guarantee one layer down,
-	// at the ring's own `read`, so a future edit to either transport cannot
-	// quietly reopen it.
+Deno.test('kinds: a live-view socket filter admits no content kind, asserted at the ring', () => {
 	const ring = new SessionEventRing({ now: () => 1000 });
 	for (const kind of SSE_ONLY_EVENT_KINDS) ring.append(kind, { text: 'page content' });
 	ring.append('navigation', { origin: 'https://a.test', path: '/', has_query: false });
@@ -64,30 +48,14 @@ Deno.test('kinds: a live-view socket filter admits no content kind, asserted at 
 	assertEquals(records.map((record) => record.kind), ['navigation']);
 });
 
-Deno.test('events: the published bounds are the design figures', () => {
-	assertEquals(RING_CAPACITY, 512);
-	assertEquals(MAX_EVENT_BYTES, 1024);
-	assertEquals(MAX_RING_BYTES, 256 * 1024);
-	assertEquals(CONTENT_RATE_PER_SECOND, 50);
-});
-
-Deno.test('events: twelve subscribable kinds, fourteen kind strings on the wire', () => {
-	assertEquals(EVENT_KINDS.length, 12);
-	assertEquals(EVENT_RECORD_KINDS.length, 14);
-	// gap and bye are kind strings but not subscribable.
-	assertEquals(EVENT_RECORD_KINDS.filter((k) => !EVENT_KINDS.includes(k as never)), ['gap', 'bye']);
-});
-
 Deno.test('events: the socket carries no content-bearing kind', () => {
-	// A live-view ticket is minted on view:watch/view:control and carries no
-	// mcp:invoke, so page content must not reach it.
 	for (const kind of ['focus', 'input', 'console']) {
 		assert(!WS_EVENT_KINDS.includes(kind as never), `${kind} must not be on the socket`);
 	}
 	assertEquals(WS_EVENT_KINDS.length, EVENT_KINDS.length - 3);
 });
 
-Deno.test('events: seq is per session, from 1, monotonic and never reused (I-10)', () => {
+Deno.test('events: seq is per session, from 1, monotonic and never reused', () => {
 	const ring = new SessionEventRing({ capacity: 4 });
 	const seqs: number[] = [];
 	for (let i = 0; i < 10; i++) {
@@ -97,7 +65,6 @@ Deno.test('events: seq is per session, from 1, monotonic and never reused (I-10)
 	}
 	assertEquals(seqs, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 	assertEquals(ring.highWaterMark, 10);
-	// Eviction does not rewind the counter, so a reused seq is impossible.
 	assertEquals(ring.size, 4);
 	assertEquals(ring.oldestSeq, 7);
 });
@@ -110,8 +77,6 @@ Deno.test('events: the entry bound evicts oldest-first', () => {
 });
 
 Deno.test('events: the byte bound binds before the entry bound', () => {
-	// 512 entries are permitted, but 256 KiB is not: the byte total is what the
-	// published memory figure rests on, so it must evict first.
 	const ring = new SessionEventRing({ maxRingBytes: 4096 });
 	for (let i = 0; i < 200; i++) ring.append('dialog', { dialog_id: `d${i}`, kind: 'alert', message: 'x'.repeat(512) });
 	assert(ring.size < 200, 'the byte bound must have evicted');
@@ -121,7 +86,6 @@ Deno.test('events: the byte bound binds before the entry bound', () => {
 
 Deno.test('events: an over-long record is truncated at its one field and flagged, never dropped', () => {
 	const ring = new SessionEventRing();
-	// Astral characters: 512 of them is 2048 UTF-8 bytes, well past the 1 KiB cap.
 	const record = ring.append('console', { level: 'log', text: '\u{1F600}'.repeat(4000), truncated: false });
 	assert(record !== null, 'the record must survive');
 	assertEquals(record.kind, 'console');
@@ -158,9 +122,8 @@ Deno.test('events: every kind fits the byte cap with maximal identifiers', () =>
 	}
 });
 
-Deno.test('events: a data: line can never be split, whatever the payload holds (I-9)', () => {
+Deno.test('events: a data: line can never be split, whatever the payload holds', () => {
 	const ring = new SessionEventRing();
-	// Newlines, carriage returns, tabs and astral characters in every text field.
 	const hostile = 'a\nb\r\nc\td\u{1F4A5}  ';
 	const records = [
 		ring.append('console', { level: 'log', text: hostile }),
@@ -178,15 +141,9 @@ Deno.test('events: a data: line can never be split, whatever the payload holds (
 Deno.test('events: an under-run cursor gets a gap first, with exact arithmetic', () => {
 	const ring = new SessionEventRing({ capacity: 4 });
 	for (let i = 0; i < 10; i++) ring.append('tab', { action: 'created' });
-	// Retained: 7..10. A consumer that last saw 2 lost 3,4,5,6.
 	const out = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 2 });
 	assertEquals(out[0]?.kind, 'gap');
-	// One *below* the oldest retained: every record's seq means "the cursor you
-	// have consumed through", so resuming from the gap's own seq delivers the
-	// record that follows it rather than skipping it.
 	assertEquals(out[0]?.seq, 6);
-	// `by_kind` attributes the loss (SR1-A1b): four `tab` records, not merely four
-	// records. A consumer needs that to tell a flooding page from its own absence.
 	assertEquals(out[0]?.payload, {
 		reason: 'ring-overrun',
 		dropped_from: 3,
@@ -198,17 +155,11 @@ Deno.test('events: an under-run cursor gets a gap first, with exact arithmetic',
 });
 
 Deno.test('events: resuming from a gap record skips nothing', () => {
-	// The SSE `id:` field is the record's seq and a reconnecting client returns
-	// it as `Last-Event-ID`. A gap that shared a seq with the record after it
-	// made that record unreachable — lost silently, with no second gap to say so,
-	// which defeats "the only signal of loss is a gap record" using the gap
-	// record itself.
 	const ring = new SessionEventRing({ capacity: 4 });
 	for (let i = 0; i < 10; i++) ring.append('tab', { action: 'created' });
 	const first = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 2 });
 	const gap = first[0];
 	assert(gap !== undefined && gap.kind === 'gap');
-	// The client got the gap, then dropped before reading anything else.
 	const resumed = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: gap.seq });
 	assertEquals(resumed.map((r) => r.seq), [7, 8, 9, 10], 'no record is skipped on resume');
 	assertEquals(resumed.some((r) => r.kind === 'gap'), false, 'and nothing further was lost');
@@ -243,7 +194,6 @@ Deno.test('events: any non-current epoch gaps with dropped null, older or newer 
 		const out = ring.read({ kind: 'cursor', epoch, seq: 1 });
 		assertEquals(out[0]?.kind, 'gap');
 		assertEquals(out[0]?.payload.reason, 'epoch-changed');
-		// null, not zero: the previous incarnation's ring is gone and the count is unknowable.
 		assertEquals(out[0]?.payload.dropped, null);
 		assertEquals(out.length, 4, 'the whole retained ring replays after the gap');
 	}
@@ -289,7 +239,6 @@ Deno.test('events: the rate cap drops content kinds and reports the exact count'
 		if (ring.append('console', { level: 'log', text: 'x' }) !== null) accepted += 1;
 	}
 	assertEquals(accepted, CONTENT_RATE_PER_SECOND);
-	// The drop count reaches the wire on the next window, as one control record.
 	time.advance(RATE_WINDOW_MS_FOR_TEST);
 	ring.append('console', { level: 'log', text: 'y' });
 	const capped = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 0 })
@@ -301,12 +250,6 @@ Deno.test('events: the rate cap drops content kinds and reports the exact count'
 const RATE_WINDOW_MS_FOR_TEST = 1000;
 
 Deno.test('events: structural kinds get a larger budget, not an exemption', () => {
-	// The design reasoned that structural kinds need no cap "because a page
-	// cannot spin them". A page can: `alert()` in a loop mints `dialog`,
-	// `window.open`/`close` mints `tab`, and reassigning an iframe `src` mints
-	// `navigation`. Uncapped that is event *blinding* — 512 synthetic records
-	// evict the one real `download.done` a consumer was waiting for, so the page
-	// chooses what an mcp:invoke principal is allowed to observe.
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 4096 });
 	let accepted = 0;
@@ -315,7 +258,6 @@ Deno.test('events: structural kinds get a larger budget, not an exemption', () =
 	}
 	assertEquals(accepted, STRUCTURAL_RATE_PER_SECOND);
 	assert(STRUCTURAL_RATE_PER_SECOND > CONTENT_RATE_PER_SECOND, 'structural traffic keeps the looser budget');
-	// The loss is reported exactly, never silent.
 	time.advance(1000);
 	ring.append('dialog', { dialog_id: 'd', kind: 'alert', message: 'y' });
 	const capped = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 0 })
@@ -324,8 +266,6 @@ Deno.test('events: structural kinds get a larger budget, not an exemption', () =
 });
 
 Deno.test('events: control records are never capped, so a cap is always reported', () => {
-	// The `rate-capped` record is itself a control record. Capping control would
-	// let a flood suppress the report of the flood.
 	const ring = new SessionEventRing({ now: clock().now, capacity: 4096 });
 	let accepted = 0;
 	for (let i = 0; i < 400; i++) {
@@ -335,10 +275,6 @@ Deno.test('events: control records are never capped, so a cap is always reported
 });
 
 Deno.test('events: a page cannot pick a download failure reason through its filename', () => {
-	// The watchdog interpolates the download's *display name* — which the page
-	// chooses — into several of its error strings. Under substring matching a
-	// file called `deadline.pdf` reported `interrupted` and `cancel.txt`
-	// reported `canceled`: the enum stayed closed, but the page picked from it.
 	for (const name of ['deadline.pdf', 'cancel.txt', 'per-file limit.doc']) {
 		const error = `the browser reported ${name} as complete but no file exists at the vetted path`;
 		assertEquals(downloadFailureReason(error), 'browser-error', name);
@@ -346,9 +282,6 @@ Deno.test('events: a page cannot pick a download failure reason through its file
 });
 
 Deno.test('events: a failed download never reports itself complete', () => {
-	// The containment-failure path sets `state: 'completed'` and then emits the
-	// `failed` phase, so passing the state through told a consumer to go and
-	// fetch bytes that are not there.
 	const payload = downloadPayload('download.failed', {
 		guid: 'g',
 		fileName: 'f.pdf',
@@ -364,8 +297,6 @@ Deno.test('events: a failed download never reports itself complete', () => {
 });
 
 Deno.test('events: a cursor with a non-decimal seq is a mismatch, not a plausible number', () => {
-	// Bare `Number` accepted `0x10` as 16 and ` 12` as 12, turning a malformed
-	// cursor into a confident wrong answer instead of the mismatch it is.
 	for (const raw of ['E:0x10', 'E: 12', 'E:', 'E:-1', 'E:1e3', 'E:1.5']) {
 		assertEquals(parseCursor(raw), { kind: 'epoch-mismatch' }, raw);
 	}
@@ -381,13 +312,9 @@ Deno.test('events: a closed ring returns null from appendControl rather than reu
 });
 
 Deno.test('events: non-string bloat cannot escape the byte cap', () => {
-	// The second pass only inspected top-level strings, so a nested object — the
-	// "a refactor widened a payload" case the pass exists for — returned an
-	// oversized record.
 	const ring = new SessionEventRing();
 	const record = ring.append('tab', {
 		action: 'opened',
-		// Not a shape any producer emits today; that is the point.
 		nested: Array.from({ length: 400 }, (_, i) => ({ index: i, note: 'x'.repeat(40) })),
 	});
 	assert(record !== null);
@@ -421,7 +348,7 @@ Deno.test('events: disarming below zero is a no-op rather than a negative refcou
 	assertEquals(ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 0 }), []);
 });
 
-Deno.test('B2.5/E-53: the dialog claim is refcounted, announced, and arms on the zero transition only', () => {
+Deno.test('the dialog claim is refcounted, announced, and arms on the zero transition only', () => {
 	const ring = new SessionEventRing();
 	const armed: boolean[] = [];
 	ring.setDialogArmed((value) => armed.push(value));
@@ -436,13 +363,11 @@ Deno.test('B2.5/E-53: the dialog claim is refcounted, announced, and arms on the
 	ring.disarmDialog();
 	assertEquals(armed, [true, false]);
 	assertEquals(ring.dialogSubscribers, 0);
-	// The transitions are on the stream, because they change what a `dialog` record *means*: armed,
-	// it is an open question; disarmed, it is a report of something already answered.
 	const events = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 0 }).map((r) => r.payload.event);
 	assertEquals(events, ['dialog-manual-armed', 'dialog-manual-disarmed']);
 });
 
-Deno.test('B2.5/E-53: a subscriber that arrived before the callback is not lost', () => {
+Deno.test('a subscriber that arrived before the callback is not lost', () => {
 	const ring = new SessionEventRing();
 	ring.armDialog();
 	const armed: boolean[] = [];
@@ -507,26 +432,22 @@ Deno.test('events: two rings never share an epoch', () => {
 Deno.test('redaction: navigation carries origin, path and has_query — never a URL', () => {
 	const target = navigationTarget('https://app.example.test:8443/dash/reports?token=SECRET#frag');
 	assertEquals(target, { origin: 'https://app.example.test:8443', path: '/dash/reports', has_query: true });
-	// The whole point: the removed half is *gone*, not truncated into another field.
 	const serialized = JSON.stringify(target);
 	assert(!serialized.includes('SECRET'), 'the query must not survive in any field');
 	assert(!serialized.includes('frag'), 'the fragment must not survive in any field');
 	assert(!('url' in target), 'a field named url would be the lie this shape exists to avoid');
 });
 
-Deno.test('NF-2 (AC25): a navigation path drops matrix parameters and a data: payload, as the request log does', () => {
+Deno.test('a navigation path drops matrix parameters and a data: payload, as the request log does', () => {
 	const target = navigationTarget('https://a.test/x;jsessionid=1/y;p=2?q');
 	assertEquals(target, { origin: 'https://a.test', path: '/x/y', has_query: true });
 	assert(!JSON.stringify(target).includes('jsessionid'), 'a session id in a matrix parameter must not survive');
-	// The same cutter as the network log's path, from one definition.
 	assertEquals(
 		navigationTarget('https://a.test/x;jsessionid=1/y;p=2?q').path,
 		loggedPath('https://a.test/x;jsessionid=1/y;p=2?q'),
 	);
-	// A `data:` URL's "path" is its payload; only the media type is kept.
 	assertEquals(navigationTarget('data:text/plain;base64,c2VjcmV0').path, 'text/plain');
 	assertEquals(navigationTarget('data:,Zq8-plain').path, '');
-	// Unchanged for a plain path, an origin-less scheme and an unparseable string.
 	assertEquals(navigationTarget('https://a.test/dash/reports').path, '/dash/reports');
 	assertEquals(navigationTarget('about:blank').path, 'blank');
 	assertEquals(navigationTarget('not a url at all').path, '');
@@ -557,7 +478,7 @@ Deno.test('redaction: no download payload carries a url, on any of the three kin
 	};
 	for (const kind of ['download.started', 'download.done', 'download.failed'] as const) {
 		const payload = downloadPayload(kind, source);
-		assert(!('url' in payload), `${kind} must carry no url (SECURITY-AUTH §8.3)`);
+		assert(!('url' in payload), `${kind} must carry no url`);
 		assert(!('path' in payload), `${kind} must not disclose a server path`);
 		assert(!('suggestedFilename' in payload), `${kind} must carry the sanitized name only`);
 	}
@@ -590,9 +511,7 @@ Deno.test('redaction: download.failed reports a closed reason, never the free-te
 	}
 });
 
-Deno.test('redaction: no event kind may carry an element record (I-8)', () => {
-	// The five fields a `focus` descriptor is allowed, and nothing that would make
-	// the ring a page-content transcript.
+Deno.test('redaction: no event kind may carry an element record', () => {
 	const ring = new SessionEventRing();
 	const record = ring.append('focus', {
 		element_index: 4,
@@ -623,7 +542,6 @@ Deno.test('redaction: the network idle counter emits one record per quiet transi
 		counter.finished('r2');
 		await new Promise((resolve) => setTimeout(resolve, 30));
 		assertEquals(seen, [{ inflight: 0, quietMs: 5 }]);
-		// Quiet stays quiet: an edge, not a heartbeat.
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		assertEquals(seen.length, 1);
 	} finally {
@@ -643,10 +561,7 @@ Deno.test('redaction: a finish for a request never started is ignored', () => {
 	}
 });
 
-Deno.test('redaction: a page-chosen filename cannot steer the failure enum (m-1)', () => {
-	// Two of the watchdog's own templates interpolate the display name at
-	// position 0, and the page chooses that name. A start anchor alone still let
-	// it pick the value out of the closed enum.
+Deno.test('redaction: a page-chosen filename cannot steer the failure enum', () => {
 	const steering = [
 		'the session already tracks 0 downloads.pdf resolved outside the downloads directory and was refused',
 		'the download exceeds the per-file limit of 0 bytes.pdf is not a regular file and was refused',
@@ -655,7 +570,6 @@ Deno.test('redaction: a page-chosen filename cannot steer the failure enum (m-1)
 	for (const error of steering) {
 		assertEquals(downloadFailureReason(error), 'browser-error', error.slice(0, 48));
 	}
-	// The real watchdog strings still classify, so nothing regressed the other way.
 	assertEquals(downloadFailureReason('the session already tracks 100 downloads'), 'over-session-limit');
 	assertEquals(
 		downloadFailureReason('the download exceeds the per-file limit of 104857600 bytes'),
@@ -670,10 +584,7 @@ Deno.test('redaction: a page-chosen filename cannot steer the failure enum (m-1)
 	assertEquals(downloadFailureReason('canceled by the server'), 'canceled');
 });
 
-Deno.test('events: a payload whose bulk is in its keys still fits the byte cap (m-3)', () => {
-	// No shrink touches a field *name*, so the second pass exited over cap on a
-	// payload built this way. Not reachable today; it is exactly the "a refactor
-	// widened a payload" case the pass exists for.
+Deno.test('events: a payload whose bulk is in its keys still fits the byte cap', () => {
 	const ring = new SessionEventRing();
 	const payload: Record<string, unknown> = {};
 	for (let i = 0; i < 400; i++) payload[`field_name_number_${i}_with_a_long_key`] = i;
@@ -684,11 +595,7 @@ Deno.test('events: a payload whose bulk is in its keys still fits the byte cap (
 	assertEquals(record.payload.truncated, true);
 });
 
-Deno.test('events: a control record names no principal (m-4, I-8)', () => {
-	// The ring is replayable to every mcp:invoke holder, and
-	// browser_list_sessions publishes only human_has_control: boolean. Under
-	// anonymous loopback the principal is `anonymous:<remoteAddr>`, so this would
-	// have put a human's network address on an event stream.
+Deno.test('events: a control record names no principal', () => {
 	const ring = new SessionEventRing();
 	const record = ring.appendControl('taken', { holder_name: 'viewer-ulid' });
 	assert(record !== null);
@@ -696,12 +603,9 @@ Deno.test('events: a control record names no principal (m-4, I-8)', () => {
 	assertEquals(record.payload.holder_name, 'viewer-ulid');
 });
 
-// --- SR1-A1b: the sliding window, and loss that says what it was ------------
+// --- the sliding window, and loss that says what it was ---------------------
 
-Deno.test('events: a burst straddling the window boundary is charged once (SR1-A1b)', () => {
-	// The measured defect: the window was re-anchored to `now` at each roll, so a
-	// page placed 250 `dialog` records at 900 ms and 250 more at 1000 ms and got
-	// 500 admitted in 100 ms against a budget that reads as 250 a second.
+Deno.test('events: a burst straddling the window boundary is charged once', () => {
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 4096 });
 	const flood = (count: number): number => {
@@ -714,26 +618,18 @@ Deno.test('events: a burst straddling the window boundary is charged once (SR1-A
 
 	time.advance(900);
 	assertEquals(flood(400), STRUCTURAL_RATE_PER_SECOND, 'the first window admits exactly its budget');
-	// The boundary the page chose. Under the fixed window this admitted a second
-	// full budget; under the sliding one the previous window still weighs in full.
 	time.advance(100);
 	assertEquals(flood(400), 0, 'the straddle admits nothing: 250 in 100 ms is not 250 a second');
 
-	// The charge decays across the new window rather than vanishing at its edge.
 	time.advance(500);
 	const halfway = flood(400);
 	assert(halfway > 0 && halfway < STRUCTURAL_RATE_PER_SECOND, `half a window admits part of a budget, got ${halfway}`);
 
-	// And any 1000 ms interval stays inside the budget. Two windows on, with the
-	// carried charge fully decayed, a full budget is available again.
 	time.advance(1500);
 	assertEquals(flood(400), STRUCTURAL_RATE_PER_SECOND, 'a quiet second restores the whole budget');
 });
 
 Deno.test('events: a long silence carries no charge into the window that follows', () => {
-	// Only an immediately preceding window overlaps the last 1000 ms. Charging a
-	// page for traffic outside the window it is measured over would be a cap that
-	// tightens with idleness, which is a different bug wearing this one's clothes.
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 4096 });
 	let accepted = 0;
@@ -745,13 +641,9 @@ Deno.test('events: a long silence carries no charge into the window that follows
 	assertEquals(ring.append('dialog', { dialog_id: 'd', kind: 'alert', message: 'y' }) !== null, true);
 });
 
-Deno.test('events: the gap attributes the loss per kind, so a flood is distinguishable (SR1-A1b)', () => {
-	// The finding: a consumer reading `dropped: 900` cannot tell "the page
-	// flooded `dialog`" from "you were away too long", and the two want different
-	// responses — re-read state, or stop trusting this page.
+Deno.test('events: the gap attributes the loss per kind, so a flood is distinguishable', () => {
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 8 });
-	// Two records the consumer cares about, then a flood that evicts them.
 	ring.append('download.done', { file_id: 'f1', filename: 'a.pdf', status: 'completed' });
 	ring.append('navigation', { origin: 'https://example.test', path: '/', has_query: false });
 	for (let i = 0; i < 20; i++) {
@@ -766,16 +658,11 @@ Deno.test('events: the gap attributes the loss per kind, so a flood is distingui
 	assertEquals(byKind.dialog !== undefined, true, 'the flooding kind is named');
 	assertEquals(byKind['download.done'], 1, 'and so is the record the consumer actually wanted');
 	assertEquals(byKind.navigation, 1);
-	// The breakdown sums to the reported total: an attribution that did not would
-	// be worse than none, because a consumer would reconcile against it.
 	const total = Object.values(byKind).reduce((sum, count) => sum + count, 0);
 	assertEquals(total, gap.payload.dropped);
 });
 
 Deno.test('events: a loss beyond the ledger reports by_kind null rather than a guess', () => {
-	// `dropped: null` is already the convention for a count that cannot be known.
-	// An attribution that cannot be known takes the same answer: a fabricated one
-	// is worse than an admitted gap, because a consumer acts on it.
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 4 });
 	for (let i = 0; i < 200; i++) {
@@ -786,7 +673,6 @@ Deno.test('events: a loss beyond the ledger reports by_kind null rather than a g
 	const gap = out[0];
 	assert(gap !== undefined && gap.kind === 'gap');
 	assertEquals(gap.payload.by_kind, null);
-	// The count itself is still exact — only the breakdown is beyond reach.
 	assertNotEquals(gap.payload.dropped, null);
 });
 
@@ -798,11 +684,7 @@ Deno.test('events: an epoch change reports by_kind null beside dropped null', ()
 	assertEquals(out[0]?.payload.by_kind, null);
 });
 
-Deno.test('events: control, gap and bye stay uncapped, by name (SR1-A1b)', () => {
-	// A flood must never be able to suppress the report of itself: the
-	// `rate-capped` record is a `control`, and `gap` is the only signal of loss.
-	// Asserted by name rather than by count, because a later editor moving one of
-	// the three into the capped set is exactly the regression this defends.
+Deno.test('events: control, gap and bye stay uncapped, by name', () => {
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 8192 });
 	for (let i = 0; i < 400; i++) ring.append('dialog', { dialog_id: 'd', kind: 'alert', message: 'x' });
@@ -811,7 +693,6 @@ Deno.test('events: control, gap and bye stay uncapped, by name (SR1-A1b)', () =>
 		if (ring.appendControl('taken', { principal: 'p' }) !== null) controls += 1;
 	}
 	assertEquals(controls, 400, 'control is never charged, even while a kind is being capped');
-	// And the cap on the flooding kind is still reported, on the next window.
 	time.advance(1000);
 	ring.append('dialog', { dialog_id: 'd', kind: 'alert', message: 'y' });
 	const capped = ring.read({ kind: 'cursor', epoch: ring.epoch, seq: 0 })
@@ -821,10 +702,6 @@ Deno.test('events: control, gap and bye stay uncapped, by name (SR1-A1b)', () =>
 });
 
 Deno.test('events: a gap carrying every kind still fits the per-record byte cap', () => {
-	// A `gap` is synthesized at read rather than pushed, so it does not pass
-	// through `fitToByteCap`. Its size must therefore be bounded by construction:
-	// `by_kind` holds at most one entry per kind in the vocabulary, and this is
-	// the worst case measured rather than argued.
 	const time = clock();
 	const ring = new SessionEventRing({ now: time.now, capacity: 4 });
 	const payloads: Record<string, Record<string, unknown>> = {
@@ -849,6 +726,5 @@ Deno.test('events: a gap carrying every kind still fits the per-record byte cap'
 	assert(gap !== undefined && gap.kind === 'gap');
 	const bytes = new TextEncoder().encode(JSON.stringify(gap)).length;
 	assert(bytes <= MAX_EVENT_BYTES, `a gap must fit ${MAX_EVENT_BYTES} bytes, measured ${bytes}`);
-	// And the breakdown really did carry many kinds rather than collapsing to one.
 	assert(Object.keys(gap.payload.by_kind as Record<string, number>).length >= 8);
 });

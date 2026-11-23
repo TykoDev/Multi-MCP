@@ -1,6 +1,5 @@
 /**
- * Keyboard-table contract (ARCHITECTURE.md §6.10 "per-char keyDown/char/keyUp **with VK codes**",
- * COMPLETIONS-CRITERIA.md §4 row "Input synthesis (per-char keys, VK codes, …)", parity risk R5).
+ * Keyboard-table contract (per-character keyDown/char/keyUp **with VK codes**).
  *
  * These are the values a page reads off `KeyboardEvent.keyCode` / `.code` / `.key`. A wrong one does
  * not throw anywhere — it just makes a site ignore the keystroke — so the table is pinned here rather
@@ -124,15 +123,13 @@ Deno.test('keys: a shifted character contributes its own shift bit', () => {
 	assertEquals(parseKeyCombo('ctrl+?').modifiers, MODIFIER_BITS.ctrl | MODIFIER_BITS.shift);
 });
 
-Deno.test('E-51: an explicit shift modifier shifts the LETTER, so the page sees the key a human produces', () => {
-	// The defect: `shift+k` used to reach the page as key 'k' with shiftKey true, while a human
-	// holding Shift and pressing K produces key 'K'. Observed on real Chromium in
-	// `tests/e2e/interaction_e2e_test.ts` before the fix.
+Deno.test('keys: an explicit shift modifier shifts the LETTER, so the page sees the key a human produces', () => {
+	// A human holding Shift and pressing K produces key 'K', so `shift+k` must reach the page as 'K'.
 	const chord = parseKeyCombo('ctrl+shift+k');
 	assertEquals(chord.key.key, 'K');
 	assertEquals(chord.key.code, 'KeyK');
 	assertEquals(chord.modifiers, MODIFIER_BITS.ctrl | MODIFIER_BITS.shift);
-	// The uppercase spelling was always correct and is byte-for-byte unchanged.
+	// The uppercase spelling gives the same key.
 	assertEquals(parseKeyCombo('Ctrl+Shift+K').key.key, 'K');
 	// A named key is not a letter and is untouched.
 	assertEquals(parseKeyCombo('shift+Tab').key.key, 'Tab');

@@ -1,17 +1,17 @@
 /**
- * Tier-1 `url-matcher` suite (OBSERVABILITY-TESTING-CICD.md §4.2) — the security-critical one.
+ * Unit-tier `url-matcher` suite — the security-critical one.
  *
- * One known-answer table per rule M1–M9 of SECURITY-AUTH.md §4.1, plus the adversarial classes the
- * suite is speced to carry: userinfo tricks, obfuscated IPv4 (decimal/hex/octal/short), Unicode
- * NFKC digit spoofing, unsafe-pattern rejection, new-tab never-match. Known-answer tables only — no
- * property-based fuzz, because CI determinism is the point (§4.2).
+ * One known-answer table per matching rule, plus the adversarial classes: userinfo tricks,
+ * obfuscated IPv4 (decimal/hex/octal/short), Unicode NFKC digit spoofing, unsafe-pattern
+ * rejection, new-tab never-match. Known-answer tables only — no property-based fuzz, because CI
+ * determinism is the point.
  *
- * Release gate: COMPLETIONS-CRITERIA.md Q5 requires **100 % branch coverage** of `url_matcher.ts`.
+ * This suite holds `url_matcher.ts` to **100 % branch coverage**.
  */
 
 // test-policy-allow-file: the KAT tables carry remote-looking URLs as *data* — they are strings fed
 // to a parser, never endpoints. The suite runs with no --allow-net at all, so a stray fetch would
-// die as NotCapable rather than reach the network (SECURITY-AUTH.md §3.6).
+// die as NotCapable rather than reach the network.
 
 import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
 import {
@@ -40,7 +40,7 @@ type MatchCase = {
 	readonly name: string;
 	readonly url: string;
 	readonly pattern: string;
-	/** Omitted rows call the two-argument form, pinning the `navigation` default of M4. */
+	/** Omitted rows call the two-argument form, pinning the `navigation` default. */
 	readonly context?: UrlMatchContext;
 	readonly expected: boolean;
 };
@@ -56,10 +56,10 @@ function matchTable(rule: string, rows: readonly MatchCase[]): void {
 }
 
 // ---------------------------------------------------------------------------
-// M1 — unparseable or empty url ⇒ no match (fail closed)
+// Fail closed — unparseable or empty url ⇒ no match (fail closed)
 // ---------------------------------------------------------------------------
 
-matchTable('M1', [
+matchTable('fail-closed', [
 	{ name: 'empty url', url: '', pattern: 'example.com', expected: false },
 	{ name: 'whitespace url', url: '   ', pattern: 'example.com', expected: false },
 	{ name: 'not a url at all', url: 'not a url', pattern: 'example.com', expected: false },
@@ -71,10 +71,10 @@ matchTable('M1', [
 ]);
 
 // ---------------------------------------------------------------------------
-// M2 — new-tab URLs never match any pattern
+// New-tab URLs never match any pattern
 // ---------------------------------------------------------------------------
 
-matchTable('M2', [
+matchTable('new-tab', [
 	{ name: 'about:blank vs a matching chrome pattern', url: 'about:blank', pattern: 'about://blank', expected: false },
 	{ name: 'chrome://new-tab-page', url: 'chrome://new-tab-page', pattern: 'chrome://new-tab-page', expected: false },
 	{ name: 'chrome://new-tab-page/', url: 'chrome://new-tab-page/', pattern: 'chrome://new-tab-page', expected: false },
@@ -91,7 +91,7 @@ matchTable('M2', [
 	{ name: 'a real chrome page still matches', url: 'chrome://settings/', pattern: 'chrome://settings', expected: true },
 ]);
 
-Deno.test('M2: the new-tab list is exactly the five speced URLs', () => {
+Deno.test('new-tab: the list is exactly the five fixed URLs', () => {
 	assertEquals(NEW_TAB_URLS, [
 		'about:blank',
 		'chrome://new-tab-page',
@@ -105,7 +105,7 @@ Deno.test('M2: the new-tab list is exactly the five speced URLs', () => {
 });
 
 // ---------------------------------------------------------------------------
-// M3 — unsafe patterns are rejected and match nothing (no "warn but allow")
+// Unsafe patterns are rejected and match nothing (no "warn but allow")
 // ---------------------------------------------------------------------------
 
 type RejectionCase = { readonly name: string; readonly pattern: string; readonly reason: PatternRejectionReason };
@@ -143,7 +143,7 @@ const REJECTED: readonly RejectionCase[] = [
 	{ name: 'host that canonicalises to nothing', pattern: '.', reason: 'unparseable' },
 ];
 
-Deno.test.each(REJECTED)('M3: $name is refused ($reason)', (row) => {
+Deno.test.each(REJECTED)('refusal: $name is refused ($reason)', (row) => {
 	const parsed = parsePattern(row.pattern);
 	assertFalse(parsed.ok, `expected ${row.pattern} to be refused`);
 	if (parsed.ok) return;
@@ -153,7 +153,7 @@ Deno.test.each(REJECTED)('M3: $name is refused ($reason)', (row) => {
 	assertFalse(urlMatch('https://a.b.example.com/', row.pattern));
 });
 
-Deno.test('M3: the one safe wildcard shape survives, in both scheme forms', () => {
+Deno.test('refusal: the one safe wildcard shape survives, in both scheme forms', () => {
 	const bare = parsePattern('*.example.com');
 	assert(bare.ok);
 	assertEquals(bare.pattern, {
@@ -170,18 +170,18 @@ Deno.test('M3: the one safe wildcard shape survives, in both scheme forms', () =
 	assertEquals(qualified.pattern.host, 'example.com');
 });
 
-Deno.test('M3: a public-suffix wildcard is honoured as written (spec-faithful, not a gap)', () => {
-	// M3's refusal list covers multiple/embedded/TLD-position/lone wildcards — not `*.com`, which
+Deno.test('refusal: a public-suffix wildcard is honoured as written', () => {
+	// The refusal list covers multiple/embedded/TLD-position/lone wildcards — not `*.com`, which
 	// over-matches exactly as widely as its author asked. Pinned so a future narrowing is deliberate.
 	assert(parsePattern('*.com').ok);
 	assert(urlMatch('https://anything.com/', '*.com'));
 });
 
 // ---------------------------------------------------------------------------
-// M4 — scheme handling, and the navigation/secret split
+// Scheme handling, and the navigation/secret split
 // ---------------------------------------------------------------------------
 
-matchTable('M4', [
+matchTable('scheme', [
 	{
 		name: 'scheme-less matches http in navigation',
 		url: 'http://example.com/',
@@ -243,10 +243,10 @@ matchTable('M4', [
 ]);
 
 // ---------------------------------------------------------------------------
-// M5 — `*.example.com` matches the apex and any depth of subdomain
+// Wildcards — `*.example.com` matches the apex and any depth of subdomain
 // ---------------------------------------------------------------------------
 
-matchTable('M5', [
+matchTable('wildcard', [
 	{ name: 'apex itself', url: 'https://example.com/', pattern: '*.example.com', expected: true },
 	{ name: 'one label deep', url: 'https://a.example.com/', pattern: '*.example.com', expected: true },
 	{ name: 'three labels deep', url: 'https://a.b.c.example.com/', pattern: '*.example.com', expected: true },
@@ -261,10 +261,10 @@ matchTable('M5', [
 ]);
 
 // ---------------------------------------------------------------------------
-// M6 — bare domains: case-insensitive, port-agnostic unless pinned, www.± root
+// Bare domains: case-insensitive, port-agnostic unless pinned, www.± root
 // ---------------------------------------------------------------------------
 
-matchTable('M6', [
+matchTable('bare-domain', [
 	{ name: 'case folds on both sides', url: 'https://EXAMPLE.com/', pattern: 'Example.COM', expected: true },
 	{ name: 'port ignored when unpinned', url: 'https://example.com:8443/', pattern: 'example.com', expected: true },
 	{
@@ -311,10 +311,10 @@ matchTable('M6', [
 ]);
 
 // ---------------------------------------------------------------------------
-// M7 — scheme-qualified patterns are origin matches (any path)
+// Scheme-qualified patterns are origin matches (any path)
 // ---------------------------------------------------------------------------
 
-matchTable('M7', [
+matchTable('origin', [
 	{
 		name: 'exact origin, deep path',
 		url: 'https://mail.google.com/u/0/#inbox?q=1',
@@ -354,10 +354,10 @@ matchTable('M7', [
 ]);
 
 // ---------------------------------------------------------------------------
-// M8 — IP-literal hosts match only that literal; wildcards never match them
+// IP-literal hosts match only that literal; wildcards never match them
 // ---------------------------------------------------------------------------
 
-matchTable('M8', [
+matchTable('ip-literal', [
 	{ name: 'exact IPv4 literal', url: 'http://192.168.1.1/', pattern: '192.168.1.1', expected: true },
 	{ name: 'different IPv4 literal', url: 'http://192.168.1.2/', pattern: '192.168.1.1', expected: false },
 	{ name: 'wildcard over an IPv4 suffix', url: 'http://192.168.1.1/', pattern: '*.168.1.1', expected: false },
@@ -388,10 +388,10 @@ matchTable('M8', [
 ]);
 
 // ---------------------------------------------------------------------------
-// M9 — userinfo tricks resolve against the parsed hostname, never a prefix
+// Userinfo tricks resolve against the parsed hostname, never a prefix
 // ---------------------------------------------------------------------------
 
-matchTable('M9', [
+matchTable('userinfo', [
 	{
 		name: 'allowed host in userinfo does not match',
 		url: 'https://allowed.example@evil.test/',
@@ -441,7 +441,7 @@ matchTable('M9', [
 ]);
 
 // ---------------------------------------------------------------------------
-// Adversarial: obfuscated IPv4 encodings (§4.2 step 4)
+// Adversarial: obfuscated IPv4 encodings (`isUrlAllowed` step 4)
 // ---------------------------------------------------------------------------
 
 type IpCase = { readonly name: string; readonly host: string; readonly literal: string | null };
@@ -453,7 +453,7 @@ Deno.test.each<IpCase>([
 	{ name: 'octal', host: '0300.0250.0.1', literal: '192.168.0.1' },
 	{ name: 'short dotted (3 parts)', host: '192.168.1', literal: '192.168.0.1' },
 	{ name: 'short dotted (2 parts)', host: '192.11010305', literal: '192.168.1.1' },
-	{ name: 'the spec-named bypass 0xd83ad60e', host: '0xd83ad60e', literal: '216.58.214.14' },
+	{ name: 'the well-known bypass 0xd83ad60e', host: '0xd83ad60e', literal: '216.58.214.14' },
 	{ name: 'IPv6 loopback', host: '[::1]', literal: '[::1]' },
 	{ name: 'IPv6 unbracketed', host: '::1', literal: '[::1]' },
 	{ name: 'IPv4-mapped IPv6', host: '[::ffff:192.168.1.1]', literal: '[::ffff:c0a8:101]' },
@@ -510,7 +510,7 @@ Deno.test.each([
 
 Deno.test('nfkc-spoofing: an opaque-scheme host survives percent-encoding into the IP block', () => {
 	// Non-special schemes keep their host opaque — the URL parser does not percent-decode it, so the
-	// §4.2 step-4 normalisation is what closes this hole.
+	// `isUrlAllowed` step-4 normalisation is what closes this hole.
 	assertFalse(isUrlAllowed('foo://%31%32%37.0.0.1/', { blockIpAddresses: true }));
 	assert(isUrlAllowed('foo://%31%32%37.0.0.1/', { blockIpAddresses: false }));
 });
@@ -535,7 +535,7 @@ Deno.test('canonicalHost: lowercases and drops exactly one root dot', () => {
 });
 
 // ---------------------------------------------------------------------------
-// isUrlAllowed — §4.2 evaluation order
+// isUrlAllowed — evaluation order
 // ---------------------------------------------------------------------------
 
 Deno.test('policy: step 1 — new-tab URLs are always allowed', () => {
@@ -597,7 +597,7 @@ Deno.test('policy: step 7 — an unconfigured policy allows everything with a ho
 });
 
 // ---------------------------------------------------------------------------
-// Compilation, set mode, and the M3 warning path
+// Compilation, set mode, and the refused-pattern warning path
 // ---------------------------------------------------------------------------
 
 function bulkPolicy(extra: readonly string[]): CompiledDomainPolicy {
@@ -650,7 +650,7 @@ Deno.test('policy: compilation reports every refused pattern once, through an in
 	assertEquals(policy.blockIpAddresses, false);
 });
 
-Deno.test('policy: the default sink writes one console warning naming the rule', () => {
+Deno.test('policy: the default sink writes one console warning naming the reason and the list', () => {
 	const original = console.warn;
 	const lines: string[] = [];
 	console.warn = (...args: unknown[]) => void lines.push(args.map(String).join(' '));
@@ -662,7 +662,7 @@ Deno.test('policy: the default sink writes one console warning naming the rule',
 	}
 	assertEquals(lines.length, 2);
 	assertStringIncludes(lines[0] ?? '', 'tld-wildcard');
-	assertStringIncludes(lines[0] ?? '', '§4.1 M3');
+	assertStringIncludes(lines[0] ?? '', 'allowedDomains');
 	assertStringIncludes(lines[1] ?? '', 'sensitiveData');
 });
 
@@ -685,7 +685,7 @@ Deno.test('validatePatterns: reports unsafe scopes for sensitiveData intake', ()
 });
 
 // ---------------------------------------------------------------------------
-// The §4.2 empty-allowlist precedence trap
+// The empty-allowlist precedence trap
 // ---------------------------------------------------------------------------
 
 Deno.test.each([

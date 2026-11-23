@@ -41,7 +41,7 @@ label{display:block;margin-top:8px}
 <script>
 // Every write below sets the DOM *property* and never touches the markup attribute, so
 // `EnhancedDomTreeNode.attributes` keeps the authored value while the accessibility tree reports the
-// live one. That disagreement is the whole point of DATA-MODEL §6.5's "AX value overrides DOM value"
+// live one. That disagreement is the whole point of the "AX value overrides DOM value"
 // rule, and no page of the recorded corpus produces it. Deterministic: no timers, no randomness.
 document.getElementById('lv-number').value = '42';
 document.getElementById('lv-range').value = '9';

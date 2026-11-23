@@ -1,6 +1,6 @@
 /**
- * Bounded event history (ARCHITECTURE.md §4.4) — backs the `recentEvents` block of
- * `BrowserStateSummary` (DATA-MODEL.md §5.3, "last 10 bus events as JSON") and debugging dumps.
+ * Bounded event history — backs the `recentEvents` block of
+ * `BrowserStateSummary` (the last 10 bus events as JSON) and debugging dumps.
  *
  * A fixed-capacity ring: push is O(1) and memory is capped regardless of run length.
  */

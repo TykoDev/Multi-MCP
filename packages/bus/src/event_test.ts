@@ -62,7 +62,7 @@ Deno.test('event: TIMEOUT_<EventClassName> overrides the class default', () => {
 	assertEquals(resolveEventTimeoutSec(EvtTypedEvent, (name) => env.get(name)), 45);
 });
 
-Deno.test('event: the env override is read on every resolution, never snapshotted (D-CFG1)', () => {
+Deno.test('event: the env override is read on every resolution, never snapshotted', () => {
 	const env = new Map<string, string>();
 	const source = (name: string) => env.get(name);
 	assertEquals(resolveEventTimeoutSec(EvtTypedEvent, source), 12);

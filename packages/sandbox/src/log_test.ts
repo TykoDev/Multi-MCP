@@ -1,5 +1,5 @@
 /**
- * R3-8: the sandbox service's log guard cuts a registered secret out of the line as it is written — the JSON line,
+ * The sandbox service's log guard cuts a registered secret out of the line as it is written — the JSON line,
  * where a `"` or `\` in the value is escaped. A remote's token may hold either (`git_forwarder.ts` admits any printable
  * ASCII), so the guard must match the escaped form as well as the raw one.
  */
@@ -22,7 +22,7 @@ function captured(fn: () => void): string[] {
 	return lines;
 }
 
-Deno.test('R3-8 log: a secret with a quote or a backslash is cut out of the JSON line too', () => {
+Deno.test('log: a secret with a quote or a backslash is cut out of the JSON line too', () => {
 	const secrets = ['tok"en_with_quote_0123', 'tok\\en_with_backslash_0123', 'both"\\_mixed_token_0123'];
 	for (const secret of secrets) guardSecret(secret);
 	const lines = captured(() => {
@@ -45,7 +45,7 @@ Deno.test('R3-8 log: a secret with a quote or a backslash is cut out of the JSON
 	assertEquals(JSON.parse(lines[0]!).nested.header, 'Basic [redacted]');
 });
 
-Deno.test('R3-8 log: values are cut in the order they were registered, so an Authorization keeps its scheme', () => {
+Deno.test('log: values are cut in the order they were registered, so an Authorization keeps its scheme', () => {
 	// As git_forwarder.ts registers a remote: the token, its Basic credential, then the header value holding it.
 	const token = 'ghp_order"test\\token_0123';
 	const credential = btoa(`x-access-token:${token}`);
@@ -55,7 +55,7 @@ Deno.test('R3-8 log: values are cut in the order they were registered, so an Aut
 	assertEquals(JSON.parse(line!).authorization, 'Basic [redacted]');
 });
 
-Deno.test('R3-8 log: a plain secret is still cut, and a value too short to guard is left alone', () => {
+Deno.test('log: a plain secret is still cut, and a value too short to guard is left alone', () => {
 	guardSecret('plain_token_0123456789');
 	guardSecret('short');
 	const [line] = captured(() => log('info', 'probe', { a: 'plain_token_0123456789', b: 'short' }));

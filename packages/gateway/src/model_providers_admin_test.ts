@@ -1,13 +1,4 @@
-/**
- * D-154: model providers in the database, seeded once from the operator's providers file, keys sealed in the vault.
- *
- * Proven here, on loopback and under `tests/.scratch` only: without a database the file is used as is and nothing can
- * change; with one, the file seeds it once and is never written; every provider (seeded or added) is edited through
- * one PUT, installed live and read back without a key; a typed key is sealed (absent from every byte on disk), reaches
- * its provider's client and is redacted from task output; `keep` cannot follow a provider to another host; a removed
- * provider's sealed key goes with it; without a vault key a key is refused, never stored in plaintext. The net grants
- * are an injected permissions API; the file system is real.
- */
+/** Model providers in the database, seeded once from the operator's providers file, keys sealed in the vault. */
 import { assert, assertEquals, assertFalse, assertRejects, assertStringIncludes } from '@std/assert';
 import { join, resolve } from '@std/path';
 import { AgentError } from '@tykotech/agents';
@@ -36,7 +27,7 @@ const UNGRANTED = 'http://127.0.0.1:9/v1';
 const UNGRANTED_HOST = '127.0.0.1:9';
 const GRANTED_HOST = '127.0.0.1:11434';
 const GRANTED = `http://${GRANTED_HOST}/v1`;
-const NO_TEXT_BACKEND = 'Text execution requires a configured ACP agent or a model provider';
+const NO_TEXT_BACKEND = 'Text execution requires a model provider';
 const DB_KEY = generateDbKey();
 
 /** A permissions API granting `net` for the listed hosts only. */
@@ -113,7 +104,7 @@ interface Harness {
 
 /**
  * A gateway on the operator `file` (or none) and the data directory `data` (or none), its database opened and seeded
- * and its provider store loaded exactly as `startGateway` does. `vault: false` leaves `TTK_DB_KEY_FILE` unset.
+ * and its provider store loaded exactly as `startGateway` does.
  */
 async function harness(
 	file: string | null,
@@ -209,7 +200,7 @@ function view(id: string, origin: 'seed' | 'admin', key: string, extra: Record<s
 
 // --- without a database -------------------------------------------------------------------------------------------
 
-Deno.test('D-154: with neither a providers file nor a data directory nothing is managed', async () => {
+Deno.test('with neither a providers file nor a data directory nothing is managed', async () => {
 	await using h = await harness(null, null);
 	assertEquals(await h.get(), {
 		seed: { file: null, seeded_at: null },
@@ -226,7 +217,7 @@ Deno.test('D-154: with neither a providers file nor a data directory nothing is 
 	assertEquals([put.status, put.slug], [409, 'persistence-required']);
 });
 
-Deno.test('D-154: without a data directory the providers file is used as is, never written, and read back keyless', async () => {
+Deno.test('without a data directory the providers file is used as is, never written, and read back keyless', async () => {
 	await using s = await scratch();
 	await using h = await harness(s.operator, null);
 	const text = await (await h.request('GET', ROUTE, h.keys.admin)).text();
@@ -258,7 +249,7 @@ Deno.test('D-154: without a data directory the providers file is used as is, nev
 
 // --- seeding and the database ------------------------------------------------------------------------------------
 
-Deno.test('D-154: the providers file seeds the database once; its key is sealed and the file is never written', async () => {
+Deno.test('the providers file seeds the database once; its key is sealed and the file is never written', async () => {
 	await using s = await scratch();
 	const operatorBytes = await Deno.readTextFile(s.operator);
 	{
@@ -266,7 +257,7 @@ Deno.test('D-154: the providers file seeds the database once; its key is sealed 
 		const document = await h.get();
 		assertEquals(document.seed.file, s.operator);
 		assert(typeof document.seed.seeded_at === 'string');
-		assertEquals(document.store, { available: true, database: `${s.data}/ttk.db`, vault: 'unlocked' });
+		assertEquals(document.store, { available: true, database: join(s.data, 'ttk.db'), vault: 'unlocked' });
 		assertEquals(document.default, 'local');
 		assertEquals(
 			document.providers.map((p: Json) => view(p.id, p.origin, p.key.source)),
@@ -288,7 +279,7 @@ Deno.test('D-154: the providers file seeds the database once; its key is sealed 
 	assertStringIncludes(again.lines.join('\n'), 'the providers file differs from the database');
 });
 
-Deno.test('D-154: a PUT replaces every provider, seals a typed key, applies live, and survives a restart', async () => {
+Deno.test('a PUT replaces every provider, seals a typed key, applies live, and survives a restart', async () => {
 	await using s = await scratch();
 	const operatorBytes = await Deno.readTextFile(s.operator);
 	await using h = await harness(s.operator, s.data);
@@ -355,7 +346,7 @@ Deno.test('D-154: a PUT replaces every provider, seals a typed key, applies live
 	assertEquals(reloaded.default, 'second');
 });
 
-Deno.test('D-154: a typed key reaches its provider, and the agent redacts it from the task', async () => {
+Deno.test('a typed key reaches its provider, and the agent redacts it from the task', async () => {
 	await using s = await scratch();
 	const fake = startFakeProvider();
 	try {
@@ -385,7 +376,7 @@ Deno.test('D-154: a typed key reaches its provider, and the agent redacts it fro
 	}
 });
 
-Deno.test('D-154: a typed key is judged by the parser’s key rules before anything is sealed, and never echoed', async () => {
+Deno.test('a typed key is judged by the parser’s key rules before anything is sealed, and never echoed', async () => {
 	await using s = await scratch();
 	await using h = await harness(null, s.data);
 	const cases: Array<[Record<string, unknown>, string, string?]> = [
@@ -432,7 +423,7 @@ Deno.test('D-154: a typed key is judged by the parser’s key rules before anyth
 	assertFalse(h.lines.join('\n').includes(TYPED));
 });
 
-Deno.test('C2 (v): allow_http with a typed key is admitted to a private or named host, sealed, and warned of in plaintext', async () => {
+Deno.test('allow_http with a typed key is admitted to a private or named host, sealed, and warned of in plaintext', async () => {
 	await using s = await scratch();
 	await using h = await harness(null, s.data);
 	for (
@@ -454,7 +445,7 @@ Deno.test('C2 (v): allow_http with a typed key is admitted to a private or named
 	assertFalse(h.lines.join('\n').includes(TYPED), 'the warning never carries the key');
 });
 
-Deno.test('D-154: the body is strict — no inline key, no key file — and both routes need admin', async () => {
+Deno.test('the body is strict — no inline key, no key file — and both routes need admin', async () => {
 	await using s = await scratch();
 	await using h = await harness(null, s.data);
 	const bodies: Array<[unknown, string]> = [
@@ -481,7 +472,7 @@ Deno.test('D-154: the body is strict — no inline key, no key file — and both
 	assertEquals(many.detail, 'more than 16 providers, field providers');
 });
 
-Deno.test('D-154: keep binds a sealed key to its host; the same host keeps it untouched; an unknown id cannot keep', async () => {
+Deno.test('keep binds a sealed key to its host; the same host keeps it untouched; an unknown id cannot keep', async () => {
 	await using s = await scratch();
 	await using h = await harness(null, s.data);
 	assertEquals((await h.put({ providers: [added({ key: { mode: 'set', value: TYPED } })] })).status, 200);
@@ -510,7 +501,7 @@ Deno.test('D-154: keep binds a sealed key to its host; the same host keeps it un
 	);
 });
 
-Deno.test('D-154: a seeded provider can be edited and removed; a removed or keyless provider leaves no sealed key', async () => {
+Deno.test('a seeded provider can be edited and removed; a removed or keyless provider leaves no sealed key', async () => {
 	await using s = await scratch();
 	await using h = await harness(s.operator, s.data);
 	const vault = h.data.store!.vault;
@@ -532,7 +523,7 @@ Deno.test('D-154: a seeded provider can be edited and removed; a removed or keyl
 	assertEquals((await again.get()).providers, []);
 });
 
-Deno.test('D-154: the default is the one named, else a sole provider, else none; a ghost default is refused', async () => {
+Deno.test('the default is the one named, else a sole provider, else none; a ghost default is refused', async () => {
 	await using s = await scratch();
 	await using h = await harness(null, s.data);
 	const defaultOf = async (body: unknown): Promise<unknown> => {
@@ -547,7 +538,7 @@ Deno.test('D-154: the default is the one named, else a sole provider, else none;
 	assertEquals([ghost.status, ghost.detail], [400, 'default names no listed provider, field default']);
 });
 
-Deno.test('D-154: without TTK_DB_KEY_FILE a key is never stored — a keyed file refuses startup, a typed key 409s', async () => {
+Deno.test('without TTK_DB_KEY_FILE a key is never stored — a keyed file refuses startup, a typed key 409s', async () => {
 	await using s = await scratch();
 	await assertRejects(() => harness(s.operator, s.data, { vault: false }), SeedError, 'provider local has a key');
 	await using bare = await scratch();
@@ -560,12 +551,12 @@ Deno.test('D-154: without TTK_DB_KEY_FILE a key is never stored — a keyed file
 	assertFalse((await bytesOnDisk(bare.data)).includes(TYPED));
 });
 
-Deno.test('D-154: a gateway started with no providers file but a data directory gains providers live', async () => {
+Deno.test('a gateway started with no providers file but a data directory gains providers live', async () => {
 	await using s = await scratch();
 	await using h = await harness(null, s.data);
 	const card = async () => await (await h.request('GET', '/.well-known/agent-card.json', null)).json();
 	assertFalse((await card()).defaultInputModes.includes('text/plain'));
-	// Empty, the runtime answers exactly as one composed without providers (§3.10).
+	// Empty, the runtime answers exactly as one composed without providers.
 	const refused = await h.request('POST', '/api/v1/agent/tasks', h.keys.agent, { message: 'hi', provider: 'second' });
 	assertEquals([refused.status, (await refused.json()).detail], [400, NO_TEXT_BACKEND]);
 	assertEquals((await (await h.request('GET', '/api/v1/agent/providers', h.keys.agent)).json()).providers, []);
@@ -605,13 +596,12 @@ function settings(id: string, baseUrl: string, models: readonly string[] = ['m1'
 const SCOPES = new Set(['agent:invoke', 'model:invoke', 'mcp:invoke']);
 const prompt = (text: string) => ({ messageId: crypto.randomUUID(), role: 'ROLE_USER' as const, parts: [{ text }] });
 
-Deno.test('D-152/D-153: applyModelProviders swaps the runtime map and default in place; a queued task is judged again', async () => {
+Deno.test('applyModelProviders swaps the runtime map and default in place; a queued task is judged again', async () => {
 	const registry = new SessionRegistry({ reapIntervalMs: 0 });
 	const initial: ModelProvidersConfig = { default: 'local', providers: [settings('local', UNGRANTED)] };
 	const services = createExpansionServices(
 		loadConfig({}).expansion,
 		{ registry, version: 't' },
-		undefined,
 		undefined,
 		undefined,
 		{
@@ -655,14 +645,13 @@ Deno.test('D-152/D-153: applyModelProviders swaps the runtime map and default in
 	}
 });
 
-Deno.test('D-153: a data directory composes the runtime able to gain providers; empty, it routes as none', async () => {
+Deno.test('a data directory composes the runtime able to gain providers; empty, it routes as none', async () => {
 	await using s = await scratch();
 	const registry = new SessionRegistry({ reapIntervalMs: 0 });
 	const without = createExpansionServices(loadConfig({}).expansion, { registry, version: 't' });
 	const managed = createExpansionServices(
 		loadConfig({}).expansion,
 		{ registry, version: 't' },
-		undefined,
 		undefined,
 		undefined,
 		{
@@ -693,11 +682,11 @@ Deno.test('D-153: a data directory composes the runtime able to gain providers; 
 	}
 });
 
-// --- D-158: the model list --------------------------------------------------------------------------------------------
+// --- the model list ------------------------------------------------------------------------------------------------
 
 const MODELS = '/api/v1/system/model-providers/models';
 
-Deno.test('D-158: a saved provider’s models are listed with its sealed key; the answer is sorted and de-duplicated', async () => {
+Deno.test('a saved provider’s models are listed with its sealed key; the answer is sorted and de-duplicated', async () => {
 	await using s = await scratch();
 	const fake = startFakeProvider();
 	try {
@@ -725,7 +714,7 @@ Deno.test('D-158: a saved provider’s models are listed with its sealed key; th
 	}
 });
 
-Deno.test('D-158: the model list dials only a saved provider’s host, needs admin, and says why it cannot list', async () => {
+Deno.test('the model list dials only a saved provider’s host, needs admin, and says why it cannot list', async () => {
 	await using s = await scratch();
 	const fake = startFakeProvider();
 	try {
@@ -753,19 +742,18 @@ Deno.test('D-158: the model list dials only a saved provider’s host, needs adm
 	}
 });
 
-// --- D-158: the agents' settings ----------------------------------------------------------------------------------
+// --- the agents' settings ------------------------------------------------------------------------------------------
 
 const AGENTS = '/api/v1/system/agents';
 
-Deno.test('D-158: the agents are listed with their defaults; a change is judged against the providers, stored and applied', async () => {
+Deno.test('the agents are listed with their defaults; a change is judged against the providers, stored and applied', async () => {
 	await using s = await scratch();
 	await using h = await harness(s.operator, s.data);
 	assertEquals((await h.put({ providers: [seeded(), added()] })).status, 200);
 	const first: Json = await (await h.request('GET', AGENTS, h.keys.admin)).json();
 	assertEquals(first.store, { writable: true });
-	assertEquals(first.agents.map((agent: Json) => agent.id), ['builtin', 'sloplord', 'acp']);
-	assertEquals(first.agents[0].settings, { model: null, a2a: true, acp: false, a2ui: true, memory: true });
-	assertEquals(first.agents[2].applies.model, false);
+	assertEquals(first.agents.map((agent: Json) => agent.id), ['builtin', 'sloplord']);
+	assertEquals(first.agents[0].settings, { model: null, a2a: true, a2ui: true, memory: true });
 	assertEquals(first.models.map((entry: Json) => `${entry.provider}/${entry.model}`), ['local/m1', 'second/s1']);
 
 	const saved = await h.request('PUT', AGENTS, h.keys.admin, {
@@ -781,11 +769,22 @@ Deno.test('D-158: the agents are listed with their defaults; a change is judged 
 	// Stored in the database: a store opened on it again reads the same.
 	assertEquals(new AgentSettingsStore(h.data.store!.db).current().builtin.memory, false);
 	assertStringIncludes(h.data.store!.db.setting(AGENT_SETTINGS_KEY) ?? '', '"second"');
+	// A row saved while the ACP agent existed — its `acp` entry and every agent's `acp` switch — keeps the rest.
+	const db = h.data.store!.db;
+	const retired = JSON.parse(db.setting(AGENT_SETTINGS_KEY)!) as Record<string, Record<string, unknown>>;
+	for (const entry of Object.values(retired)) entry.acp = false;
+	db.setSetting(
+		AGENT_SETTINGS_KEY,
+		JSON.stringify({ ...retired, acp: { model: null, a2a: true, acp: true, a2ui: false, memory: false } }),
+	);
+	const reopened = new AgentSettingsStore(db).current();
+	assertEquals([reopened.builtin.model, reopened.builtin.memory], [{ provider: 'second', model: 's1' }, false]);
+	assertEquals(Object.keys(reopened).sort(), ['builtin', 'sloplord']);
 
 	for (
 		const [body, detail] of [
 			[{ agents: { builtin: { model: { provider: 'second', model: 'nope' } } } }, 'field builtin.model'],
-			[{ agents: { acp: { model: { provider: 'second', model: 's1' } } } }, 'field acp.model'],
+			[{ agents: { acp: {} } }, 'field acp'],
 			[{ agents: { ghost: {} } }, 'field ghost'],
 			[{ agents: {}, extra: 1 }, 'field agents'],
 		] as const
@@ -798,11 +797,85 @@ Deno.test('D-158: the agents are listed with their defaults; a change is judged 
 	assertEquals((await h.request('PUT', AGENTS, h.keys.agent, { agents: {} })).status, 403);
 });
 
-Deno.test('D-158: without a data directory the agents read their defaults and a change is refused', async () => {
+Deno.test('without a data directory the agents read their defaults and a change is refused', async () => {
 	await using s = await scratch();
 	await using h = await harness(s.operator, null);
 	const document: Json = await (await h.request('GET', AGENTS, h.keys.admin)).json();
 	assertEquals(document.store.writable, false);
 	const refused = await problem(await h.request('PUT', AGENTS, h.keys.admin, { agents: { builtin: { a2a: false } } }));
 	assertEquals([refused.status, refused.slug], [409, 'persistence-required']);
+});
+
+// --- a stored key is bound to where it travels ---------------------------------------------------------------------
+
+Deno.test('keep refuses a scheme change on the same host:port, for a PUT and for the model list', async () => {
+	await using s = await scratch();
+	await using h = await harness(null, s.data);
+	const plain = `http://${GRANTED_HOST}/v1`;
+	const tls = `https://${GRANTED_HOST}/v1`;
+	assertEquals(
+		(await h.put({ providers: [added({ base_url: tls, key: { mode: 'set', value: TYPED } })] })).status,
+		200,
+	);
+	// `providerNetHost` spells both `127.0.0.1:11434`; only the scheme differs, and the key would go out in plaintext.
+	const put = await problem(await h.put({ providers: [added({ base_url: plain, key: { mode: 'keep' } })] }));
+	assertEquals(
+		[put.status, put.detail],
+		[400, 'a kept key cannot follow its provider to another scheme; set the key again, entry 1, field key'],
+	);
+	const probe = await problem(
+		await h.request('POST', MODELS, h.keys.admin, {
+			id: 'second',
+			kind: 'openai',
+			base_url: plain,
+			key: { mode: 'keep' },
+		}),
+	);
+	assertEquals(
+		[probe.status, probe.detail],
+		[400, 'a kept key cannot follow its provider to another scheme; set the key again, field key'],
+	);
+	// The same scheme still keeps it; setting the key again on the new scheme is the way across.
+	assertEquals((await h.put({ providers: [added({ base_url: `${tls}2`, key: { mode: 'keep' } })] })).status, 200);
+	assertEquals(
+		(await h.put({ providers: [added({ base_url: plain, key: { mode: 'set', value: TYPED } })] })).status,
+		200,
+	);
+	assertEquals(h.store.effective()?.providers[0]?.baseUrl, plain);
+});
+
+Deno.test('a row whose base_url was moved off the host its key is sealed to is refused on load', async () => {
+	await using s = await scratch();
+	{
+		await using h = await harness(null, s.data);
+		assertEquals((await h.put({ providers: [added({ key: { mode: 'set', value: TYPED } })] })).status, 200);
+		// Someone with write access to ttk.db but not its key edits the entry alone; `key_host` still says the old
+		// host.
+		const db = h.data.store!.db;
+		const row = db.get('SELECT entry, key_host FROM model_providers WHERE id = ?', 'second')!;
+		assertEquals(row.key_host, GRANTED_HOST);
+		const entry = { ...JSON.parse(String(row.entry)), base_url: 'http://attacker.invalid:11434/v1', allow_http: true };
+		db.run('UPDATE model_providers SET entry = ? WHERE id = ?', JSON.stringify(entry), 'second');
+	}
+	await using restarted = await harness(null, s.data);
+	assertEquals(restarted.store.effective()?.providers, [], 'nothing is offered, the key goes nowhere');
+	assert(
+		restarted.lines.some((line) => line.includes('a stored key is sealed to another host than its base_url')),
+		restarted.lines.join('\n'),
+	);
+	assertFalse(restarted.lines.join('\n').includes(TYPED));
+	// Nor can it be kept from there: the row disagrees with its own key, so the key must be set again.
+	const kept = await problem(
+		await restarted.put({
+			providers: [added({ base_url: 'http://attacker.invalid:11434/v1', allow_http: true, key: { mode: 'keep' } })],
+		}),
+	);
+	assertEquals(kept.status, 400);
+	assertStringIncludes(kept.detail ?? '', 'another host');
+	// Nor back at the sealed host: the stored row itself disagrees with its key, so the key is set again or not at all.
+	const back = await problem(await restarted.put({ providers: [added({ key: { mode: 'keep' } })] }));
+	assertEquals(
+		back.detail,
+		'the stored key does not match its provider host; set the key again, entry 1, field key',
+	);
 });

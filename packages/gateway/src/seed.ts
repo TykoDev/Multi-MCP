@@ -1,20 +1,4 @@
-/**
- * D-154 (owner-requested): seeding the database from the operator's files and environment.
- *
- * A seed source is copied into the database **once**: when its destination was never seeded and is empty. From then
- * on the database is the source in force and the file may be removed. `seed --force` (`-Force`) copies it again,
- * replacing what is there. Nothing is ever written back to a source.
- *
- * | Target      | Source                                          | Destination                                   |
- * | ----------- | ----------------------------------------------- | --------------------------------------------- |
- * | `providers` | `TTK_MODEL_PROVIDERS_FILE` (keys included)      | `model_providers` rows, keys sealed per host  |
- * | `secrets`   | `TTK_SECRETS` / `TTK_SECRETS_FILE`              | one sealed `browser-secrets` vault row        |
- *
- * `TTK_SECRETS_REF` is not seeded: an external secret manager stays the source, read at every start.
- *
- * A source that carries a secret needs an unlocked vault (`TTK_DB_KEY_FILE`); without one, seeding refuses by name
- * rather than store the secret in plaintext or drop it silently.
- */
+/** Seeding the database from the operator's files and environment. */
 import { parseSecrets, type SecretEntry } from '@tykotech/mcp';
 import { type Database, now } from './database.ts';
 import {
@@ -35,7 +19,7 @@ export type SeedTarget = (typeof SEED_TARGETS)[number];
 export const BROWSER_SECRETS_NAME = 'browser-secrets';
 
 /** The `settings` row recording when the browser secrets were last seeded. */
-export const SECRETS_SEED_MARKER = 'seed.browser_secrets';
+const SECRETS_SEED_MARKER = 'seed.browser_secrets';
 
 /** The sources as the configuration resolved them. */
 export interface SeedSources {
@@ -152,8 +136,8 @@ async function seedSecrets(
 }
 
 /**
- * The browser secrets in force: the vault's when the database holds them, else `fallback` (the configuration's, used
- * directly — no database, or `TTK_SECRETS_REF`). A stored document is judged by the same parser as the file.
+ * The browser secrets the vault holds, or `null` when it is locked or holds none. A stored document is judged by the
+ * same parser as the file.
  */
 export async function storedBrowserSecrets(vault: Vault): Promise<SecretEntry[] | null> {
 	if (!vault.unlocked || !vault.has(BROWSER_SECRETS_NAME)) return null;

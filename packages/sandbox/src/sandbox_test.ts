@@ -44,7 +44,7 @@ async function counted(test: (sandbox: Sandbox, started: () => number, workDir: 
 	}
 }
 
-Deno.test('SB-3 sandbox: health checks that arrive together share one probe cage, then its answer', async () => {
+Deno.test('sandbox: health checks that arrive together share one probe cage, then its answer', async () => {
 	await counted(async (sandbox, started) => {
 		const answers = await Promise.all(Array.from({ length: 8 }, () => sandbox.health()));
 		assertEquals(started(), 1);
@@ -54,16 +54,17 @@ Deno.test('SB-3 sandbox: health checks that arrive together share one probe cage
 	});
 });
 
-Deno.test('SB-3 sandbox: a measurement for a request without a command slot waits for a housekeeping slot', async () => {
+Deno.test('sandbox: a measurement for a request without a command slot waits for a housekeeping slot', async () => {
 	await counted(async (sandbox, started, workDir) => {
 		await Deno.mkdir(`${workDir}/${RUN}`);
 		const held = await Promise.all(Array.from({ length: LIMITS.choreRunning }, () => sandbox.chores.enter()));
 		const controller = new AbortController();
 		const waiting = sandbox.diskUsage(RUN, controller.signal);
 		const queued = sandbox.diskUsage(RUN);
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		// Wait for both to queue (a fixed sleep flakes under a loaded parallel run), bounded at about one second.
+		for (let i = 0; i < 200 && sandbox.chores.waiting < 2; i++) await new Promise((resolve) => setTimeout(resolve, 5));
 		assertEquals([sandbox.chores.waiting, started()], [2, 0]);
-		// SB-10: one that is cancelled while it waits says so.
+		// One that is cancelled while it waits says so.
 		controller.abort();
 		const cancelled = await assertRejects(() => waiting, GateError);
 		assertEquals(cancelled.code, 'cancelled');

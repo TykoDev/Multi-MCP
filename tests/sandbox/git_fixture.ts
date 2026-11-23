@@ -1,5 +1,5 @@
 /**
- * R12 (design §2.19, AC34): one git smart-HTTP exchange (protocol v0, stateless RPC) for a shallow clone of a tiny,
+ * One git smart-HTTP exchange (protocol v0, stateless RPC) for a shallow clone of a tiny,
  * deterministic two-commit repository, recorded once from `git http-backend` on loopback and replayed by the sandbox
  * tier's fake upstream, so a real `git clone` in a cage can run through the credentialed forwarder end to end with
  * no git or network on the upstream side. Synthetic content only.

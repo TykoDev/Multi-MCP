@@ -1,6 +1,6 @@
 /**
  * The bubblewrap command line for each kind of cage, read as a list of options. The cages
- * themselves run in integration.test.ts, on Linux.
+ * themselves run in tests/sandbox/cages_test.ts, on Linux.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import {
@@ -219,7 +219,7 @@ Deno.test('cage: the prelude announces the cage, merges stderr, and limits proce
 	assertStringIncludes(piped, 'rm -f /tmp/.harbour-stdin');
 });
 
-Deno.test('SB-1 cage: only the measuring cage keeps a capability, added after every other is dropped', () => {
+Deno.test('cage: only the measuring cage keeps a capability, added after every other is dropped', () => {
 	assert(!cageArgs(execSpec(), SYSTEM).includes('--cap-add'));
 	const args = cageArgs(execSpec({ caps: ['CAP_DAC_READ_SEARCH'] }), SYSTEM);
 	assertEquals(args.slice(0, 8), [
@@ -235,7 +235,7 @@ Deno.test('SB-1 cage: only the measuring cage keeps a capability, added after ev
 	assertEquals(options(args).filter((g) => g[0] === '--cap-add'), [['--cap-add', 'CAP_DAC_READ_SEARCH']]);
 });
 
-Deno.test('SB-7 cage: a cleanup-only command can write no file data, and is told so rather than killed', () => {
+Deno.test('cage: a cleanup-only command can write no file data, and is told so rather than killed', () => {
 	assert(!prelude({ proxy: false, stdin: false, processes: 200 }).includes('ulimit -f'));
 	const text = prelude({ proxy: true, stdin: false, processes: 200, noGrowth: true });
 	const lines = text.split('\n');

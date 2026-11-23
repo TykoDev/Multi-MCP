@@ -1,6 +1,5 @@
 /**
- * Tier 2 — launch/discovery primitives against a real browser process
- * (OBSERVABILITY-TESTING-CICD.md §4.3 `session-lifecycle`; ARCHITECTURE.md §6.1, §7.4).
+ * Tier 2 — launch/discovery primitives against a real browser process.
  *
  * These suites import `../src/launch.ts` rather than `../mod.ts` so the launch half of the package
  * is testable independently of the transport half (`mod.ts` re-exports both).
@@ -34,7 +33,7 @@ Deno.test('port: successive picks do not collide', () => {
 });
 
 Deno.test('discovery: a scan either resolves a browser or explains exactly what it tried', async () => {
-	// Under the §3.6 test matrix (`--allow-read=.`) the per-OS tables are usually unreadable, so both
+	// Under the test permission matrix (`--allow-read=.`) the per-OS tables are usually unreadable, so both
 	// outcomes are legitimate. What is NOT legitimate is an untyped failure or a useless message.
 	try {
 		const path = await findBrowserExecutable();
@@ -68,6 +67,22 @@ browserTest('launch: each launch takes a different random ephemeral debug port',
 	assert(first.port !== 9222 && second.port !== 9222, 'must not fall back to the well-known port');
 });
 
+/**
+ * Binds `port` once the OS has let go of it. Changed from an immediate bind (vendored test): Windows keeps a closed
+ * listener's port for a moment after the process exits, so the test failed there; a port still held after 3 s fails.
+ */
+async function bindReleased(port: number): Promise<void> {
+	for (let attempt = 0;; attempt++) {
+		try {
+			Deno.listen({ hostname: '127.0.0.1', port, transport: 'tcp' }).close();
+			return;
+		} catch (error) {
+			if (!(error instanceof Deno.errors.AddrInUse) || attempt >= 30) throw error;
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+	}
+}
+
 browserTest('launch: close() terminates the browser and releases the debug port', async (ctx) => {
 	const browser = await ctx.launch();
 	const port = browser.port;
@@ -75,8 +90,7 @@ browserTest('launch: close() terminates the browser and releases the debug port'
 	const status = await browser.child.status;
 	assert(status.code !== undefined);
 	// The port must be reusable once the browser is gone.
-	const listener = Deno.listen({ hostname: '127.0.0.1', port, transport: 'tcp' });
-	listener.close();
+	await bindReleased(port);
 	await assertRejects(() => fetchWebSocketDebuggerUrl(`http://127.0.0.1:${port}`), BrowserLaunchError);
 });
 
@@ -87,13 +101,12 @@ browserTest('launch: `await using` disposes the browser on scope exit', async (c
 		port = browser.port;
 		assert(port > 0);
 	}
-	const listener = Deno.listen({ hostname: '127.0.0.1', port, transport: 'tcp' });
-	listener.close();
+	await bindReleased(port);
 });
 
 browserTest('launch: a locked profile retries onto a fresh temp profile dir', async (ctx) => {
 	// Chrome refuses a second instance on a live `--user-data-dir` (exit 21,
-	// RESULT_CODE_PROFILE_IN_USE). D-BROWSER1 requires up to 3 attempts with a fresh profile.
+	// RESULT_CODE_PROFILE_IN_USE). Launch makes up to 3 attempts, each with a fresh profile.
 	const shared = await ctx.scratchDir('bua-locked-');
 	const holder = await ctx.launch({ userDataDir: shared });
 	assertEquals(holder.userDataDir, shared);
@@ -157,7 +170,7 @@ browserTest('launch: refuses to spawn without --user-data-dir even with a valid 
 });
 
 browserTest('launch: the browser makes no request to a fixture it was not pointed at', async (ctx) => {
-	// Privacy gate Q7 in miniature: the default arg set must not produce background traffic to any
+	// The no-unsolicited-traffic privacy rule in miniature: the default arg set must not produce background traffic to any
 	// server we control, and the browser must not fetch a new-tab page (we pass about:blank).
 	const fixture = startFixtureServer({ '/': () => new Response('unused') });
 	ctx.defer(() => fixture.close());
@@ -171,14 +184,14 @@ Deno.test('exit codes: the profile-in-use code is Chromium 21, not a local inven
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(TIER-2) — the --user-data-dir conflict guard compares paths, not spellings
+// the --user-data-dir conflict guard compares paths, not spellings
 // ---------------------------------------------------------------------------
 
 Deno.test('args: a relative --user-data-dir naming the same directory is not a conflict', () => {
 	// The shape a real caller produces: `@tykotech/browser` composes `--user-data-dir=` from the raw
 	// `BrowserProfile.userDataDir` while `launchBrowser` absolutizes `LaunchOptions.userDataDir`, so
-	// one directory arrives twice, resolved and unresolved. That is not a conflict, and rejecting it
-	// made a relative `profile.userDataDir` unusable through the public API.
+	// one directory arrives twice, resolved and unresolved. That is not a conflict: rejecting it would
+	// make a relative `profile.userDataDir` unusable through the public API.
 	const relativeDir = 'tests/.scratch/bua-tier2-profile';
 	const args = composeLaunchArgs({
 		userDataDir: resolve(relativeDir),
@@ -193,7 +206,7 @@ Deno.test('args: a relative --user-data-dir naming the same directory is not a c
 });
 
 Deno.test('args: a --user-data-dir naming a genuinely different directory is still refused', () => {
-	// The guard must still guard: this is the case the ERRATUM(TIER-2) relaxation must not swallow.
+	// The guard must still guard: path comparison must not swallow a real conflict.
 	const error = assertThrows(
 		() =>
 			composeLaunchArgs({
@@ -207,7 +220,7 @@ Deno.test('args: a --user-data-dir naming a genuinely different directory is sti
 });
 
 browserTest('launch: a relative userDataDir reaches Chrome resolved, not rejected', async (ctx) => {
-	// End to end against a real browser, through the exact two-route shape §6.1 produces.
+	// End to end against a real browser, through the exact two-route shape the browser layer produces.
 	const absolute = await ctx.scratchDir('bua-tier2-');
 	const relativeDir = relative(Deno.cwd(), absolute).replaceAll('\\', '/');
 	assert(

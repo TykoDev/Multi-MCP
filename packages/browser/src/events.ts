@@ -1,27 +1,24 @@
 /**
- * The 44-event browser catalog (AGENTS.md §3: events live in the owning package's `events.ts`).
+ * The browser event catalog; events live in the owning package's `events.ts`.
  *
- * Contract owner: SPECS/DATA-MODEL.md §5.1 — the authoritative schema reference for every browser
- * event (R1.4). Grouping and names are normative in SPECS/ARCHITECTURE.md §5:
- * **18 command + 4 lifecycle + 8 notification + 3 error/reconnect + 4 storage + 3 download + 4 misc**
- * (DECISION-REGISTER.md §8 fixes the count at 44).
+ * Grouped as **19 command + 4 lifecycle + 8 notification + 3 error/reconnect + 4 storage +
+ * 3 download + 4 misc = 45** events.
  *
- * Conventions used throughout, so the catalog reads the same way 44 times over:
+ * Conventions used throughout, so the catalog reads the same way for every class:
  *
  * - Every class extends `BaseEvent<TResult>` from `@tykotech/bus`; the envelope (`eventId`,
  *   `eventParentId`, `eventCreatedAt`, `eventType`, `eventTimeout`) comes from there.
- * - `static override timeoutSec` is set **only** where §5.1 states a number. Rows marked `—` inherit
- *   `DEFAULT_EVENT_TIMEOUT_SEC` (30 s — build-run erratum E-1); restating 30 on those classes would
- *   turn an inherited default into a copy that can drift, so they deliberately declare nothing.
- *   Every class stays overridable at runtime via `TIMEOUT_<EventClassName>` (D-BUS1).
- * - Constructors take a single init object. Positional argument lists across 44 classes with
- *   optional trailing fields are exactly the "easy to get wrong" API the house style rejects; the
- *   ARCHITECTURE.md §4 sketch is normative in shape, not spelling (§3).
- * - Fields the spec marks optional (`timeoutMs?`, `clip?`, …) are stored as `T | null` with a `null`
- *   default — ERRATUM(M1-events-types-1), matching ERRATUM(M0-bus-1) in `@tykotech/bus`.
+ * - `static override timeoutSec` is set **only** where an event has its own budget. The others
+ *   inherit `DEFAULT_EVENT_TIMEOUT_SEC` (30 s); restating 30 on those classes would turn an
+ *   inherited default into a copy that can drift, so they deliberately declare nothing.
+ *   Every class stays overridable at runtime via `TIMEOUT_<EventClassName>`.
+ * - Constructors take a single init object. Positional argument lists across dozens of classes
+ *   with optional trailing fields are exactly the "easy to get wrong" API the house style rejects.
+ * - Optional fields (`timeoutMs?`, `clip?`, …) are stored as `T | null` with a `null` default,
+ *   the same rule `@tykotech/bus` follows for its envelope.
  *
  * The module footer calls `registerEvents(...)`, which is the import-time uniqueness +
- * non-substring assertion required by D-BUS1.
+ * non-substring assertion of the bus's event-name registry.
  */
 
 import { BaseEvent, type EventClass, registerEvents } from '@tykotech/bus';
@@ -41,19 +38,17 @@ import type {
 } from './types.ts';
 
 // ---------------------------------------------------------------------------------------------
-// ElementSelectedEvent — the serializable-node base (DATA-MODEL.md §5.1 preamble)
+// ElementSelectedEvent — the serializable-node base
 // ---------------------------------------------------------------------------------------------
 
 /**
  * Deep-copies `node` with its circular references nulled: `parentNode`, `childrenNodes`,
- * `contentDocument`, `axNode`, `snapshotNode` (DATA-MODEL.md §5.1; R9.4 forbids cyclic node graphs
- * in anything serialized).
+ * `contentDocument`, `axNode`, `snapshotNode` (nothing serialized may carry a cyclic node graph).
  *
  * `childrenNodes` is typed `EnhancedDomTreeNode[]` and cannot literally hold `null`, so it is
- * cleared to `[]` — ERRATUM(M1-events-types-2). `shadowRoots` is not in the spec's null list but is
- * a second cycle path (a shadow root's `parentNode` points back at its host), so each entry is
- * sanitized recursively instead of being dropped: the letter of the rule is kept and the result is
- * still acyclic. Scalar and record fields are copied, so mutating the event's node never touches the
+ * cleared to `[]`. `shadowRoots` is a second cycle path (a shadow root's `parentNode` points back
+ * at its host), so each entry is sanitized recursively instead of being dropped: the result keeps
+ * the shadow content and is still acyclic. Scalar and record fields are copied, so mutating the event's node never touches the
  * live DOM IR.
  */
 export function sanitizeNodeForEvent(node: EnhancedDomTreeNode): EnhancedDomTreeNode {
@@ -76,7 +71,7 @@ function sanitizeNode(node: EnhancedDomTreeNode, seen: WeakSet<EnhancedDomTreeNo
 		targetId: node.targetId,
 		frameId: node.frameId,
 		sessionId: node.sessionId,
-		// The five circular references named by §5.1, nulled.
+		// The five circular references, nulled.
 		parentNode: null,
 		childrenNodes: [],
 		contentDocument: null,
@@ -96,9 +91,9 @@ function sanitizeNode(node: EnhancedDomTreeNode, seen: WeakSet<EnhancedDomTreeNo
 }
 
 /**
- * Abstract base of the six element-targeted commands: `ClickElementEvent`, `TypeTextEvent`,
- * `ScrollEvent`, `UploadFileEvent`, `GetDropdownOptionsEvent`, `SelectDropdownOptionEvent`
- * (ARCHITECTURE.md §5, DATA-MODEL.md §5.1).
+ * Abstract base of the element-targeted commands: `ClickElementEvent`, `TypeTextEvent`,
+ * `ScrollEvent`, `UploadFileEvent`, `GetDropdownOptionsEvent`, `SelectDropdownOptionEvent`,
+ * `HoverEvent` and `SendKeysEvent`.
  *
  * Its validation rule is the whole point: `node` is stored as the sanitized copy produced by
  * {@linkcode sanitizeNodeForEvent}, so the event survives `JSON.stringify` no matter how tangled the
@@ -118,7 +113,7 @@ export abstract class ElementSelectedEvent<
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.1 — Command events (agent/tools → browser): 18
+// Command events (agent/tools → browser): 19
 // ---------------------------------------------------------------------------------------------
 
 /** Navigate the focused tab (or a new one). Handler: BrowserSession + SecurityWatchdog pre-check. */
@@ -142,13 +137,10 @@ export class NavigateToUrlEvent extends BaseEvent<void> {
 /**
  * Click an element. Result carries `clickX`/`clickY` and download info. Handler: DefaultAction.
  *
- * ERRATUM(E-48): `clickCount` is settable. `Input.dispatchMouseEvent`'s `clickCount` is typed at
- * `packages/cdp/src/domains/input.ts:57` and carried on both the press and the release by
- * {@linkcode dispatchMouseClick}, but neither of its two callers ever supplied it, so every
- * agent-side click was `clickCount: 1` and no tool could produce a `dblclick`. The Live View was the
- * only producer of a higher count (`packages/gateway/src/liveview.ts:789`), which made
- * "what a human does through the socket must be reproducible by the tools" false for one gesture.
- * The field is 1..3 and the handler ramps it — see `DefaultActionWatchdog.#clickNode`.
+ * `clickCount` is settable so a tool can produce a `dblclick`: what a human does through the Live
+ * View socket must be reproducible by the tools. {@linkcode dispatchMouseClick} carries it on both
+ * the press and the release. The field is 1..3 and the handler ramps it — see
+ * `DefaultActionWatchdog.#clickNode`.
  */
 export class ClickElementEvent extends ElementSelectedEvent<Record<string, unknown> | null> {
 	static override timeoutSec = 15;
@@ -164,11 +156,10 @@ export class ClickElementEvent extends ElementSelectedEvent<Record<string, unkno
 }
 
 /**
- * Click raw viewport coordinates (the coordinate `click` variant, D-ACT1).
+ * Click raw viewport coordinates (the coordinate `click` variant).
  *
- * ERRATUM(M1-events-types-6): §5.1.1 gives `button` a default of `'left'` on `ClickElementEvent` but
- * lists it bare here. A required `button` on one click sibling and a defaulted one on the other is a
- * footgun, so the same `'left'` default applies.
+ * `button` defaults to `'left'`, as on `ClickElementEvent`: a required `button` on one click
+ * sibling and a defaulted one on the other would be a footgun.
  */
 export class ClickCoordinateEvent extends BaseEvent<Record<string, unknown>> {
 	static override timeoutSec = 15;
@@ -177,7 +168,7 @@ export class ClickCoordinateEvent extends BaseEvent<Record<string, unknown>> {
 	readonly button: MouseButton;
 	/** Skips the occlusion check. */
 	readonly force: boolean;
-	/** ERRATUM(E-48), the coordinate half: 1 for a single click, 2 for a double click. */
+	/** 1 for a single click, 2 for a double click. */
 	readonly clickCount: number;
 
 	constructor(
@@ -194,13 +185,12 @@ export class ClickCoordinateEvent extends BaseEvent<Record<string, unknown>> {
 
 /**
  * Move the pointer onto an element, or to a raw viewport point, without pressing anything
- * (`browser_hover`, §4).
+ * (`browser_hover`).
  *
- * ERRATUM(E-49): the vendored package had no hover. `dispatchMouseClick` opens with exactly this
- * `mouseMoved` and then presses, so a hover was reachable only by clicking — which is a different
- * gesture with different consequences. `node: null` means "the raw point", the same shape
- * {@linkcode ScrollEvent} already uses for "the page rather than an element", so the hover is one
- * event class rather than the element/coordinate pair the click needed before this erratum existed.
+ * A hover is its own event because clicking is a different gesture with different consequences:
+ * `dispatchMouseClick` opens with exactly this `mouseMoved` and then presses. `node: null` means
+ * "the raw point", the same shape {@linkcode ScrollEvent} uses for "the page rather than an
+ * element", so the hover is one event class rather than an element/coordinate pair.
  * The element arm reuses the click cascade's own geometry (scroll into view, viewport metrics,
  * `resolveClickPoint`), so a hover lands where a click on the same index would have landed.
  */
@@ -222,7 +212,7 @@ export class TypeTextEvent extends ElementSelectedEvent<Record<string, unknown> 
 	static override timeoutSec = 60;
 	readonly text: string;
 	readonly clear: boolean;
-	/** `true` only when the text came from `sensitiveData` (D-SEC2); drives log/history redaction. */
+	/** `true` only when the text came from `sensitiveData`; drives log/history redaction. */
 	readonly isSensitive: boolean;
 	/** The `<secret>key</secret>` name the text was substituted from, for redacted messages. */
 	readonly sensitiveKeyName: string | null;
@@ -297,7 +287,7 @@ export class BrowserStateRequestEvent extends BaseEvent<BrowserStateSummary> {
 	readonly includeDom: boolean;
 	readonly includeScreenshot: boolean;
 	readonly includeRecentEvents: boolean;
-	/** ERRATUM(E-41): index offscreen-but-rendered elements too (`browser_get_state {include_hidden}`). */
+	/** Index offscreen-but-rendered elements too (`browser_get_state {include_hidden}`). */
 	readonly includeOffscreen: boolean;
 
 	constructor(
@@ -331,7 +321,7 @@ export class RefreshEvent extends BaseEvent<void> {
 	static override timeoutSec = 15;
 }
 
-/** Deliberate wait. The handler clamps `seconds` against `maxSeconds` (§7.4 #4). */
+/** Deliberate wait. The handler clamps `seconds` against `maxSeconds`. */
 export class WaitEvent extends BaseEvent<void> {
 	static override timeoutSec = 60;
 	readonly seconds: number;
@@ -347,12 +337,10 @@ export class WaitEvent extends BaseEvent<void> {
 /**
  * Send a key or combo, e.g. `'ctrl+a'`, `'Enter'`.
  *
- * ERRATUM(E-50): `node` is optional and, when given, focused before the first combo. The event used
- * to be session-scoped only, so `browser_press_key` could aim a chord at whatever happened to hold
- * focus and nothing else — §4 asks for a chord aimed at a *named element*, and a caller that had to
- * click the element first would have fired that click's own handlers as a side effect of pressing a
- * key. `null` keeps the pre-erratum behaviour exactly, which is the same "null means the session
- * rather than an element" shape {@linkcode ScrollEvent} already carries.
+ * `node` is optional and, when given, focused before the first combo, so `browser_press_key` can aim
+ * a chord at a *named element* without clicking it first — a click would fire that element's own
+ * handlers as a side effect of pressing a key. `null` sends to whatever holds focus, the same "null
+ * means the session rather than an element" shape {@linkcode ScrollEvent} carries.
  */
 export class SendKeysEvent extends ElementSelectedEvent<void, EnhancedDomTreeNode | null> {
 	static override timeoutSec = 60;
@@ -375,7 +363,7 @@ export class UploadFileEvent extends ElementSelectedEvent<void> {
 	}
 }
 
-/** Inspect a dropdown. Result keys are `shortTermMemory` / `longTermMemory` (§7.4 #19). */
+/** Inspect a dropdown. Result keys are `shortTermMemory` / `longTermMemory`. */
 export class GetDropdownOptionsEvent extends ElementSelectedEvent<Record<string, string>> {
 	static override timeoutSec = 15;
 
@@ -409,10 +397,10 @@ export class ScrollToTextEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.2 — Lifecycle commands: 4
+// Lifecycle commands: 4
 // ---------------------------------------------------------------------------------------------
 
-/** Start the session: launch or attach, converging on one `connect(cdpUrl)` path (D-BROWSER1). */
+/** Start the session: launch or attach, converging on one `connect(cdpUrl)` path. */
 export class BrowserStartEvent extends BaseEvent<BrowserStartResult> {
 	static override timeoutSec = 30;
 	/** Attach to this endpoint instead of launching. */
@@ -450,7 +438,7 @@ export class BrowserKillEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.3 — Notifications (browser → everyone): 8
+// Notifications (browser → everyone): 8
 // ---------------------------------------------------------------------------------------------
 
 /** The CDP socket is open. Consumers: Permissions, StorageState, Recording, HarRecording, Captcha. */
@@ -509,7 +497,7 @@ export class AgentFocusChangedEvent extends BaseEvent<void> {
 	}
 }
 
-/** A target crashed. Defined; in practice crash paths dispatch `BrowserErrorEvent` (§5.1.3). */
+/** A target crashed. Defined; in practice crash paths dispatch `BrowserErrorEvent`. */
 export class TargetCrashedEvent extends BaseEvent<void> {
 	static override timeoutSec = 10;
 	readonly targetId: TargetId;
@@ -538,8 +526,7 @@ export class NavigationStartedEvent extends BaseEvent<void> {
  * Navigation finished. Consumers: Security (redirect check), Downloads (PDF auto-download).
  *
  * `loadingStatus` is non-null exactly when readiness timed out — a non-fatal outcome carrying
- * `'timeout after Xs waiting for <level> (saw: …)'` so the agent sees a slow page, not an error
- * (ARCHITECTURE.md §7.5).
+ * `'timeout after Xs waiting for <level> (saw: …)'` so the agent sees a slow page, not an error.
  */
 export class NavigationCompleteEvent extends BaseEvent<void> {
 	readonly targetId: TargetId;
@@ -566,7 +553,7 @@ export class NavigationCompleteEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.4 — Error / reconnect: 3 (the §5.1.4 table has no timeout column: all bus-default, E-1)
+// Error / reconnect: 3 (all inherit the bus default timeout)
 // ---------------------------------------------------------------------------------------------
 
 /** Structured browser-layer failure, e.g. `'NavigationBlocked'`, `'ReconnectionFailed'`. */
@@ -583,7 +570,7 @@ export class BrowserErrorEvent extends BaseEvent<void> {
 	}
 }
 
-/** One reconnect attempt is starting (3 attempts, 1 s/2 s/4 s backoff — ARCHITECTURE.md §7.4). */
+/** One reconnect attempt is starting (3 attempts, 1 s/2 s/4 s backoff). */
 export class BrowserReconnectingEvent extends BaseEvent<void> {
 	readonly cdpUrl: string;
 	readonly attempt: number;
@@ -612,7 +599,7 @@ export class BrowserReconnectedEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.5 — Storage state: 4
+// Storage state: 4
 // ---------------------------------------------------------------------------------------------
 
 /** Persist cookies + origins. `path: null` uses the profile's `storageState` path. */
@@ -666,7 +653,7 @@ export class StorageStateLoadedEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.6 — Downloads: 3
+// Downloads: 3
 // ---------------------------------------------------------------------------------------------
 
 /** `Browser.downloadWillBegin` re-broadcast. */
@@ -706,7 +693,7 @@ export class DownloadProgressEvent extends BaseEvent<void> {
 
 /**
  * A download finished and is available. Remote browsers never touch the local filesystem: the path
- * is synthesized and `fileSize` is 0 (ARCHITECTURE.md §6.8).
+ * is synthesized and `fileSize` is 0.
  */
 export class FileDownloadedEvent extends BaseEvent<void> {
 	static override timeoutSec = 30;
@@ -747,10 +734,10 @@ export class FileDownloadedEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// §5.1.7 — Misc: 4
+// Misc: 4
 // ---------------------------------------------------------------------------------------------
 
-/** Cosmetic about:blank animation was injected (○ port-optional, D-SCOPE1). */
+/** Cosmetic about:blank animation was injected (optional feature). */
 export class AboutBlankDVDScreensaverShownEvent extends BaseEvent<void> {
 	readonly targetId: TargetId;
 	/** Injection failure text; non-fatal by construction. */
@@ -770,13 +757,12 @@ export class DialogOpenedEvent extends BaseEvent<void> {
 	readonly url: string;
 	readonly frameId: string | null;
 	/**
-	 * ERRATUM(E-53): the id `browser_handle_dialog` answers by.
+	 * The id `browser_handle_dialog` answers by.
 	 *
-	 * The event announced a dialog the watchdog had already answered, so a consumer could learn that
-	 * a `prompt` had been dismissed but never choose otherwise. An id makes the announcement
-	 * *addressable*: while manual handling is armed the watchdog holds the dialog open under this id
-	 * until a caller answers it or the hold expires. Empty string on the automatic path, which is
-	 * every path a 0.1.0 consumer sees.
+	 * The id makes the announcement *addressable*, so a consumer can choose how a dialog is answered
+	 * rather than only learn how the watchdog answered it: while manual handling is armed the watchdog
+	 * holds the dialog open under this id until a caller answers it or the hold expires. Empty string
+	 * on the automatic path.
 	 */
 	readonly dialogId: string;
 
@@ -795,9 +781,8 @@ export class DialogOpenedEvent extends BaseEvent<void> {
 /**
  * Vendor `BrowserUse.captchaSolver*` CDP event re-broadcast (cloud proxy browsers only).
  *
- * ERRATUM(M1-events-types-7): §5.1.7 names `startedAt`/`finishedAt` without a type. They are
- * ISO-8601 strings, matching the envelope's `eventCreatedAt` (§5.1) — one timestamp spelling per
- * wire surface beats mixing epoch numbers into event payloads.
+ * `startedAt`/`finishedAt` are ISO-8601 strings, matching the envelope's `eventCreatedAt` — one
+ * timestamp spelling per wire surface beats mixing epoch numbers into event payloads.
  */
 export class CaptchaSolverStartedEvent extends BaseEvent<void> {
 	static override timeoutSec = 5;
@@ -816,14 +801,14 @@ export class CaptchaSolverStartedEvent extends BaseEvent<void> {
 	}
 }
 
-/** Vendor captcha solve finished; `waitIfCaptchaSolving()` resolves off this (AGENT-RUNTIME §4). */
+/** Vendor captcha solve finished; `waitIfCaptchaSolving()` resolves off this. */
 export class CaptchaSolverFinishedEvent extends BaseEvent<void> {
 	static override timeoutSec = 5;
 	readonly targetId: TargetId;
 	readonly vendor: string | null;
 	readonly url: string | null;
 	readonly durationMs: number;
-	/** ISO-8601. See ERRATUM(M1-events-types-7). */
+	/** ISO-8601, like `CaptchaSolverStartedEvent.startedAt`. */
 	readonly finishedAt: string;
 	readonly success: boolean;
 
@@ -846,14 +831,10 @@ export class CaptchaSolverFinishedEvent extends BaseEvent<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Catalog + registration (the import-time uniqueness / non-substring assertion, D-BUS1)
+// Catalog + registration (the import-time uniqueness / non-substring assertion)
 // ---------------------------------------------------------------------------------------------
 
-/**
- * §5.1.1 — the result-bearing commands dispatched by Tools handlers and BrowserSession.
- *
- * 18 in the specification; 19 since ERRATUM(E-49) added {@linkcode HoverEvent}.
- */
+/** The 19 result-bearing commands dispatched by Tools handlers and BrowserSession. */
 export const COMMAND_EVENTS: readonly EventClass[] = [
 	NavigateToUrlEvent,
 	ClickElementEvent,
@@ -876,7 +857,7 @@ export const COMMAND_EVENTS: readonly EventClass[] = [
 	ScrollToTextEvent,
 ];
 
-/** §5.1.2 — 4 lifecycle commands. */
+/** 4 lifecycle commands. */
 export const LIFECYCLE_EVENTS: readonly EventClass[] = [
 	BrowserStartEvent,
 	BrowserStopEvent,
@@ -884,7 +865,7 @@ export const LIFECYCLE_EVENTS: readonly EventClass[] = [
 	BrowserKillEvent,
 ];
 
-/** §5.1.3 — 8 notifications. */
+/** 8 notifications. */
 export const NOTIFICATION_EVENTS: readonly EventClass[] = [
 	BrowserConnectedEvent,
 	BrowserStoppedEvent,
@@ -896,14 +877,14 @@ export const NOTIFICATION_EVENTS: readonly EventClass[] = [
 	NavigationCompleteEvent,
 ];
 
-/** §5.1.4 — 3 error / reconnect events. */
+/** 3 error / reconnect events. */
 export const ERROR_EVENTS: readonly EventClass[] = [
 	BrowserErrorEvent,
 	BrowserReconnectingEvent,
 	BrowserReconnectedEvent,
 ];
 
-/** §5.1.5 — 4 storage-state events. */
+/** 4 storage-state events. */
 export const STORAGE_EVENTS: readonly EventClass[] = [
 	SaveStorageStateEvent,
 	LoadStorageStateEvent,
@@ -911,14 +892,14 @@ export const STORAGE_EVENTS: readonly EventClass[] = [
 	StorageStateLoadedEvent,
 ];
 
-/** §5.1.6 — 3 download events. */
+/** 3 download events. */
 export const DOWNLOAD_EVENTS: readonly EventClass[] = [
 	DownloadStartedEvent,
 	DownloadProgressEvent,
 	FileDownloadedEvent,
 ];
 
-/** §5.1.7 — 4 misc events (all ○ port-optional features). */
+/** 4 misc events (all optional features). */
 export const MISC_EVENTS: readonly EventClass[] = [
 	AboutBlankDVDScreensaverShownEvent,
 	DialogOpenedEvent,
@@ -927,7 +908,7 @@ export const MISC_EVENTS: readonly EventClass[] = [
 ];
 
 /**
- * The whole catalog: 18 + 4 + 8 + 3 + 4 + 3 + 4 = **44** (DECISION-REGISTER.md §8).
+ * The whole catalog: 19 + 4 + 8 + 3 + 4 + 3 + 4 = **45**.
  * `ElementSelectedEvent` is abstract plumbing and is deliberately not a member.
  */
 export const BROWSER_EVENTS: readonly EventClass[] = [

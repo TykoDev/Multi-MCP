@@ -1,10 +1,9 @@
 /**
- * Scroll-path contract (ARCHITECTURE.md §6.10 "scroll (page gesture / element wheel / iframe JS)" and
- * "scroll-to-text (`DOM.performSearch` + fallback)").
+ * Scroll-path contract (page gesture / element wheel / iframe script, and scroll-to-text via
+ * `DOM.performSearch` plus a fallback).
  *
  * The arithmetic is pure; the three paths are asserted on real CDP frames over `ChromeFixture`.
- * Whether a real document actually moves is the browser tier's job
- * (`packages/core/tests/integration/event_ScrollEvent_test.ts`).
+ * Whether a real document actually moves is the browser tier's job.
  */
 
 import { assertEquals } from '@std/assert';

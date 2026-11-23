@@ -1,8 +1,8 @@
 /**
- * The reported `a2ui_publish` / `a2ui_delete` failures (2026-10-11), driven through the composed services and the
- * same executor the dispatcher uses: every message a specification client sends — as JSON text, without `version`,
- * naming the basic catalog — publishes; and every refusal names its cause instead of "Invalid input" or "check the
- * service configuration".
+ * The reported `a2ui_publish` / `a2ui_delete` failures (2026-10-11), driven through the composed services and the same
+ * executor the dispatcher uses: every message a specification client sends — as JSON text, without `version`, naming
+ * the basic catalog — publishes; and every refusal names its cause instead of "Invalid input" or "check the service
+ * configuration".
  */
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { createToolExecutor, type Scope, SessionRegistry, type ToolResult } from '@tykotech/mcp';

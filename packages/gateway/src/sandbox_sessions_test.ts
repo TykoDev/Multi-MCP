@@ -1,6 +1,4 @@
-/**
- * D-076: the gateway's session tools and routes against a fake sandbox service.
- */
+/** The gateway's session tools and routes against a fake sandbox service. */
 import { assert, assertEquals } from '@std/assert';
 import { SessionRegistry } from '@tykotech/mcp';
 import { SandboxClient, SandboxClientError } from '@tykotech/sandbox';

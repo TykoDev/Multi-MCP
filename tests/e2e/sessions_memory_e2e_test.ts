@@ -1,11 +1,11 @@
 /**
- * Sessions › Sessions: memory per browser session against the limits, Active and Idle, and Close — in the shipped SPA,
+ * Sessions › Sessions: memory per browser session against the limits, and Close — in the shipped SPA,
  * against real Chromium processes, so the memory dump is Chromium's own answer for the browser this harness launched.
  *
  * Browser tier — requires `--allow-run=<resolved chromium>`.
  */
 import { assert, assertEquals } from '@std/assert';
-import { harness, imageOf, skipUnlessBrowser } from '../support/harness.ts';
+import { harness, skipUnlessBrowser } from '../support/harness.ts';
 import { jsLiteral } from '../support/js_literal.ts';
 
 Deno.test({
@@ -51,29 +51,22 @@ Deno.test({
 			assert(mine.memory.private_bytes > 10 * 1024 * 1024, `${mine.memory.private_bytes} bytes private`);
 			assert(answer.gateway.heap_limit_bytes > answer.gateway.heap_used_bytes);
 			assertEquals(answer.container.limit_bytes, 1536 * 1024 * 1024);
-			assertEquals((await h.fetch('/api/v1/system/usage', { headers: { authorization: 'Bearer nope' } })).status, 401);
+			const refused = await h.fetch('/api/v1/system/usage', { headers: { authorization: 'Bearer nope' } });
+			await refused.body?.cancel();
+			assertEquals(refused.status, 401);
 		});
 
-		await t.step('the Sessions tab shows the meters and the sessions as Active, each with its memory', async () => {
+		await t.step('the Sessions tab shows the three meters and each session with its memory', async () => {
 			await until(`!!document.querySelector('input')`, 'the connect form');
 			await inPage(`(() => { const i = document.querySelector('input'); i.value = ${jsLiteral(h.key)};
 				i.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('button').click(); return true; })()`);
 			await until(`location.hash === '#/sessions'`, 'the sessions screen');
 			await until(`document.querySelectorAll('.sc-mem .sc-meter').length === 3`, 'the three meters');
 			await until(
-				`document.querySelectorAll('.sc-group')[0]?.querySelectorAll('.sc-card').length >= 2 &&
-					[...document.querySelectorAll('.sc-mem-figure')].some((n) => /MB/.test(n.textContent))`,
-				'the active sessions with their memory',
+				`document.querySelectorAll('.sc-card').length >= 2 &&
+					[...document.querySelectorAll('.sc-facts')].some((n) => /MB memory/.test(n.textContent))`,
+				'the sessions with their memory',
 			);
-			const groups = await inPage<string>(
-				`JSON.stringify([...document.querySelectorAll('.sc-group')].map((g) => [g.querySelector('.sc-group-title').textContent, g.querySelectorAll('.sc-card').length]))`,
-			);
-			assertEquals(JSON.parse(groups)[0][0], 'Active');
-			assertEquals(JSON.parse(groups)[1][0], 'Idle');
-			const shot = imageOf(await h.call('browser_screenshot', { session_id: driver }));
-			assert(shot);
-			await Deno.mkdir('tests/.scratch', { recursive: true });
-			await Deno.writeFile('tests/.scratch/sessions-memory.png', shot.bytes);
 		});
 
 		await t.step('Close on a card closes that session, after a confirmation', async () => {

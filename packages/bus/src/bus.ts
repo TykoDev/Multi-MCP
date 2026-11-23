@@ -1,16 +1,15 @@
 /**
- * `EventBus` — the typed async event bus (D-BUS1, ARCHITECTURE.md §4).
+ * `EventBus` — the typed async event bus.
  *
  * Semantics that are contract, not implementation detail:
  *  - `dispatch()` enqueues and returns immediately; it never throws (a synchronous failure comes
  *    back as an already-rejected handle instead).
  *  - Handlers for one event run **sequentially in registration order**; every handler runs even if
- *    an earlier one threw, because awaiting the handle must mean "all handlers finished"
- *    (ERRATUM(M0-bus-5): the spec's SecurityWatchdog example reads as if a throw aborts the chain;
- *    the normative sentence in ARCHITECTURE.md §4.2 wins, so M1 must veto navigation explicitly).
- *    ERRATUM(E-56): registration order holds **through a timeout too** — see
+ *    an earlier one threw, because awaiting the handle must mean "all handlers finished". A throw
+ *    therefore does not abort the chain: a handler that must stop a navigation vetoes it explicitly.
+ *    Registration order holds **through a timeout too** — see
  *    {@linkcode DEFAULT_HANDLER_ABANDON_GRACE_MS}.
- *  - Handlers for *different* events run concurrently (ERRATUM(M0-bus-8)). A serial cross-event queue
+ *  - Handlers for *different* events run concurrently. A serial cross-event queue
  *    would deadlock the moment a handler awaited an event it dispatched itself, which the browser
  *    layer does routinely (`BrowserStartEvent` → `BrowserLaunchEvent`).
  *  - Each handler invocation gets its own timeout budget and its own `AbortSignal`.
@@ -39,16 +38,15 @@ import type {
 export const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 
 /**
- * How long a **timed-out** handler is joined before the bus starts the next one — ERRATUM(E-56).
+ * How long a **timed-out** handler is joined before the bus starts the next one.
  *
- * ## The defect
+ * ## Why join at all
  *
  * `#invoke` settles at the deadline, but settling the *dispatch* does not stop the *handler*: its
- * promise is still running. Before this, `#runHandlers` took that settlement as permission to start
- * the next entry, so the documented "sequential in registration order" guarantee — the one E-16's
- * teardown ordering rests on — was void in precisely the condition where ordering matters. Two
- * teardown handlers could interleave, which is exactly what registering them in order was meant to
- * prevent.
+ * promise is still running. Starting the next entry on that settlement would void the "sequential in
+ * registration order" guarantee — the one teardown ordering rests on — in precisely the condition
+ * where ordering matters: two teardown handlers could interleave, which is exactly what registering
+ * them in order is meant to prevent.
  *
  * ## Why a bounded join rather than an unbounded one
  *
@@ -56,12 +54,12 @@ export const DEFAULT_STOP_TIMEOUT_MS = 5_000;
  * ignores its `AbortSignal` the power to wedge the dispatch forever — trading a violated ordering
  * promise for a liveness bug, which is the worse of the two. Waiting for a bounded grace after the
  * abort keeps ordering for every handler that unwinds cooperatively (the abort has already fired, so
- * a handler built on `HandlerBudget`/`AbortSignal` returns almost immediately) and degrades to the
- * old behaviour *only* for a handler that ignores cancellation — where the bus records the fact
- * rather than pretending the guarantee held.
+ * a handler built on `HandlerBudget`/`AbortSignal` returns almost immediately) and gives up on
+ * ordering *only* for a handler that ignores cancellation — where the bus records the fact rather
+ * than pretending the guarantee held.
  *
  * One second is the same figure `@tykotech/browser`'s `HANDLER_BUDGET_RESERVE_MS` reserves for a handler to
- * unwind, and it is small (≈3 %) against the smallest real budget in ARCHITECTURE.md §8 (30 s).
+ * unwind, and it is small (≈3 %) against the smallest real handler budget (30 s).
  *
  * ## What is deliberately *not* joined
  *
@@ -69,7 +67,7 @@ export const DEFAULT_STOP_TIMEOUT_MS = 5_000;
  * handlers; nothing follows the final entry whose order could be violated, so joining there would
  * add the grace to the latency of every timed-out dispatch, buy no ordering, and erode the separate
  * promise that a timeout rejects promptly instead of hanging. A straggler in the last slot therefore
- * still outlives its dispatch — that is E-52's escape, and it is answered on the handler side by
+ * still outlives its dispatch; that escape is answered on the handler side by
  * `BaseWatchdog.cdpFor(context)`, not here.
  */
 export const DEFAULT_HANDLER_ABANDON_GRACE_MS = 1_000;
@@ -80,7 +78,7 @@ export interface EventBusOptions {
 	name?: string;
 	/** Ring capacity for {@linkcode EventBus.history}. */
 	historyLimit?: number;
-	/** Env getter for `TIMEOUT_<EventClassName>` overrides (D-CFG1). */
+	/** Env getter for `TIMEOUT_<EventClassName>` overrides. */
 	env?: EnvSource;
 	/** Structured logger; defaults to a stderr console logger. */
 	logger?: BusLogger;
@@ -92,8 +90,9 @@ export interface EventBusOptions {
 	stopTimeoutMs?: number;
 	/**
 	 * How long a timed-out handler is joined before the next one starts
-	 * ({@linkcode DEFAULT_HANDLER_ABANDON_GRACE_MS}). `<= 0` disables the join, restoring the
-	 * pre-E-56 behaviour; a non-finite value joins without a bound and can wedge the dispatch.
+	 * ({@linkcode DEFAULT_HANDLER_ABANDON_GRACE_MS}). `<= 0` disables the join, so the next handler
+	 * starts as soon as the timed-out one's outcome settles; a non-finite value joins without a bound
+	 * and can wedge the dispatch.
 	 */
 	abandonGraceMs?: number;
 }
@@ -123,8 +122,8 @@ interface HandlerEntry {
 
 /**
  * One in-progress handler invocation, split into the two facts `#runHandlers` needs separately:
- * *what the dispatch will report* and *whether the handler is actually done*. Before E-56 these were
- * one promise, which is why a timeout read as "finished".
+ * *what the dispatch will report* and *whether the handler is actually done*. They are kept apart so
+ * a timeout never reads as "finished".
  */
 interface HandlerRun<T> {
 	/** The recorded outcome. Settles at the deadline when the handler overruns. */
@@ -189,7 +188,7 @@ export class EventBus {
 	 * Subscribes `handler` to `cls`. Returns an unsubscribe function.
 	 *
 	 * Registering the same function twice — or the same `(owner, key)` pair twice — throws
-	 * {@linkcode DuplicateHandlerError} (D-BUS1: duplicate registration MUST throw).
+	 * {@linkcode DuplicateHandlerError}.
 	 */
 	on<E extends BaseEvent<unknown>>(
 		cls: EventClass<E>,
@@ -264,7 +263,7 @@ export class EventBus {
 
 	/**
 	 * Stops the bus: drains in-flight handlers for at most `timeoutMs`, aborting the stragglers, then
-	 * makes every further dispatch a logged no-op (ARCHITECTURE.md §4.8 warm-resume protection).
+	 * makes every further dispatch a logged no-op.
 	 * Idempotent and non-throwing.
 	 */
 	async stop(timeoutMs: number = this.#stopTimeoutMs): Promise<void> {
@@ -301,9 +300,9 @@ export class EventBus {
 			if (entry === undefined) continue;
 			const run = this.#invoke(entry, event, timeoutSec);
 			outcomes.push(await run.outcome);
-			// ERRATUM(E-56): the outcome settling is not the handler finishing. Starting the next entry
-			// while this one is still executing is what voided the registration-order guarantee. There is
-			// nothing after the last entry to order, so the tail is deliberately not joined.
+			// The outcome settling is not the handler finishing. Starting the next entry while this one
+			// is still executing would void the registration-order guarantee. There is nothing after the
+			// last entry to order, so the tail is deliberately not joined.
 			if (index + 1 < entries.length) await this.#joinStraggler(entry, event, run);
 		}
 		return outcomes;

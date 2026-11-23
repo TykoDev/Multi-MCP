@@ -1,11 +1,6 @@
 /**
- * C6 and C9 (D-099): the administrator seed is validated like every other credential, and accounts count as
- * credentials for the bind policy.
- *
- * C6: an invalid `TTK_ADMIN_USER` used to be read as "no seed" — a server nobody could sign in to, started without a
- * word; both forms set was silently resolved; and the implicit `secrets/ttk_admin_user.json` swallowed every error.
- * C9: `checkBindPolicy` counted keys and OAuth only, so a non-loopback deployment whose one credential was an account
- * was refused while the verifier was perfectly able to authenticate it.
+ * The administrator seed is validated like every other credential, and accounts count as credentials for the bind
+ * policy.
  */
 import { assert, assertEquals, assertRejects, assertStringIncludes, assertThrows } from '@std/assert';
 import { join } from '@std/path';
@@ -23,7 +18,7 @@ function disk(files: Record<string, string>): (path: string) => Promise<string> 
 		files[path] === undefined ? Promise.reject(new Deno.errors.NotFound(path)) : Promise.resolve(files[path]);
 }
 
-Deno.test('config: an invalid TTK_ADMIN_USER refuses startup, naming the variable and never the value (C6)', async () => {
+Deno.test('config: an invalid TTK_ADMIN_USER refuses startup, naming the variable and never the value', async () => {
 	const valid = await record();
 	assertEquals(loadConfig({ TTK_ADMIN_USER: valid }).adminUser?.username, 'root');
 
@@ -50,7 +45,7 @@ Deno.test('config: an invalid TTK_ADMIN_USER refuses startup, naming the variabl
 	assertEquals(loadConfig({ TTK_ADMIN_USER: '  ' }).adminUser, null);
 });
 
-Deno.test('config: TTK_ADMIN_USER and TTK_ADMIN_USER_FILE together are refused (C6)', async () => {
+Deno.test('config: TTK_ADMIN_USER and TTK_ADMIN_USER_FILE together are refused', async () => {
 	const valid = await record();
 	const both = assertThrows(
 		() =>
@@ -70,14 +65,14 @@ Deno.test('config: TTK_ADMIN_USER and TTK_ADMIN_USER_FILE together are refused (
 	assertStringIncludes(file.message, 'TTK_ADMIN_USER_FILE:');
 });
 
-Deno.test('secrets: the implicit admin-record file is optional when absent and fatal when invalid (C6)', async () => {
+Deno.test('secrets: the implicit admin-record file is optional when absent and fatal when invalid', async () => {
 	const valid = await record();
 	// Absent: no seed, no error.
 	const absent = await resolveSecrets({ env: {}, readFile: disk({}) });
 	assertEquals(absent.TTK_ADMIN_USER, undefined);
 	assertEquals(loadConfig({}, { secrets: absent }).adminUser, null);
 
-	// Present and valid: it seeds, as before.
+	// Present and valid: it seeds.
 	const present = await resolveSecrets({ env: {}, readFile: disk({ [DEFAULT_ADMIN_USER_FILE]: `${valid}\n` }) });
 	assertEquals(loadConfig({}, { secrets: present }).adminUser?.username, 'root');
 
@@ -117,7 +112,7 @@ Deno.test('secrets: the implicit admin-record file is optional when absent and f
 	assertEquals(loadConfig({ TTK_ADMIN_USER: valid }, { secrets: inline }).adminUser?.username, 'root');
 });
 
-Deno.test('config: the bind policy counts user accounts as credentials (C9)', async () => {
+Deno.test('config: the bind policy counts user accounts as credentials', async () => {
 	const dir = join('tests/.scratch', `bind-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
 	const publicBind = { TTK_HOST: '0.0.0.0', TTK_PUBLIC_URL: 'http://192.168.1.10:8787' };

@@ -2,26 +2,28 @@
  * @module
  * URL matcher + navigation domain policy — the security-critical primitive of `@tykotech/browser`.
  *
- * Contract owner: SPECS/SECURITY-AUTH.md §4.1 (rules M1–M9), §4.2 (`isUrlAllowed`, evaluation
- * order, the empty-allowlist precedence trap), §4.3 (the three enforcement points E1/E2/E3).
- * Coverage gate: SPECS/COMPLETIONS-CRITERIA.md Q5 — **100 % branch coverage**. Every arm below is
- * therefore reachable from `url_matcher_test.ts`; no defensive-unreachable arms are written.
+ * Owns the matching rules (fail closed, new-tab URLs, unsafe-pattern refusal, scheme scoping,
+ * wildcards, bare domains, origin patterns, IP literals, parse-not-string-match), `isUrlAllowed`
+ * with its evaluation order and the empty-allowlist precedence trap, and serves the three
+ * enforcement points E1/E2/E3.
+ * Every arm below is reachable from `url_matcher_test.ts`, which holds it to **100 % branch
+ * coverage**; no defensive-unreachable arms are written.
  *
  * Two properties this module MUST keep, both load-bearing elsewhere:
  *
- * 1. **Pure and side-effect-free.** DECISION-REGISTER.md §9 E-3 rules that a throwing handler does
+ * 1. **Pure and side-effect-free.** A throwing bus handler does
  *    not abort its siblings, so `SecurityWatchdog` throwing cannot by itself stop a navigation:
  *    BOTH the watchdog (E1/E2) and `BrowserSession.onNavigateToUrlEvent` call `isUrlAllowed`. The
  *    matcher, not handler-registration order, is the enforcement point — so it does no logging, no
  *    caching and no I/O on the decision path. Warnings are emitted once, at policy *compile* time.
- * 2. **Parse, never string-match** (M9). Every host decision goes through the WHATWG `URL` parser,
- *    which is also what Chrome uses — so "what BUA thinks the host is" and "what the browser will
+ * 2. **Parse, never string-match.** Every host decision goes through the WHATWG `URL` parser,
+ *    which is also what Chrome uses — so "what the matcher thinks the host is" and "what the browser will
  *    resolve" cannot drift (`http://allowed.example@evil.test/` ⇒ host `evil.test`;
  *    `http://0xd83ad60e/` ⇒ host `216.58.214.14`). Regexes appear only on *patterns* (trusted
  *    config) and on strings the URL parser has already canonicalised.
  *
  * Normalisation asymmetry (deliberate, security-relevant): NFKC folding is applied **only** in the
- * IP-literal detection of §4.2 step 4, where extra folding can only ever block *more* traffic. It is
+ * IP-literal detection of `isUrlAllowed` step 4, where extra folding can only ever block *more* traffic. It is
  * NOT applied to host comparison, where folding a spoofed host (`ｅxample.com` → `example.com`)
  * would *widen* an allowlist. Host comparison relies on the URL parser's own IDNA/UTS-46 mapping,
  * which is the mapping the browser will actually resolve with.
@@ -32,14 +34,17 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Which scheme set a scheme-less pattern covers (M4).
+ * Which scheme set a scheme-less pattern covers.
  * - `navigation` — navigation policy and action-model domain filtering: `http:` and `https:`.
  * - `secret` — `sensitiveData` scoping: `https:` only. Secrets over plaintext HTTP require an
  *   explicit `http://` pattern.
  */
 export type UrlMatchContext = 'navigation' | 'secret';
 
-/** Why a pattern was refused at configuration time (M3 + ERRATUM(M1-security-profile-1)). */
+/**
+ * Why a pattern was refused at configuration time: an unsafe wildcard shape, or a "domain" that
+ * carries a path, query, fragment, userinfo or whitespace.
+ */
 export type PatternRejectionReason =
 	| 'empty'
 	| 'lone-wildcard'
@@ -50,17 +55,17 @@ export type PatternRejectionReason =
 	| 'path-or-credentials'
 	| 'unparseable';
 
-/** A pattern that survived M3, reduced to the three things matching depends on. */
+/** A pattern that survived refusal, reduced to the three things matching depends on. */
 export type ParsedPattern = {
 	/** The trimmed pattern text, for diagnostics. */
 	readonly source: string;
-	/** Lowercase scheme without the colon, or `null` for a scheme-less pattern (M4). */
+	/** Lowercase scheme without the colon, or `null` for a scheme-less pattern. */
 	readonly scheme: string | null;
-	/** Canonical lowercase host; for a wildcard pattern, the base after `*.` (M5). */
+	/** Canonical lowercase host; for a wildcard pattern, the base after `*.`. */
 	readonly host: string;
-	/** `true` for the one safe wildcard shape, a leading `*.` (M3/M5). */
+	/** `true` for the one safe wildcard shape, a leading `*.`. */
 	readonly wildcard: boolean;
-	/** Pinned port as decimal text, or `null` when the pattern ignores the port (M6). */
+	/** Pinned port as decimal text, or `null` when the pattern ignores the port. */
 	readonly port: string | null;
 };
 
@@ -68,7 +73,7 @@ export type PatternParseResult =
 	| { readonly ok: true; readonly pattern: ParsedPattern }
 	| { readonly ok: false; readonly reason: PatternRejectionReason };
 
-/** A refused pattern, reported once at compile time (M3 "log a warning"). */
+/** A refused pattern, reported once at compile time as a warning. */
 export type PatternWarning = {
 	/** Which list the pattern came from, e.g. `allowedDomains`. */
 	readonly source: string;
@@ -84,14 +89,14 @@ export type CompileOptions = {
 	readonly onWarn?: WarnSink | null;
 };
 
-/** The three `BrowserProfile` inputs of SECURITY-AUTH.md §4 (DATA-MODEL.md §5.2). */
+/** The three `BrowserProfile` inputs of the domain policy. */
 export type DomainPolicy = {
 	readonly allowedDomains?: readonly string[] | null;
 	readonly prohibitedDomains?: readonly string[] | null;
 	readonly blockIpAddresses?: boolean;
 };
 
-/** One compiled list: exact hostnames in a `Set` (§4.2 performance clause), globs stay linear. */
+/** One compiled list: exact hostnames in a `Set` once the list is large, globs stay linear. */
 export type CompiledList = {
 	/** Populated only in set mode; scheme-less, port-less, non-wildcard patterns land here. */
 	readonly exactHosts: ReadonlySet<string>;
@@ -114,7 +119,7 @@ export type CompiledDomainPolicy = {
 // ---------------------------------------------------------------------------
 
 /**
- * M2. Exactly these five, compared case-insensitively after trimming. The list is deliberately
+ * The new-tab URLs. Exactly these five, compared case-insensitively after trimming. The list is deliberately
  * literal: `isUrlAllowed` step 1 *allows* new-tab URLs, so broadening this set would widen
  * navigation permission, while `urlMatch` returning `false` for them is what keeps a fresh tab from
  * satisfying a secrets scope or a domain-gated action filter.
@@ -130,19 +135,18 @@ export const NEW_TAB_URLS: readonly string[] = [
 const NEW_TAB_SET: ReadonlySet<string> = new Set(NEW_TAB_URLS);
 
 /**
- * §4.2 performance clause: at or above this many entries a list compiles to a `Set`.
+ * At or above this many entries a list compiles its exact hostnames to a `Set`, for lookup speed.
  *
- * ERRATUM(M1-security-profile-5): DATA-MODEL.md §5.2 claims the conversion "loses glob support";
- * §4.2 says "glob patterns stay in the linear path". §4.2 wins — a policy whose *meaning* changes
- * when an unrelated 100th entry is added is not a policy. Globs are always evaluated.
+ * Glob patterns stay in the linear path and are always evaluated: a policy whose *meaning* changes
+ * when an unrelated 100th entry is added is not a policy.
  */
 export const SET_MODE_THRESHOLD = 100;
 
-/** Schemes allowed to a scheme-less pattern, per context (M4). */
+/** Schemes allowed to a scheme-less pattern, per context. */
 const NAVIGATION_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
 const SECRET_SCHEMES: ReadonlySet<string> = new Set(['https:']);
 
-/** WHATWG special schemes whose default port `URL` elides, so a pinned port still compares (M6). */
+/** WHATWG special schemes whose default port `URL` elides, so a pinned port still compares. */
 const DEFAULT_PORTS: Readonly<Record<string, string>> = {
 	'http:': '80',
 	'https:': '443',
@@ -151,17 +155,18 @@ const DEFAULT_PORTS: Readonly<Record<string, string>> = {
 	'ftp:': '21',
 };
 
-/** Applied to *patterns* only — trusted configuration text, never to a URL (M9). */
+/** Applied to *patterns* only — trusted configuration text, never to a URL. */
 const SCHEME_SHAPE = /^[a-z][a-z0-9+.-]*$/;
 const PORT_SHAPE = /^[0-9]{1,5}$/;
 
 /**
  * Characters that make a "domain pattern" something else: a path, a query, a fragment, userinfo, or
- * whitespace. See ERRATUM(M1-security-profile-1).
+ * whitespace. Such a pattern is refused rather than silently reduced to its host, because the
+ * operator meant something narrower than "the whole host".
  */
 const NON_HOST_CHARS: readonly string[] = ['/', '\\', '?', '#', '@', ' ', '\t'];
 
-/** Ideographic full stops UTS-46 maps to `.` but NFKC does not — ERRATUM(M1-security-profile-2). */
+/** Ideographic full stops UTS-46 maps to `.` but NFKC does not, so they are folded explicitly. */
 const IDEOGRAPHIC_DOTS: readonly string[] = ['。', '｡'];
 
 /** Applied to a hostname the URL parser has already canonicalised, never to raw input. */
@@ -174,9 +179,8 @@ const CANONICAL_IPV4 = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/;
 /**
  * Lowercases and drops the FQDN root dot.
  *
- * ERRATUM(M1-security-profile-3): `new URL('http://evil.com./').hostname` is `evil.com.`, which
- * compares unequal to the pattern `evil.com` — a silent `prohibitedDomains` bypass. §4.1 M6 only
- * says "case-insensitively", so the root-dot strip is recorded rather than assumed.
+ * `new URL('http://evil.com./').hostname` is `evil.com.`, which would compare unequal to the
+ * pattern `evil.com` — a silent `prohibitedDomains` bypass — so the root dot is stripped.
  */
 export function canonicalHost(hostname: string): string {
 	const lower = hostname.toLowerCase();
@@ -184,12 +188,12 @@ export function canonicalHost(hostname: string): string {
 }
 
 /**
- * `www.example.com` ⇒ `example.com`, but only for the single-dot root shape of M6.
+ * `www.example.com` ⇒ `example.com`, but only for a single-dot root pattern.
  *
- * ERRATUM(M1-security-profile-4): M6's "the `www.`± variant" also admits the *adding* direction,
- * under which the pattern `www.example.com` would match the host `example.com`. That widens beyond
- * M6's own linear rule and would make set mode disagree with the linear path, so only the stripping
- * direction is implemented — in both paths, which are then equivalent.
+ * Only the stripping direction is implemented. The *adding* direction, under which the pattern
+ * `www.example.com` would match the host `example.com`, widens beyond the bare-domain rule and
+ * would make set mode disagree with the linear path; with stripping only, both paths are
+ * equivalent.
  */
 function wwwStripped(host: string): string | null {
 	if (!host.startsWith('www.')) return null;
@@ -197,13 +201,13 @@ function wwwStripped(host: string): string | null {
 	return isSingleDotRoot(root) ? root : null;
 }
 
-/** M6's "single-dot root pattern": exactly two labels, e.g. `example.com`. */
+/** A "single-dot root pattern": exactly two labels, e.g. `example.com`. */
 function isSingleDotRoot(host: string): boolean {
 	return host.split('.').length === 2;
 }
 
 // ---------------------------------------------------------------------------
-// IP-literal detection (§4.2 step 4)
+// IP-literal detection (`isUrlAllowed` step 4)
 // ---------------------------------------------------------------------------
 
 function percentDecode(text: string): string {
@@ -219,9 +223,9 @@ function percentDecode(text: string): string {
 /**
  * Percent-decode → NFKC → ideographic-dot fold → lowercase → drop the FQDN root dot.
  *
- * §4.2 step 4 names percent-decoding and "Unicode digits and ideographic dots normalized via NFKC".
- * NFKC alone folds fullwidth digits (`１` ⇒ `1`) and `U+FF0E` (`．` ⇒ `.`) but leaves `U+3002` (`。`)
- * and `U+FF61` (`｡`) untouched — see ERRATUM(M1-security-profile-2).
+ * Unicode digits and ideographic dots must fold before the IP check. NFKC alone folds fullwidth
+ * digits (`１` ⇒ `1`) and `U+FF0E` (`．` ⇒ `.`) but leaves `U+3002` (`。`) and `U+FF61` (`｡`)
+ * untouched, which UTS-46 (and so the browser) maps to `.` — hence the explicit fold.
  */
 export function normalizeHostForIpCheck(host: string): string {
 	let text = percentDecode(host.trim()).normalize('NFKC');
@@ -248,13 +252,13 @@ export function ipLiteralOf(host: string): string | null {
 	return CANONICAL_IPV4.test(parsed.hostname) ? parsed.hostname : null;
 }
 
-/** M8 / §4.2 step 4 predicate. */
+/** Whether a host denotes an IP literal (`isUrlAllowed` step 4, and the IP-literal matching rule). */
 export function isIpLiteralHost(host: string): boolean {
 	return ipLiteralOf(host) !== null;
 }
 
 // ---------------------------------------------------------------------------
-// pattern parsing (M3)
+// pattern parsing and refusal
 // ---------------------------------------------------------------------------
 
 function reject(reason: PatternRejectionReason): PatternParseResult {
@@ -278,7 +282,7 @@ function validPort(host: string, port: string): HostPort | null {
 	return { host, port: String(value) };
 }
 
-/** Splits an authority into host and optional pinned port, keeping IPv6 literals intact (M6). */
+/** Splits an authority into host and optional pinned port, keeping IPv6 literals intact. */
 function splitPort(authority: string): HostPort | null {
 	if (authority.startsWith('[')) {
 		const end = authority.indexOf(']');
@@ -310,10 +314,10 @@ function canonicalizePatternHost(host: string, scheme: string | null): string | 
 }
 
 /**
- * M3. The **only** safe wildcard shape is a leading `*.` on the host; everything else is refused at
+ * The **only** safe wildcard shape is a leading `*.` on the host; everything else is refused at
  * configuration time and matches nothing. There is no "warn but allow".
  *
- * Note (spec-faithful, not a gap): `*.com` is honoured, because M3's refusal list covers multiple,
+ * Note (deliberate, not a gap): `*.com` is honoured, because the refusal list covers multiple,
  * embedded, TLD-position and lone wildcards but not a wildcard over a public suffix. It over-matches
  * exactly as widely as its author asked it to.
  */
@@ -351,33 +355,33 @@ export function parsePattern(pattern: string): PatternParseResult {
 }
 
 // ---------------------------------------------------------------------------
-// matching (M1–M9)
+// matching
 // ---------------------------------------------------------------------------
 
-/** M2: a freshly opened tab satisfies no pattern, in any context. */
+/** A freshly opened tab satisfies no pattern, in any context. */
 export function isNewTabUrl(url: string): boolean {
 	return NEW_TAB_SET.has(url.trim().toLowerCase());
 }
 
-/** M4/M7. A scheme-less pattern is context-scoped; a scheme-qualified one matches exactly. */
+/** A scheme-less pattern is context-scoped; a scheme-qualified one matches exactly. */
 function schemeMatches(protocol: string, scheme: string | null, context: UrlMatchContext): boolean {
 	if (scheme !== null) return protocol === `${scheme}:`;
 	return context === 'secret' ? SECRET_SCHEMES.has(protocol) : NAVIGATION_SCHEMES.has(protocol);
 }
 
-/** M6: a pinned port compares against the URL's effective port, default ports included. */
+/** A pinned port compares against the URL's effective port, default ports included. */
 function effectivePort(url: URL): string {
 	if (url.port !== '') return url.port;
 	return DEFAULT_PORTS[url.protocol] ?? '';
 }
 
-/** M5 + M8: any depth of subdomain, plus the bare base — but never an IP-literal host. */
+/** Wildcard: any depth of subdomain, plus the bare base — but never an IP-literal host. */
 function hostMatchesWildcard(host: string, base: string): boolean {
 	if (isIpLiteralHost(host)) return false;
 	return host === base || host.endsWith(`.${base}`);
 }
 
-/** M6 + M8: exact host, plus the `www.` variant of a single-dot root pattern. */
+/** Bare domain: exact host, plus the `www.` variant of a single-dot root pattern. */
 function hostMatchesExact(host: string, patternHost: string): boolean {
 	if (host === patternHost) return true;
 	return isSingleDotRoot(patternHost) && host === `www.${patternHost}`;
@@ -390,11 +394,11 @@ function matchesParsed(url: URL, host: string, pattern: ParsedPattern, context: 
 }
 
 /**
- * The shared primitive of SECURITY-AUTH.md §4.1 — navigation policy, action-model domain filtering
- * and secret scoping all call this and nothing else.
+ * The shared URL-matching primitive — navigation policy, action-model domain filtering and secret
+ * scoping all call this and nothing else.
  *
- * Fails closed on an empty, unparseable or host-less URL (M1), on a new-tab URL (M2) and on an
- * unsafe pattern (M3).
+ * Fails closed on an empty, unparseable or host-less URL, on a new-tab URL and on an unsafe
+ * pattern.
  */
 export function urlMatch(url: string, pattern: string, context: UrlMatchContext = 'navigation'): boolean {
 	if (isNewTabUrl(url)) return false;
@@ -411,11 +415,11 @@ export function urlMatch(url: string, pattern: string, context: UrlMatchContext 
 // policy compilation
 // ---------------------------------------------------------------------------
 
-/** The default M3 warning sink. Configuration-time only — never on the decision path. */
+/** The default refused-pattern warning sink. Configuration-time only — never on the decision path. */
 export const defaultPatternWarnSink: WarnSink = (warning) => {
 	console.warn(
 		`[bua:url-matcher] ignoring unsafe pattern ${JSON.stringify(warning.pattern)} ` +
-			`in ${warning.source}: ${warning.reason} (SECURITY-AUTH.md §4.1 M3)`,
+			`in ${warning.source}: ${warning.reason}`,
 	);
 };
 
@@ -449,9 +453,9 @@ function compileList(
 }
 
 /**
- * Compiles a policy once, reporting every refused pattern (M3). Call this at configuration time and
+ * Compiles a policy once, reporting every refused pattern. Call this at configuration time and
  * cache the result on the session: `isUrlAllowed` accepts the compiled form and is then allocation-
- * free, which matters because E-3 makes it run twice per navigation.
+ * free, which matters because it runs twice per navigation (watchdog and session).
  */
 export function compileDomainPolicy(policy: DomainPolicy, options: CompileOptions = {}): CompiledDomainPolicy {
 	const sink = warnSinkOf(options);
@@ -470,7 +474,7 @@ export function compileDomainPolicy(policy: DomainPolicy, options: CompileOption
 }
 
 /**
- * Validates a pattern list without building a policy — the `sensitiveData` intake path (S1) and the
+ * Validates a pattern list without building a policy — the `sensitiveData` intake path and the
  * action registry's `domains` field use this so an unsafe scope is reported where it is configured.
  */
 export function validatePatterns(
@@ -508,19 +512,19 @@ function listMatches(list: CompiledList, url: URL, host: string, context: UrlMat
 }
 
 /**
- * SECURITY-AUTH.md §4.2, evaluated in the speced order:
+ * The navigation domain policy, evaluated in this order:
  *
  * 1. `about:blank` / chrome new-tab ⇒ allow (the agent must always be able to park on a blank tab;
- *    M2 separately guarantees these unlock no secrets).
+ *    `urlMatch` separately guarantees these unlock no secrets).
  * 2. `data:` / `blob:` ⇒ allow (in-page artifacts, no network origin).
- * 3. No hostname ⇒ deny. Unparseable URLs land here too (M1, fail closed).
+ * 3. No hostname ⇒ deny. Unparseable URLs land here too (fail closed).
  * 4. `blockIpAddresses` ⇒ deny IP-literal hosts including obfuscated encodings.
  * 5. `allowedDomains` non-empty ⇒ allow iff some pattern matches (`prohibitedDomains` ignored).
  * 6. Else `prohibitedDomains` non-empty ⇒ deny iff some pattern matches.
  * 7. Else allow.
  *
  * Pure and side-effect-free: it is called from `SecurityWatchdog` *and* from
- * `BrowserSession.onNavigateToUrlEvent` for the same navigation (E-3).
+ * `BrowserSession.onNavigateToUrlEvent` for the same navigation.
  */
 export function isUrlAllowed(url: string, policy: DomainPolicy | CompiledDomainPolicy): boolean {
 	const compiled = isCompiled(policy) ? policy : compileDomainPolicy(policy, { onWarn: null });
@@ -537,7 +541,7 @@ export function isUrlAllowed(url: string, policy: DomainPolicy | CompiledDomainP
 }
 
 /**
- * The §4.2 precedence trap, as a function so no caller has to remember it: an **empty**
+ * The empty-allowlist precedence trap, as a function so no caller has to remember it: an **empty**
  * `allowedDomains` from a caller (MCP tool args, server task body) means "no restriction downstream"
  * and MUST NOT override a configured non-empty allowlist. Only a non-empty caller list may
  * narrow/replace it.

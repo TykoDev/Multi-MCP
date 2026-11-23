@@ -1,5 +1,5 @@
 /**
- * R3: persistent named profiles and saved storage state.
+ * Persistent named profiles and saved storage state.
  *
  * The assertion that matters is that state survives a *browser restart*, so
  * every case here closes the session — which really kills Chromium — and
@@ -38,7 +38,7 @@ async function dataDir(name: string): Promise<{ path: string; [Symbol.asyncDispo
 }
 
 Deno.test({
-	name: 'e2e R3: a named profile keeps cookies across a browser restart',
+	name: 'e2e persistence: a named profile keeps cookies across a browser restart',
 	ignore,
 	async fn(t) {
 		await using data = await dataDir('profile');
@@ -127,7 +127,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R3: storage state moves between sessions by name, never through the model',
+	name: 'e2e persistence: storage state moves between sessions by name, never through the model',
 	ignore,
 	async fn(t) {
 		await using data = await dataDir('storage');
@@ -189,7 +189,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R3: persistence is refused, not faked, without a data directory',
+	name: 'e2e persistence: persistence is refused, not faked, without a data directory',
 	ignore,
 	async fn() {
 		await using h = await harness();
@@ -202,7 +202,7 @@ Deno.test({
 		});
 		assertStringIncludes(profileError, 'TTK_DATA_DIR');
 
-		// R5 withdraws the persistence tool entirely when there is nowhere to
+		// Tool availability withdraws the persistence tool entirely when there is nowhere to
 		// persist to, which is a better answer than offering it and failing: the
 		// absence is visible in `tools/list` before anything is attempted.
 		const names = (await h.client.listTools({})).tools.map((tool) => tool.name);

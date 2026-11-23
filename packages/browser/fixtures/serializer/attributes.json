@@ -1,6 +1,6 @@
 {
 	"name": "attributes",
-	"pins": "§6.5 end to end: password scrubbing, AX-value override, format/expected_format hints (format mirrored into placeholder), role/type/invalid/required/aria-expanded cleanups, empty values dropped, >5-char dedupe where a protected key claims the value, 100-char cap, compound_components",
+	"pins": "attribute emission end to end: password scrubbing, AX-value override, format/expected_format hints (format mirrored into placeholder), role/type/invalid/required/aria-expanded cleanups, empty values dropped, >5-char dedupe where a protected key claims the value, 100-char cap, compound_components",
 	"tree": {
 		"tag": "HTML",
 		"children": [

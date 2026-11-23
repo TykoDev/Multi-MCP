@@ -1,5 +1,5 @@
 {
-	"_comment": "BUA bundled-browser seccomp profile (ERRATUM(E-74)). deny-by-default: any syscall not listed returns EPERM. Built from a measured trace of this image's own server and browser, not transcribed. See SPECS/SECURITY-AUTH.md section 6 for what was measured, what was added by rule, and what it still denies, and docs/reference/docker-reference.md for how it is applied.",
+	"_comment": "Bundled-browser seccomp profile. deny-by-default: any syscall not listed returns EPERM. Built from a measured trace of this image's own server and browser, not transcribed. See docs/reference/api.md (Chromium sandbox) for how it is applied.",
 	"defaultAction": "SCMP_ACT_ERRNO",
 	"defaultErrnoRet": 1,
 	"archMap": [

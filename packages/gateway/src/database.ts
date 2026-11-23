@@ -1,19 +1,5 @@
-/**
- * D-154 (owner-requested): the gateway's SQLite database, `<TTK_DATA_DIR>/ttk.db`.
- *
- * One file holds what the control plane edits and what must never rest in plaintext: model providers, the vault's
- * sealed secrets (`vault.ts`), the seed markers, and the agents' vector memory (`memory.ts`). It is opened with the
- * runtime's own `node:sqlite` — no FFI, no npm package, no native extension (`allowExtension` stays off, so
- * `--deny-ffi` holds) — and needs only the read and write grants the data directory already has.
- *
- * - The file is created `0600` before SQLite opens it; SQLite gives its `-wal` and `-shm` files the database's mode.
- * - WAL with a busy timeout, so `serve` and a local `stdio` process can share one file.
- * - `secure_delete`, so a replaced or deleted sealed secret does not linger in a free page.
- * - Node-local: nothing here is replicated to other cluster nodes (owner: a future feature).
- *
- * The schema is versioned by `PRAGMA user_version`; each migration runs once, inside a transaction.
- */
-// deno-lint-ignore no-external-import -- node: builtin (the runtime's own SQLite), not a dependency; D-154
+/** The gateway's SQLite database, `<TTK_DATA_DIR>/ttk.db`. */
+// deno-lint-ignore no-external-import -- node: builtin (the runtime's own SQLite), not a dependency
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { join } from '@std/path';
 
@@ -83,8 +69,8 @@ export class Database {
 	}
 
 	/**
-	 * Opens (creating when absent) `<dataDir>/ttk.db` and brings its schema up to date. Throws a
-	 * {@linkcode DatabaseError} naming the path when the file cannot be opened or is not this server's database.
+	 * Opens (creating when absent) `<dataDir>/ttk.db` and brings its schema up to date. Throws a {@linkcode
+	 * DatabaseError} naming the path when the file cannot be opened or is not this server's database.
 	 */
 	static open(dataDir: string): Database {
 		const path = join(dataDir, DATABASE_FILE);
@@ -131,7 +117,7 @@ export class Database {
 		}
 	}
 
-	/** An in-memory database with the full schema, for tests and embedders without a data directory. */
+	/** An in-memory database with the full schema, for tests. */
 	static memory(): Database {
 		return Database.#connect(':memory:', null);
 	}
@@ -197,14 +183,7 @@ export class Database {
 		return Number(this.#db.prepare(sql).run(...params).changes);
 	}
 
-	/**
-	 * Registers a deterministic scalar SQL function (the memory store's similarity).
-	 *
-	 * - **It must never throw.** On Deno 2.9.7 a throwing user function makes `StatementSync.all()` never return
-	 *   (`get()` is unaffected); answer SQL `NULL` and let the caller refuse instead.
-	 * - **Its arity is `fn.length`.** Declare named parameters — a rest-parameter function registers with arity 0 and
-	 *   every call fails with "wrong number of arguments".
-	 */
+	/** Registers a deterministic scalar SQL function (the memory store's similarity). */
 	defineFunction(name: string, fn: (...args: SQLInputValue[]) => SQLInputValue): void {
 		this.#db.function(name, { deterministic: true }, fn);
 	}

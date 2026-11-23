@@ -1,6 +1,6 @@
 {
 	"name": "visibility",
-	"pins": "§6.4 text-node gate (visible, stripped length > 1) and the invisible-element gate; unknown visibility inherits from the nearest ancestor that knows",
+	"pins": "text-node gate (visible, stripped length > 1) and the invisible-element gate; unknown visibility inherits from the nearest ancestor that knows",
 	"tree": {
 		"tag": "HTML",
 		"children": [

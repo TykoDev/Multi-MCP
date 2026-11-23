@@ -1,7 +1,7 @@
 /**
  * `DOMSnapshot.captureSnapshot` decoding — the geometry + computed-style third of the merge.
  *
- * Contract: SPECS/DATA-MODEL.md §6.2 (`EnhancedSnapshotNode`, the 10 whitelisted computed styles).
+ * Produces `EnhancedSnapshotNode`s with the 10 whitelisted computed styles.
  *
  * The wire format is column-oriented and string-table-encoded: every string is an index into
  * `strings`, every `Rare*Data` is a sparse `{index, value}` column pair, and geometry lives in a
@@ -55,8 +55,8 @@ export interface DecodedSnapshot {
 /**
  * The `computedStyles` argument for `DOMSnapshot.captureSnapshot`.
  *
- * DATA-MODEL §6.2 makes the list normative rather than advisory ("requesting more crashes Chrome on
- * heavy sites"), so it is passed through untouched from the seam and pinned by a test.
+ * The list is normative rather than advisory (requesting more crashes Chrome on heavy sites), so it is
+ * passed through untouched from the seam and pinned by a test.
  */
 export const SNAPSHOT_COMPUTED_STYLES: readonly string[] = REQUIRED_COMPUTED_STYLES;
 
@@ -92,11 +92,10 @@ export function toRect(row: readonly number[] | undefined, scale = 1): DomRect |
 /**
  * Decode one capture.
  *
- * ERRATUM(M1-dom-extract-3): `devicePixelRatio` divides **`bounds` only**. DATA-MODEL §6.2 marks
- * `bounds` as "device px ÷ devicePixelRatio → CSS px" and `clientRects`/`scrollRects` as "raw"
- * without saying what "raw" is measured in; they are already CSS px in Chrome's encoding
- * (`clientLeft`/`scrollWidth`-family values), so scaling them would halve every frame inset on a 2×
- * display. See also ERRATUM(M1-dom-extract-1) for what `clientRects` actually contains.
+ * `devicePixelRatio` divides **`bounds` only** (device px ÷ devicePixelRatio → CSS px).
+ * `clientRects`/`scrollRects` are already CSS px in Chrome's encoding (`clientLeft`/`scrollWidth`-family
+ * values), so scaling them would halve every frame inset on a 2× display. See `frameContentBox` in
+ * `extract_merge.ts` for what `clientRects` actually contains.
  */
 export function decodeSnapshot(snapshot: CapturedSnapshot, devicePixelRatio: number): DecodedSnapshot {
 	const scale = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
@@ -138,7 +137,7 @@ function decodeDocument(
 	const layout = doc.layout;
 	const backendIds = nodes.backendNodeId ?? [];
 	const clickable = decodeRareBooleanSet(nodes.isClickable);
-	// ERRATUM(E-39): the value columns, decoded alongside `isClickable` because they are node-level
+	// The value columns, decoded alongside `isClickable` because they are node-level
 	// columns too and would otherwise be lost for nodes with no layout box (an un-rendered `<option>`
 	// still has `optionSelected`).
 	const inputValues = decodeRarePairs(nodes.inputValue);
@@ -202,7 +201,7 @@ function decodeDocument(
 			paintOrder: layout.paintOrders?.[li] ?? null,
 			clientRects: toRect(layout.clientRects?.[li]),
 			scrollRects: toRect(layout.scrollRects?.[li]),
-			// ERRATUM(M1-dom-extract-2): the seam types `stackingContexts` as `number | null` but CDP
+			// The seam types `stackingContexts` as `number | null` but CDP
 			// models it as `RareBooleanData`. Encoded as 1/0 so no information is invented.
 			stackingContexts: stacking.has(li) ? 1 : 0,
 			isClickable: clickable.has(ni),
@@ -248,7 +247,7 @@ function decodeComputedStyles(
 /**
  * Paint-order comparison: Chrome assigns a higher `paintOrder` to whatever paints later, i.e. on top.
  *
- * Exported so the serializer's `ignoredByPaintOrder` filter (DATA-MODEL §6.3) and this module agree on
+ * Exported so the serializer's `ignoredByPaintOrder` filter and this module agree on
  * the direction of the comparison. Nodes without paint order never win.
  */
 export function paintsAbove(a: EnhancedSnapshotNode | null, b: EnhancedSnapshotNode | null): boolean {

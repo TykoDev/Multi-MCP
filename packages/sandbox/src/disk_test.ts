@@ -35,7 +35,7 @@ async function settle(check: () => Promise<string | null>): Promise<string | nul
 	return await check();
 }
 
-Deno.test('SB-1 disk: a cage alone that writes past its allowance is stopped without waiting for du', async () => {
+Deno.test('disk: a cage alone that writes past its allowance is stopped without waiting for du', async () => {
 	const { state, watches, spec } = volume();
 	const watch = await watches.start(spec(100 * MiB));
 	state.free -= 80 * MiB;
@@ -48,7 +48,7 @@ Deno.test('SB-1 disk: a cage alone that writes past its allowance is stopped wit
 	assertEquals(watches.active, 0);
 });
 
-Deno.test('SB-1 disk: past the allowance the files are measured, and a run past its limit is stopped', async () => {
+Deno.test('disk: past the allowance the files are measured, and a run past its limit is stopped', async () => {
 	const { state, watches, spec } = volume();
 	const watch = await watches.start(spec(100 * MiB));
 	state.free -= 95 * MiB;
@@ -58,7 +58,7 @@ Deno.test('SB-1 disk: past the allowance the files are measured, and a run past 
 	await watch.end();
 });
 
-Deno.test('SB-1 disk: a measurement that finds the run within its limit moves the baseline on', async () => {
+Deno.test('disk: a measurement that finds the run within its limit moves the baseline on', async () => {
 	const { state, watches, spec } = volume();
 	const watch = await watches.start(spec(100 * MiB));
 	// The volume lost 95 MiB; du finds 60 MiB of it in the run, within its limit, and the rest is
@@ -74,7 +74,7 @@ Deno.test('SB-1 disk: a measurement that finds the run within its limit moves th
 	await watch.end();
 });
 
-Deno.test('SB-1 disk: alone, loss du cannot explain (deleted files held open) stops the cage', async () => {
+Deno.test('disk: alone, loss du cannot explain (deleted files held open) stops the cage', async () => {
 	const { state, watches, spec } = volume();
 	const watch = await watches.start(spec(1000 * MiB));
 	// Within the allowance, but du finds the run's files unchanged while the volume lost 995 MiB.
@@ -83,7 +83,7 @@ Deno.test('SB-1 disk: alone, loss du cannot explain (deleted files held open) st
 	await watch.end();
 });
 
-Deno.test('SB-1 disk: two cages at once are each held to what du says, never charged with the other', async () => {
+Deno.test('disk: two cages at once are each held to what du says, never charged with the other', async () => {
 	const { state, watches, spec } = volume();
 	const busy = await watches.start(spec(1000 * MiB));
 	const quiet = await watches.start(spec(20 * MiB));
@@ -101,7 +101,7 @@ Deno.test('SB-1 disk: two cages at once are each held to what du says, never cha
 	await alone.end();
 });
 
-Deno.test('SB-1 disk: the free-space floor stops a cage whoever fills the disk', async () => {
+Deno.test('disk: the free-space floor stops a cage whoever fills the disk', async () => {
 	const { state, watches, spec } = volume();
 	const watch = await watches.start(spec(100 * MiB));
 	state.free = GiB - 1;
@@ -110,7 +110,7 @@ Deno.test('SB-1 disk: the free-space floor stops a cage whoever fills the disk',
 	await watch.end();
 });
 
-Deno.test('SB-1 disk: a run that cannot be measured once it outgrew its allowance is stopped', async () => {
+Deno.test('disk: a run that cannot be measured once it outgrew its allowance is stopped', async () => {
 	const { state, watches, spec } = volume();
 	const watch = await watches.start(spec(100 * MiB, { measure: () => Promise.reject(new Error('du failed')) }));
 	state.free -= 95 * MiB;
@@ -118,7 +118,7 @@ Deno.test('SB-1 disk: a run that cannot be measured once it outgrew its allowanc
 	await watch.end();
 });
 
-Deno.test('SB-1 disk: the floor is still read while a slow measurement runs, and end() stops it', async () => {
+Deno.test('disk: the floor is still read while a slow measurement runs, and end() stops it', async () => {
 	const { state, watches, spec } = volume();
 	let release!: () => void;
 	state.measuring = new Promise((resolve) => release = resolve);
@@ -140,7 +140,7 @@ Deno.test('SB-1 disk: the floor is still read while a slow measurement runs, and
 	await ending;
 });
 
-Deno.test('SB-7 disk: a run over its budget, watched with no room at all, is stopped as it grows', async () => {
+Deno.test('disk: a run over its budget, watched with no room at all, is stopped as it grows', async () => {
 	const { state, watches, spec } = volume();
 	state.used = 500 * MiB;
 	// Cleanup mode: the limit is what the run already has.
@@ -155,7 +155,7 @@ Deno.test('SB-7 disk: a run over its budget, watched with no room at all, is sto
 	await watch.end();
 });
 
-// --- treeUsage: the Docker backend's measurer (review R2-2) -------------------------------------------------------
+// --- treeUsage: the Docker backend's measurer -------------------------------------------------------
 
 const posix = Deno.build.os !== 'windows';
 
@@ -171,7 +171,7 @@ async function allocated(path: string): Promise<number> {
 	return info.blocks !== null ? info.blocks * 512 : info.size;
 }
 
-Deno.test('R2-2 usage: every entry of every root counts once; a missing root counts nothing; links are not followed', async () => {
+Deno.test('usage: every entry of every root counts once; a missing root counts nothing; links are not followed', async () => {
 	const { root, done } = await tree();
 	try {
 		await Deno.mkdir(`${root}/work/a/b`, { recursive: true });
@@ -186,7 +186,7 @@ Deno.test('R2-2 usage: every entry of every root counts once; a missing root cou
 		}
 		if (posix) {
 			// A link into a folder outside counts as the link itself, never as what it points at.
-			await Deno.symlink(`${root}/outside`, `${root}/work/escape`);
+			await Deno.symlink(await Deno.realPath(`${root}/outside`), `${root}/work/escape`);
 			expected += await allocated(`${root}/work/escape`);
 			// A hard link is the same file: counted once, as du does.
 			await Deno.link(`${root}/home/two.bin`, `${root}/work/a/again.bin`);
@@ -200,7 +200,7 @@ Deno.test('R2-2 usage: every entry of every root counts once; a missing root cou
 });
 
 Deno.test({
-	name: 'R2-2 usage: a directory a command locked is opened and counted, never skipped',
+	name: 'usage: a directory a command locked is opened and counted, never skipped',
 	ignore: !posix,
 	fn: async () => {
 		const { root, done } = await tree();
@@ -228,7 +228,7 @@ Deno.test({
 	},
 });
 
-Deno.test('R2-2 usage: a walk past its deadline, or cancelled, fails instead of answering with what it saw', async () => {
+Deno.test('usage: a walk past its deadline, or cancelled, fails instead of answering with what it saw', async () => {
 	const { root, done } = await tree();
 	try {
 		for (let i = 0; i < 3; i++) await Deno.mkdir(`${root}/work/d${i}`, { recursive: true });

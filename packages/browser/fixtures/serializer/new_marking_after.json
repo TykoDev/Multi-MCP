@@ -1,6 +1,6 @@
 {
 	"name": "new_marking_after",
-	"pins": "R6.2 step 2 — the element absent from the previous step's (sessionId, backendNodeId) set renders as *[idx]",
+	"pins": "new-element marking, step 2 — the element absent from the previous step's (sessionId, backendNodeId) set renders as *[idx]",
 	"tree": {
 		"tag": "HTML",
 		"children": [

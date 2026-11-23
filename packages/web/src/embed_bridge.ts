@@ -1,5 +1,5 @@
 /**
- * The MCP Apps bridge for the two embeds (R9, design §2.20, D-134): JSON-RPC 2.0 over `postMessage` with the host
+ * The MCP Apps bridge for the two embeds: JSON-RPC 2.0 over `postMessage` with the host
  * that frames us, hand-written because the Apps SDK is not a dependency this repository takes.
  *
  * What it speaks, and nothing more:
@@ -10,7 +10,7 @@
  *   `host-context-changed` notifications, and the `ui/resource-teardown` request, which is answered once the embed
  *   has released what it holds; a `ping` is answered too.
  *
- * `ui/update-model-context` and `ui/message` are never sent (design §2.20): an embed that could talk to the model
+ * `ui/update-model-context` and `ui/message` are never sent: an embed that could talk to the model
  * would be a second, unreviewed prompt channel.
  *
  * **Who it listens to.** Only messages whose `source` is the window that framed us: a sibling frame, a pop-up or a
@@ -24,7 +24,7 @@ import type { EmbedIconName } from './embed_icons.ts';
 export type { EmbedIconName } from './embed_icons.ts';
 
 /** The protocol revision this bridge was written against (SEP-1865, Stable). */
-export const APPS_PROTOCOL_VERSION = '2026-01-26';
+const APPS_PROTOCOL_VERSION = '2026-01-26';
 
 /** A tool result as the host relays it. */
 export interface EmbedToolResult {
@@ -237,7 +237,7 @@ export function toolErrorOf(result: EmbedToolResult): { code: string; message: s
 	};
 }
 
-/** What the live embed says when a ticket or its socket is refused (RV-10). */
+/** What the live embed says when a ticket or its socket is refused. */
 export interface RefusalWords {
 	/** One sentence for the person in the chat: no code, no origin, no variable name. */
 	readonly user: string;
@@ -248,13 +248,13 @@ export interface RefusalWords {
 }
 
 /**
- * The words for a refused live view (RV-10). The person reading the embed is in a chat and cannot change what the
+ * The words for a refused live view. The person reading the embed is in a chat and cannot change what the
  * server admits; the operator who can needs the origin and the variable to set. So the sentence is theirs and the
  * detail is folded away — present, so it can be copied to whoever runs the server, but never the message itself.
  */
 export function refusalWords(code: string, text: string): RefusalWords {
 	const detail = `${code}: ${text}`;
-	// An origin the server does not admit stays refused however often it is asked (D-135): no Watch is offered again.
+	// An origin the server does not admit stays refused however often it is asked: no Watch is offered again.
 	if (code === 'invalid-arguments' && /origin/i.test(text)) {
 		return {
 			user: 'Live views are not available in this app. The server’s administrator can allow it.',

@@ -1,7 +1,6 @@
 /**
  * @module
- * `DOMWatchdog` — the bridge from `BrowserStateRequestEvent` to the DOM pipeline
- * (ARCHITECTURE.md §6.7, DATA-MODEL.md §5.3, §6.3 R6.1–R6.4).
+ * `DOMWatchdog` — the bridge from `BrowserStateRequestEvent` to the DOM pipeline.
  *
  * This watchdog is a **bridge, not a pipeline**. Capture, merge, index assignment and rendering all
  * live in `src/dom/` and none of it is reimplemented here. What this file owns is the *budget and
@@ -19,7 +18,7 @@
  * The whole handler runs under one {@linkcode STATE_BUDGET_MS} deadline — probe, build, screenshot
  * and metrics share it, which is what "20 s combined" means once the probe is inside the same
  * request. The deadline is an `AbortSignal`, so a timeout at this level aborts the CDP sends beneath
- * it (ARCHITECTURE.md §8's level-N/level-N+1 rule).
+ * it.
  *
  * ## The two failure behaviours are contracts
  *
@@ -28,24 +27,23 @@
  *   would propagate through `eventResult({raiseIfAny: true})` and cost the agent its whole step for
  *   what is often a transient CDP hiccup.
  * - **Budget exhausted → non-actionable state.** When the deadline fires, the state carries
- *   `stateError` and an **empty** `selectorMap` (R6.4). The same shape is synthesized by
+ *   `stateError` and an **empty** `selectorMap`. The same shape is synthesized by
  *   `BrowserSession.getBrowserStateSummary()` when the *event* times out at the bus level. Both
  *   exist for one reason: an LLM must never be handed indices that no longer resolve, because the
  *   next thing it does with them is click.
  *
  * ## The summary's `url` is read from the page, not from the target record
  *
- * ERRATUM(M1-hardening-4): DATA-MODEL.md §5.3 gives `BrowserStateSummary.url` as "current tab url"
- * without naming a source, and `SessionManager`'s `TargetRecord.url` is the obvious free one. It is
- * also the wrong one: that record is written by `Target.targetInfoChanged`, which real Chrome emits
- * on its own schedule — measured at ~1.5 s behind `location.href` after a form-submit click. Since
- * `domState` in the *same* summary is extracted live, the record turns a summary into a lie: the
- * prompt's `Current tab:` line, `AgentHistory.state.url` and §6.6 replay all resolve the previous
- * page's URL beside the new page's elements. The URL is therefore read from the focused session the
- * way `Agent`'s `#pageSnapshot` reads it — `Runtime.evaluate('location.href')`, with the target
- * record as the fallback for a session that cannot answer. The §6.7 non-http fast path is decided
+ * `SessionManager`'s `TargetRecord.url` is the obvious free source for `BrowserStateSummary.url`, and
+ * the wrong one: that record is written by `Target.targetInfoChanged`, which real Chrome emits on its
+ * own schedule — measured at ~1.5 s behind `location.href` after a form-submit click. Since
+ * `domState` in the *same* summary is extracted live, the record would turn a summary into a lie: the
+ * prompt's `Current tab:` line, `AgentHistory.state.url` and history replay would all resolve the
+ * previous page's URL beside the new page's elements. The URL is therefore read from the focused
+ * session the way `Agent`'s `#pageSnapshot` reads it — `Runtime.evaluate('location.href')`, with the
+ * target record as the fallback for a session that cannot answer. The non-http fast path is decided
  * *first* and short-circuits the read entirely, so `about:blank` and `chrome://` states cost no
- * round trip and behave exactly as before.
+ * round trip.
  *
  * ## Naming trap
  *
@@ -72,11 +70,11 @@ import { type BrowserStateSummary, type NetworkRequest, type PageInfo, type TabI
 import { BaseWatchdog, type WatchdogHost } from './base.ts';
 
 // ---------------------------------------------------------------------------
-// constants (ARCHITECTURE.md §6.7, §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// constants (load-bearing timing budgets)
 // ---------------------------------------------------------------------------
 
 /**
- * The combined budget DOM build + screenshot share (ARCHITECTURE.md §6.7).
+ * The combined budget DOM build + screenshot share.
  *
  * Pinned equal to the DOM pipeline's own {@linkcode DOM_BUILD_BUDGET_MS} by `dom_test.ts`: they are
  * the same 20 s, and two constants that must agree are one constant with an extra failure mode.
@@ -84,36 +82,34 @@ import { BaseWatchdog, type WatchdogHost } from './base.ts';
 export const STATE_BUDGET_MS = 20_000;
 
 /**
- * Re-exported so a caller pins one import for the whole §6.7 budget: the 20 s pipeline ceiling, the
+ * Re-exported so a caller pins one import for the whole state budget: the 20 s pipeline ceiling, the
  * 2 s probe cap and the 0.3 s stability window.
  */
 export { DOM_BUILD_BUDGET_MS, NETWORK_PROBE_MAX_MS, NETWORK_STABILITY_MS };
 
-/** `pendingNetworkRequests` cap (DATA-MODEL.md §5.3: "≤20, filtered"). */
+/** `pendingNetworkRequests` cap: at most 20, filtered. */
 export const PENDING_NETWORK_LIMIT = 20;
 
 /**
  * A request in flight longer than this is *stale*, not pending: it is a hung connection, a long-poll
  * or a server-sent-events stream, none of which mean "the page is still loading".
  *
- * ERRATUM(M1-watchdogs-data-1): §5.3 says `pendingNetworkRequests` excludes "ads/trackers/stale"
- * without defining stale. 10 s is chosen as 5× the 2 s probe cap: anything the probe waited out and
- * that is still running is by construction not something the next screenshot is waiting for.
+ * 10 s is 5× the 2 s probe cap: anything the probe waited out and that is still running is by
+ * construction not something the next screenshot is waiting for.
  */
 export const PENDING_NETWORK_STALE_MS = 10_000;
 
 /** Bound on the in-flight tracker so a long run cannot grow it without limit. */
 export const PENDING_NETWORK_TRACKER_LIMIT = 500;
 
-/** How many bus events `includeRecentEvents` surfaces (DATA-MODEL.md §5.3: "last 10"). */
+/** How many bus events `includeRecentEvents` surfaces. */
 export const RECENT_EVENTS_COUNT = 10;
 
 /**
- * Host fragments whose requests are excluded from `pendingNetworkRequests` (§5.3 "ads/trackers").
+ * Host fragments whose requests are excluded from `pendingNetworkRequests` ("ads/trackers").
  *
- * ERRATUM(M1-watchdogs-data-2): §5.3 requires the filter but names no list. These are the
- * highest-volume third-party analytics/ad hosts; the list is a *display* filter on a diagnostic
- * field, never a security control (SecurityWatchdog owns blocking — SECURITY-AUTH.md §4).
+ * These are the highest-volume third-party analytics/ad hosts; the list is a *display* filter on a
+ * diagnostic field, never a security control (SecurityWatchdog owns blocking).
  */
 export const TRACKER_HOST_FRAGMENTS: readonly string[] = [
 	'doubleclick.net',
@@ -142,11 +138,10 @@ export const TRACKER_HOST_FRAGMENTS: readonly string[] = [
 /**
  * Labels that mark an element as a pagination control.
  *
- * ERRATUM(M1-watchdogs-data-5): `paginationButtonsDetected` is declared in DATA-MODEL.md §5.3 with
- * no detection rule anywhere in the spec set. Implemented as a label match over the interactive
- * elements the serializer already selected — accessible name, `aria-label`, `title`, `rel` and the
- * element's own meaningful text. It is a *hint* for the prompt layer, so a false negative costs
- * nothing and a false positive costs one sentence; the vocabulary is therefore deliberately narrow.
+ * `paginationButtonsDetected` is a label match over the interactive elements the serializer already
+ * selected — accessible name, `aria-label`, `title`, `rel` and the element's own meaningful text. It
+ * is a *hint* for the prompt layer, so a false negative costs nothing and a false positive costs one
+ * sentence; the vocabulary is therefore deliberately narrow.
  */
 export const PAGINATION_LABEL_PATTERNS: readonly RegExp[] = [
 	/^\s*(?:next|previous|prev)\b/i,
@@ -162,11 +157,11 @@ export const PAGINATION_LABEL_PATTERNS: readonly RegExp[] = [
 export const PAGINATION_REL_VALUES: readonly string[] = ['next', 'prev', 'previous'];
 
 /**
- * Event fields safe to surface in `recentEvents`.
+ * Event fields safe to surface in `recentEvents` ("last 10 bus events as JSON").
  *
- * ERRATUM(M1-watchdogs-data-6): §5.3 says `recentEvents` is "last 10 bus events as JSON". Serializing
- * events whole would put `TypeTextEvent.text` — which carries substituted `sensitiveData` (D-SEC2) —
- * straight into the prompt and the history file. Only the envelope plus this allow-list is emitted.
+ * Serializing events whole would put `TypeTextEvent.text` — which carries substituted
+ * `sensitiveData` — straight into the prompt and the history file. Only the envelope plus this
+ * allow-list is emitted.
  */
 export const RECENT_EVENT_FIELDS: readonly string[] = [
 	'url',
@@ -214,7 +209,7 @@ export class DOMWatchdog extends BaseWatchdog {
 	readonly #options: DomWatchdogOptions;
 	readonly #now: () => number;
 	readonly #budgetMs: number;
-	/** In-flight network requests, for the `pendingNetworkRequests` field of §5.3. */
+	/** In-flight network requests, for the `pendingNetworkRequests` field. */
 	readonly #inflight = new Map<string, TrackedRequest>();
 	readonly #cdpUnsubscribes: (() => void)[] = [];
 	/** Auto-handled JS dialogs awaiting their one appearance in a state summary. */
@@ -232,13 +227,13 @@ export class DOMWatchdog extends BaseWatchdog {
 
 	// -- public surface (the DefaultActionWatchdog / Tools seam) ------------------------------------
 
-	/** The effective combined budget. Defaults to {@linkcode STATE_BUDGET_MS} (ARCHITECTURE.md §6.7). */
+	/** The effective combined budget. Defaults to {@linkcode STATE_BUDGET_MS}. */
 	get budgetMs(): number {
 		return this.#budgetMs;
 	}
 
 	/**
-	 * The cached selector map from the most recent successful build (R6.3).
+	 * The cached selector map from the most recent successful build.
 	 *
 	 * Empty after a recovery or non-actionable state — deliberately: those states exist so nothing
 	 * downstream can act on indices whose tree is gone.
@@ -247,12 +242,12 @@ export class DOMWatchdog extends BaseWatchdog {
 		return this.#lastSerialization?.state.selectorMap ?? new Map();
 	}
 
-	/** R6.3's cached reverse map: `sessionId:backendNodeId` → LLM index. */
+	/** The cached reverse map: `sessionId:backendNodeId` → LLM index. */
 	get reverseMap(): ReadonlyMap<string, number> {
 		return this.#lastSerialization?.reverseMap ?? new Map();
 	}
 
-	/** The `[index]<tag …/>` text of §6.4 from the most recent build, or `''`. */
+	/** The `[index]<tag …/>` text from the most recent build, or `''`. */
 	get serializedText(): string {
 		return this.#lastSerialization?.text ?? '';
 	}
@@ -294,7 +289,7 @@ export class DOMWatchdog extends BaseWatchdog {
 		} catch (error) {
 			// The recovery contract: a failure is data, not an exception.
 			const reason = budget.signal.aborted
-				? `browser state exceeded its ${this.#budgetMs} ms budget (ARCHITECTURE.md §6.7)`
+				? `browser state exceeded its ${this.#budgetMs} ms budget`
 				: `browser state could not be built: ${describeError(error)}`;
 			this.logger.warn('browser state build failed; returning a recovery state', { error });
 			return this.#assembleRecovery([reason], { stateError: budget.signal.aborted ? reason : null });
@@ -303,14 +298,14 @@ export class DOMWatchdog extends BaseWatchdog {
 		}
 	}
 
-	/** Arms the network tracker for a newly created tab (DATA-MODEL.md §5.1.3 lists DOM as a consumer). */
+	/** Arms the network tracker for a newly created tab. */
 	onTabCreatedEvent(_event: TabCreatedEvent, _context?: HandlerContext): void {
 		this.#armNetworkTracker();
 	}
 
 	/**
 	 * Records an auto-handled dialog as `"[type] message"` for the next state summary
-	 * (DATA-MODEL.md §5.3 `closedPopupMessages`).
+	 * (`closedPopupMessages`).
 	 */
 	onDialogOpenedEvent(event: DialogOpenedEvent, _context?: HandlerContext): void {
 		this.#popupMessages.push(`[${event.dialogType}] ${event.message}`);
@@ -323,7 +318,7 @@ export class DOMWatchdog extends BaseWatchdog {
 	// -- state assembly ----------------------------------------------------------------------------
 
 	/**
-	 * The §6.7 budget composed with the bus's own — ERRATUM(E-52).
+	 * The state budget composed with the bus's own.
 	 *
 	 * Two deadlines govern a state build: this watchdog's `#budgetMs` and the dispatch's `timeoutSec`.
 	 * They are not the same number and either can be the tighter one, so the CDP traffic must answer to
@@ -348,9 +343,9 @@ export class DOMWatchdog extends BaseWatchdog {
 		const targetId = session.targetId;
 		const target = manager.targets.get(targetId);
 		const recordedUrl = target?.url ?? '';
-		// The §6.7 fast path: a non-http(s) URL has no DOM worth building and no network to wait for —
+		// The fast path: a non-http(s) URL has no DOM worth building and no network to wait for —
 		// and no `location.href` worth a round trip either. Decided on the record, so the short-circuit
-		// stays a short-circuit; only an http(s) page pays for the live read (ERRATUM(M1-hardening-4)).
+		// stays a short-circuit; only an http(s) page pays for the live read.
 		const url = isHttpUrl(recordedUrl) ? await this.#readUrl(session.sessionId, recordedUrl, context) : recordedUrl;
 		const browserErrors: string[] = [];
 
@@ -377,11 +372,11 @@ export class DOMWatchdog extends BaseWatchdog {
 			this.#readTitle(session.sessionId, target?.title ?? '', context),
 		]);
 
-		// R6.4: the deadline can fire *inside* the pipeline, which absorbs the abort and answers with its
+		// The deadline can fire *inside* the pipeline, which absorbs the abort and answers with its
 		// own recovery state. That is still a whole-request timeout, and it still owes the caller a
 		// non-actionable state — checked here rather than trusting the inner result's `timedOut` flag.
 		if (signal.aborted) {
-			const reason = `browser state exceeded its ${this.#budgetMs} ms budget (ARCHITECTURE.md §6.7)`;
+			const reason = `browser state exceeded its ${this.#budgetMs} ms budget`;
 			// The live URL is already in hand: a timed-out state is still a state about a *page*, and the
 			// one field it can still be honest about must not fall back to the lagging record.
 			return this.#assembleRecovery([reason, ...(extraction?.browserErrors ?? [])], { stateError: reason, url });
@@ -407,7 +402,7 @@ export class DOMWatchdog extends BaseWatchdog {
 			paginationButtonsDetected: detectPaginationButtons(serialized.state.selectorMap),
 			stateError: serialized.stateError,
 			stateToken: serialized.stateToken,
-			// ERRATUM(E-40): the frame list and the session-cap flag, straight from the extraction.
+			// The frame list and the session-cap flag, straight from the extraction.
 			frames: extraction === null ? [] : [...extraction.frameTree],
 			captureTruncated: extraction?.captureTruncated ?? false,
 		};
@@ -442,7 +437,7 @@ export class DOMWatchdog extends BaseWatchdog {
 			resolveChildSession: async (frameId) => {
 				if (!this.profile.crossOriginIframes) return null;
 				try {
-					// §7.3: SessionManager is the only sanctioned way to obtain a session id. An OOPIF's
+					// SessionManager is the only sanctioned way to obtain a session id. An OOPIF's
 					// target id is its frame id, and it must never take the agent's focus.
 					const child = await manager.getOrCreateCdpSession(frameId, false);
 					return { targetId: child.targetId, sessionId: child.sessionId, frameId };
@@ -473,7 +468,7 @@ export class DOMWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The page's own `location.href` — see the module note on ERRATUM(M1-hardening-4).
+	 * The page's own `location.href` — see the module note on the summary's `url`.
 	 *
 	 * Deliberately the same shape as `Agent.#pageSnapshot`: evaluate on the focused session, fall back
 	 * to the cached record when there is no live answer. A navigation in flight can make the evaluate
@@ -495,7 +490,7 @@ export class DOMWatchdog extends BaseWatchdog {
 	/**
 	 * The page's own `document.title`.
 	 *
-	 * ERRATUM(M1-watchdogs-data-7): `Target.targetInfo.title` — the obvious free source — is what
+	 * `Target.targetInfo.title` — the obvious free source — is what
 	 * SessionManager tracks, and Chrome seeds it with the *host* until the document title propagates
 	 * through `targetInfoChanged`. Verified against real headless Chrome: a page titled `listing`
 	 * reports `127.0.0.1:52139` at state-request time. `BrowserStateSummary.title` is prompt content,
@@ -514,7 +509,7 @@ export class DOMWatchdog extends BaseWatchdog {
 		}
 	}
 
-	/** The single `Page.getLayoutMetrics` of §6.7 — PageInfo comes from exactly one call. */
+	/** The single `Page.getLayoutMetrics` — PageInfo comes from exactly one call. */
 	async #readLayoutMetrics(
 		sessionId: SessionId,
 		browserErrors: string[],
@@ -554,10 +549,10 @@ export class DOMWatchdog extends BaseWatchdog {
 			paintOrderFiltering: this.profile.paintOrderFiltering,
 			pixelsAbove: pageInfo.pixelsAbove,
 			pixelsBelow: pageInfo.pixelsBelow,
-			// ERRATUM(E-41): the offscreen class is admitted only when the request asked for it.
+			// The offscreen class is admitted only when the request asked for it.
 			includeOffscreen,
 		});
-		// R6.4: a build that ran out of budget yields a state the LLM must not act on. `recovered`
+		// A build that ran out of budget yields a state the LLM must not act on. `recovered`
 		// without `timedOut` is an ordinary failure — recoverable, reported through `browserErrors`.
 		if (extraction.timedOut && serialized.stateError === null) {
 			return {
@@ -571,7 +566,7 @@ export class DOMWatchdog extends BaseWatchdog {
 		return serialized;
 	}
 
-	/** The minimal recovery state of §6.7. Carries `browserErrors`; never throws on the way out. */
+	/** The minimal recovery state. Carries `browserErrors`; never throws on the way out. */
 	#assembleRecovery(
 		browserErrors: readonly string[],
 		options: { stateError?: string | null; url?: string } = {},
@@ -690,7 +685,7 @@ interface TrackedRequest {
 // module helpers (pure — unit-testable without a browser)
 // ---------------------------------------------------------------------------
 
-/** The §6.7 fast-path predicate: only http(s) URLs get a DOM build. */
+/** The fast-path predicate: only http(s) URLs get a DOM build. */
 export function isHttpUrl(url: string): boolean {
 	if (url === '') return false;
 	try {
@@ -702,7 +697,7 @@ export function isHttpUrl(url: string): boolean {
 }
 
 /**
- * `isPdfViewer` (DATA-MODEL.md §5.3: "url heuristic").
+ * `isPdfViewer`, by URL heuristic.
  *
  * A `.pdf` path on any scheme Chrome can render one from, plus Chrome's built-in PDF viewer
  * extension origin, which is what the URL looks like once the viewer has taken over.
@@ -729,7 +724,7 @@ export function isTrackerUrl(url: string): boolean {
 	return TRACKER_HOST_FRAGMENTS.some((fragment) => host.includes(fragment));
 }
 
-/** `Page.getLayoutMetrics` → the `PageInfo` of DATA-MODEL.md §5.3, from exactly one call. */
+/** `Page.getLayoutMetrics` → the `PageInfo`, from exactly one call. */
 export function toPageInfo(metrics: {
 	layoutViewport: { pageX: number; pageY: number; clientWidth: number; clientHeight: number };
 	contentSize: { width: number; height: number };
@@ -788,7 +783,7 @@ export function paginationLabelsOf(node: EnhancedDomTreeNode): string[] {
 	return labels;
 }
 
-/** `paginationButtonsDetected` (DATA-MODEL.md §5.3) — see ERRATUM(M1-watchdogs-data-5). */
+/** `paginationButtonsDetected` — see {@linkcode PAGINATION_LABEL_PATTERNS}. */
 export function detectPaginationButtons(selectorMap: ReadonlyMap<number, EnhancedDomTreeNode>): boolean {
 	for (const node of selectorMap.values()) {
 		const rel = node.attributes['rel']?.toLowerCase().trim();
@@ -803,7 +798,7 @@ export function detectPaginationButtons(selectorMap: ReadonlyMap<number, Enhance
 /**
  * One `recentEvents` entry: the envelope plus {@linkcode RECENT_EVENT_FIELDS}.
  *
- * Never the whole event — see ERRATUM(M1-watchdogs-data-6).
+ * Never the whole event — see {@linkcode RECENT_EVENT_FIELDS}.
  */
 export function summarizeEvent(event: BaseEvent<unknown>): Record<string, unknown> {
 	const summary: Record<string, unknown> = {

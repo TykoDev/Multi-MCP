@@ -2,11 +2,10 @@
  * @module
  * File containment — download filename sanitisation and directory containment predicates.
  *
- * Contract owner: SPECS/SECURITY-AUTH.md §8 (the three containment contracts), specifically §8.3
- * "download containment": `suggestedFilename` is sanitised (strip NUL, backslash→slash, basename
+ * Download containment: `suggestedFilename` is sanitised (strip NUL, backslash→slash, basename
  * only, reject empty/`.`/`..`), written files get ` (1)`-style unique names, and the final real path
  * MUST resolve inside the configured downloads dir. The same predicates gate profile/user-data-dir
- * paths (storage-state files, temp profile dirs) — SECURITY-AUTH.md §3.3/§8.
+ * paths (storage-state files, temp profile dirs).
  *
  * Design notes:
  *
@@ -136,7 +135,7 @@ function truncateFilename(name: string, max: number): string {
 
 /**
  * Reduces an attacker-influenced `suggestedFilename` to a safe basename, or `null` when nothing
- * usable survives (SECURITY-AUTH.md §8.3 "reject empty/`.`/`..`").
+ * usable survives (an empty name, `.` or `..` is refused).
  *
  * The pipeline, in order — each step exists because of a named escape:
  *
@@ -168,7 +167,7 @@ export function sanitizeFilename(suggested: string): string | null {
 }
 
 /**
- * ` (1)`-style disambiguation (SECURITY-AUTH.md §8.3). `taken` is injected so this stays pure;
+ * ` (1)`-style disambiguation. `taken` is injected so this stays pure;
  * returns `null` once `maxAttempts` is exhausted rather than overwriting an existing file.
  */
 export function uniqueFilename(
@@ -192,7 +191,7 @@ export function uniqueFilename(
  * relative to wherever this process happens to be running" is not a security property.
  *
  * Callers holding a real filesystem path SHOULD pass `Deno.realPath` output for both arguments, so
- * a symlink out of the directory is caught (§8.2's GHSA-j9hj-92j8-jv9h contract).
+ * a symlink out of the directory is caught (the GHSA-j9hj-92j8-jv9h class of escape).
  */
 export function isContainedIn(
 	baseDir: string,

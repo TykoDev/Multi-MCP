@@ -1,5 +1,5 @@
 /**
- * §6.1 element hashes and the §6.6 replay cascade.
+ * Element hashes and the replay cascade.
  *
  * The hashes are only useful in relation to each other — what matters is which page changes each one
  * survives — so most cases here assert a *pair* of nodes, not a literal digest.
@@ -126,7 +126,7 @@ Deno.test('dom-hashes: the dynamic-class heuristic', () => {
 	assertEquals(filterDynamicClasses('  btn   css-1x2y3z  btn-primary '), 'btn btn-primary');
 });
 
-Deno.test('dom-hashes: buildInteractedElement captures the §6.6 record', async () => {
+Deno.test('dom-hashes: buildInteractedElement captures the replay record', async () => {
 	const node = pick(button({ 'id': 'save', 'name': 'submit', 'aria-label': 'Save it', 'class': 'x' }, 'Save it'));
 	const record = await buildInteractedElement(node, '/html[1]/body[1]/div[1]/button[1]');
 	assertEquals(record.attributes, { 'name': 'submit', 'id': 'save', 'aria-label': 'Save it' });

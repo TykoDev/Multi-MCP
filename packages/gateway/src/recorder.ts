@@ -1,31 +1,4 @@
-/**
- * Session recording (SPECS/ROADMAP.md R7).
- *
- * The screencast already produces a JPEG per repaint; recording is what happens
- * when those frames go to an encoder instead of (or as well as) a viewer. The
- * encoder is `ffmpeg`, run as a child process reading a concatenated JPEG
- * stream on stdin — the roadmap's "ffmpeg sidecar", chosen over writing a
- * container by hand because the output has to be a file people can actually
- * open.
- *
- * ## Why frames are repeated
- *
- * Chrome emits a screencast frame when the page *paints*, so a page nobody is
- * touching emits nothing at all. Piped straight into a constant-rate encoder
- * that makes idle time vanish: a ten-minute session where someone read a page
- * for nine of them plays back in seconds, and the recording no longer shows
- * what happened when. So the last frame is re-sent on a timer, which costs
- * almost nothing (VP9 encodes a repeated frame to a handful of bytes) and buys
- * a recording whose timeline matches the session's.
- *
- * ## Why not variable-rate timestamps
- *
- * `-use_wallclock_as_timestamps` with a variable frame-rate output would be
- * exact rather than approximate, but the flag that makes it work has been
- * spelled three different ways across ffmpeg 4, 5 and 7 (`-vsync vfr`,
- * `-fps_mode vfr`). A constant rate plus a repeater behaves identically on all
- * of them, and this code cannot choose which ffmpeg a deployment has.
- */
+/** Session recording. Why frames are repeated. Why not variable-rate timestamps. */
 import type { RecordingController, RecordingInfo, SessionAccess, SessionRegistry } from '@tykotech/mcp';
 import { childEnvOverrides, ToolError } from '@tykotech/mcp';
 import type { Logger } from './logger.ts';
@@ -33,22 +6,19 @@ import type { Logger } from './logger.ts';
 /** Frames per second written to the encoder. */
 const RECORD_FPS = 5;
 /** Hard cap on one recording, so a forgotten `start` cannot fill a disk. */
-export const MAX_RECORDING_MS = 30 * 60 * 1000;
+const MAX_RECORDING_MS = 30 * 60 * 1000;
 /** How long to wait for ffmpeg to finish writing after stdin closes. */
 const FLUSH_TIMEOUT_MS = 20_000;
-/**
- * How long `start` waits for the first frame.
- *
- * A recording that begins on a settled page would otherwise contain nothing
- * until something moved — and a short recording of a still page would be an
- * empty file. Chrome sends a frame as soon as the screencast starts, and the
- * cast replays its last one to a late subscriber, so this normally resolves in
- * milliseconds; the bound only matters when the browser is wedged.
- */
+/** How long `start` waits for the first frame. */
 const FIRST_FRAME_TIMEOUT_MS = 3_000;
+/**
+ * How often a running recording is held to the disk budget. A walk per frame would cost more than the frame; at 1
+ * Mbit/s a recording grows well under a megabyte between two checks, which is the most it can run past the budget.
+ */
+const BUDGET_CHECK_MS = 5_000;
 
 /** A name that is safe as one path segment. */
-export function safeRecordingName(name: string): string {
+function safeRecordingName(name: string): string {
 	const cleaned = name.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
 	if (cleaned === '') {
 		throw new ToolError('invalid-arguments', `recording name ${JSON.stringify(name)} has no usable characters`);
@@ -58,7 +28,7 @@ export function safeRecordingName(name: string): string {
 
 /**
  * The child process the recorder drives — the subset of `Deno.ChildProcess` it uses, so a test can supply an encoder
- * that is not a real `ffmpeg` (F26: the recordings route's ownership is proven at the unit tier without `--allow-run`).
+ * that is not a real `ffmpeg` (the recordings route's ownership is proven at the unit tier without `--allow-run`).
  */
 export interface EncoderProcess {
 	readonly stdin: WritableStream<Uint8Array>;
@@ -98,19 +68,16 @@ export interface RecorderDeps {
 	readonly logger: Logger;
 	/** Starts the encoder; a real `ffmpeg` child unless a test supplies one. */
 	readonly spawn?: EncoderSpawn;
+	/**
+	 * The disk budget recordings share with the file share. Spent, `start` is refused; reached while recording, the
+	 * recording is stopped and finalised, as the 30-minute cap does. Absent, only that cap bounds a recording.
+	 */
+	readonly budget?: { exhausted(): Promise<boolean> };
+	/** Test seam: how often a running recording is checked against `budget`; {@linkcode BUDGET_CHECK_MS} by default. */
+	readonly budgetCheckMs?: number;
 }
 
-/**
- * One recording in flight.
- *
- * `detach` and `timer` are mutable because they can only exist *after* the
- * record does — the frame callback and the repeater both close over it. An
- * earlier version built the record, then spread it into a second object once
- * those were available; the closures kept writing to the first, so `frames`
- * stayed at zero while the encoder happily produced a video. The container
- * verification caught it (`0 frames, 7513 bytes`), which is exactly the shape
- * of bug a spread of a mutable object produces.
- */
+/** One recording in flight. */
 interface ActiveRecording {
 	readonly name: string;
 	readonly path: string;
@@ -123,16 +90,23 @@ interface ActiveRecording {
 	last: Uint8Array | null;
 	/** Set once the writer has failed, so the repeater stops trying. */
 	broken: boolean;
+	/** When the disk budget was last asked, and whether that answer is still outstanding. */
+	budgetCheckedAt: number;
+	budgetChecking: boolean;
 }
 
 export class Recorder implements RecordingController {
 	readonly #deps: RecorderDeps;
 	readonly #active = new Map<string, ActiveRecording>();
 	/**
-	 * R8 (D-128): who started each recording this process wrote, by safe name. In memory only, so after a restart no
-	 * recording has a known owner, and in `owner` mode those are served to `admin` alone.
+	 * Who started each recording this process wrote, by safe name. In memory only, so after a restart no recording has
+	 * a known owner, and in `owner` mode those are served to `admin` alone.
 	 */
 	readonly #owners = new Map<string, string>();
+	/** Sessions whose `start` is in flight, reserved before its first `await` so a second start is refused. */
+	readonly #starting = new Set<string>();
+	/** In `owner` mode, the recording names a start in flight has claimed, so no other start can take one. */
+	readonly #claimed = new Set<string>();
 
 	constructor(deps: RecorderDeps) {
 		this.#deps = deps;
@@ -142,16 +116,14 @@ export class Recorder implements RecordingController {
 		return this.#deps.dir !== null;
 	}
 
-	/** D-155: where recordings are written, for the overview's count; `null` when recording is off. */
+	/** Where recordings are written, for the disk budget; `null` when recording is off. */
 	get dir(): string | null {
 		return this.#deps.dir;
 	}
 
 	/**
-	 * Whether `access` may download the recording `name` (R8, D-128). Always in `shared` mode — a recording is the
-	 * browser after the fact, and `view:watch` already watches every session there. In `owner` mode only its starter
-	 * or an `admin`; a recording whose starter is unknown (written before this process started) is `admin`'s alone.
-	 * A name that is not a valid recording name is nobody's.
+	 * Whether `access` may download the recording `name`. Always in `shared` mode — a recording is the browser after
+	 * the fact, and `view:watch` already watches every session there.
 	 */
 	mayRead(name: string, access: SessionAccess): boolean {
 		if (this.#deps.registry.ownership !== 'owner' || access.admin) return true;
@@ -180,36 +152,61 @@ export class Recorder implements RecordingController {
 		return [...this.#active.keys()].map((id) => this.status(id)).filter((info): info is RecordingInfo => info !== null);
 	}
 
-	/**
-	 * `owner` binds the recording to its starter (R8, D-128). In `owner` mode a name another owner's recording holds —
-	 * or one already on disk from before this process, whose owner is unknown — is refused: writing it would replace
-	 * that recording's file and take it over. The refusal names no owner.
-	 */
+	/** `owner` binds the recording to its starter. */
 	async start(sessionId: string, name: string, owner?: string): Promise<RecordingInfo> {
 		const dir = this.#requireDir();
-		if (this.#active.has(sessionId)) {
+		// Every check below and its reservation run before the first `await`.
+		if (this.#active.has(sessionId) || this.#starting.has(sessionId)) {
 			throw new ToolError('invalid-arguments', `session ${sessionId} is already recording`);
 		}
-		// The session must exist: recording is about a browser, and creating one
-		// as a side effect of "start recording" would be a surprise.
+		// The session must exist: recording is about a browser, and creating one as a side effect of "start recording"
+		// would be a surprise.
 		if (this.#deps.registry.peek(sessionId) === undefined) {
 			throw new ToolError('unknown-session', `no session with id ${sessionId}`);
 		}
 
 		const safe = safeRecordingName(name);
 		const path = `${dir}/${safe}.webm`;
-		if (this.#deps.registry.ownership === 'owner') {
-			const holder = this.#owners.get(safe);
-			const onDisk = holder === undefined && await Deno.stat(path).then(() => true, () => false);
-			if ((holder !== undefined && holder !== owner) || onDisk) {
+		const owned = this.#deps.registry.ownership === 'owner';
+		const holder = this.#owners.get(safe);
+		if (owned && ((holder !== undefined && holder !== owner) || this.#claimed.has(safe))) {
+			throw new ToolError('invalid-arguments', `recording name ${safe} is in use; choose another name`);
+		}
+		this.#starting.add(sessionId);
+		if (owned) this.#claimed.add(safe);
+		try {
+			if (owned && holder === undefined && await Deno.stat(path).then(() => true, () => false)) {
 				throw new ToolError('invalid-arguments', `recording name ${safe} is in use; choose another name`);
 			}
+			// Asked after the reservation, so the checks above still run before the first `await`. `file-unavailable`
+			// is the code a share write past the same budget already answers with.
+			if (await this.#deps.budget?.exhausted()) {
+				throw new ToolError(
+					'file-unavailable',
+					'the file share and recordings are at their disk budget (TTK_DISK_BUDGET_MB); free space to record',
+				);
+			}
+			return await this.#begin(sessionId, safe, path, dir, owner);
+		} finally {
+			// Released on every path: once `#begin` succeeds, `#active` and `#owners` hold the session and the name.
+			this.#starting.delete(sessionId);
+			if (owned) this.#claimed.delete(safe);
 		}
+	}
+
+	/** The body of {@linkcode start}, run while its session (and, in `owner` mode, its name) is reserved. */
+	async #begin(
+		sessionId: string,
+		safe: string,
+		path: string,
+		dir: string,
+		owner: string | undefined,
+	): Promise<RecordingInfo> {
 		await Deno.mkdir(dir, { recursive: true }).catch(() => {});
 
 		let child: EncoderProcess;
 		try {
-			// D-127: ffmpeg gets the same blank overrides Chromium does — no exporter settings, no inline secret.
+			// ffmpeg gets the same blank overrides Chromium does — no exporter settings, no inline secret.
 			child = (this.#deps.spawn ?? spawnEncoder)(this.#deps.ffmpeg, {
 				env: childEnvOverrides(),
 				args: [
@@ -224,8 +221,8 @@ export class Recorder implements RecordingController {
 					'pipe:0',
 					'-c:v',
 					'libvpx-vp9',
-					// Realtime settings: this runs beside a live browser, and an
-					// encoder that pins a core would show up as a slow page.
+					// Realtime settings: this runs beside a live browser, and an encoder that pins a core would show up
+					// as a slow page.
 					'-deadline',
 					'realtime',
 					'-cpu-used',
@@ -257,10 +254,12 @@ export class Recorder implements RecordingController {
 			frames: 0,
 			last: null,
 			broken: false,
+			budgetCheckedAt: Date.now(),
+			budgetChecking: false,
 		};
 
-		// stderr is drained and kept only on failure: ffmpeg is chatty on the way
-		// down, and an undrained pipe eventually blocks the child.
+		// stderr is drained and kept only on failure: ffmpeg is chatty on the way down, and an undrained pipe
+		// eventually blocks the child.
 		const stderr: string[] = [];
 		void (async () => {
 			for await (const chunk of child.stderr.pipeThrough(new TextDecoderStream())) stderr.push(chunk);
@@ -277,18 +276,24 @@ export class Recorder implements RecordingController {
 		let sawFirstFrame: (() => void) | null = null;
 		const firstFrame = new Promise<void>((resolve) => (sawFirstFrame = resolve));
 
-		record.detach = await this.#deps.subscribe(sessionId, (base64) => {
-			const bytes = decodeJpeg(base64);
-			record.last = bytes;
-			write(bytes);
-			sawFirstFrame?.();
-			sawFirstFrame = null;
-		});
+		try {
+			record.detach = await this.#deps.subscribe(sessionId, (base64) => {
+				const bytes = decodeJpeg(base64);
+				record.last = bytes;
+				write(bytes);
+				sawFirstFrame?.();
+				sawFirstFrame = null;
+			});
+		} catch (cause) {
+			// The encoder is already running and nothing tracks it yet; without this it would outlive the failure.
+			await writer.abort().catch(() => {});
+			try {
+				child.kill('SIGKILL');
+			} catch { /* already gone */ }
+			throw cause;
+		}
 
-		// `start` means "recording has begun", so it waits for proof of that. The
-		// timer is always cleared: `unref` keeps it from holding the process open
-		// but leaves it pending, which is a leak a test sanitizer is right to
-		// flag and a slow drip in a long-lived server.
+		// `start` means "recording has begun", so it waits for proof of that.
 		let waitTimer: ReturnType<typeof setTimeout> | undefined;
 		try {
 			await Promise.race([
@@ -314,6 +319,7 @@ export class Recorder implements RecordingController {
 				this.#deps.logger.warn(`recording ${safe} hit its ${MAX_RECORDING_MS}ms cap; stopping`);
 				void this.stop(sessionId).catch(() => {});
 			}
+			this.#checkBudget(sessionId, record);
 		}, Math.round(1000 / RECORD_FPS));
 		Deno.unrefTimer(timer);
 		record.timer = timer;
@@ -322,8 +328,8 @@ export class Recorder implements RecordingController {
 		if (owner !== undefined) this.#owners.set(safe, owner);
 		this.#deps.logger.info(`recording ${safe} started for session ${sessionId}`);
 
-		// Surface an immediate ffmpeg failure (a missing codec, an unwritable
-		// path) rather than reporting success and producing an empty file.
+		// Surface an immediate ffmpeg failure (a missing codec, an unwritable path) rather than reporting success and
+		// producing an empty file.
 		let probeTimer: ReturnType<typeof setTimeout> | undefined;
 		let failedEarly: Deno.CommandStatus | null;
 		try {
@@ -365,12 +371,11 @@ export class Recorder implements RecordingController {
 		if (active.timer !== null) clearInterval(active.timer);
 		active.detach();
 
-		// Closing stdin is what tells ffmpeg to finalise the container. A file
-		// whose moov/cues were never written is not a video.
+		// Closing stdin is what tells ffmpeg to finalise the container. A file whose moov/cues were never written is
+		// not a video.
 		await active.writer.close().catch(() => {});
-		// The deadline timer is cleared whichever way the race goes; a 20-second
-		// timer left pending per recording is a slow leak in a long-lived server
-		// and an outright test failure under the op sanitizer.
+		// The deadline timer is cleared whichever way the race goes; a 20-second timer left pending per recording is a
+		// slow leak in a long-lived server and an outright test failure under the op sanitizer.
 		let flushTimer: ReturnType<typeof setTimeout> | undefined;
 		let finished: Deno.CommandStatus | null;
 		try {
@@ -395,8 +400,8 @@ export class Recorder implements RecordingController {
 		try {
 			bytes = (await Deno.stat(active.path)).size;
 		} catch {
-			// Reported as zero rather than throwing: the recording happened, and
-			// the caller needs to know it produced nothing.
+			// Reported as zero rather than throwing: the recording happened, and the caller needs to know it produced
+			// nothing.
 		}
 		const info: RecordingInfo = {
 			session_id: sessionId,
@@ -420,6 +425,28 @@ export class Recorder implements RecordingController {
 	pathFor(name: string): string | null {
 		if (this.#deps.dir === null) return null;
 		return `${this.#deps.dir}/${safeRecordingName(name)}.webm`;
+	}
+
+	/**
+	 * Called from the repeater, at most once per {@linkcode BUDGET_CHECK_MS} and never two at once: when the disk
+	 * budget is spent, the recording is stopped the way the 30-minute cap stops it, so the file is finalised and
+	 * playable.
+	 */
+	#checkBudget(sessionId: string, record: ActiveRecording): void {
+		const budget = this.#deps.budget;
+		if (budget === undefined || record.budgetChecking) return;
+		const now = Date.now();
+		if (now - record.budgetCheckedAt < (this.#deps.budgetCheckMs ?? BUDGET_CHECK_MS)) return;
+		record.budgetCheckedAt = now;
+		record.budgetChecking = true;
+		void budget.exhausted().then((spent) => {
+			// Only the recording that asked: it may have been stopped, and the session recording again, meanwhile.
+			if (!spent || this.#active.get(sessionId) !== record) return;
+			this.#deps.logger.warn(`recording ${record.name} reached the disk budget (TTK_DISK_BUDGET_MB); stopping`);
+			return this.stop(sessionId).then(() => {});
+		}).catch(() => {}).finally(() => {
+			record.budgetChecking = false;
+		});
 	}
 
 	#requireDir(): string {

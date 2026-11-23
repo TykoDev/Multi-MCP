@@ -1,9 +1,9 @@
 /**
- * R9 (W7, D-134 – D-136): MCP Apps in the gateway — the startup refusals of design §2.1 (AC36), the embed documents
- * and their connect-src substitution, the embed-ticket mint (origin list ∩ per-token overlay, mode ceiling, 30 s,
- * origin-bound, single use; F10, F21), and AC37 end to end through the real middleware: a 2025-era client on the
- * default stateless mount — no capabilities declared — gets a ticket that redeems only from its origin, while an
- * upgrade from an origin `TTK_ALLOWED_ORIGINS` does not admit is refused before the ticket is looked at.
+ * MCP Apps in the gateway — the startup refusals, the embed documents and their connect-src substitution, the
+ * embed-ticket mint (origin list ∩ per-token overlay, mode ceiling, 30 s, origin-bound, single use, holder label), and
+ * the mint end to end through the real middleware: a 2025-era client on the default stateless mount — no capabilities
+ * declared — gets a ticket that redeems only from its origin, while an upgrade from an origin `TTK_ALLOWED_ORIGINS`
+ * does not admit is refused before the ticket is looked at.
  */
 import { assert, assertEquals, assertRejects, assertStringIncludes, assertThrows } from '@std/assert';
 import { join } from '@std/path';
@@ -49,35 +49,23 @@ async function embedRoot(
 	return root;
 }
 
-// --- AC36: every refusal of design §2.1 fires at start ------------------------------------------------------------
+// --- every startup refusal fires at start ----------------------------------------------------------------------------
 
-Deno.test('AC36: TTK_MCP_APPS* refusals fire at start, and the names are read (ENV_NAMES)', () => {
+Deno.test('TTK_MCP_APPS* refusals fire at start, and the names are read', () => {
 	for (const name of ['TTK_MCP_APPS', 'TTK_MCP_APPS_ORIGINS', 'TTK_MCP_APPS_DOMAIN']) {
 		assert((ENV_NAMES as readonly string[]).includes(name), `${name} is read only if it is in ENV_NAMES`);
 	}
-	// `off` is off (D-150: unset is `control`; its own test below).
+	// `off` is off (unset is `control`; its own test below).
 	assertEquals(loadConfig({ TTK_MCP_APPS: 'OFF' }).mcpApps, null);
 	// Not an enum member.
 	assertThrows(() => loadConfig({ TTK_MCP_APPS: 'on' }), ConfigError, 'TTK_MCP_APPS: expected off|watch|control');
-	// D-150: on with no origins is no longer refused — the mint admits by the effective allowed origins instead.
+	// On with no origins is accepted — the mint admits by the effective allowed origins instead.
 	assertEquals(loadConfig({ ...BASE_ENV, TTK_MCP_APPS: 'watch' }).mcpApps, {
 		mode: 'watch',
 		origins: [],
 		domain: null,
 		defaulted: false,
 	});
-	// On in a cluster, named: still refused.
-	assertThrows(
-		() =>
-			loadConfig({
-				...BASE_ENV,
-				TTK_MCP_APPS: 'watch',
-				TTK_MCP_APPS_ORIGINS: HOST_ORIGIN,
-				TTK_CLUSTER_KV: 'tests/.scratch/never.kv',
-			}),
-		ConfigError,
-		'cannot run in a cluster',
-	);
 	// A listed hostname TTK_ALLOWED_ORIGINS does not admit.
 	assertThrows(
 		() => loadConfig({ ...BASE_ENV, TTK_MCP_APPS: 'watch', TTK_MCP_APPS_ORIGINS: 'https://other.host.example' }),
@@ -136,36 +124,25 @@ Deno.test('AC36: TTK_MCP_APPS* refusals fire at start, and the names are read (E
 	});
 });
 
-Deno.test('D-150: TTK_MCP_APPS unset is control on a single node, and off with a note in a cluster', () => {
+Deno.test('TTK_MCP_APPS unset is control', () => {
 	const single = loadConfig({});
 	assertEquals(single.mcpApps, { mode: 'control', origins: [], domain: null, defaulted: true });
 	assertEquals(single.featureNotes.filter((note) => note.includes('TTK_MCP_APPS')), []);
 	// An empty value is unset.
 	assertEquals(loadConfig({ TTK_MCP_APPS: '  ' }).mcpApps?.defaulted, true);
-	// A listed origin narrows the default exactly as it narrows a named mode, and is checked against the admission
-	// list the same way.
+	// A listed origin narrows the default exactly as it narrows a named mode, and is checked against the admission list
+	// the same way.
 	assertEquals(loadConfig({ ...BASE_ENV, TTK_MCP_APPS_ORIGINS: HOST_ORIGIN }).mcpApps?.origins, [HOST_ORIGIN]);
 	assertThrows(
 		() => loadConfig({ TTK_PUBLIC_URL: 'https://gw.example.test', TTK_MCP_APPS_ORIGINS: HOST_ORIGIN }),
 		ConfigError,
 		'not admitted by TTK_ALLOWED_ORIGINS',
 	);
-	// Clustered: off, not refused, and one note says why.
-	const clustered = loadConfig({
-		...BASE_ENV,
-		TTK_MCP_APPS_ORIGINS: HOST_ORIGIN,
-		TTK_CLUSTER_KV: 'tests/.scratch/x.kv',
-	});
-	assertEquals(clustered.mcpApps, null);
-	const notes = clustered.featureNotes.filter((note) => note.includes('TTK_MCP_APPS'));
-	assertEquals(notes.length, 1);
-	assertStringIncludes(notes[0] ?? '', 'TTK_MCP_APPS is unset and stays off');
-	assertStringIncludes(notes[0] ?? '', 'cannot run in a cluster');
 });
 
 // --- the embed documents -------------------------------------------------------------------------------------------
 
-Deno.test('R9: the embeds load from the web root with the socket origin of TTK_PUBLIC_URL in connect-src', async () => {
+Deno.test('the embeds load from the web root with the socket origin of TTK_PUBLIC_URL in connect-src', async () => {
 	const root = await embedRoot();
 	try {
 		assertEquals(socketOrigin(new URL('https://gw.example.test/base/')), 'wss://gw.example.test');
@@ -181,7 +158,7 @@ Deno.test('R9: the embeds load from the web root with the socket origin of TTK_P
 	}
 });
 
-Deno.test('AC36: an embed missing from the build, or built without the placeholder, refuses startup', async () => {
+Deno.test('an embed missing from the build, or built without the placeholder, refuses startup', async () => {
 	const apiKey = await generateApiKey('key-1', ['mcp:invoke', 'view:watch']);
 	const partial = await embedRoot([EMBED_LIVE_FILE]);
 	const stale = await embedRoot();
@@ -214,8 +191,8 @@ Deno.test('AC36: an embed missing from the build, or built without the placehold
 				ConfigError,
 				'is missing from packages/web/dist',
 			);
-			// D-150: the default does not refuse a build without the embeds — it stays off, says so once, and the
-			// tools, the resources and the diagnostics all read off.
+			// The default does not refuse a build without the embeds — it stays off, says so once, and the tools, the
+			// resources and the diagnostics all read off.
 			const defaulted = loadConfig({ ...BASE_ENV, TTK_API_KEYS: JSON.stringify([apiKey.record]) });
 			assertEquals(defaulted.mcpApps?.defaulted, true);
 			const warnings: string[] = [];
@@ -258,12 +235,12 @@ Deno.test('AC36: an embed missing from the build, or built without the placehold
 // --- the embed-ticket mint -------------------------------------------------------------------------------------------
 
 function mintFixture(options: {
-	/** `null` leaves `TTK_MCP_APPS` unset — D-150's default, `control`. */
+	/** `null` leaves `TTK_MCP_APPS` unset — the default, `control`. */
 	mode?: 'watch' | 'control' | null;
 	overlay?: readonly string[];
 	publicUrl?: string;
 	records?: readonly ApiKeyRecord[];
-	/** `TTK_MCP_APPS_ORIGINS`; `''` leaves the list empty (D-150). */
+	/** `TTK_MCP_APPS_ORIGINS`; `''` leaves the list empty. */
 	appsOrigins?: string;
 } = {}) {
 	const clock = { now: 1_000_000 };
@@ -301,7 +278,7 @@ function mintFixture(options: {
 	return { apps, tickets, clock, warnings, infos, registry, mint };
 }
 
-Deno.test('R9 (AC37): an embed ticket is origin-bound, 30 s, single use, and named for TTK_PUBLIC_URL', async () => {
+Deno.test('an embed ticket is origin-bound, 30 s, single use, and named for TTK_PUBLIC_URL', async () => {
 	const f = mintFixture();
 	try {
 		assertEquals(f.apps.connectDomains, ['wss://gw.example.test']);
@@ -336,7 +313,7 @@ Deno.test('R9 (AC37): an embed ticket is origin-bound, 30 s, single use, and nam
 	}
 });
 
-Deno.test('R9 (AC37, F10): an origin not listed, or one the per-token overlay excludes, is refused', async () => {
+Deno.test('an origin not listed, or one the per-token overlay excludes, is refused', async () => {
 	const f = mintFixture();
 	const narrowed = mintFixture({ overlay: ['http://localhost:5173'] });
 	try {
@@ -346,7 +323,7 @@ Deno.test('R9 (AC37, F10): an origin not listed, or one the per-token overlay ex
 			assertStringIncludes(refused.message, 'TTK_MCP_APPS_ORIGINS');
 		}
 		assertEquals(f.tickets.size, 0, 'a refused origin mints nothing');
-		// The overlay narrows to localhost:5173 for this credential: the host origin is listed but no longer allowed.
+		// The overlay narrows to localhost:5173 for this credential: the host origin is listed but not allowed for it.
 		const excluded = await assertRejects(() => narrowed.mint({}), ToolError);
 		assertEquals(excluded.code, 'invalid-arguments');
 		assertEquals((await narrowed.mint({ origin: 'http://localhost:5173' })).origin_bound, 'http://localhost:5173');
@@ -356,7 +333,7 @@ Deno.test('R9 (AC37, F10): an origin not listed, or one the per-token overlay ex
 	}
 });
 
-Deno.test('D-150: with no TTK_MCP_APPS_ORIGINS an https origin TTK_ALLOWED_ORIGINS admits is bound exactly', async () => {
+Deno.test('with no TTK_MCP_APPS_ORIGINS an https origin TTK_ALLOWED_ORIGINS admits is bound exactly', async () => {
 	// BASE_ENV admits 127.0.0.1, localhost and abc123.host.example by hostname; the default mode is `control`.
 	const f = mintFixture({ mode: null, appsOrigins: '' });
 	const narrowed = mintFixture({ mode: null, appsOrigins: '', overlay: ['http://localhost:5173'] });
@@ -397,7 +374,7 @@ Deno.test('D-150: with no TTK_MCP_APPS_ORIGINS an https origin TTK_ALLOWED_ORIGI
 			assertStringIncludes(refused.message, 'whose hostname TTK_ALLOWED_ORIGINS admits', origin);
 		}
 		assertEquals(f.tickets.size, before, 'a refused origin mints nothing');
-		// The per-token overlay still narrows (F10): only its exact origins pass for this credential.
+		// The per-token overlay still narrows: only its exact origins pass for this credential.
 		const excluded = await assertRejects(() => narrowed.mint({}), ToolError);
 		assertEquals(excluded.code, 'invalid-arguments');
 		assertEquals((await narrowed.mint({ origin: 'http://localhost:5173' })).origin_bound, 'http://localhost:5173');
@@ -414,7 +391,7 @@ Deno.test('D-150: with no TTK_MCP_APPS_ORIGINS an https origin TTK_ALLOWED_ORIGI
 	}
 });
 
-Deno.test('D-150: a named mode with no TTK_MCP_APPS_ORIGINS admits the same way, and a list still narrows', async () => {
+Deno.test('a named mode with no TTK_MCP_APPS_ORIGINS admits the same way, and a list still narrows', async () => {
 	const named = mintFixture({ mode: 'watch', appsOrigins: '' });
 	const listed = mintFixture({ mode: null, appsOrigins: HOST_ORIGIN });
 	try {
@@ -430,7 +407,7 @@ Deno.test('D-150: a named mode with no TTK_MCP_APPS_ORIGINS admits the same way,
 	}
 });
 
-Deno.test('R9 (AC37): control needs TTK_MCP_APPS=control AND view:control, and never names the scope', async () => {
+Deno.test('control needs TTK_MCP_APPS=control AND view:control, and never names the scope', async () => {
 	const watchOnly = mintFixture();
 	const control = mintFixture({ mode: 'control' });
 	try {
@@ -459,7 +436,7 @@ Deno.test('R9 (AC37): control needs TTK_MCP_APPS=control AND view:control, and n
 	}
 });
 
-Deno.test('R9: an unknown session is refused; the holder label comes from the key records, for API keys only (F21)', async () => {
+Deno.test('an unknown session is refused; the holder label comes from the key records, for API keys only', async () => {
 	const labelled = mintFixture({
 		records: [{ id: 'key-1', sha256: '0'.repeat(64), label: 'Claude host' }],
 	});
@@ -473,11 +450,11 @@ Deno.test('R9: an unknown session is refused; the holder label comes from the ke
 		assert(redeemed.ok);
 		assertEquals(redeemed.record.holderName, 'Claude host');
 		assertEquals(redeemed.record.access, { owner: 'api-key:key-1', admin: false });
-		// An OAuth subject that happens to spell a key id is not that key.
-		const oauth = await labelled.mint({ access: { owner: 'oauth:key-1', admin: false } });
-		const asOauth = labelled.tickets.redeem(oauth.ticket, 'default', HOST_ORIGIN);
-		assert(asOauth.ok);
-		assertEquals(asOauth.record.holderName, null);
+		// An owner of another realm that happens to spell a key id is not that key.
+		const other = await labelled.mint({ access: { owner: 'other:key-1', admin: false } });
+		const asOther = labelled.tickets.redeem(other.ticket, 'default', HOST_ORIGIN);
+		assert(asOther.ok);
+		assertEquals(asOther.record.holderName, null);
 		// A label the caller already resolved wins.
 		const named = await labelled.mint({ holderName: 'Given' });
 		const asNamed = labelled.tickets.redeem(named.ticket, 'default', HOST_ORIGIN);
@@ -488,28 +465,28 @@ Deno.test('R9: an unknown session is refused; the holder label comes from the ke
 	}
 });
 
-Deno.test('B4: an administrator account gets the label the REST mint shows; another realm spelling one does not', async () => {
+Deno.test('an administrator account gets the label the REST mint shows; another realm spelling one does not', async () => {
 	const f = mintFixture();
 	try {
-		// A password login is an `api-key` principal `admin:<username>` (GW-4 keeps that prefix off every key id), and
-		// its label never survives the trip through the SDK's AuthInfo — so the mint derives it, as the REST mint shows.
+		// A password login is an `api-key` principal `admin:<username>` (no key id may carry that prefix), and its
+		// label never survives the trip through the SDK's AuthInfo — so the mint derives it, as the REST mint shows.
 		const admin = await f.mint({ principal: 'admin:root', access: { owner: 'api-key:admin:root', admin: true } });
 		const asAdmin = f.tickets.redeem(admin.ticket, 'default', HOST_ORIGIN);
 		assert(asAdmin.ok);
 		assertEquals(asAdmin.record.holderName, 'Administrator (root)');
 		assertEquals(asAdmin.record.principal, 'admin:root');
-		const oauth = await f.mint({ principal: 'admin:root', access: { owner: 'oauth:admin:root', admin: false } });
-		const asOauth = f.tickets.redeem(oauth.ticket, 'default', HOST_ORIGIN);
-		assert(asOauth.ok);
-		assertEquals(asOauth.record.holderName, null);
+		const other = await f.mint({ principal: 'admin:root', access: { owner: 'other:admin:root', admin: false } });
+		const asOther = f.tickets.redeem(other.ticket, 'default', HOST_ORIGIN);
+		assert(asOther.ok);
+		assertEquals(asOther.record.holderName, null);
 	} finally {
 		await f.registry.shutdown();
 	}
 });
 
-Deno.test('R9: a public URL that is not https draws one reachability warning, and off means no deployment', async () => {
+Deno.test('a public URL that is not https draws one reachability warning, and off means no deployment', async () => {
 	const f = mintFixture({ publicUrl: 'http://127.0.0.1:8787' });
-	// D-150: the default draws the same line at `info`, not `warn` — every plain-http deployment now starts with it.
+	// The default draws the same line at `info`, not `warn` — every plain-http deployment starts with it.
 	const defaulted = mintFixture({ publicUrl: 'http://127.0.0.1:8787', mode: null });
 	try {
 		assertEquals(f.warnings.length, 1);
@@ -535,9 +512,9 @@ Deno.test('R9: a public URL that is not https draws one reachability warning, an
 	}
 });
 
-// --- AC37 through the real middleware ---------------------------------------------------------------------------------
+// --- the embed mint through the real middleware ---------------------------------------------------------------------
 
-Deno.test('AC37: a 2025-era client on the default stateless mount mints an embed ticket; the upgrade front still rules', async () => {
+Deno.test('a 2025-era client on the default stateless mount mints an embed ticket; the upgrade front still rules', async () => {
 	const root = await embedRoot();
 	const key = await generateApiKey('key-1', ['mcp:invoke', 'view:watch']);
 	const config = loadConfig({
@@ -564,7 +541,7 @@ Deno.test('AC37: a 2025-era client on the default stateless mount mints an embed
 		accept: 'application/json, text/event-stream',
 	};
 	try {
-		// No `initialize`, no capabilities, no 2026 envelope: the legacy stateless path a 2025 host takes.
+		// No `initialize`, no capabilities, no 2026 envelope: the stateless path a 2025 host takes.
 		const response = await gateway.app.request(`${base}/mcp`, {
 			method: 'POST',
 			headers,
@@ -596,7 +573,7 @@ Deno.test('AC37: a 2025-era client on the default stateless mount mints an embed
 		assertEquals(refused.status, 403);
 		assertEquals((await refused.json()).type, 'https://tykotech.eu/problems/origin-forbidden');
 		assertEquals(gateway.tickets.size, 1, 'the refused upgrade did not touch the ticket');
-		// It redeems only from the origin it was minted for — issued to the principal id, never the owner string (R1-3).
+		// It redeems only from the origin it was minted for — issued to the principal id, never the owner string.
 		const redeemed = gateway.tickets.redeem(minted.ticket!, 'default', HOST_ORIGIN);
 		assert(redeemed.ok);
 		assertEquals(redeemed.record.principal, 'key-1');

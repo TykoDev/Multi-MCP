@@ -1,11 +1,10 @@
 /**
  * @module
- * `BrowserSession` — lifecycle, the launch/attach convergence point, and the navigation entry point
- * (ARCHITECTURE.md §7.4, §7.5; DATA-MODEL.md §5.1.1–§5.1.3).
+ * `BrowserSession` — lifecycle, the launch/attach convergence point, and the navigation entry point.
  *
- * Launch and attach converge on **one** `connect(cdpUrl)` path (D-BROWSER1): a local launch is just
+ * Launch and attach converge on **one** `connect(cdpUrl)` path: a local launch is just
  * "ask `BrowserLaunchEvent` for a cdpUrl first". Everything after the socket opens is identical, and
- * that sequence is fixed by §7.4:
+ * that sequence is fixed:
  *
  * 1. SessionManager start
  * 2. root `Target.setAutoAttach({flatten: true})`
@@ -20,16 +19,15 @@
  *
  * `BrowserSession` registers its own handlers through {@linkcode BrowserSession.attach}, which
  * `start()` calls if you have not. **Attach the watchdogs first.** Handlers of one event run
- * sequentially in registration order (E-2), and the session's `BrowserStopEvent` handler is what
+ * sequentially in registration order, and the session's `BrowserStopEvent` handler is what
  * closes the CDP socket — StorageStateWatchdog's cookie save and the LocalBrowserWatchdog's teardown
  * both want a live connection, so the session must run last.
  *
- * ERRATUM(M1-session-3): DATA-MODEL.md §5.1.2 lists `BrowserStopEvent`'s handlers as "BrowserSession,
- * LocalBrowser, StorageState, AboutBlank, Recording". Read as an order it is unimplementable — every
- * watchdog after the first would be handed a closed socket. It is read as a *set*, and the session
- * registers last so the socket outlives the handlers that need it.
+ * `BrowserStopEvent`'s handlers (BrowserSession, LocalBrowser, StorageState, AboutBlank, Recording)
+ * are a *set*, not an order: as an order every watchdog after the session would be handed a closed
+ * socket, so the session registers last and the socket outlives the handlers that need it.
  *
- * ## Security (B-12 / build-run erratum E-3)
+ * ## Security
  *
  * A throwing handler does **not** abort its siblings. `SecurityWatchdog` raising on a blocked URL
  * therefore cannot stop this class from navigating; {@linkcode BrowserSession.onNavigateToUrlEvent}
@@ -80,7 +78,7 @@ import { cdpBoundTo } from './cdp_signal.ts';
 import { CONNECT_TIMEOUT_MS, isLifecycleEventName, ReconnectController, withTimeout } from './reconnect.ts';
 import { SessionManager } from './session_manager.ts';
 
-/** Chrome's own new-tab pages, redirected to `about:blank` on connect (ARCHITECTURE.md §7.4 step 3). */
+/** Chrome's own new-tab pages, redirected to `about:blank` on connect. */
 export const CHROME_NEW_TAB_URLS: readonly string[] = [
 	'chrome://new-tab-page',
 	'chrome://new-tab-page/',
@@ -91,9 +89,9 @@ export const CHROME_NEW_TAB_URLS: readonly string[] = [
 /** How long step 4 waits for a freshly created bootstrap tab to register. */
 const BOOTSTRAP_TAB_WAIT_MS = 2_000;
 
-/** Construction options (ARCHITECTURE.md §3 sketch: `{ profile?, cdpUrl? }`, plus test seams). */
+/** Construction options: `{ profile?, cdpUrl? }`, plus test seams. */
 export interface BrowserSessionOptions {
-	/** A full profile or a partial one; omitted fields take their DATA-MODEL.md §5.2 defaults. */
+	/** A full profile or a partial one; omitted fields take their defaults. */
 	readonly profile?: BrowserProfile | BrowserProfileInit | undefined;
 	/** Attach mode. Overrides `profile.cdpUrl`. */
 	readonly cdpUrl?: string | null | undefined;
@@ -117,7 +115,7 @@ export interface StopOptions {
 export class BrowserSession {
 	/**
 	 * Declared so `registerHandlers` asserts the declaration against the actual `on<EventName>` method
-	 * set — the same discipline every watchdog carries (ARCHITECTURE.md §4.5).
+	 * set — the same discipline every watchdog carries.
 	 */
 	static readonly LISTENS_TO = [
 		BrowserStartEvent,
@@ -211,7 +209,7 @@ export class BrowserSession {
 		return this.#cdpUrl;
 	}
 
-	/** `true` when this process owns the browser subprocess (launch mode, D-BROWSER1). */
+	/** `true` when this process owns the browser subprocess (launch mode). */
 	get isLocal(): boolean {
 		return this.#ownsBrowser || resolveIsLocal(this.profile);
 	}
@@ -220,7 +218,7 @@ export class BrowserSession {
 		return this.#client !== null && this.#client.state === 'open';
 	}
 
-	/** The {@linkcode ConnectionPolicy} the bus circuit breaker consumes (ARCHITECTURE.md §4.6). */
+	/** The {@linkcode ConnectionPolicy} the bus circuit breaker consumes. */
 	get connectionPolicy(): ConnectionPolicy {
 		return this.#reconnect;
 	}
@@ -230,7 +228,7 @@ export class BrowserSession {
 		return this.#sessionManager?.agentFocusTargetId ?? null;
 	}
 
-	/** Open tabs as the LLM sees them, oldest first (DATA-MODEL.md §5.4). */
+	/** Open tabs as the LLM sees them, oldest first. */
 	get tabs(): TabInfo[] {
 		const manager = this.#sessionManager;
 		if (manager === null) return [];
@@ -247,7 +245,7 @@ export class BrowserSession {
 	/**
 	 * Subscribes the session's own handlers. Idempotent.
 	 *
-	 * Call it **after** attaching the watchdogs: registration order is handler order (E-2), and this
+	 * Call it **after** attaching the watchdogs: registration order is handler order, and this
 	 * class's `BrowserStopEvent` handler closes the socket every other stop handler still needs.
 	 */
 	attach(): void {
@@ -283,8 +281,8 @@ export class BrowserSession {
 	}
 
 	/**
-	 * Stops the session. `keepAlive` makes a non-forced stop a no-op (AGENT-RUNTIME.md §4 step 8:
-	 * "kills the browser unless `keepAlive`"); `force: true` overrides it.
+	 * Stops the session. `keepAlive` makes a non-forced stop a no-op (the agent run ends by
+	 * killing the browser unless `keepAlive`); `force: true` overrides it.
 	 */
 	async stop(options: StopOptions = {}): Promise<void> {
 		const force = options.force ?? false;
@@ -306,10 +304,9 @@ export class BrowserSession {
 	/**
 	 * Force-stops and starts again on the same profile.
 	 *
-	 * ERRATUM(M1-session-1): COMPLETIONS-CRITERIA.md §3.2 requires `reset()` semantics but no spec
-	 * section defines them. Implemented as force-stop → start: it is the only reading under which
-	 * `reset` differs from `stop` (it ignores `keepAlive`, since a session you asked to reset is not a
-	 * session you want kept warm) and still leaves a usable session behind.
+	 * Implemented as force-stop → start: that way `reset` differs from `stop` (it ignores `keepAlive`,
+	 * since a session you asked to reset is not a session you want kept warm) and still leaves a usable
+	 * session behind.
 	 */
 	async reset(): Promise<BrowserStartResult> {
 		await this.stop({ force: true, reason: 'reset' });
@@ -321,51 +318,49 @@ export class BrowserSession {
 	 * The agent-visible browser state, produced by DOMWatchdog via `BrowserStateRequestEvent`.
 	 *
 	 * On failure or whole-event timeout the session synthesizes a **non-actionable** state carrying
-	 * `stateError` and an empty `selectorMap`, so the LLM can never act on stale indices
-	 * (ARCHITECTURE.md §6.7, DATA-MODEL.md §5.3).
+	 * `stateError` and an empty `selectorMap`, so the LLM can never act on stale indices.
 	 */
 	async getBrowserStateSummary(
 		options: {
 			includeDom?: boolean;
 			includeScreenshot?: boolean;
 			includeRecentEvents?: boolean;
-			/** ERRATUM(E-41): see `BrowserStateRequestEvent.includeOffscreen`. */
+			/** See `BrowserStateRequestEvent.includeOffscreen`. */
 			includeOffscreen?: boolean;
 		} = {},
 	): Promise<BrowserStateSummary> {
 		const handle = this.eventBus.dispatch(new BrowserStateRequestEvent(options));
 		try {
 			const summary = await handle.eventResult({ raiseIfAny: true, raiseIfNone: true });
-			// ERRATUM(E-36) — G-1, invariant I-1. The cache is the ONE index table `nodeAt` resolves
+			// The cache is the ONE index table `nodeAt` resolves
 			// against, so only a request that actually built a DOM may write it. A DOM-less request
 			// (`includeDom: false`, which `identify()` issues after every navigation) returns a summary
-			// whose `selectorMap` is empty by construction; writing that over the cache silently emptied
-			// the index table, and every `browser_click`/`browser_type` carrying an index then failed
-			// with `unknown-index` until the caller re-read the state. Single writer, one condition.
+			// whose `selectorMap` is empty by construction; writing that over the cache would empty the
+			// index table, and every `browser_click`/`browser_type` carrying an index would fail with
+			// `unknown-index` until the caller re-read the state. Single writer, one condition.
 			if (options.includeDom !== false) this.#cachedBrowserState = summary;
 			return summary;
 		} catch (error) {
 			this.logger.warn('browser state request failed; returning a non-actionable state', { error });
-			// ERRATUM(E-36) — G-1. This branch used to LEAVE THE PREVIOUS SUMMARY STANDING. A state read
-			// that failed after a navigation therefore left `nodeAt` resolving indices from a page the
-			// browser had already left: the caller received an element, acted on it, and the action
-			// landed somewhere else entirely. A failed read means "I do not know what is on the page",
+			// The cached summary is cleared, never left standing: after a failed read following a
+			// navigation, `nodeAt` would resolve indices from a page the browser has already left, and an
+			// action would land somewhere else entirely. A failed read means "I do not know what is on the page",
 			// and the only honest index table for that is none at all.
 			this.#cachedBrowserState = null;
 			return this.#nonActionableState(error);
 		}
 	}
 
-	// -- handlers (ARCHITECTURE.md §4.5 `on<EventName>` convention) ---------------------------------
+	// -- handlers (the `on<EventName>` convention) ---------------------------------------------------
 
 	/**
-	 * Launch-or-attach, then the §7.4 post-connect sequence.
+	 * Launch-or-attach, then the post-connect sequence.
 	 *
-	 * DELIBERATELY UNCANCELLABLE — the `HandlerContext` is declared and not used (ERRATUM(E-62)).
+	 * DELIBERATELY UNCANCELLABLE — the `HandlerContext` is declared and not used.
 	 * `connect()` already owns a bounded cap **with teardown on timeout**, so it cannot straggle; and
 	 * abandoning it partway would leave a live socket, a half-seeded SessionManager and possibly a
-	 * spawned Chrome with nothing in-process aware of them. That is the orphan ERRATUM(CANCEL-4) was
-	 * written to prevent, reached from the other end.
+	 * spawned Chrome with nothing in-process aware of them — the same orphan that reaping a superseded
+	 * launch prevents, reached from the other end.
 	 */
 	async onBrowserStartEvent(event: BrowserStartEvent, _context?: HandlerContext): Promise<BrowserStartResult> {
 		if (this.isConnected && this.#cdpUrl !== null) return { cdpUrl: this.#cdpUrl };
@@ -377,7 +372,7 @@ export class BrowserSession {
 			cdpUrl = configured;
 			this.#ownsBrowser = false;
 		} else {
-			// One handler awaiting an event it dispatched itself — the flow E-2 exists to keep working.
+			// One handler awaiting an event it dispatched itself — the flow the bus keeps working.
 			const launched = await this.eventBus.dispatch(new BrowserLaunchEvent())
 				.eventResult({ raiseIfAny: true, raiseIfNone: true });
 			cdpUrl = launched.cdpUrl;
@@ -393,7 +388,7 @@ export class BrowserSession {
 	/**
 	 * Tears the transport down. Registered last, so every other stop handler still had a socket.
 	 *
-	 * DELIBERATELY UNCANCELLABLE — the `HandlerContext` is declared and not used (ERRATUM(E-62)). This
+	 * DELIBERATELY UNCANCELLABLE — the `HandlerContext` is declared and not used. This
 	 * is the teardown itself: a stop that gives up halfway leaves the socket open and the reconnect
 	 * policy disabled, which is strictly worse than a late one. Same ruling as the SecurityWatchdog
 	 * containment writes — a control that must fire beats one that fires on time.
@@ -410,7 +405,7 @@ export class BrowserSession {
 	}
 
 	/**
-	 * The navigation entry point and the second of the two `isUrlAllowed` call sites (E-3 / B-12).
+	 * The navigation entry point and the second of the two `isUrlAllowed` call sites.
 	 *
 	 * @throws {UrlNotAllowedError} before any CDP call when the domain policy refuses the URL.
 	 */
@@ -451,7 +446,7 @@ export class BrowserSession {
 		await this.eventBus.dispatch(new AgentFocusChangedEvent({ targetId, url: finalUrl }));
 	}
 
-	/** Focus another tab. `targetId: null` selects the most recent page (DATA-MODEL.md §5.1.1). */
+	/** Focus another tab. `targetId: null` selects the most recent page. */
 	async onSwitchTabEvent(event: SwitchTabEvent, context?: HandlerContext): Promise<TargetId> {
 		const manager = this.#requireSessionManager();
 		const targetId = event.targetId === null
@@ -473,7 +468,7 @@ export class BrowserSession {
 		await this.#cdpFor(manager, context).send.Target.closeTarget({ targetId });
 	}
 
-	/** Applies the profile viewport to a newly created tab (DATA-MODEL.md §5.1.3 "session (viewport)"). */
+	/** Applies the profile viewport to a newly created tab. */
 	async onTabCreatedEvent(event: TabCreatedEvent, context?: HandlerContext): Promise<void> {
 		await this.#applyViewport(event.targetId, context);
 	}
@@ -484,13 +479,13 @@ export class BrowserSession {
 		this.logger.debug('tab closed', { targetId: event.targetId });
 	}
 
-	/** Cache clear + viewport, per DATA-MODEL.md §5.1.3. */
+	/** Cache clear + viewport. */
 	async onAgentFocusChangedEvent(event: AgentFocusChangedEvent, context?: HandlerContext): Promise<void> {
 		this.#cachedBrowserState = null;
 		await this.#applyViewport(event.targetId, context);
 	}
 
-	// -- connect (ARCHITECTURE.md §7.4) ------------------------------------------------------------
+	// -- connect ------------------------------------------------------------
 
 	/**
 	 * The single convergence point for launch and attach.
@@ -509,7 +504,7 @@ export class BrowserSession {
 			controller.abort(new BrowserError('connect timed out'));
 			await this.#teardownTransport();
 			throw new BrowserError(
-				`connect(${cdpUrl}) exceeded the ${this.#connectTimeoutMs}ms cap (ARCHITECTURE.md §7.4)`,
+				`connect(${cdpUrl}) exceeded the ${this.#connectTimeoutMs}ms cap`,
 			);
 		}
 		if (failure !== null) {
@@ -531,7 +526,7 @@ export class BrowserSession {
 		this.#closeUnsubscribe = client.onClose((info) => this.#onTransportClosed(info));
 
 		// (1) SessionManager start — seeds the target map before autoAttach can fire.
-		// ERRATUM(E-94): with an allowlist the manager also gets the document veto (E0), over the same matcher
+		// With an allowlist the manager also gets the document veto (E0), over the same matcher
 		// and compiled policy as E1 — read at call time, so a policy recompiled by launch options applies.
 		const documentFilter = this.#documentFilter();
 		const manager = new SessionManager(client, {
@@ -540,7 +535,7 @@ export class BrowserSession {
 			proxy: this.profile.proxy,
 			now: this.#now,
 			documentFilter,
-			// ERRATUM(E-114): which requests that veto judges (D-138) — `documents` unless the host asked for `all`. Inert
+			// Which requests that veto judges — `documents` unless the host asked for `all`. Inert
 			// without a filter, so the no-allowlist attach path is unchanged.
 			requestScope: this.profile.requestScope,
 		});
@@ -548,9 +543,9 @@ export class BrowserSession {
 		await manager.start();
 
 		// (2) root autoAttach in flat session mode.
-		// ERRATUM(E-94): new targets are held for the debugger only under a document filter, so a pop-up's first
-		// document request cannot leave before its session's `Fetch.enable` (M5). Without one the parameters are
-		// the donor's, byte for byte.
+		// New targets are held for the debugger only under a document filter, so a pop-up's first
+		// document request cannot leave before its session's `Fetch.enable`. Without one, new targets
+		// run at once.
 		await client.send.Target.setAutoAttach({
 			autoAttach: true,
 			waitForDebuggerOnStart: documentFilter !== null,
@@ -583,7 +578,7 @@ export class BrowserSession {
 			if (!CHROME_NEW_TAB_URLS.includes(record.url)) continue;
 			try {
 				const session = await manager.getOrCreateCdpSession(record.targetId, false);
-				// Bare `manager.client` on purpose (ERRATUM(E-62) allowlist): step 6 of the §7.4 connect
+				// Bare `manager.client` on purpose, not a cancellation-bound view: step 3 of the connect
 				// sequence, reached from `connect()`, which owns its own cap and tears down on timeout.
 				// There is no handler context here, and a half-run bootstrap is what that cap exists to
 				// avoid.
@@ -599,7 +594,7 @@ export class BrowserSession {
 
 	async #ensurePageTarget(manager: SessionManager): Promise<void> {
 		if (manager.mostRecentPageTarget() !== null) return;
-		// Bare `manager.client` on purpose (ERRATUM(E-62) allowlist): the same connect-sequence path as
+		// Bare `manager.client` on purpose, not a cancellation-bound view: the same connect-sequence path as
 		// `#redirectNewTabPages`. A browser with zero page targets is not a usable session, so this one
 		// is not optional either.
 		const created = await manager.client.send.Target.createTarget({ url: 'about:blank' });
@@ -614,7 +609,7 @@ export class BrowserSession {
 		}
 	}
 
-	// -- reconnect (ARCHITECTURE.md §7.4) ----------------------------------------------------------
+	// -- reconnect ----------------------------------------------------------
 
 	#onTransportClosed(info: CdpCloseInfo): void {
 		this.logger.warn('CDP connection closed', {
@@ -655,7 +650,7 @@ export class BrowserSession {
 		this.#cachedBrowserState = null;
 	}
 
-	/** The §4.7 repair hook: one focused-session re-acquisition, never masking the original error. */
+	/** The bus session-repair hook: one focused-session re-acquisition, never masking the original error. */
 	async #repairFocusedSession(): Promise<void> {
 		const manager = this.#sessionManager;
 		if (manager === null || !this.isConnected) return;
@@ -674,7 +669,7 @@ export class BrowserSession {
 	}
 
 	/**
-	 * New-tab reuse rule (ARCHITECTURE.md §7.5 preamble): a `newTab` navigation that finds the agent
+	 * New-tab reuse rule: a `newTab` navigation that finds the agent
 	 * already parked on a blank/new-tab page reuses it instead of littering the browser with tabs.
 	 */
 	async #resolveNavigationTarget(newTab: boolean, context?: HandlerContext): Promise<TargetId> {
@@ -726,9 +721,9 @@ export class BrowserSession {
 	}
 
 	/**
-	 * ERRATUM(E-94): the document veto handed to the `SessionManager`, or `null` when the profile names no
-	 * allowlist. Only an allowlist arms it: `prohibitedDomains` alone keeps the donor's after-the-fact path, and
-	 * an empty list is unrestricted (the §4.2 precedence rule).
+	 * The document veto handed to the `SessionManager`, or `null` when the profile names no
+	 * allowlist. Only an allowlist arms it: `prohibitedDomains` alone is enforced after the fact by
+	 * the SecurityWatchdog, and an empty allowlist is unrestricted (the empty-allowlist precedence rule).
 	 */
 	#documentFilter(): ((url: string) => boolean) | null {
 		const allowed = this.profile.allowedDomains;
@@ -745,7 +740,7 @@ export class BrowserSession {
 	}
 
 	/**
-	 * The CDP client with a handler's cancellation bound — ERRATUM(E-62), the `BrowserSession` twin of
+	 * The CDP client with a handler's cancellation bound — the `BrowserSession` twin of
 	 * `BaseWatchdog.cdpFor`. `context === undefined` yields the bare client, for the same reason
 	 * `handlerBudget(undefined)` is infinite: `connect()` and the tests run under no dispatch.
 	 *
@@ -780,7 +775,7 @@ export class BrowserSession {
 			closedPopupMessages: [],
 			paginationButtonsDetected: false,
 			stateError: message,
-			// ERRATUM(E-36): no table, so nothing to address — `nodeAt` answers `no-state`.
+			// No table, so nothing to address — `nodeAt` answers `no-state`.
 			stateToken: null,
 			frames: [],
 			captureTruncated: false,
@@ -793,7 +788,7 @@ export class BrowserSession {
 // ---------------------------------------------------------------------------
 
 /**
- * A handler context rendered as a spreadable {@linkcode CancelOptions} fragment — ERRATUM(E-62).
+ * A handler context rendered as a spreadable {@linkcode CancelOptions} fragment .
  *
  * An **absent** key, not `{ signal: undefined }`: the two are distinguishable to the strict optional
  * rules this workspace compiles under, and "no cancellation" has to be the absent one so a caller

@@ -1,10 +1,8 @@
 /**
- * Element replay keys: the three hashes of DATA-MODEL §6.1 ("Derived members") and the five-level
- * `MatchLevel` cascade of §6.6.
+ * Element replay keys: the three derived-member hashes and the five-level `MatchLevel` cascade.
  *
  * The hashes are the only handle a later step has on an element it touched earlier — `backendNodeId`
- * dies with its snapshot (§6.3 R6.3), so history replay (AGENT-RUNTIME §12) re-identifies the node by
- * content. Three keys, deliberately ordered by how much page churn each survives:
+ * dies with its snapshot, so history replay re-identifies the node by content. Three keys, deliberately ordered by how much page churn each survives:
  *
  * | key | input | survives |
  * |---|---|---|
@@ -12,7 +10,7 @@
  * | `stableHash` | same, with dynamic CSS class tokens filtered | CSS-in-JS / build-hash class churn |
  * | `parentBranchHash` | tag path only | attribute and label churn |
  *
- * Digest: SHA-256 via WebCrypto (`crypto.subtle`, D-DEP1 rung (a)), hex, first 16 chars — 64 bits, a
+ * Digest: SHA-256 via WebCrypto (`crypto.subtle`, no extra dependency), hex, first 16 chars — 64 bits, a
  * ~1e-10 collision probability over a 1000-element page, which is the level of care an index-free
  * fallback path deserves and no more.
  */
@@ -22,7 +20,7 @@ import { type DomInteractedElement, type EnhancedDomTreeNode, MatchLevel } from 
 
 const TEXT_ENCODER = new TextEncoder();
 
-/** Hex characters kept from the SHA-256 digest (§6.1: "sha256[:16 hex]"). */
+/** Hex characters kept from the SHA-256 digest ("sha256[:16 hex]"). */
 export const HASH_HEX_LENGTH = 16;
 
 /** Field separator inside a hash preimage. Chosen because it cannot occur in a tag path. */
@@ -32,8 +30,7 @@ const FIELD_SEPARATOR = '|';
  * Attributes excluded from the "static attrs" component of {@linkcode elementHash}: `style` is
  * rewritten by every animation frame and `on*` handlers are frequently rebound by frameworks.
  *
- * ERRATUM(M1-dom-serialize-6): §6.1 says "sorted static attrs" without defining *static*. Implemented
- * as "all attributes except `style` and `on*`"; `class` stays in (it is what separates
+ * *Static* means all attributes except `style` and `on*`; `class` stays in (it is what separates
  * {@linkcode elementHash} from {@linkcode stableHash}).
  */
 function isStaticAttribute(name: string): boolean {
@@ -43,8 +40,7 @@ function isStaticAttribute(name: string): boolean {
 /**
  * Class tokens treated as machine-generated and therefore dropped from {@linkcode stableHash}.
  *
- * ERRATUM(M1-dom-serialize-7): §6.1/§6.6 say "dynamic CSS class tokens" without a rule. Implemented as
- * the four patterns below plus {@linkcode DYNAMIC_STATE_CLASSES}, deliberately narrow: a false
+ * The rule is the four patterns below plus {@linkcode DYNAMIC_STATE_CLASSES}, deliberately narrow: a false
  * positive only weakens level-2 matching, a false negative makes `stableHash` no better than
  * `elementHash`.
  */
@@ -142,29 +138,29 @@ function compositePreimage(node: EnhancedDomTreeNode, stable: boolean): string {
 	].join(FIELD_SEPARATOR);
 }
 
-/** §6.1 — sha256[:16 hex] over parent-tag-path | sorted static attrs | AX name. */
+/** sha256[:16 hex] over parent-tag-path | sorted static attrs | AX name. */
 export function elementHash(node: EnhancedDomTreeNode): Promise<string> {
 	return sha256Prefix(compositePreimage(node, false));
 }
 
-/** §6.1 — {@linkcode elementHash} with dynamic CSS class tokens filtered out. */
+/** {@linkcode elementHash} with dynamic CSS class tokens filtered out. */
 export function stableHash(node: EnhancedDomTreeNode): Promise<string> {
 	return sha256Prefix(compositePreimage(node, true));
 }
 
-/** §6.1 — tag path only. */
+/** Tag path only. */
 export function parentBranchHash(node: EnhancedDomTreeNode): Promise<string> {
 	return sha256Prefix(tagPath(node));
 }
 
-/** Attributes §6.6 requires on a persisted `DomInteractedElement` "at minimum". */
+/** Attributes a persisted `DomInteractedElement` carries at minimum. */
 export const REPLAY_ATTRIBUTES = ['name', 'id', 'aria-label'] as const;
 
 /**
- * Builds the §6.6 record persisted per executed action.
+ * Builds the record persisted per executed action.
  *
  * `xPath` is supplied by the caller rather than derived here: the xpath contract belongs to
- * `DomNodeDerived` (types.ts §6.1), which the extraction half owns.
+ * `DomNodeDerived` (types.ts), which the extraction half owns.
  */
 export async function buildInteractedElement(
 	node: EnhancedDomTreeNode,
@@ -192,13 +188,13 @@ export interface ReplayCandidate {
 	readonly xPath: string;
 }
 
-/** Where in the §6.6 cascade a candidate was re-found. */
+/** Where in the replay cascade a candidate was re-found. */
 export interface ReplayMatch {
 	readonly node: EnhancedDomTreeNode;
 	readonly level: MatchLevel;
 }
 
-/** The cascade order — ascending numeric value, as §6.6 requires. */
+/** The cascade order — ascending numeric value. */
 export const MATCH_LEVEL_ORDER: readonly MatchLevel[] = [
 	MatchLevel.EXACT,
 	MatchLevel.STABLE,
@@ -221,13 +217,12 @@ function attributesMatch(target: DomInteractedElement, node: EnhancedDomTreeNode
 }
 
 /**
- * §6.6 replay cascade: EXACT → STABLE → XPATH → AX_NAME → ATTRIBUTE, tried in ascending numeric
+ * Replay cascade: EXACT → STABLE → XPATH → AX_NAME → ATTRIBUTE, tried in ascending numeric
  * order, first level that matches wins.
  *
  * Levels 1–4 take the first candidate in the supplied (document) order when several match — an
  * ambiguous hash still identifies the *kind* of element the agent meant. Level 5 requires a **unique**
- * match, because §6.6 spells that requirement out only for ATTRIBUTE and because attribute matching is
- * the loosest key in the set.
+ * match, because attribute matching is the loosest key in the set.
  *
  * When `target.frameId` is set and any candidate carries it, the search is restricted to that frame;
  * otherwise every candidate is considered (frame ids are not stable across reloads, so this is a

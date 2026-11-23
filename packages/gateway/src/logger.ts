@@ -1,9 +1,4 @@
-/**
- * Structured logging.
- *
- * On stdio the protocol owns stdout, so every line goes to stderr there; the
- * HTTP server logs to stdout where a container collector expects it.
- */
+/** Structured logging. */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 

@@ -1,38 +1,19 @@
 /**
- * NF-3 (design §2.8, AC26, HTTP half): `startGateway` builds **one** `SecretStore` and hands it to both consumers —
- * the registry's `redact` (the request log and console ring cap their text through it) and the mount's
- * `GatewayDeps.secrets`, which the tools read as `ctx.secrets`.
- *
- * Proven by identity, not by counting alone: the injected factory returns a store that records which instance each
- * `redact` call ran on. The registry path is driven by a request reaching a session's network log; the tool path by
- * `browser_network_log`, whose projection redacts every field it returns. The browser is faked (an injected
- * launcher and a stand-in CDP client), so this stays in the unit tier.
+ * `startGateway` builds **one** `SecretStore` and hands it to both consumers — the registry's `redact` (the request log
+ * and console ring cap their text through it) and the mount's `GatewayDeps.secrets`, which the tools read as
+ * `ctx.secrets`.
  */
 import { assert, assertEquals } from '@std/assert';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import type { CdpClient } from '@tykotech/cdp';
 import { type SecretEntry, SecretStore } from '@tykotech/mcp';
 import { generateApiKey } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
 import { startGateway } from './server.ts';
+import { fakeSession } from './support_test.ts';
 
 /** Synthetic; never a real credential. */
-const SECRET = 'Zq8-nf3-synthetic-secret-0123456789';
-
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'nf3-test' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
+const SECRET = 'Zq8-mount-synthetic-secret-0123456789';
 
 type Listener = (params: unknown, sessionId?: string) => void;
 
@@ -65,15 +46,15 @@ class RecordingStore extends SecretStore {
 	}
 }
 
-Deno.test('NF-3 (AC26): one SecretStore per mount — registry redact and ctx.secrets are the same instance', async () => {
-	const key = await generateApiKey('nf3', ['mcp:invoke']);
+Deno.test('one SecretStore per mount — registry redact and ctx.secrets are the same instance', async () => {
+	const key = await generateApiKey('mount', ['mcp:invoke']);
 	const config = loadConfig({
 		TTK_HOST: '127.0.0.1',
 		TTK_PORT: '0',
 		TTK_API_KEYS: JSON.stringify([key.record]),
 		TTK_SECRETS: JSON.stringify({ shop_token: SECRET }),
 		TTK_LOG_LEVEL: 'error',
-		// D-150: `owner` is the default; this test creates its session with no caller (`createNew()`), so shared.
+		// `owner` is the default; this test creates its session with no caller (`createNew()`), so shared.
 		TTK_SESSION_OWNERSHIP: 'shared',
 	});
 	const built: SecretStore[] = [];

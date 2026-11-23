@@ -1,39 +1,31 @@
-/**
- * The output-schema contract (D-A2), proven against real handler results.
- *
- * Invariant I-6: a success without `structuredContent` is a hard `tools/call`
- * failure the moment a schema is declared, and D-A2 declares one on every tool.
- * The result builders make that unrepresentable — no builder accepts a success
- * without a payload — but "unrepresentable" is a claim about a module, and this
- * file is the claim about the catalog.
- *
- * The round trip asserts **equality**, not merely that the payload parses.
- * `z.object().parse` strips unknown keys in Zod v4, which is the behaviour we
- * want on the wire, and it is also exactly how a handler that grew a field
- * before its schema did would lose it in silence.
- */
-import { assert, assertEquals } from '@std/assert';
+/** The output-schema contract, proven against real handler results. */
+import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import * as z from 'zod';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
-import { CATALOG, CATALOG_BY_NAME } from './catalog.ts';
-import { SessionRegistry } from './registry.ts';
-import { SecretStore } from './secrets.ts';
-import { INLINE_FILE_LIMIT_BYTES } from './files.ts';
 import {
+	type BrowserSession,
 	DOWNLOAD_TRANSFER_DEADLINE_MS,
 	MAX_DOWNLOAD_BYTES,
 	MAX_SESSION_DOWNLOAD_BYTES,
 	MAX_TRACKED_DOWNLOADS,
 } from '@tykotech/browser';
+import { EventBus } from '@tykotech/bus';
+import { CATALOG, CATALOG_BY_NAME } from './catalog.ts';
+import { SessionRegistry } from './registry.ts';
+import { SecretStore } from './secrets.ts';
+import { INLINE_FILE_LIMIT_BYTES } from './files.ts';
 import * as tools from './tools.ts';
-import { captureHarness } from '../fixtures/capture_session.ts';
-import { image, json, projected, say } from './types.ts';
-import type { ToolContext, ToolResult } from './types.ts';
+import { captureHarness, captureSession, loadCapture } from '../fixtures/capture_session.ts';
+import { image, json, projected, say, type ToolContext, type ToolResult } from './types.ts';
+import { join } from '@std/path';
+import { EXTENSION_OUTPUT, extensionTools } from './extension_tools.ts';
+import { LibraryStore } from './library.ts';
+import { LIBRARY_OUTPUT, libraryTools } from './library_tools.ts';
+import { SCOPES } from './scopes.ts';
+import { createToolExecutor } from './server.ts';
 
 // --- the builders themselves -------------------------------------------------
 
-Deno.test('types: every result builder emits structuredContent (I-6)', () => {
+Deno.test('types: every result builder emits structuredContent', () => {
 	const payload = { session_id: 's' };
 	const built: Array<[string, ToolResult]> = [
 		['say', say(payload, 'a line')],
@@ -51,13 +43,11 @@ Deno.test('types: every result builder emits structuredContent (I-6)', () => {
 	}
 });
 
-Deno.test('types: `projected` keeps the text block and the structured half apart (D-3)', () => {
+Deno.test('types: `projected` keeps the text block and the structured half apart', () => {
 	const result = projected({ a: 1, b: 2 }, { a: 1 }) as {
 		content: Array<{ text: string }>;
 		structuredContent: Record<string, unknown>;
 	};
-	// The text block is the frozen, byte-stable rendering an existing client
-	// already parses; the structured half is where new fields land.
 	assertEquals(JSON.parse(result.content[0]!.text), { a: 1 });
 	assertEquals(result.structuredContent, { a: 1, b: 2 });
 });
@@ -135,8 +125,6 @@ function roundTrip(name: string, result: ToolResult): void {
 	const structured = (result as { structuredContent?: Record<string, unknown> }).structuredContent;
 	assert(structured !== undefined, `${name} returned a success with no structuredContent`);
 	const parsed = tool.outputSchema.parse(structured);
-	// Equality, not parseability: a key the schema does not declare is stripped
-	// here and would be stripped on the wire, silently.
 	assertEquals(parsed, structured, `${name} emits a field its outputSchema does not declare`);
 }
 
@@ -147,8 +135,6 @@ Deno.test('catalog: the handler successes reachable at the unit tier round-trip 
 		roundTrip('browser_go_back', await tools.browserGoBack({}, ctx));
 		roundTrip('browser_click', await tools.browserClick({ coordinate_x: 1, coordinate_y: 2 }, ctx));
 		roundTrip('browser_click', await tools.browserClick({ index: 3 }, ctx));
-		// B2.4: the three pointer tools are `browser_click`'s cascade with one argument changed, so
-		// both arms of each are driven here rather than asserted from a literal.
 		roundTrip('browser_double_click', await tools.browserDoubleClick({ index: 3 }, ctx));
 		roundTrip('browser_double_click', await tools.browserDoubleClick({ coordinate_x: 1, coordinate_y: 2 }, ctx));
 		roundTrip('browser_right_click', await tools.browserRightClick({ index: 3 }, ctx));
@@ -156,9 +142,6 @@ Deno.test('catalog: the handler successes reachable at the unit tier round-trip 
 		roundTrip('browser_hover', await tools.browserHover({ index: 3 }, ctx));
 		roundTrip('browser_hover', await tools.browserHover({ coordinate_x: 1, coordinate_y: 2 }, ctx));
 		roundTrip('browser_type', await tools.browserType({ text: 'hello', index: 3 }, ctx));
-		// B2.5: browser_fill delegates to browser_type, so both of its arms are reachable here. The
-		// other five B2.5 tools need a real CDP session (or a real file on disk) and are proven on the
-		// browser tier instead, with a literal payload below standing in for the shape.
 		roundTrip('browser_fill', await tools.browserFill({ index: 3, text: 'hello' }, ctx));
 		roundTrip('browser_fill', await tools.browserFill({ index: 3, text: 'hello', clear: false }, ctx));
 		roundTrip('browser_press_key', await tools.browserPressKey({ key: 'Enter' }, ctx));
@@ -171,8 +154,6 @@ Deno.test('catalog: the handler successes reachable at the unit tier round-trip 
 		roundTrip('browser_switch_tab', await tools.browserSwitchTab({ tab_id: 'aaaa' }, ctx));
 		roundTrip('browser_list_files', await tools.browserListFiles({}, ctx));
 		roundTrip('browser_list_sessions', await tools.browserListSessions({}, ctx));
-		// B2.6: driven, not asserted from a literal — `sessionDetail` is the one builder behind both,
-		// so a field it grows has to satisfy both schemas here or the round trip strips it.
 		roundTrip('browser_get_session', await tools.browserGetSession({}, ctx));
 		roundTrip('browser_close_session', await tools.browserCloseSession({ session_id: 'default' }, ctx));
 		roundTrip('browser_close_all', await tools.browserCloseAll({}, ctx));
@@ -181,19 +162,10 @@ Deno.test('catalog: the handler successes reachable at the unit tier round-trip 
 	}
 });
 
-/**
- * B1.7: `browser_wait_for` driven for real on both of its answers.
- *
- * A literal payload would prove nothing here, because the interesting half of
- * this schema is that a timeout is a **success** carrying `met: false` rather
- * than an error — a shape a hand-written payload would assert into existence.
- */
+/** `browser_wait_for` driven for real on both of its answers. */
 Deno.test('catalog: browser_wait_for round-trips its outputSchema on both answers', async () => {
 	const h = await captureHarness('iframe_crossorigin');
 	try {
-		// The satisfied answer. The wait starts first on purpose: an omitted cursor
-		// means "from now", so a record already in the ring when the call began is
-		// deliberately not what the caller asked about.
 		const waiting = tools.browserWaitFor({ until: { navigation: true }, timeout_ms: 5000 }, h.ctx);
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		h.record.events.append('navigation', {
@@ -210,7 +182,6 @@ Deno.test('catalog: browser_wait_for round-trips its outputSchema on both answer
 		assertEquals(metPayload.met, true);
 		assert(metPayload.event !== null, 'the record that satisfied the wait is returned');
 
-		// The expired answer: met false, no event, and no error.
 		const missed = await tools.browserWaitFor({ until: { dialog: true }, timeout_ms: 100 }, h.ctx);
 		roundTrip('browser_wait_for', missed);
 		const missedPayload = (missed as { structuredContent: Record<string, unknown> }).structuredContent;
@@ -223,10 +194,8 @@ Deno.test('catalog: browser_wait_for round-trips its outputSchema on both answer
 });
 
 /**
- * B1.5/B1.6: the perception handlers driven against a recorded capture (D-TEST1), so the rich
- * element record, the frame list and the locator tools round-trip their schemas from a real
- * handler result rather than a literal. `browser_verify_locator` is driven through its in-memory
- * kind; the browser-search kinds share the same result shape and the browser tier drives them.
+ * The perception handlers driven against a recorded capture, so the rich element record, the frame list and the
+ * locator tools round-trip their schemas from a real handler result rather than a literal.
  */
 Deno.test('catalog: the perception successes round-trip their outputSchema from a recorded capture', async () => {
 	const h = await captureHarness('iframe_crossorigin');
@@ -253,10 +222,8 @@ Deno.test('catalog: the perception successes round-trip their outputSchema from 
 });
 
 /**
- * The rest of the catalog needs a real browser, a model or an encoder, so its
- * schemas are proven against a payload built here from the handler's own
- * literal instead. This is weaker than driving the handler and says so; the
- * browser tier drives the real ones.
+ * The rest of the catalog needs a real browser, a model or an encoder, so its schemas are proven against a payload
+ * built here from the handler's own literal instead.
  */
 Deno.test('catalog: the browser-tier successes have a schema their payload satisfies', () => {
 	const cases: Record<string, Record<string, unknown>> = {
@@ -270,7 +237,6 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 			scroll: { x: 0, y: 0, pixels_above: 0, pixels_below: 0 },
 			interactive_elements: [{ index: 0, tag: 'button', label: 'Go' }],
 			page: 'Example',
-			// I-4: structured half only, so the text block keeps its 0.1.0 layout.
 			state_token: 'aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb',
 			focused_index: null,
 			elements_total: 1,
@@ -288,11 +254,6 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 			frames_unknown: [],
 			capture_truncated: false,
 		},
-		// The truncated shape, because it is the one F-3 changed: `length` is the document's TRUE
-		// length and `returned_length` is what the text block carries, so the two disagree here by
-		// design. `audit_id` is absent — this read was same-origin, and its absence is the
-		// wire-visible statement that no extra grant was needed. `tools_test.ts` drives the real
-		// handler against this same schema, which is the stronger half of the proof.
 		browser_get_html: {
 			session_id: 's',
 			frame_id: 'F1',
@@ -314,8 +275,6 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 			unsupported: ['accept_downloads'],
 			state_token: null,
 		},
-		// B2.5: each needs a real CDP session (or a real file), so the shape is pinned here and the
-		// browser tier drives the handler.
 		browser_scroll_to: {
 			session_id: 's',
 			scroll: { x: 0, y: 400, pixels_above: 400, pixels_below: 1200 },
@@ -381,15 +340,10 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 				auto_download: false,
 				started_at: '2026-01-01T00:00:00.000Z',
 				completed_at: '2026-01-01T00:00:01.000Z',
-				// B2.9: non-optional and nullable, so a consumer never has to tell an absent key from a
-				// digest that is not ready. This literal carries the computed form; `files_test.ts` covers
-				// the null one.
 				sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
 			},
 			range_supported: true,
 		},
-		// R4 (D-116): the inspection tools' handlers are driven against a real log and ring in
-		// `inspection_test.ts`, which parses every result with these schemas; these literals pin the shapes.
 		browser_network_log: {
 			session_id: 's',
 			entries: [{
@@ -434,8 +388,6 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 		assert(tool !== undefined, `${name} is not in the catalog`);
 		assertEquals(tool.outputSchema.parse(payload), payload, `${name}'s schema strips a field its handler emits`);
 	}
-	// Both halves of the catalog together must be the whole catalog, so a tool
-	// added without a proven success fails here rather than shipping unproven.
 	const covered = new Set([
 		...Object.keys(cases),
 		'browser_navigate',
@@ -453,8 +405,6 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 		'browser_list_files',
 		'browser_list_sessions',
 		'browser_get_session',
-		// B2.6: both need a live CDP session to emulate anything, so the browser tier drives them and
-		// the literals below pin the shape.
 		'browser_set_viewport',
 		'browser_set_session_options',
 		'browser_close_session',
@@ -466,31 +416,15 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 		'browser_wait_for',
 		'browser_download',
 		'browser_head',
-		// B2.1: driven against the capture with a scripted hit test in hit_test_test.ts.
 		'browser_element_at',
-		// B2.7: round-tripped on both arms at the foot of this file, against the capture's own frame
-		// list with a scripted `Runtime.evaluate`.
 		'browser_evaluate',
-		// B2.8: round-tripped at the foot of this file against the capture's own password field, and
-		// exercised end to end on the browser tier (tests/e2e/fill_secret_e2e_test.ts).
 		'browser_fill_secret',
 		'browser_audit',
-		// B2.9: round-tripped at the foot of this file. Its numbers come from the constants the
-		// enforcement path uses, and files_test.ts asserts each is the same constant.
 		'browser_file_policy',
-		// B3.2: the one tool that needs neither a browser nor a literal — `health_test.ts` drives the
-		// real handler against a real registry and parses the result with this very schema, which is
-		// a stronger proof than a payload written beside the schema it is checked against.
 		'browser_health',
-		// mcp-recommendations W4 (R2, D-124): `handoff_test.ts` drives the real handler on both of its rounds and on
-		// the link path, and asserts each success equals its own parse by this schema.
 		'browser_request_human',
-		// R9 (W7): both MCP Apps handlers are driven through the dispatcher in `ui_resources_test.ts`, whose output
-		// check parses each real result with this very schema.
 		'browser_live_view',
 		'browser_live_ticket',
-		// W2 (R10/R11): `media_test.ts` drives each real handler against a capture-backed session and parses its
-		// success with the schema the catalog declares (`structured()`), on every delivery and metric group.
 		'browser_pdf',
 		'browser_file_link',
 		'browser_accessibility_snapshot',
@@ -500,20 +434,10 @@ Deno.test('catalog: the browser-tier successes have a schema their payload satis
 	assertEquals(uncovered, [], `these tools have an outputSchema nothing proves: ${uncovered.join(', ')}`);
 });
 
-/**
- * The two tools that may declare a field spelled `secret`, and what makes them exceptions (B2.8).
- *
- * The rule this test enforces is "no output schema ships a credential", and the cheapest way to
- * check it is the field name. `browser_fill_secret` and `browser_audit` both carry a `secret` field
- * holding the configured secret's **name** — which is the whole R14 mechanism: the model is told the
- * name so it can spend a value it never sees. The exception is therefore listed by tool, not waived
- * by loosening the pattern, and each exception is paired below with a positive assertion that the
- * field is names-only. `available_secrets` on `browser_get_state` is the same exception at one
- * remove and is asserted the same way.
- */
+/** The two tools that may declare a field spelled `secret`, and what makes them exceptions. */
 const SECRET_NAME_FIELDS: ReadonlySet<string> = new Set(['browser_fill_secret', 'browser_audit']);
 
-Deno.test('schemas: no output schema declares a field named `password`, `secret` or `token` (DD-7)', () => {
+Deno.test('schemas: no output schema declares a field named `password`, `secret` or `token`', () => {
 	for (const tool of CATALOG) {
 		const emitted = JSON.stringify(z.toJSONSchema(tool.outputSchema, { io: 'output' }));
 		for (const word of ['"password"', '"secret"', '"credential"']) {
@@ -521,48 +445,29 @@ Deno.test('schemas: no output schema declares a field named `password`, `secret`
 			assert(!emitted.includes(word), `${tool.name}'s outputSchema declares ${word}`);
 		}
 	}
-	// `available_secrets` is the deliberate exception and is names-only (R14), so
-	// it is asserted by its exact spelling rather than excluded by a substring.
 	const state = JSON.stringify(z.toJSONSchema(CATALOG_BY_NAME.get('browser_get_state')!.outputSchema, {
 		io: 'output',
 	}));
 	assert(state.includes('available_secrets'), 'browser_get_state must still advertise the secret *names*');
 
-	// The two exceptions, argued: each declares `secret` and neither declares anything a value could
-	// be recovered from. A length is as disclosing as a prefix on a field a caller knows to be a
-	// credential (E-38), so the absence of every length-shaped spelling is asserted, not assumed.
 	for (const name of SECRET_NAME_FIELDS) {
 		const emitted = JSON.stringify(z.toJSONSchema(CATALOG_BY_NAME.get(name)!.outputSchema, { io: 'output' }));
 		assert(emitted.includes('"secret"'), `${name} must still name the secret`);
 		for (const forbidden of ['"value"', '"typed_length"', '"secret_length"', '"length"', '"hash"', '"digest"']) {
-			// `expression_digest` is the evaluate half of the audit entry and is a digest of the
-			// caller's own expression, never of a secret; it is spelled out rather than matched loosely.
 			if (forbidden === '"digest"' && emitted.includes('"expression_digest"')) continue;
 			assert(!emitted.includes(forbidden), `${name}'s outputSchema declares ${forbidden} beside a secret name`);
 		}
 	}
 });
 
-/**
- * A-2: `browser_wait_for` must not turn "I lost the answer" into "it did not happen".
- *
- * The ring deliberately returns a `gap` through any `kinds` filter, because the
- * only signal of loss is that record. A tool that filtered it back out would
- * answer `met: false` for an event that did occur and was evicted — and the
- * model would act on a negative it was never entitled to.
- */
+/** `browser_wait_for` must not turn "I lost the answer" into "it did not happen". */
 Deno.test('catalog: browser_wait_for reports a gap rather than a false negative', async () => {
 	const h = await captureHarness('iframe_crossorigin');
 	try {
 		const ring = h.record.events;
 		const waiting = tools.browserWaitFor({ until: { dialog: true }, timeout_ms: 5000 }, h.ctx);
 		await new Promise((resolve) => setTimeout(resolve, 10));
-		// The dialog happens, then the page floods the ring past its capacity, so
-		// the record the caller was waiting for is evicted before it is read.
 		ring.append('dialog', { dialog_id: 'd1', kind: 'alert', message: 'gone' });
-		// Spread across three kinds because each carries its own per-window budget:
-		// one kind alone cannot overrun a 512-entry ring inside one second, which
-		// is the rate cap doing its job.
 		for (let i = 0; i < 250; i++) {
 			ring.append('tab', { action: 'opened' });
 			ring.append('navigation', { frame_id: 'f', origin: 'https://a.test', path: '/', has_query: false });
@@ -581,7 +486,7 @@ Deno.test('catalog: browser_wait_for reports a gap rather than a false negative'
 	}
 });
 
-Deno.test('B2.7: browser_evaluate round-trips its outputSchema on both the value and the exception arm', async () => {
+Deno.test('schemas: browser_evaluate round-trips its outputSchema on both the value and the exception arm', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		const session = h.record.session as unknown as Record<string, unknown>;
@@ -600,8 +505,6 @@ Deno.test('B2.7: browser_evaluate round-trips its outputSchema on both the value
 		session.agentFocusTargetId = 'T';
 
 		roundTrip('browser_evaluate', await tools.browserEvaluate({ expression: '6*7' }, h.ctx));
-		// The exception arm carries `error_text` and no `value`, which is a different key set — and a
-		// schema that declared only the success shape would strip one of them on the wire.
 		answer = { result: { type: 'object' }, exceptionDetails: { exception: { description: 'TypeError: x' } } };
 		roundTrip('browser_evaluate', await tools.browserEvaluate({ expression: 'x()' }, h.ctx));
 	} finally {
@@ -609,7 +512,7 @@ Deno.test('B2.7: browser_evaluate round-trips its outputSchema on both the value
 	}
 });
 
-Deno.test('B2.8: browser_fill_secret and browser_audit round-trip their outputSchema', async () => {
+Deno.test('schemas: browser_fill_secret and browser_audit round-trip their outputSchema', async () => {
 	const h = await captureHarness('form_attributes');
 	try {
 		const session = h.record.session as unknown as Record<string, unknown>;
@@ -656,8 +559,6 @@ Deno.test('B2.8: browser_fill_secret and browser_audit round-trip their outputSc
 			'browser_fill_secret',
 			await tools.browserFillSecret({ index: 6, secret: 'bank_password', state_token: token }, ctx),
 		);
-		// Both arms of the reader: the `own` filter and, with admin, the `all` one — they differ in the
-		// `scope` literal, which the schema declares as a closed enum.
 		roundTrip('browser_audit', await tools.browserAudit({}, ctx));
 		roundTrip(
 			'browser_audit',
@@ -668,14 +569,12 @@ Deno.test('B2.8: browser_fill_secret and browser_audit round-trip their outputSc
 	}
 });
 
-Deno.test('B2.9: browser_file_policy round-trips its outputSchema and reads the enforcement constants', async () => {
+Deno.test('schemas: browser_file_policy round-trips its outputSchema and reads the enforcement constants', async () => {
 	const { ctx, registry } = await harness();
 	try {
 		const result = await tools.browserFilePolicy({}, ctx);
 		roundTrip('browser_file_policy', result);
 		const payload = (result as { structuredContent: Record<string, unknown> }).structuredContent;
-		// The same constants the enforcement path uses, read here rather than restated — a policy tool
-		// whose numbers were typed out again would be a second guess with a nicer interface.
 		assertEquals(payload.max_files_per_session, MAX_TRACKED_DOWNLOADS);
 		assertEquals(payload.max_file_bytes, MAX_DOWNLOAD_BYTES);
 		assertEquals(payload.max_session_bytes, MAX_SESSION_DOWNLOAD_BYTES);
@@ -686,6 +585,283 @@ Deno.test('B2.9: browser_file_policy round-trips its outputSchema and reads the 
 			(payload.retention as { session_idle_ttl_s: number }).session_idle_ttl_s,
 			Math.round(registry.sessionTtlMs / 1000),
 		);
+	} finally {
+		await registry.shutdown();
+	}
+});
+
+// --- Every extension and library tool declares a typed `outputSchema` inside the kept `{ result }` envelope, and the dispatcher validates the real results against it. ---
+
+/** The success's validated structured result, after asserting it equals the handler's own JSON. */
+function unchanged(name: string, result: ToolResult): Record<string, unknown> {
+	const call = result as { isError?: boolean; content: Array<{ text?: string }>; structuredContent?: unknown };
+	assertEquals(call.isError, undefined, `${name} failed: ${call.content[0]?.text}`);
+	const raw = JSON.parse(call.content[0]?.text ?? 'null') as Record<string, unknown>;
+	assertEquals(call.structuredContent, raw, `${name}: the schema dropped or changed a field`);
+	return (raw as { result: Record<string, unknown> }).result;
+}
+
+Deno.test('every extension and library tool types what is inside its { result } envelope', () => {
+	const tools = [
+		...extensionTools(
+			Object.fromEntries(Object.keys(EXTENSION_OUTPUT).map((name) => [name, () => Promise.resolve({})])),
+		),
+		...libraryTools(new LibraryStore({ dataDir: 'tests/.scratch/never-created' })),
+	];
+	assertEquals(tools.length, 44);
+	for (const tool of tools) {
+		const schema = z.toJSONSchema(tool.outputSchema) as {
+			properties?: {
+				result?: { type?: string; properties?: object; anyOf?: unknown[]; additionalProperties?: unknown };
+			};
+			required?: string[];
+		};
+		assertEquals(schema.required, ['result'], `${tool.name} keeps the envelope`);
+		const result = schema.properties?.result;
+		assert(result !== undefined, `${tool.name} has a result`);
+		assert(
+			result.properties !== undefined || result.anyOf !== undefined,
+			`${tool.name} result is untyped: ${JSON.stringify(result)}`,
+		);
+	}
+});
+
+Deno.test('real library results validate and pass the dispatcher unchanged', async () => {
+	const dir = join('tests/.scratch', `outputs-${crypto.randomUUID().slice(0, 8)}`);
+	await Deno.mkdir(dir, { recursive: true });
+	const store = new LibraryStore({ dataDir: dir });
+	await store.initialize();
+	const downloads = join(dir, 'downloads');
+	await Deno.mkdir(downloads);
+	const session = captureSession(await loadCapture('baseline_button'));
+	const registry = new SessionRegistry({
+		reapIntervalMs: 0,
+		launch: () => Promise.resolve({ session, downloads: null, downloadsDir: downloads }),
+	});
+	const call = createToolExecutor({ registry, version: 'test', library: store }, 'owner', new Set(SCOPES));
+	const seen = new Set<string>();
+	const run = async (name: string, args: Record<string, unknown>) => {
+		seen.add(name);
+		return unchanged(name, await call(name, args));
+	};
+	try {
+		assertEquals((await run('file_write', { path: 'docs/a.md', content: '# a' })).path, 'docs/a.md');
+		assertEquals((await run('file_mkdir', { path: 'docs/empty' })).kind, 'directory');
+		assertEquals(((await run('file_list', { path: 'docs' })).entries as unknown[]).length, 2);
+		assertEquals((await run('file_stat', { path: 'docs/a.md' })).size, 3);
+		assertEquals((await run('file_read', { path: 'docs/a.md' })).content, '# a');
+		assertEquals((await run('file_move', { from: 'docs/a.md', to: 'docs/b.md' })).name, 'b.md');
+		const skill = { 'SKILL.md': '---\nname: plan\ndescription: Plan work\n---\nPlan it.', 'notes.txt': 'n' };
+		assertEquals((await run('skill_put', { name: 'plan', files: skill })).files, ['SKILL.md', 'notes.txt']);
+		assertEquals(((await run('skill_list', {})).skills as unknown[]).length, 1);
+		assertStringIncludes(String((await run('skill_get', { name: 'plan' })).instructions), 'Plan it.');
+		assertEquals((await run('skill_read_file', { name: 'plan', path: 'notes.txt' })).text, 'n');
+		const prompt = {
+			name: 'ask',
+			title: 'Ask',
+			description: 'Ask a question',
+			arguments: [{ name: 'q', description: 'the question', required: true }, { name: 'tone' }],
+			template: 'Q: {{q}} ({{tone}})',
+		};
+		assertEquals((await run('prompt_put', prompt)).title, 'Ask');
+		assertEquals(((await run('prompt_list', {})).prompts as unknown[]).length, 1);
+		assertEquals(((await run('prompt_get', { name: 'ask' })).arguments as unknown[]).length, 2);
+		assertEquals(
+			(await run('prompt_render', { name: 'ask', arguments: { q: 'why', tone: 'calm' } })).text,
+			'Q: why (calm)',
+		);
+		const record = await registry.resolve(undefined);
+		const art = await record.files.addArtifact({
+			name: 'page.pdf',
+			mimeType: 'application/pdf',
+			bytes: new TextEncoder().encode('%PDF'),
+		});
+		const saved = await run('browser_save_to_share', { file_id: art.file_id, path: 'docs/page.pdf' });
+		assertEquals([saved.path, saved.size, saved.sha256], ['docs/page.pdf', 4, art.sha256]);
+		assertEquals((await run('file_delete', { path: 'docs', recursive: true })).removed, true);
+		assertEquals((await run('skill_delete', { name: 'plan' })).removed, true);
+		assertEquals((await run('prompt_delete', { name: 'ask' })).removed, true);
+		assertEquals([...seen].sort(), Object.keys(LIBRARY_OUTPUT).sort(), 'every library tool was driven');
+	} finally {
+		await registry.shutdown();
+		await Deno.remove(dir, { recursive: true });
+	}
+});
+
+/** The sandbox service's replies, field for field from `packages/sandbox/src` (workspaces.ts, sandbox.ts). */
+const LIMITS = {
+	disk_budget_bytes: 1_073_741_824,
+	disk_used_bytes: 4096,
+	file_bytes: 262_144,
+	exec_timeout_default_ms: 300_000,
+	exec_timeout_max_ms: 900_000,
+	exec_output_bytes: 1_048_576,
+	session_idle_ms: 1_800_000,
+	session_lifetime_ms: 14_400_000,
+	session_input_bytes: 16_384,
+};
+const WORKSPACE = '0f0e8c6a-3d2b-4c1a-9e8f-7a6b5c4d3e2f';
+const SESSION = '1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d';
+const TASK = {
+	id: WORKSPACE,
+	contextId: SESSION,
+	status: { state: 'TASK_STATE_WORKING', timestamp: new Date(0).toISOString() },
+	artifacts: [{ artifactId: 'a', parts: [{ text: 'partial' }] }],
+	history: [{ messageId: 'm', role: 'ROLE_USER', parts: [{ text: 'hello' }] }],
+};
+const SERVICE_REPLIES: Record<string, { args: Record<string, unknown>; reply: Record<string, unknown> }> = {
+	sandbox_create: {
+		args: { name: 'demo' },
+		reply: { workspace_id: WORKSPACE, created_at: new Date(0).toISOString(), name: 'demo', limits: LIMITS },
+	},
+	sandbox_clone: {
+		args: { remote: 'app', ref: 'main' },
+		reply: {
+			workspace_id: WORKSPACE,
+			created_at: new Date(0).toISOString(),
+			commit: '80445e2e21d609fd261502c216b1847b40923c7d',
+			ref: 'main',
+			limits: LIMITS,
+		},
+	},
+	sandbox_list: {
+		args: {},
+		reply: {
+			workspaces: [{ workspace_id: WORKSPACE, created_at: new Date(0).toISOString(), busy: true }],
+			clone: { hosts: ['github.com'], remotes: ['app'] },
+		},
+	},
+	sandbox_read: { args: { workspace_id: WORKSPACE, path: 'a.txt' }, reply: { content: 'hi', bytes: 2 } },
+	sandbox_write: {
+		args: { workspace_id: WORKSPACE, path: 'a.txt', content: 'hi' },
+		reply: { written: true, bytes: 2, path: 'a.txt' },
+	},
+	sandbox_exec: {
+		args: { workspace_id: WORKSPACE, command: 'echo hi' },
+		reply: {
+			exitCode: 0,
+			timedOut: false,
+			killed: null,
+			durationMs: 12,
+			output: 'hi\n',
+			truncated: false,
+			omittedBytes: 0,
+			outputBytes: 3,
+			diskBytes: 4096,
+			diskBudgetBytes: 1_073_741_824,
+			overBudget: false,
+			cleanupOnly: false,
+			reachedHosts: [],
+			refusedHosts: [],
+		},
+	},
+	sandbox_diff: {
+		args: { workspace_id: WORKSPACE },
+		reply: { patch: '+hi\n', files: [{ path: 'a.txt', change: 'added' }], truncated: false },
+	},
+	sandbox_delete: { args: { workspace_id: WORKSPACE }, reply: { removed: true } },
+	sandbox_session_open: {
+		args: { workspace_id: WORKSPACE },
+		reply: { session_id: SESSION, created_at: new Date(0).toISOString() },
+	},
+	sandbox_session_input: { args: { session_id: SESSION, data: 'ls\n' }, reply: { accepted: true } },
+	sandbox_session_read: {
+		args: { session_id: SESSION },
+		reply: { output: 'a.txt\n', seq: 6, gap: false, ended: false, exit_code: null, killed: null },
+	},
+	sandbox_session_close: { args: { session_id: SESSION }, reply: { closed: true } },
+	agent_peers: { args: {}, reply: { peers: [{ id: 'reviewer' }] } },
+	agent_delegate: { args: { peer: 'reviewer', message: 'look' }, reply: { task: TASK } },
+	agent_get_task: { args: { task_id: WORKSPACE }, reply: { task: TASK } },
+	agent_cancel_task: { args: { task_id: WORKSPACE }, reply: { task: TASK } },
+	agent_run_tool: { args: { tool: 'sandbox_exec', arguments: { command: 'true' } }, reply: { task: TASK } },
+	agent_list_tasks: {
+		args: { state: 'active', limit: 5 },
+		reply: { tasks: [{ ...TASK, history: [] }], truncated: false },
+	},
+	a2ui_delete: { args: { surface_id: 's' }, reply: { removed: true, surfaceId: 's' } },
+	memory_save: {
+		args: { collection: 'notes', items: [{ text: 'the cat sat', metadata: { kind: 'pet' } }] },
+		reply: { collection: 'notes', embedder: 'builtin:lexical-512', created: true, ids: ['01J0000000000000000000000A'] },
+	},
+	memory_search: {
+		args: { collection: 'notes', query: 'cat', limit: 3, filter: { kind: 'pet', ok: true, n: 1, z: null } },
+		reply: {
+			collection: 'notes',
+			embedder: 'builtin:lexical-512',
+			results: [{ id: 'a', text: 'the cat sat', metadata: { kind: 'pet' }, score: 0.81 }],
+		},
+	},
+	memory_delete: {
+		args: { collection: 'notes', all: true },
+		reply: { collection: 'notes', deleted: 1, dropped: true },
+	},
+	memory_list: {
+		args: {},
+		reply: {
+			default_embedder: 'builtin:lexical-512',
+			collections: [{
+				name: 'notes',
+				embedder: 'builtin:lexical-512',
+				dims: 512,
+				items: 1,
+				created_at: new Date(0).toISOString(),
+				available: true,
+			}],
+		},
+	},
+};
+
+Deno.test('service replies of the documented shape validate, and an added field passes through', async () => {
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const actions = Object.fromEntries(
+		Object.entries(SERVICE_REPLIES).map(([name, { reply }]) => [
+			name,
+			() => Promise.resolve({ ...reply, added_later: 1 }),
+		]),
+	);
+	const call = createToolExecutor(
+		{ registry, version: 'test', extraTools: extensionTools(actions), sandboxClone: () => true },
+		'owner',
+		new Set(SCOPES),
+	);
+	try {
+		for (const [name, { args, reply }] of Object.entries(SERVICE_REPLIES)) {
+			assertEquals(unchanged(name, await call(name, args)), { ...reply, added_later: 1 }, name);
+		}
+	} finally {
+		await registry.shutdown();
+	}
+});
+
+Deno.test('a reply that drifts from its declared shape is refused as a server fault, not passed on', async () => {
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const warnings: string[] = [];
+	const call = createToolExecutor(
+		{
+			registry,
+			version: 'test',
+			logger: { warn: (message) => warnings.push(message), info: () => {} },
+			extraTools: extensionTools({
+				sandbox_exec: () => Promise.resolve({ timedOut: false, killed: null, durationMs: 1, stdout: 'x' }),
+				a2ui_publish: () => Promise.resolve({ surface: { surfaceId: 's' } }),
+			}),
+		},
+		'owner',
+		new Set(SCOPES),
+	);
+	try {
+		for (
+			const [name, args] of [
+				['sandbox_exec', { workspace_id: WORKSPACE, command: 'true' }],
+				['a2ui_publish', { message: { version: 'v0.9', deleteSurface: { surfaceId: 's' } } }],
+			] as const
+		) {
+			const result = await call(name, args) as { isError?: boolean; structuredContent: { error: { code: string } } };
+			assertEquals(result.isError, true, name);
+			assertEquals(result.structuredContent.error.code, 'browser-unavailable');
+		}
+		assert(warnings.some((warning) => warning.includes('sandbox_exec returned a result its schema rejects')));
 	} finally {
 		await registry.shutdown();
 	}

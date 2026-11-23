@@ -1,10 +1,5 @@
-/**
- * Live sandbox sessions over HTTP (D-076), for the Workspaces screen: open, feed, follow as server-sent events,
- * close. The gateway holds no shell itself; it relays to the sandbox service, long-polling `session_read` and
- * turning each answer into an `output` event. Every route takes `sandbox:execute`, and the stream re-earns that
- * scope on the gateway's horizon like every other long-lived stream (GW-3).
- */
-import type { Context, Hono } from 'hono';
+/** Live sandbox sessions over HTTP, for the Workspaces screen: open, feed, follow as server-sent events, close. */
+import type { Context, Hono, Next } from 'hono';
 import type { SandboxClient } from '@tykotech/sandbox';
 import { SandboxClientError } from '@tykotech/sandbox';
 import type { AppVariables } from './app.ts';
@@ -34,7 +29,8 @@ export function attachSandboxSessionRoutes(
 	streams: StreamGuard,
 	authorized: (principal: Principal) => boolean,
 ): void {
-	const require = (c: Context): Response | null => {
+	/** Route middleware: `sandbox:execute`, then a configured sandbox. */
+	const needs = () => async (c: Context, next: Next): Promise<Response | void> => {
 		const principal = c.get('principal') as Principal | undefined;
 		if (principal === undefined) return problemResponse('unauthenticated', c.get('requestId'));
 		if (!principal.scopes.has('sandbox:execute')) {
@@ -43,13 +39,11 @@ export function attachSandboxSessionRoutes(
 		if (sandbox === undefined) {
 			return problemResponse('not-found', c.get('requestId'), 'no coding sandbox is configured');
 		}
-		return null;
+		await next();
 	};
 	const owner = (c: Context): string => expansionOwner(c.get('principal') as Principal);
 
-	app.post('/api/v1/sandbox/sessions', async (c: Context) => {
-		const denied = require(c);
-		if (denied !== null) return denied;
+	app.post('/api/v1/sandbox/sessions', needs(), async (c: Context) => {
 		try {
 			const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 			const args: Record<string, unknown> = { workspace_id: body.workspace_id };
@@ -60,9 +54,7 @@ export function attachSandboxSessionRoutes(
 		}
 	});
 
-	app.post('/api/v1/sandbox/sessions/:id/input', async (c: Context) => {
-		const denied = require(c);
-		if (denied !== null) return denied;
+	app.post('/api/v1/sandbox/sessions/:id/input', needs(), async (c: Context) => {
 		try {
 			const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 			return c.json(await sandbox!.call(owner(c), 'session_input', { session_id: c.req.param('id'), data: body.data }));
@@ -71,9 +63,7 @@ export function attachSandboxSessionRoutes(
 		}
 	});
 
-	app.delete('/api/v1/sandbox/sessions/:id', async (c: Context) => {
-		const denied = require(c);
-		if (denied !== null) return denied;
+	app.delete('/api/v1/sandbox/sessions/:id', needs(), async (c: Context) => {
 		try {
 			await sandbox!.call(owner(c), 'session_close', { session_id: c.req.param('id') });
 			return c.body(null, 204);
@@ -82,9 +72,7 @@ export function attachSandboxSessionRoutes(
 		}
 	});
 
-	app.get('/api/v1/sandbox/sessions/:id/events', (c: Context) => {
-		const denied = require(c);
-		if (denied !== null) return denied;
+	app.get('/api/v1/sandbox/sessions/:id/events', needs(), (c: Context) => {
 		const principal = c.get('principal') as Principal;
 		const sessionId = c.req.param('id') ?? '';
 		const who = expansionOwner(principal);

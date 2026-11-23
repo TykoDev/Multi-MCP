@@ -1,13 +1,11 @@
 /**
- * Browser downloads and file retrieval (E-33; MCP-FILE-TOOL-PLAN.md), against a
- * real Chromium.
+ * Browser downloads and file retrieval, against a real Chromium.
  *
- * The 2026-09-05 diagnostic against real Chrome found two defects in the old
- * pipeline: a clicked attachment was downloaded twice (the response sniffer
- * re-triggered what Chromium was already downloading), and a second file with
- * the same suggested name overwrote the first while the ledger recorded a
- * ` (1)` file that did not exist. This suite is the regression for both, and the
- * proof that retrieval returns the bytes the browser actually fetched — through
+ * A clicked attachment is downloaded exactly once (nothing re-triggers what
+ * Chromium is already downloading), and a second file with the same suggested
+ * name is stored beside the first under a ` (1)` display name rather than
+ * overwriting it. This suite proves both, and that retrieval returns the bytes
+ * the browser actually fetched — through
  * a cookie the fixture requires, so a server-side re-fetch could not have
  * produced them.
  *
@@ -94,7 +92,7 @@ Deno.test({
 		await t.step('a clicked attachment becomes exactly one completed, available file', async () => {
 			await clickLink('body=first');
 			const listing = await listUntil((files) => files.length >= 1 && settled(files), 'the first download');
-			// The regression: one click, one record — not one click, two records.
+			// One click, one record — not one click, two records.
 			assertEquals(listing.files.length, 1, JSON.stringify(listing.files));
 			first = listing.files[0] as FileInfo;
 			assertEquals(first.name, 'report.txt');
@@ -119,7 +117,7 @@ Deno.test({
 			assertEquals(second.size, 6);
 			assert(second.file_id !== first.file_id);
 
-			// Re-read the *first* after the second finished: the E-33 overwrite would show here.
+			// Re-read the *first* after the second finished: an overwrite would show here.
 			const firstBytes = blobOf(await h.call('browser_get_file', { file_id: first.file_id }));
 			assertEquals(decoder.decode(firstBytes.bytes), 'first');
 			assertEquals(firstBytes.mimeType, 'text/plain');
@@ -201,7 +199,7 @@ Deno.test({
 			const anonymous = await fetch(`${h.url}${new URL(payload.http_url).pathname}`);
 			assertEquals(anonymous.status, 401);
 			await anonymous.body?.cancel();
-			// R1-5: refused by the front (an encoded slash) before authentication or routing ever see it.
+			// Refused by the front (an encoded slash) before authentication or routing ever see it.
 			const traversal = await h.fetch('/api/v1/sessions/default/files/..%2F..%2Fdeno.json');
 			assertEquals(traversal.status, 400);
 			await traversal.body?.cancel();
@@ -288,18 +286,17 @@ Deno.test({
 			// **Bounded, and the bound is the finding.** A cancellation is *reported* before its cleanup
 			// completes: `#abort` writes the canceled record and notifies listeners, and only then cancels
 			// through CDP and removes the partial — so a listing that says `canceled` is not yet a promise
-			// about the directory. ERRATUM(E-54) additionally made the removal retry, because Chromium
+			// about the directory. The removal retries, because Chromium
 			// still holds the `.crdownload` handle for a moment after `Browser.cancelDownload` returns and
 			// Windows refuses the unlink until it does; measured at ~100 ms across three runs. The window
 			// is bounded at 5 s and the assertion is still that the file GOES: a partial that survived
-			// would fail here exactly as it did before E-54.
+			// would fail here.
 			let left = await leftovers();
 			const t0 = Date.now();
 			while (left.length > 0 && Date.now() - t0 < 5_000) {
 				await new Promise((resolve) => setTimeout(resolve, 50));
 				left = await leftovers();
 			}
-			console.log(`[E-54] the cancelled transfer's partial was gone ${Date.now() - t0} ms after it read canceled`);
 			assertEquals(left, [], 'the cancelled transfer left no file behind');
 		});
 

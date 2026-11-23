@@ -1,5 +1,5 @@
 /**
- * §6.5 attribute emission, one test per rule of the ordered pipeline in `serialize_attrs.ts`.
+ * Attribute emission, one test per rule of the ordered pipeline in `serialize_attrs.ts`.
  *
  * The two order-sensitive rules get their own pins: B2-after-B1 (password scrubbing must outlive the
  * AX value override) and C6-before-D1 (dedupe before capping, or two values differing past char 100
@@ -27,7 +27,7 @@ Deno.test('dom-attrs: A1 emits whitelisted DOM attributes in source order and dr
 });
 
 Deno.test('dom-attrs: A1 drops an empty value rather than rendering it', () => {
-	// ERRATUM(M1-parity-3): §6.5 says empty renders `key=''`. The reference emits neither the `value=""`
+	// An empty value renders nothing, not `key=''`: the reference emits neither the `value=""`
 	// nor the `title=""` that `form_attributes`' `#f-empty-value` carries in its markup.
 	assertEquals(attrs({ tag: 'BUTTON', attrs: { 'aria-label': '', 'id': 'b' } }), 'id=b');
 });
@@ -83,7 +83,7 @@ Deno.test('dom-attrs: A3 AX properties overwrite same-named DOM keys in place, i
 			ax: { name: 'Agree to terms', props: { checked: true, level: '2' } },
 		}),
 		'checked=true name=agree level=2',
-		'ax_name is emitted by no golden and is no longer emitted at all',
+		'ax_name is emitted by no golden, so it is not emitted at all',
 	);
 	// The whitelist filters, it does not order: Chrome reports `invalid` before `checked` on a required
 	// checkbox and the reference prints them that way (`#c-required`).
@@ -188,8 +188,8 @@ Deno.test('dom-attrs: C4 drops aria-expanded when the AX expanded property is pr
 });
 
 Deno.test('dom-attrs: label-ish attributes that restate the element text are KEPT', () => {
-	// ERRATUM(M1-parity-3): §6.5's "label-ish attrs dropped when equal to element text" cleanup is not
-	// what the reference does — `#f-text-equals-label` renders `title=Save changes aria-label=Save
+	// Label-ish attributes are kept when equal to the element text, because that is what the
+	// reference does — `#f-text-equals-label` renders `title=Save changes aria-label=Save
 	// changes` directly above its own text `Save changes`. Both keys are dedupe-protected, so the
 	// duplicate pair survives C6 as well.
 	const node: FixtureNode = {
@@ -214,7 +214,7 @@ Deno.test('dom-attrs: C6 dedupes values over 5 chars, protecting the named keys'
 		'id=duplicate-value',
 		'with no protected carrier, first occurrence wins among the rest',
 	);
-	// ERRATUM(M1-parity-14): a protected key claims its value regardless of position, so `name` loses
+	// A protected key claims its value regardless of position, so `name` loses
 	// even when it comes first (`#f-dupe`).
 	assertEquals(
 		attrs({
@@ -270,8 +270,8 @@ Deno.test('dom-attrs: includeAttributes narrows every source, including AX and s
 });
 
 Deno.test('dom-attrs: src is never emitted, frames included', () => {
-	// ERRATUM(M1-dom-serialize-11 REVERSED): §6.4's grammar example shows `<iframe src=... />`; none of
-	// the reference's four iframe lines carries a `src`, and §6.5's whitelist never had one.
+	// No frame gets a `src`: none of the reference's four iframe lines carries one, and the whitelist
+	// does not include it.
 	assertEquals(attrs({ tag: 'IFRAME', attrs: { src: '/inner.html', name: 'inner' } }), 'name=inner');
 	assertEquals(attrs({ tag: 'FRAME', attrs: { src: '/inner.html' } }), '');
 	assertEquals(attrs({ tag: 'IMG', attrs: { src: '/logo.png', alt: 'Logo' } }), 'alt=Logo');

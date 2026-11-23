@@ -1,20 +1,10 @@
-/**
- * B4 / D-097: the control plane's sign-in cookie, its CSRF proof, and the rules around both (AC3).
- *
- * Every rule of design §2.3 is exercised through the real middleware stack (`createGatewayApp().app`, the outer
- * front included): a cookie sign-in needs an allowed Origin and returns no token; the cookie authenticates reads; a
- * cookie-authenticated change without the CSRF header, with a wrong one or without an allowed Origin is refused
- * `403 csrf-failed`; the Authorization header wins and bearer clients carry no CSRF obligation; only `ttks_` values
- * are read from the cookie; the live-view socket never accepts it; logout clears it.
- */
+/** The control plane's sign-in cookie, its CSRF proof, and the rules around both. */
 import { assert, assertEquals, assertMatch, assertStringIncludes } from '@std/assert';
 import { encodeBase64Url } from '@std/encoding/base64url';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { SessionRegistry } from '@tykotech/mcp';
 import { generateAdminUser } from './admin_auth.ts';
 import { createGatewayApp } from './app.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
-import { Cluster } from './cluster.ts';
 import { type Config, loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
 import { LoginStore, sha256Hex } from './logins.ts';
@@ -44,8 +34,8 @@ Deno.test('session cookie: the CSRF value is SHA-256 over the label and the raw 
 	const expected = encodeBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', input)));
 	assertEquals(await csrfFor(token), expected);
 	assertEquals((await csrfFor(token)).length, 43, 'unpadded base64url of 32 bytes');
-	assertEquals(await csrfFor(token), await csrfFor(token), 'stateless: the same on every node and every restart');
-	// A copy of logins.json (or the cluster KV) holds sha256(token); the CSRF value must not follow from it.
+	assertEquals(await csrfFor(token), await csrfFor(token), 'stateless: the same on every restart');
+	// A copy of logins.json holds sha256(token); the CSRF value must not follow from it.
 	const stored = await sha256Hex(token);
 	assert((await csrfFor(stored)) !== expected);
 	assert(!expected.includes(stored.slice(0, 16)));
@@ -80,7 +70,7 @@ Deno.test('session cookie: name and attributes follow the public URL; only ttks_
 	assertEquals(readSessionCookie(undefined, 'ttk_session'), null);
 });
 
-Deno.test('R1-2: the cookie jar is judged whole; the origin is compared whole; clearing covers every path', () => {
+Deno.test('session cookie: the cookie jar is judged whole; the origin is compared whole; clearing covers every path', () => {
 	const name = SESSION_COOKIE;
 	const token = `ttks_${'ab'.repeat(32)}`;
 	assertEquals(parseSessionCookie(undefined, name), { kind: 'absent' });
@@ -284,7 +274,7 @@ Deno.test('session cookie: a cookie sign-in sets the cookie, returns the CSRF va
 	}
 });
 
-Deno.test('session cookie: a cookie sign-in needs an allowed Origin, checked before the credential (M6)', async () => {
+Deno.test('session cookie: a cookie sign-in needs an allowed Origin, checked before the credential', async () => {
 	const f = await fixture();
 	try {
 		const missing = await f.request('/api/v1/auth/login', {
@@ -444,7 +434,7 @@ Deno.test('session cookie: only a ttks_ value is read from the cookie; an API ke
 	try {
 		const planted = await f.request('/api/v1/auth/me', { headers: { cookie: `ttk_session=${f.key}` } });
 		assertEquals(planted.status, 401, 'a raw API key in the cookie authenticates nothing');
-		// R1-2: and, being a value this server never sets, it is cleared rather than left to refuse every request.
+		// And, being a value this server never sets, it is cleared rather than left to refuse every request.
 		assertStringIncludes(planted.headers.get('set-cookie') ?? '', 'ttk_session=; ');
 		await planted.body?.cancel();
 		const forged = await f.request('/api/v1/auth/me', { headers: { cookie: `ttk_session=ttks_${'0'.repeat(64)}` } });
@@ -458,7 +448,7 @@ Deno.test('session cookie: only a ttks_ value is read from the cookie; an API ke
 	}
 });
 
-Deno.test('session cookie: the live-view socket never accepts the cookie (M6)', async () => {
+Deno.test('session cookie: the live-view socket never accepts the cookie', async () => {
 	const f = await fixture();
 	try {
 		const { cookie } = await cookieSignIn(f, { username: 'root', password: f.password });
@@ -523,7 +513,7 @@ Deno.test('session cookie: an https deployment uses the __Host- cookie with Secu
 	}
 });
 
-Deno.test('session cookie: a second node with the same sign-in store derives the same CSRF value (F3)', async () => {
+Deno.test('session cookie: a second gateway over the same sign-in store derives the same CSRF value', async () => {
 	const f = await fixture();
 	const other = createGatewayApp({
 		config: f.config,
@@ -549,7 +539,7 @@ Deno.test('session cookie: a second node with the same sign-in store derives the
 	}
 });
 
-Deno.test('login: a ttks_ session token offered as an apiKey is refused, not exchanged (C14)', async () => {
+Deno.test('login: a ttks_ session token offered as an apiKey is refused, not exchanged', async () => {
 	const f = await fixture();
 	try {
 		const bearer = await f.request('/api/v1/auth/login', {
@@ -570,45 +560,6 @@ Deno.test('login: a ttks_ session token offered as an apiKey is refused, not exc
 	}
 });
 
-Deno.test('session cookie: an OAuth access token cannot open a cookie session; it stays a bearer', async () => {
-	const { publicKey, privateKey } = await generateKeyPair('RS256');
-	const jwk = { ...(await exportJWK(publicKey)), kid: 'k1', alg: 'RS256', use: 'sig' };
-	const server = Deno.serve(
-		{ hostname: '127.0.0.1', port: 0, onListen: () => {} },
-		() => Response.json({ keys: [jwk] }),
-	);
-	const issuer = `http://127.0.0.1:${server.addr.port}/realms/x`;
-	const f = await fixture({
-		TTK_OAUTH_ISSUER: issuer,
-		TTK_OAUTH_JWKS_URL: `http://127.0.0.1:${server.addr.port}/certs`,
-		TTK_OAUTH_AUDIENCE: 'tykotech',
-	});
-	try {
-		const token = await new SignJWT({ scope: 'mcp:invoke admin' })
-			.setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-			.setIssuer(issuer)
-			.setAudience('tykotech')
-			.setSubject('alice')
-			.setExpirationTime('5m')
-			.sign(privateKey);
-		const cookie = await f.request('/api/v1/auth/login', {
-			method: 'POST',
-			headers: { origin: ORIGIN },
-			body: { apiKey: token, session: 'cookie' },
-		});
-		assertEquals(cookie.status, 400);
-		assertEquals(cookie.headers.get('set-cookie'), null);
-		assertStringIncludes(((await cookie.json()) as { detail: string }).detail, 'bearer');
-		// The bearer exchange is unchanged: the token comes back as it went.
-		const bearer = await f.request('/api/v1/auth/login', { method: 'POST', body: { apiKey: token } });
-		assertEquals(bearer.status, 200);
-		assertEquals(((await bearer.json()) as { token: string }).token, token);
-	} finally {
-		await f.close();
-		await server.shutdown();
-	}
-});
-
 /** A request with an exact `Content-Type` (or none) and a raw body, for the rules the JSON helper would hide. */
 async function raw(
 	f: Fixture,
@@ -623,7 +574,7 @@ async function raw(
 	});
 }
 
-Deno.test('R1-2: a cookie sign-in must come from the server origin (scheme, host and port), not its hostname', async () => {
+Deno.test('session cookie: a cookie sign-in must come from the server origin (scheme, host and port), not its hostname', async () => {
 	const f = await fixture();
 	try {
 		const credentials = { username: 'root', password: f.password, session: 'cookie' };
@@ -661,7 +612,7 @@ Deno.test('R1-2: a cookie sign-in must come from the server origin (scheme, host
 	}
 });
 
-Deno.test('R1-2: a cookie sign-in must be sent as application/json, so a cross-origin attempt needs a preflight', async () => {
+Deno.test('session cookie: a cookie sign-in must be sent as application/json, so a cross-origin attempt needs a preflight', async () => {
 	const f = await fixture();
 	try {
 		const body = JSON.stringify({ username: 'root', password: f.password, session: 'cookie' });
@@ -689,7 +640,7 @@ Deno.test('R1-2: a cookie sign-in must be sent as application/json, so a cross-o
 	}
 });
 
-Deno.test('R1-2: a cookie-authenticated change from another port of the same host is refused', async () => {
+Deno.test('session cookie: a cookie-authenticated change from another port of the same host is refused', async () => {
 	const f = await fixture();
 	try {
 		const { cookie, csrf } = await cookieSignIn(f, { username: 'root', password: f.password });
@@ -710,74 +661,12 @@ Deno.test('R1-2: a cookie-authenticated change from another port of the same hos
 		});
 		assertEquals(bearer.status, 201);
 		await bearer.body?.cancel();
-		// Outside a cluster nothing is ever forwarded, so the forward marker relaxes nothing.
-		const notACluster = await f.request('/api/v1/live/ticket', {
-			method: 'POST',
-			headers: { cookie, origin: 'http://127.0.0.1:3000', 'x-ttk-csrf': csrf, 'x-ttk-forwarded-by': 'node-a' },
-			body: {},
-		});
-		assertEquals(notACluster.status, 403);
-		await notACluster.body?.cancel();
 	} finally {
 		await f.close();
 	}
 });
 
-Deno.test('R1-2: in a cluster, a peer-forwarded cookie change keeps the hostname rule and the CSRF value', async () => {
-	const f = await fixture();
-	const dir = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'kv-cookie-' });
-	const cluster = await Cluster.open({
-		kvPath: `${dir}/cluster.kv`,
-		nodeId: 'node-b',
-		nodeUrl: 'http://127.0.0.1:8788',
-		role: 'all',
-		version: 'test',
-		logger: createLogger({ level: 'error', write: () => {} }),
-	});
-	const node = createGatewayApp({
-		config: f.config,
-		verifier: f.verifier,
-		registry: f.registry,
-		version: 'test',
-		logger: createLogger({ level: 'error', write: () => {} }),
-		cluster,
-	});
-	try {
-		const { cookie, csrf } = await cookieSignIn(f, { username: 'root', password: f.password });
-		const mint = (headers: Record<string, string>) =>
-			node.app.request(`${ORIGIN}/api/v1/live/ticket`, {
-				method: 'POST',
-				headers: { host: '127.0.0.1:8788', cookie, 'content-type': 'application/json', ...headers },
-				body: '{}',
-			});
-		// The browser addressed node A, so its Origin is not this node's; the peer marked the forward. The marker is
-		// not CORS-safelisted, so no cross-origin page can attach it without a preflight this server never grants.
-		const forwarded = await mint({ origin: 'http://localhost:8787', 'x-ttk-csrf': csrf, 'x-ttk-forwarded-by': 'a' });
-		assertEquals(forwarded.status, 201, await forwarded.clone().text());
-		await forwarded.body?.cancel();
-		// The CSRF value still applies, and so does the process-wide hostname list.
-		const noCsrf = await mint({ origin: 'http://localhost:8787', 'x-ttk-forwarded-by': 'a' });
-		assertEquals(noCsrf.status, 403);
-		await noCsrf.body?.cancel();
-		const foreign = await mint({ origin: 'https://evil.example', 'x-ttk-csrf': csrf, 'x-ttk-forwarded-by': 'a' });
-		assertEquals(foreign.status, 403);
-		await foreign.body?.cancel();
-		// Without the marker, a cookie change on this node must come from this node's own origin.
-		const unmarked = await mint({ origin: 'http://localhost:8787', 'x-ttk-csrf': csrf });
-		assertEquals(unmarked.status, 403);
-		assertEquals((await unmarked.json()).type, 'https://tykotech.eu/problems/csrf-failed');
-		const own = await mint({ origin: 'http://127.0.0.1:8788', 'x-ttk-csrf': csrf });
-		assertEquals(own.status, 201);
-		await own.body?.cancel();
-	} finally {
-		await node.close();
-		await cluster.close();
-		await f.close();
-		await Deno.remove(dir, { recursive: true }).catch(() => {});
-	}
-});
-
-Deno.test('R1-2: duplicate or malformed sign-in cookies are refused and cleared, never resolved first-wins', async () => {
+Deno.test('session cookie: duplicate or malformed sign-in cookies are refused and cleared, never resolved first-wins', async () => {
 	const f = await fixture();
 	try {
 		const victim = await cookieSignIn(f, { username: 'root', password: f.password });
@@ -796,7 +685,7 @@ Deno.test('R1-2: duplicate or malformed sign-in cookies are refused and cleared,
 		for (const path of ['/', '/api', '/api/', '/api/v1', '/api/v1/auth', '/api/v1/auth/me']) {
 			assert(paths.includes(path), `the clearing covers Path=${path}; got ${paths.join(' ')}`);
 		}
-		// (c) A junk first value no longer locks the browser out silently: it is refused *and* cleared.
+		// (c) A junk first value does not lock the browser out silently: it is refused *and* cleared.
 		for (
 			const jar of [
 				`ttk_session=garbage; ${victim.cookie}`,
@@ -827,13 +716,13 @@ Deno.test('R1-2: duplicate or malformed sign-in cookies are refused and cleared,
 	}
 });
 
-Deno.test('R1-3: logout clears the cookie even when the session cannot be ended, and says so', async () => {
+Deno.test('session cookie: logout clears the cookie even when the session cannot be ended, and says so', async () => {
 	const lines: string[] = [];
 	const f = await fixture();
 	try {
 		const { cookie, csrf } = await cookieSignIn(f, { username: 'root', password: f.password });
 		const original = f.verifier.closeSession.bind(f.verifier);
-		f.verifier.closeSession = () => Promise.reject(new Error('cluster store unavailable'));
+		f.verifier.closeSession = () => Promise.reject(new Error('login store unavailable'));
 		const gateway = createGatewayApp({
 			config: f.config,
 			verifier: f.verifier,
@@ -861,7 +750,7 @@ Deno.test('R1-3: logout clears the cookie even when the session cannot be ended,
 	}
 });
 
-Deno.test('R1-3: logout is not rate-limited, so a spent budget cannot keep a browser signed in', async () => {
+Deno.test('session cookie: logout is not rate-limited, so a spent budget cannot keep a browser signed in', async () => {
 	const f = await fixture({ TTK_RATE_RPM: '2' });
 	try {
 		const { cookie, csrf } = await cookieSignIn(f, { username: 'root', password: f.password });
@@ -881,7 +770,7 @@ Deno.test('R1-3: logout is not rate-limited, so a spent budget cannot keep a bro
 	}
 });
 
-Deno.test('R1-7: GET /api/v1/auth/me is never cached: it carries the CSRF value', async () => {
+Deno.test('session cookie: GET /api/v1/auth/me is never cached: it carries the CSRF value', async () => {
 	const f = await fixture();
 	try {
 		const { cookie } = await cookieSignIn(f, { username: 'root', password: f.password });

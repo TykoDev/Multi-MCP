@@ -1,10 +1,9 @@
 /**
- * C11 (D-101, AC8): `GET /metrics` serves Prometheus text 0.0.4 to `metrics:read` or `admin`, 403 to anyone else,
- * and does not exist at all (404) unless `TTK_METRICS` is on. Labels are route patterns and catalog names, never
- * paths or arguments.
+ * `GET /metrics` serves Prometheus text 0.0.4 to `metrics:read` or `admin`, 403 to anyone else, and does not exist at
+ * all (404) unless `TTK_METRICS` is on.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
-import { SCOPES, SessionRegistry } from '@tykotech/mcp';
+import { SessionRegistry } from '@tykotech/mcp';
 import { createGatewayApp } from './app.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
 import { loadConfig } from './config.ts';
@@ -21,7 +20,7 @@ import {
 
 const ORIGIN = 'http://127.0.0.1:8787';
 
-Deno.test('C11: the exposition is well-formed text 0.0.4 with every family typed', () => {
+Deno.test('metrics: the exposition is well-formed text 0.0.4 with every family typed', () => {
 	const metrics = new GatewayMetrics();
 	metrics.observeRequest('GET', '/healthz', 200);
 	metrics.observeRequest('GET', '/healthz', 200);
@@ -71,7 +70,7 @@ Deno.test('C11: the exposition is well-formed text 0.0.4 with every family typed
 	assertEquals(metrics.render({ sessions: [], memory: null }).includes('ttk_process_'), false);
 });
 
-Deno.test('C11: label values are escaped, and a family past MAX_SERIES folds into one other series', () => {
+Deno.test('metrics: label values are escaped, and a family past MAX_SERIES folds into one other series', () => {
 	assertEquals(escapeLabel('a"b\\c\nd'), 'a\\"b\\\\c\\nd');
 	const metrics = new GatewayMetrics();
 	for (let i = 0; i < MAX_SERIES + 10; i += 1) metrics.observeRequest('GET', `/r${i}`, 200);
@@ -81,7 +80,7 @@ Deno.test('C11: label values are escaped, and a family past MAX_SERIES folds int
 	assert(lines.includes('ttk_http_requests_total{route="other",status="other"} 10'), lines.slice(-2).join('\n'));
 });
 
-Deno.test('C11: the scope rule and the tool outcome', () => {
+Deno.test('metrics: the scope rule and the tool outcome', () => {
 	assertEquals(mayReadMetrics(new Set([METRICS_SCOPE])), true);
 	assertEquals(mayReadMetrics(new Set(['admin'])), true);
 	assertEquals(mayReadMetrics(new Set(['mcp:invoke', 'view:watch', 'files:read'])), false);
@@ -132,7 +131,7 @@ async function fixture(env: Record<string, string>): Promise<Fixture> {
 	};
 }
 
-Deno.test('C11 (AC8): /metrics is 404 while TTK_METRICS is off, even for an administrator', async () => {
+Deno.test('metrics: /metrics is 404 while TTK_METRICS is off, even for an administrator', async () => {
 	const f = await fixture({});
 	try {
 		const response = await f.request('/metrics', f.admin);
@@ -143,7 +142,7 @@ Deno.test('C11 (AC8): /metrics is 404 while TTK_METRICS is off, even for an admi
 	}
 });
 
-Deno.test('C11 (AC8): /metrics serves admin, refuses a credential without the scope, and counts by pattern', async () => {
+Deno.test('metrics: /metrics serves admin, refuses a credential without the scope, and counts by pattern', async () => {
 	const f = await fixture({ TTK_METRICS: 'true' });
 	try {
 		const refused = await f.request('/metrics', f.plain);
@@ -200,37 +199,30 @@ Deno.test('C11 (AC8): /metrics serves admin, refuses a credential without the sc
 	}
 });
 
-// `metrics:read` joins the vocabulary in `scopes.ts` (W2); until it does no credential can hold it, and this test
-// says so instead of passing vacuously.
-const vocabularyHasMetricsScope = (SCOPES as readonly string[]).includes(METRICS_SCOPE);
-Deno.test({
-	name: 'C11 (AC8): a credential holding only metrics:read reads /metrics',
-	ignore: !vocabularyHasMetricsScope,
-	async fn() {
-		const scraper = await generateApiKey('scraper', [METRICS_SCOPE] as never);
-		const config = loadConfig({
-			TTK_HOST: '127.0.0.1',
-			TTK_PORT: '8787',
-			TTK_API_KEYS: JSON.stringify([scraper.record]),
-			TTK_METRICS: 'true',
+Deno.test('metrics: a credential holding only metrics:read reads /metrics', async () => {
+	const scraper = await generateApiKey('scraper', [METRICS_SCOPE]);
+	const config = loadConfig({
+		TTK_HOST: '127.0.0.1',
+		TTK_PORT: '8787',
+		TTK_API_KEYS: JSON.stringify([scraper.record]),
+		TTK_METRICS: 'true',
+	});
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const gateway = createGatewayApp({
+		config,
+		verifier: new VerifierChain({ config, allowAnonymous: false }),
+		registry,
+		version: 'test',
+		logger: createLogger({ level: 'error', write: () => {} }),
+	});
+	try {
+		const response = await gateway.app.request(`${ORIGIN}/metrics`, {
+			headers: { host: '127.0.0.1:8787', authorization: `Bearer ${scraper.key}` },
 		});
-		const registry = new SessionRegistry({ reapIntervalMs: 0 });
-		const gateway = createGatewayApp({
-			config,
-			verifier: new VerifierChain({ config, allowAnonymous: false }),
-			registry,
-			version: 'test',
-			logger: createLogger({ level: 'error', write: () => {} }),
-		});
-		try {
-			const response = await gateway.app.request(`${ORIGIN}/metrics`, {
-				headers: { host: '127.0.0.1:8787', authorization: `Bearer ${scraper.key}` },
-			});
-			assertEquals(response.status, 200);
-			assertStringIncludes(await response.text(), '# TYPE ttk_http_requests_total counter');
-		} finally {
-			await gateway.close();
-			await registry.shutdown();
-		}
-	},
+		assertEquals(response.status, 200);
+		assertStringIncludes(await response.text(), '# TYPE ttk_http_requests_total counter');
+	} finally {
+		await gateway.close();
+		await registry.shutdown();
+	}
 });

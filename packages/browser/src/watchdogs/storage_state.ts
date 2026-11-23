@@ -1,7 +1,6 @@
 /**
  * @module
- * `StorageStateWatchdog` — cookie/localStorage persistence (ARCHITECTURE.md §6.9, DATA-MODEL.md
- * §5.1.5, §5.2 "Storage / downloads", §9 R9.2).
+ * `StorageStateWatchdog` — cookie/localStorage persistence.
  *
  * **Conditional watchdog**: attached only when `storageState` or `userDataDir` is configured — see
  * {@linkcode shouldAttachStorageStateWatchdog}. A session with neither has nothing to persist and
@@ -17,7 +16,7 @@
  *   diff is over a fingerprint of the jar, so an idle session writes nothing.
  * - **Merge with the existing file, then write atomically** through `.tmp` → `.bak` → rename.
  *
- * ## The cookie-leak prevention rule (§6.9: "in-memory dicts are never stringified")
+ * ## The cookie-leak prevention rule: in-memory dicts are never stringified
  *
  * Two distinct obligations, both tested:
  *
@@ -49,10 +48,10 @@ import { type HandlerBudget, handlerBudget } from './handler_budget.ts';
 import { BaseWatchdog, type WatchdogHost } from './base.ts';
 
 // ---------------------------------------------------------------------------
-// constants (ARCHITECTURE.md §6.9 — load-bearing, DECISION-REGISTER rule §2.5)
+// constants (load-bearing timing)
 // ---------------------------------------------------------------------------
 
-/** Cookie-diff monitor cadence (ARCHITECTURE.md §6.9: "saves on a 60 s monitor loop"). */
+/** Cookie-diff monitor cadence: saves on a 60 s monitor loop. */
 export const STORAGE_MONITOR_INTERVAL_MS = 60_000;
 
 /** Suffix of the temp file the atomic write goes through. */
@@ -64,10 +63,9 @@ export const STORAGE_BACKUP_SUFFIX = '.bak';
 /**
  * File name used when only `userDataDir` is configured.
  *
- * ERRATUM(M1-watchdogs-data-3): §6.9 makes the watchdog conditional on "`storageState` **or**
- * `userDataDir` configured" but never says where it saves in the `userDataDir`-only case. It is
- * placed inside the profile directory (through the containment join, so a hostile `userDataDir`
- * cannot redirect it) under a `bua_`-prefixed name that cannot collide with Chrome's own files.
+ * It is placed inside the profile directory (through the containment join, so a hostile
+ * `userDataDir` cannot redirect it) under a `bua_`-prefixed name that cannot collide with Chrome's
+ * own files.
  */
 export const DEFAULT_STORAGE_STATE_FILENAME = 'bua_storage_state.json';
 
@@ -77,7 +75,7 @@ export function emptyStorageState(): StorageState {
 }
 
 /**
- * The conditional-attachment predicate (ARCHITECTURE.md §6.9).
+ * The conditional-attachment predicate.
  *
  * `BrowserSession` consults this before constructing the watchdog; it is exported so the decision is
  * testable, and greppable, on its own.
@@ -115,7 +113,7 @@ export function cookieFingerprint(cookies: readonly Cookie[]): string {
 		.join('');
 }
 
-/** CDP `Network.Cookie` → the Playwright-format cookie of DATA-MODEL.md §5.2. */
+/** CDP `Network.Cookie` → the Playwright-format cookie. */
 export function toStorageCookie(cdp: {
 	name: string;
 	value: string;
@@ -132,7 +130,7 @@ export function toStorageCookie(cdp: {
 		value: cdp.value,
 		domain: cdp.domain,
 		path: cdp.path,
-		// §5.2: `-1` marks a session cookie. CDP reports `session: true` with an unusable `expires`.
+		// `-1` marks a session cookie. CDP reports `session: true` with an unusable `expires`.
 		expires: cdp.session === true ? -1 : cdp.expires,
 		httpOnly: cdp.httpOnly,
 		secure: cdp.secure,
@@ -140,7 +138,7 @@ export function toStorageCookie(cdp: {
 	};
 }
 
-/** `Network.CookieParam` as the typed CDP surface spells it (no deep import — D-CDP2 via `CdpParams`). */
+/** `Network.CookieParam` as the typed CDP surface spells it (no deep import — reached via `CdpParams`). */
 export type StorageCookieParam = CdpParams['Storage.setCookies']['cookies'][number];
 
 /** The write-side shape (`Network.CookieParam`); `expires` is omitted for session cookies. */
@@ -159,8 +157,7 @@ export function toCookieParam(cookie: Cookie): StorageCookieParam {
 }
 
 /**
- * Merges a freshly-read state over one already on disk (ARCHITECTURE.md §6.9 "merges with the
- * existing file").
+ * Merges a freshly-read state over one already on disk.
  *
  * Live wins on collision: the browser's jar is the newer truth. Entries only present in the file are
  * preserved, because a run that only visited one site must not wipe another site's login.
@@ -208,8 +205,8 @@ export function parseStorageState(text: string): { state: StorageState; error: s
 	try {
 		parsed = JSON.parse(text);
 	} catch (error) {
-		// ERRATUM(E-109), review R1-1: the reason is logged, and a cookie jar is a credential store. V8's own message
-		// quotes the document's text — all of it when short, its start otherwise — so a truncated or corrupted file put
+		// The reason is logged, and a cookie jar is a credential store. V8's own message
+		// quotes the document's text — all of it when short, its start otherwise — so a truncated or corrupted file would put
 		// a cookie value into the log. A fixed phrase, and the position when the parser reports one.
 		const at = error instanceof SyntaxError ? /\bat position (\d+)\b/.exec(error.message)?.[1] : undefined;
 		return {
@@ -324,7 +321,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 
 	#monitorTimer: ReturnType<typeof setInterval> | null = null;
 	/**
-	 * Cancellation for work the 60 s loop started (ERRATUM(CANCEL-2)).
+	 * Cancellation for work the 60 s loop started.
 	 *
 	 * The monitor is the one write path with no dispatch behind it, so it has no `HandlerContext` and
 	 * no deadline — but it does have a lifetime, and `detach()` ends it. Aborted there so a tick caught
@@ -370,7 +367,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	 *
 	 * `BrowserSession.start()` awaits `BrowserConnectedEvent`, so by the time `start()` returns the
 	 * cookies are in the jar — that ordering is the whole point of dispatching the load from here
-	 * rather than from the session (ARCHITECTURE.md §6.9).
+	 * rather than from the session.
 	 */
 	async onBrowserConnectedEvent(_event: BrowserConnectedEvent, _context?: HandlerContext): Promise<void> {
 		await this.bus.dispatch(new LoadStorageStateEvent());
@@ -418,7 +415,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	/**
 	 * Reads the live browser state, merges it over what is stored, and persists it.
 	 *
-	 * ERRATUM(CANCEL-2): the `HandlerContext` is read — see {@linkcode StorageStateWatchdog} `#saveOnce`
+	 * The `HandlerContext` is read — see {@linkcode StorageStateWatchdog} `#saveOnce`
 	 * for what the budget gates and why the write itself is not interruptible once begun.
 	 */
 	async onSaveStorageStateEvent(event: SaveStorageStateEvent, context?: HandlerContext): Promise<void> {
@@ -439,7 +436,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	/**
 	 * Final save, then the loop is disarmed. Registered before the session's socket teardown.
 	 *
-	 * ERRATUM(CANCEL-2): this is the **first** `BrowserStopEvent` handler in the attach order
+	 * This is the **first** `BrowserStopEvent` handler in the attach order
 	 * (`attach_order.ts`), so an overrun here is not litter — the bus moves on to
 	 * `LocalBrowserWatchdog` (which kills Chrome) and `BrowserSession` (which closes the socket) while
 	 * this handler's four filesystem operations are still running. Reading the context is what stops a
@@ -458,7 +455,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	/** Timer hygiene: the 60 s loop must not outlive the watchdog (the op sanitizer proves it). */
 	protected override beforeDetach(): void {
 		this.#stopMonitor();
-		// ERRATUM(CANCEL-2): the timer is only half of it. A tick already past its `setInterval`
+		// The timer is only half of it. A tick already past its `setInterval`
 		// callback holds no timer and would still commit its write after `detach()`; the abort is what
 		// reaches that one. The controller is kept, not nulled — a tick suspended on a CDP read has to
 		// find an *aborted* signal when it resumes, not the absence of one, which would read as
@@ -501,7 +498,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The tick's budget: no deadline, but cancellable (ERRATUM(CANCEL-2)).
+	 * The tick's budget: no deadline, but cancellable.
 	 *
 	 * `timeoutSec: 0` is the bus's own spelling of "timeout disabled", which is the honest description
 	 * of a timer callback — nothing is waiting on it, so nothing is being made late. What it does have
@@ -534,33 +531,31 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * ERRATUM(CANCEL-2): the budget gates the **decision** to write, immediately before the write and
-	 * after the CDP reads that are what actually consume it. Nothing gates the write itself.
+	 * The budget gates the **decision** to write, immediately before the write and after the CDP reads
+	 * that are what actually consume it. Nothing gates the write itself.
 	 *
-	 * That asymmetry is the point, and it is the opposite of the one ERRATUM(KILL-3) chose for the
-	 * profile sweep. There, stopping between directories is free — the leftovers keep their prefix and
-	 * a later pass finishes them. Here the four operations of `#writeAtomic` are a transaction over a
+	 * That asymmetry is the point, and it is the opposite of the one `LocalBrowserWatchdog` makes for
+	 * the profile sweep. There, stopping between directories is free — the leftovers keep their prefix
+	 * and a later pass finishes them. Here the four operations of `#writeAtomic` are a transaction over a
 	 * file that is *already good*: stopping after the `.tmp` write leaves litter, and stopping between
 	 * the `.bak` copy and the rename rotates a generation without landing the new one. So the sequence
 	 * either does not start or runs to completion. A save skipped at the gate costs the newest cookies;
 	 * a save abandoned mid-flight can cost the previous session as well, and it is the one whose damage
 	 * is not recoverable by simply saving again later.
 	 *
-	 * `#lastFingerprint` therefore moved **after** the write. It used to be assigned before it, which
-	 * meant a save that was skipped — or one that threw — still told the 60 s loop the jar was
-	 * persisted, suppressing the next legitimate save. A save that did not happen must leave the diff
-	 * looking dirty.
+	 * `#lastFingerprint` is therefore assigned **after** the write. Assigned before it, a save that was
+	 * skipped — or one that threw — would still tell the 60 s loop the jar was persisted, suppressing
+	 * the next legitimate save. A save that did not happen must leave the diff looking dirty.
 	 */
 	async #saveOnce(path: string | null, budget: HandlerBudget, cookiesHint?: readonly Cookie[]): Promise<void> {
-		// ERRATUM(E-52): the two browser reads below now travel on the handler's own signal, so on a
-		// spent budget they *reject* instead of returning a jar read from a browser that is about to be
-		// killed. Deciding here keeps that as the documented skip — one warn, previous generation intact
-		// — rather than an `AbortError` escaping a save the system had already given up on. It is also
-		// strictly better than the old order, which asked a dying browser for data it then discarded.
+		// The two browser reads below travel on the handler's own signal, so on a spent budget they
+		// *reject* instead of returning a jar read from a browser that is about to be killed. Deciding
+		// here keeps that as the documented skip — one warn, previous generation intact — rather than an
+		// `AbortError` escaping a save the system has already given up on, and it never asks a dying
+		// browser for data it would then discard.
 		//
-		// The check below survives too: it is the one that catches a budget spent *during* the reads,
-		// which is still ERRATUM(CANCEL-2)'s case — the decision to write is cancellable, the write is
-		// not.
+		// The check further down catches a budget spent *during* the reads — the decision to write is
+		// cancellable, the write is not.
 		if (budget.expired()) {
 			this.#logSkippedSave(path);
 			return;
@@ -604,7 +599,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The one wording for "the budget was spent, so nothing was written" — ERRATUM(CANCEL-2).
+	 * The one wording for "the budget was spent, so nothing was written".
 	 *
 	 * Both skip sites share it deliberately: two spellings of one condition is how a log line that
 	 * something greps for quietly stops matching on one of its paths.
@@ -618,7 +613,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The atomic write of §6.9: `path.tmp` → copy the previous generation to `path.bak` → rename.
+	 * The atomic write: `path.tmp` → copy the previous generation to `path.bak` → rename.
 	 *
 	 * `rename` within one directory is the atomic step; the `.bak` copy happens first so the previous
 	 * generation is never the thing that is missing if the process dies mid-write.
@@ -734,13 +729,12 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	/**
 	 * Writes one origin's localStorage/sessionStorage.
 	 *
-	 * ERRATUM(M1-watchdogs-data-4): §6.9 says localStorage is loaded "before first navigation", but
-	 * CDP cannot write DOM storage for an origin no renderer has loaded — `DOMStorage` addresses a
-	 * live storage area, not the on-disk database. Cookies genuinely go in before the first
-	 * navigation (`Storage.setCookies` is browser-wide); per-origin items are held and applied on the
-	 * `NavigationCompleteEvent` that lands on their origin, which is the earliest moment the write is
-	 * possible at all. The observable contract — "a page on origin X sees the saved localStorage" —
-	 * is preserved.
+	 * localStorage is loaded "before first navigation" only as far as CDP allows: CDP cannot write DOM
+	 * storage for an origin no renderer has loaded — `DOMStorage` addresses a live storage area, not
+	 * the on-disk database. Cookies genuinely go in before the first navigation (`Storage.setCookies` is
+	 * browser-wide); per-origin items are held and applied on the `NavigationCompleteEvent` that lands
+	 * on their origin, which is the earliest moment the write is possible at all. The observable
+	 * contract — "a page on origin X sees the saved localStorage" — holds.
 	 */
 	async #applyOrigin(
 		state: StorageOriginState,
@@ -792,7 +786,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
 	 * The `userDataDir` fallback goes through {@linkcode containedJoin}, and an explicit
 	 * `storageState` path is checked against its own parent directory — a storage-state path is
 	 * user-supplied config, and "user-supplied" is the same trust level as "attacker-supplied" once
-	 * a config file is shared (SECURITY-AUTH.md §8).
+	 * a config file is shared.
 	 */
 	#resolvePath(): string | null {
 		const override = this.#options.path;

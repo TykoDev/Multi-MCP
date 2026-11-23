@@ -1,11 +1,4 @@
-/**
- * D-154: the database, its vault, seeding, and the secrets moved into it.
- *
- * Proven here: the file is created owner-only and migrated once; a secret is sealed (its plaintext appears nowhere in
- * the database file), bound to its name and context, and a wrong or missing key refuses by name; seeding copies a
- * source only into an empty, never-seeded destination, `force` replaces, and a keyed source with no vault refuses;
- * the browser secrets and the link-signing key are served from the vault.
- */
+/** The database, its vault, seeding, and the secrets sealed in it. */
 import { assert, assertEquals, assertFalse, assertRejects, assertStringIncludes, assertThrows } from '@std/assert';
 import { join, resolve } from '@std/path';
 import { parseSecrets } from '@tykotech/mcp';
@@ -14,7 +7,7 @@ import { openDataStore } from './data_store.ts';
 import { Database, DATABASE_FILE, DatabaseError } from './database.ts';
 import type { ModelProvidersConfig, ModelProviderSettings } from './model_providers.ts';
 import { ModelProvidersAdmin, providerKeyName, readRows } from './model_providers_admin.ts';
-import { LINK_KEY_FILE_NAME, LINK_KEY_SECRET_NAME, loadLinkSigningKey, SecretError } from './secrets.ts';
+import { LINK_KEY_SECRET_NAME, loadLinkSigningKey, SecretError } from './secrets.ts';
 import { BROWSER_SECRETS_NAME, seedDatabase, SeedError } from './seed.ts';
 import { decodeDbKey, generateDbKey, Vault, VaultError } from './vault.ts';
 
@@ -63,7 +56,7 @@ const FILE: ModelProvidersConfig = { default: 'cloud', providers: [provider('clo
 
 // --- the database -------------------------------------------------------------------------------------------------
 
-Deno.test('D-154: the database file is created 0600, migrated once, and reopened as is', async () => {
+Deno.test('database: the database file is created 0600, migrated once, and reopened as is', async () => {
 	await using s = await scratch();
 	const db = Database.open(s.dir);
 	db.setSetting('probe', 'one');
@@ -78,14 +71,14 @@ Deno.test('D-154: the database file is created 0600, migrated once, and reopened
 	assertEquals(Database.inspect(s.dir)?.providers, 0);
 });
 
-Deno.test('D-154: a file that is not a database refuses by path', async () => {
+Deno.test('database: a file that is not a database refuses by path', async () => {
 	await using s = await scratch();
 	await Deno.writeTextFile(join(s.dir, DATABASE_FILE), 'not a database at all, just text'.repeat(64));
 	const refused = assertThrows(() => Database.open(s.dir), DatabaseError);
 	assertStringIncludes(refused.message, join(s.dir, DATABASE_FILE));
 });
 
-Deno.test('D-154: transactions roll back on a throw', () => {
+Deno.test('database: transactions roll back on a throw', () => {
 	const db = Database.memory();
 	assertThrows(() =>
 		db.transaction(() => {
@@ -99,7 +92,7 @@ Deno.test('D-154: transactions roll back on a throw', () => {
 
 // --- the vault ----------------------------------------------------------------------------------------------------
 
-Deno.test('D-154: the key file accepts 32 bytes as base64url, padded base64 or hex, nothing else', () => {
+Deno.test('database: the key file accepts 32 bytes as base64url, padded base64 or hex, nothing else', () => {
 	const bytes = crypto.getRandomValues(new Uint8Array(32));
 	const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 	assertEquals(decodeDbKey(hex), bytes);
@@ -110,7 +103,7 @@ Deno.test('D-154: the key file accepts 32 bytes as base64url, padded base64 or h
 	}
 });
 
-Deno.test('D-154: a sealed secret never rests in plaintext and opens only under its name and context', async () => {
+Deno.test('database: a sealed secret never rests in plaintext and opens only under its name and context', async () => {
 	await using s = await scratch();
 	const db = Database.open(s.dir);
 	const vault = await Vault.open(db, KEY);
@@ -136,7 +129,7 @@ Deno.test('D-154: a sealed secret never rests in plaintext and opens only under 
 	assertFalse((await bytesOnDisk(s.dir)).includes(PROVIDER_KEY), 'no plaintext on disk, WAL included');
 });
 
-Deno.test('D-154: a wrong key, or no key over sealed secrets, refuses to open', async () => {
+Deno.test('database: a wrong key, or no key over sealed secrets, refuses to open', async () => {
 	const db = Database.memory();
 	await (await Vault.open(db, KEY)).put('x', 'value', '');
 	const wrong = await assertRejects(() => Vault.open(db, OTHER_KEY), VaultError);
@@ -153,7 +146,7 @@ Deno.test('D-154: a wrong key, or no key over sealed secrets, refuses to open', 
 
 // --- seeding ------------------------------------------------------------------------------------------------------
 
-Deno.test('D-154: the providers file seeds an empty database once; force replaces; keys are sealed per host', async () => {
+Deno.test('database: the providers file seeds an empty database once; force replaces; keys are sealed per host', async () => {
 	const db = Database.memory();
 	const vault = await Vault.open(db, KEY);
 	const store = { db, vault };
@@ -183,7 +176,7 @@ Deno.test('D-154: the providers file seeds an empty database once; force replace
 	db.close();
 });
 
-Deno.test('D-154: a database that holds providers but was never seeded is not overwritten without force', async () => {
+Deno.test('database: a database that holds providers but was never seeded is not overwritten without force', async () => {
 	const db = Database.memory();
 	const vault = await Vault.open(db, KEY);
 	db.run(
@@ -195,7 +188,7 @@ Deno.test('D-154: a database that holds providers but was never seeded is not ov
 	db.close();
 });
 
-Deno.test('D-154: a source carrying a secret refuses to seed into a locked vault, naming the fix', async () => {
+Deno.test('database: a source carrying a secret refuses to seed into a locked vault, naming the remedy', async () => {
 	const db = Database.memory();
 	const vault = await Vault.open(db, null);
 	const refused = await assertRejects(
@@ -217,7 +210,7 @@ Deno.test('D-154: a source carrying a secret refuses to seed into a locked vault
 	db.close();
 });
 
-Deno.test('D-154: openDataStore serves browser secrets from the vault; a REF source is never seeded', async () => {
+Deno.test('database: openDataStore serves browser secrets from the vault; a REF source is never seeded', async () => {
 	await using s = await scratch();
 	const config = (secrets: string, ref = false) => ({
 		...loadConfig({ TTK_DATA_DIR: s.dir }, { secrets: { TTK_SECRETS: secrets } }),
@@ -249,14 +242,14 @@ Deno.test('D-154: openDataStore serves browser secrets from the vault; a REF sou
 	assertFalse((await bytesOnDisk(s.dir)).includes(BROWSER_SECRET), 'browser secrets rest sealed');
 });
 
-Deno.test('D-154: without a data directory nothing is opened and the configuration is used as is', async () => {
+Deno.test('database: without a data directory nothing is opened and the configuration is used as is', async () => {
 	const config = loadConfig({}, { secrets: { TTK_SECRETS: `{"pw":"${BROWSER_SECRET}"}` } });
 	const opened = await openDataStore(config);
 	assertEquals([opened.store, opened.secrets.length, opened.seeded.length], [null, 1, 0]);
 	opened.close();
 });
 
-Deno.test('D-154: the seeded providers load through the provider store with their keys opened', async () => {
+Deno.test('database: the seeded providers load through the provider store with their keys opened', async () => {
 	const db = Database.memory();
 	const vault = await Vault.open(db, KEY);
 	await seedDatabase({ db, vault }, { providers: FILE, secrets: null });
@@ -272,53 +265,34 @@ Deno.test('D-154: the seeded providers load through the provider store with thei
 
 // --- the link-signing key -----------------------------------------------------------------------------------------
 
-Deno.test('D-154: the generated link-signing key is sealed in the vault, reused, and never written in plaintext', async () => {
+Deno.test('database: the generated link-signing key is sealed in the vault, reused, and never written in plaintext', async () => {
 	await using s = await scratch();
 	const db = Database.open(s.dir);
 	const vault = await Vault.open(db, KEY);
-	const first = await loadLinkSigningKey({ key: null, dataDir: s.dir, vault });
-	const second = await loadLinkSigningKey({ key: null, dataDir: s.dir, vault });
+	const first = await loadLinkSigningKey({ key: null, vault });
+	const second = await loadLinkSigningKey({ key: null, vault });
 	assertEquals(second, first, 'a restart signs with the same key');
 	assert(first.byteLength >= 32);
 	assert(vault.has(LINK_KEY_SECRET_NAME));
-	await assertRejects(() => Deno.stat(join(s.dir, LINK_KEY_FILE_NAME)), Deno.errors.NotFound);
 	// The operator's file wins.
 	const operator = 'k'.repeat(40);
-	assertEquals(await loadLinkSigningKey({ key: operator, dataDir: s.dir, vault }), new TextEncoder().encode(operator));
+	assertEquals(await loadLinkSigningKey({ key: operator, vault }), new TextEncoder().encode(operator));
 	db.close();
 	assertFalse((await bytesOnDisk(s.dir)).includes(new TextDecoder().decode(first)));
 });
 
-Deno.test('D-154: a plaintext link key from an earlier release moves into the vault and is deleted', async () => {
-	await using s = await scratch();
-	const legacy = 'L'.repeat(43);
-	await Deno.writeTextFile(join(s.dir, LINK_KEY_FILE_NAME), `${legacy}\n`);
-	const db = Database.open(s.dir);
-	const vault = await Vault.open(db, KEY);
-	assertEquals(
-		await loadLinkSigningKey({ key: null, dataDir: s.dir, vault }),
-		new TextEncoder().encode(legacy),
-		'links signed before the upgrade keep verifying',
-	);
-	await assertRejects(() => Deno.stat(join(s.dir, LINK_KEY_FILE_NAME)), Deno.errors.NotFound);
-	assertEquals(await vault.get(LINK_KEY_SECRET_NAME, ''), legacy);
-	db.close();
-});
-
-Deno.test('D-154: with no key file and no unlocked vault a link key is refused, never generated in plaintext', async () => {
-	await using s = await scratch();
+Deno.test('database: with no key file and no unlocked vault a link key is refused, never generated in plaintext', async () => {
 	const locked = await Vault.open(Database.memory(), null);
 	for (const vault of [null, locked]) {
 		const refused = await assertRejects(
-			() => loadLinkSigningKey({ key: null, dataDir: s.dir, vault }),
+			() => loadLinkSigningKey({ key: null, vault }),
 			SecretError,
 		);
 		assertStringIncludes(refused.message, 'TTK_DB_KEY_FILE');
 	}
-	await assertRejects(() => Deno.stat(join(s.dir, LINK_KEY_FILE_NAME)), Deno.errors.NotFound);
 });
 
-Deno.test('D-154: loadConfig decodes TTK_DB_KEY_FILE, refuses a malformed one, and gates generated link keys on it', () => {
+Deno.test('database: loadConfig decodes TTK_DB_KEY_FILE, refuses a malformed one, and gates generated link keys on it', () => {
 	const key = generateDbKey();
 	assertEquals(loadConfig({}, { secrets: { TTK_DB_KEY: key } }).dbKey, decodeDbKey(key));
 	assertThrows(() => loadConfig({}, { secrets: { TTK_DB_KEY: 'not-a-key' } }), Error, 'TTK_DB_KEY_FILE');

@@ -3,10 +3,9 @@
  * The click ↔ downloads seam, from the **consumer** side: how a click tells "this navigated" from
  * "this started a download".
  *
- * Contract owners: SPECS/ARCHITECTURE.md §6.8 ("… and offers a synchronous direct-callback channel
- * that DefaultActionWatchdog uses for click-triggered download detection") and §6.10 ("Wraps clicks
- * in download detection (0.5 s start grace, 30 s completion wait)"), restated in the §8 fine-grained
- * cap row.
+ * DownloadsWatchdog offers a synchronous direct-callback channel that DefaultActionWatchdog uses for
+ * click-triggered download detection; clicks are wrapped in it with a 0.5 s start grace and a 30 s
+ * completion wait.
  *
  * ## Why the channel is synchronous, and why it is not the bus
  *
@@ -14,11 +13,11 @@
  * through the event bus, the watching click would see it only after the dispatch queue drains, and
  * the 0.5 s grace does not survive that. DownloadsWatchdog therefore invokes its listeners **from
  * inside its CDP handler, before it awaits anything**; `DownloadStartedEvent` and friends
- * (DATA-MODEL.md §5.1.6) still go out on the bus for everyone else.
+ * still go out on the bus for everyone else.
  *
  * ## Why this file declares the interface instead of importing DownloadsWatchdog's
  *
- * {@linkcode ClickDownloadSource} is the *narrow structural slice* of §6.8's watchdog that the click
+ * {@linkcode ClickDownloadSource} is the *narrow structural slice* of DownloadsWatchdog that the click
  * path uses: one method, one promise. Declaring it here keeps the action watchdog compilable and
  * testable independently of the downloads watchdog's full surface, and keeps the dependency pointing
  * one way. `DownloadsWatchdog` satisfies it structurally with no `implements` clause and no import —
@@ -28,16 +27,16 @@
 /**
  * The slice of DownloadsWatchdog's `DownloadRecord` a click reports.
  *
- * Wider records satisfy it: the fields are read-only, so §6.8's full record is assignable.
+ * Wider records satisfy it: the fields are read-only, so DownloadsWatchdog's full record is assignable.
  */
 export interface ClickDownloadRecord {
 	readonly guid: string;
 	readonly url: string;
 	/** Exactly as Chrome suggested it — attacker-influenced, never used as a path. */
 	readonly suggestedFilename: string;
-	/** The sanitized, disambiguated basename actually used (SECURITY-AUTH.md §8.3). */
+	/** The sanitized, disambiguated basename actually used. */
 	readonly fileName: string;
-	/** Absolute path; synthesized and never written for a remote browser (§6.8). */
+	/** Absolute path; synthesized and never written for a remote browser. */
 	readonly path: string;
 	readonly fileSize: number;
 	readonly state: string;
@@ -57,7 +56,7 @@ export interface ClickDownloadWatch {
 	dispose(): void;
 }
 
-/** What the click path needs from §6.8's watchdog, and nothing more. */
+/** What the click path needs from DownloadsWatchdog, and nothing more. */
 export interface ClickDownloadSource {
 	armDownloadWatch(
 		options?: { readonly startGraceMs?: number; readonly completionTimeoutMs?: number },
@@ -65,19 +64,19 @@ export interface ClickDownloadSource {
 }
 
 // ---------------------------------------------------------------------------
-// timings (ARCHITECTURE.md §6.10, §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// timings (load-bearing: changing one needs real-browser evidence)
 // ---------------------------------------------------------------------------
 
 /**
- * How long after a click a download may still be attributed to it (ARCHITECTURE.md §6.10, §8).
+ * How long after a click a download may still be attributed to it.
  *
- * Restated here rather than imported from `downloads.ts` because it is §6.10's number as much as
- * §6.8's, and a click must arm its own watch with a value it owns. `default_action_test.ts` asserts
+ * Restated here rather than imported from `downloads.ts` because it is the click path's number as
+ * much as the downloads watchdog's, and a click must arm its own watch with a value it owns. `default_action_test.ts` asserts
  * the two definitions are equal, which is the drift alarm.
  */
 export const DOWNLOAD_START_GRACE_MS = 500;
 
-/** How long a started download is waited on before the click reports it unfinished (§6.10, §8). */
+/** How long a started download is waited on before the click reports it unfinished. */
 export const DOWNLOAD_COMPLETION_TIMEOUT_MS = 30_000;
 
 /**

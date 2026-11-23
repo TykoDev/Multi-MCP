@@ -1,38 +1,4 @@
-/**
- * The stateful 2025-era MCP transport (SPECS/ROADMAP.md R8, D-004 reopen).
- *
- * The 2026-07-28 revision is stateless per request, and that mount stays: browser statefulness lives in the session
- * registry, addressed by `session_id`. 2025-era clients — pi, most hosts — open one connection, expect an
- * `Mcp-Session-Id` back, and hold a standalone SSE stream for server-initiated messages. That stream is the only way
- * such a client hears `notifications/tools/list_changed`, so without a session it keeps the tool list it fetched when
- * it connected — across a deploy that changed a tool, and across a scope change that added or removed some. This mount
- * is therefore on by default outside a cluster (`TTK_MCP_STATEFUL`).
- *
- * ## Change push
- *
- * - **A deploy (a restart).** A session's non-secret record — its id, its principal and the client's own `initialize`
- *   parameters, never a token, credential or scope — is kept in `<TTK_DATA_DIR>/mcp/sessions.json`. After a restart
- *   the client's next request with that id (its stream reconnecting, typically) restores the session for the same
- *   principal: a fresh server built from that request's own credential, the client's `initialize` replayed into it so
- *   the transport and server hold the session as the client opened it — and `tools/list_changed` and
- *   `resources/list_changed` pushed on the stream as soon as it opens, so the client re-lists the deployed catalog.
- * - **A scope change.** Registration is decided by scope, so a session whose credential's scopes moved is rebuilt
- *   under the same id with the new set and told to re-list: at once when the gateway hears of the change
- *   ({@linkcode StatefulMount.refreshCredentials}, from the verifier), and in any case on the next request whose
- *   credential carries a different set than the session was built with. A credential that is gone closes its
- *   sessions. A delegated credential is only ever narrowed by the push; its next request decides any widening.
- * - **A service coming or going** re-reads tool availability in place (D-082, {@linkcode StatefulMount.refreshTools}).
- *
- * Every request must come from the principal that opened the session; another principal presenting the id is told the
- * session does not exist.
- *
- * ## What "stateful" costs, stated plainly
- *
- * A transport session pins a client to *this process*. That is fine for one node and wrong for several, so it is
- * incompatible with the cluster mode (R10): `loadConfig` resolves an unset `TTK_MCP_STATEFUL` off in a cluster and
- * refuses it named `true` with `TTK_CLUSTER_KV` (C8 / D-102). Sessions are also memory a client can create and
- * forget, so they are capped and reaped; one whose standalone stream is open is not idle.
- */
+/** The stateful 2025-era MCP transport. Change push. What "stateful" costs, stated plainly. */
 import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 import type { AuthInfo, McpServerFactory } from '@modelcontextprotocol/server';
 import { DurableJsonFile } from '@tykotech/agents';
@@ -52,7 +18,7 @@ export interface StatefulMountOptions {
 	readonly buildServer: McpServerFactory;
 	readonly logger: Logger;
 	/**
-	 * D-080: the registry whose changes each session's standalone stream carries (`resources/list_changed`, and
+	 * The registry whose changes each session's standalone stream carries (`resources/list_changed`, and
 	 * `resources/updated` for subscribed URIs). Without one the mount serves requests and pushes nothing.
 	 */
 	readonly registry?: Pick<SessionRegistry, 'watch'>;
@@ -66,7 +32,7 @@ export interface StatefulMountOptions {
 	readonly persistPath?: string;
 	/**
 	 * The scopes the credential behind `authInfo` holds now: a list, `null` once it is gone, or `undefined` when it
-	 * cannot be re-read without the token (OAuth) — the next request decides then.
+	 * cannot be re-read — the next request decides then.
 	 */
 	readonly currentScopes?: (authInfo: AuthInfo) => readonly string[] | null | undefined;
 }
@@ -154,9 +120,7 @@ function storedRecord(value: unknown): SessionRecord | null {
 	};
 }
 
-/**
- * Routes requests to per-session transports, creating one on `initialize` and restoring one a restart lost.
- */
+/** Routes requests to per-session transports, creating one on `initialize` and restoring one a restart lost. */
 export class StatefulMount {
 	readonly #options:
 		& Required<Omit<StatefulMountOptions, 'buildServer' | 'logger' | 'registry' | 'persistPath' | 'currentScopes'>>
@@ -170,8 +134,8 @@ export class StatefulMount {
 	#closed = false;
 
 	constructor(options: StatefulMountOptions) {
-		// The spread comes first: a caller passing `{ maxSessions: undefined }`
-		// explicitly must not clobber the default with `undefined`.
+		// The spread comes first: a caller passing `{ maxSessions: undefined }` explicitly must not clobber the default
+		// with `undefined`.
 		this.#options = {
 			...options,
 			maxSessions: options.maxSessions ?? DEFAULTS.maxSessions,
@@ -193,13 +157,7 @@ export class StatefulMount {
 		return [...this.#sessions.keys()];
 	}
 
-	/**
-	 * Serves one request.
-	 *
-	 * A request naming a session goes to that session's transport — restored first when a restart lost it, rebuilt
-	 * first when its credential's scopes moved. A request naming none is an initialization: a fresh transport is
-	 * built, and the `Mcp-Session-Id` it mints comes back in the response headers.
-	 */
+	/** Serves one request. */
 	async fetch(request: Request, options: { authInfo?: AuthInfo; parsedBody?: unknown } = {}): Promise<Response> {
 		this.#reap();
 		const id = request.headers.get(SESSION_HEADER);
@@ -207,14 +165,14 @@ export class StatefulMount {
 		if (id !== null && id !== '') {
 			const session = await this.#sessionFor(id, request, options.authInfo);
 			if (session === null) {
-				// The spec's answer for an unknown session, and the one a client knows how to recover from: re-initialize.
-				// Another principal presenting a live id is told the same, so the id is no oracle.
+				// The spec's answer for an unknown session, and the one a client knows how to recover from:
+				// re-initialize. Another principal presenting a live id is told the same, so the id is no oracle.
 				return jsonRpcError(404, -32_001, 'Session not found');
 			}
 			this.#touch(session);
 			if (request.method === 'DELETE') {
-				// Handled by the transport first so it can answer correctly, then
-				// forgotten here — `onsessionclosed` fires from inside.
+				// Handled by the transport first so it can answer correctly, then forgotten here — `onsessionclosed`
+				// fires from inside.
 				const response = await session.transport.handleRequest(request, options);
 				this.#forget(id, session.transport);
 				return response;
@@ -230,8 +188,8 @@ export class StatefulMount {
 		}
 
 		if (request.method !== 'POST') {
-			// A GET with no session is a standalone-stream request for a session
-			// that does not exist; the 2025 spec has no way to create one that way.
+			// A GET with no session is a standalone-stream request for a session that does not exist; the 2025 spec has
+			// no way to create one that way.
 			return jsonRpcError(400, -32_000, 'Mcp-Session-Id is required');
 		}
 
@@ -255,8 +213,7 @@ export class StatefulMount {
 		const response = await transport.handleRequest(request, options);
 		const sessionId = transport.sessionId;
 		if (sessionId === undefined) {
-			// Not an initialization after all: nothing to remember, and the
-			// transport is dropped rather than leaked.
+			// Not an initialization after all: nothing to remember, and the transport is dropped rather than leaked.
 			watch?.close();
 			await server.close().catch(() => {});
 			return response;
@@ -279,15 +236,14 @@ export class StatefulMount {
 		return response;
 	}
 
-	/** D-082: every open session re-reads which of its tools are available; each change is announced to it. */
+	/** Every open session re-reads which of its tools are available; each change is announced to it. */
 	refreshTools(): void {
 		for (const session of this.#sessions.values()) refreshToolAvailability(session.server);
 	}
 
 	/**
 	 * A credential changed (a key file reload, a key removed, an account's scopes edited, a sign-in ended): every
-	 * session re-reads what its credential holds now. One whose credential is gone is closed; one whose scopes moved
-	 * is rebuilt under the same id and told to re-list. Resolves once every rebuild has landed.
+	 * session re-reads what its credential holds now.
 	 */
 	async refreshCredentials(): Promise<void> {
 		const current = this.#options.currentScopes;
@@ -306,12 +262,8 @@ export class StatefulMount {
 				this.#forget(session.id, session.transport);
 				return;
 			}
-			// A delegated credential holds at most what it was issued; only its own next request may widen it.
-			const scopes = session.authInfo.extra?.delegatedMcp === true
-				? held.filter((scope) => session.authInfo!.scopes.includes(scope))
-				: held;
-			if (scopeKey(scopes) === session.scopes) return;
-			await this.#rebuild(session, { ...session.authInfo, scopes: [...scopes] });
+			if (scopeKey(held) === session.scopes) return;
+			await this.#rebuild(session, { ...session.authInfo, scopes: [...held] });
 		}));
 	}
 
@@ -456,8 +408,8 @@ export class StatefulMount {
 	): Promise<{ server: McpServer; watch: ResourceWatch | null }> {
 		const built = await this.#options.buildServer({ era: 'legacy', ...(authInfo ? { authInfo } : {}) });
 		const server = built as McpServer;
-		// R8 (D-128): the connection hears only of sessions its caller may reach, judged with the very access its
-		// tools and resources were built with.
+		// The connection hears only of sessions its caller may reach, judged with the very access its tools and
+		// resources were built with.
 		const watch = this.#options.registry === undefined
 			? null
 			: watchResourceChanges(server, this.#options.registry, 'legacy', serverSessionAccess(server));
@@ -549,8 +501,8 @@ export class StatefulMount {
 			if (!this.#sessions.has(record.id) && record.lastUsedAt < cutoff) this.#drop(record.id);
 		}
 		if (!force || this.#sessions.size < this.#options.maxSessions) return;
-		// At the cap with nothing idle: evict the least recently used, because
-		// refusing every new client forever is worse than dropping the stalest.
+		// At the cap with nothing idle: evict the least recently used, because refusing every new client forever is
+		// worse than dropping the stalest.
 		const oldest = [...this.#sessions.values()].sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
 		if (oldest !== undefined) this.#forget(oldest.id);
 	}
@@ -585,21 +537,7 @@ function jsonRpcError(status: number, code: number, message: string): Response {
 	);
 }
 
-/**
- * Whether a request belongs on the stateful mount (R8).
- *
- * Three cases, and no guessing:
- *
- * 1. it carries an `Mcp-Session-Id` — it is already in a stateful session;
- * 2. it is a `GET` — a standalone SSE stream, which exists only in the 2025
- *    world (the 2026 revision has `subscriptions/listen` instead);
- * 3. it is an `initialize` declaring a **2025** `protocolVersion`.
- *
- * The third is the one that matters. A 2025 client cannot ask for a session —
- * the spec has the *server* decide — so the only honest signal is the protocol
- * revision it announced. Routing on anything looser would push modern clients
- * onto a legacy transport that cannot serve them.
- */
+/** Whether a request belongs on the stateful mount. */
 export function wantsStatefulSession(request: Request, parsedBody?: unknown): boolean {
 	if (request.headers.has(SESSION_HEADER)) return true;
 	if (request.method === 'GET') return true;

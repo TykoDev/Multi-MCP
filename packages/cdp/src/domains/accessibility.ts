@@ -1,7 +1,7 @@
 /**
  * CDP `Accessibility` domain — the AX tree, joined onto the DOM tree by `backendNodeId`.
  *
- * Source of `EnhancedAxNode` (SPECS/DATA-MODEL.md §6.2): role, name, description, properties,
+ * Source of `EnhancedAxNode`: role, name, description, properties,
  * childIds. Unknown property names are dropped by the DOM layer, not here.
  */
 
@@ -76,7 +76,7 @@ export interface AccessibilityResults {
 	'Accessibility.queryAXTree': { nodes: AxNode[] };
 }
 
-/** `Accessibility.loadComplete`/`nodesUpdated` exist but are experimental and unused (D-CDP2). */
+/** `Accessibility.loadComplete`/`nodesUpdated` exist but are experimental and unused, so untyped. */
 export type AccessibilityEvents = Record<never, never>;
 
 export const ACCESSIBILITY_METHODS = [

@@ -1,8 +1,7 @@
 /**
- * `DownloadsWatchdog` contract tests (ARCHITECTURE.md §6.8; COMPLETIONS-CRITERIA.md §3.2 watchdog
- * row 8; SECURITY-AUTH.md §8.3 download containment; DATA-MODEL.md §5.1.6).
+ * `DownloadsWatchdog` contract tests, download containment included.
  *
- * Row 8 asks for: `setDownloadBehavior`, filename sanitization, Started/Progress/FileDownloaded
+ * The contract covers: `setDownloadBehavior`, filename sanitization, Started/Progress/FileDownloaded
  * events, the click-download sync callback, auto-PDF (default on), and remote-browser no-local-write.
  * Each has a test below whose name says so.
  *
@@ -124,7 +123,7 @@ async function harness(options: {
 	const session = new BrowserSession({
 		profile: createBrowserProfile({
 			cdpUrl: fixture.wsUrl,
-			// Attaching to a CDP URL infers a *remote* browser (`resolveIsLocal`, DATA-MODEL.md §5.2);
+			// Attaching to a CDP URL infers a *remote* browser (`resolveIsLocal`);
 			// the local-browser tests say so explicitly rather than relying on that inference.
 			isLocal: options.isLocal ?? true,
 			downloadsPath: options.downloadsDir ?? null,
@@ -191,7 +190,7 @@ async function harness(options: {
 // constants
 // ---------------------------------------------------------------------------
 
-Deno.test('downloads: the ARCHITECTURE §6.8/§6.10 download clock is encoded verbatim', () => {
+Deno.test('downloads: the download clock is 0.5 s start grace, 30 s completion, 0.5 s settle', () => {
 	assertEquals(DOWNLOAD_START_GRACE_MS, 500);
 	assertEquals(DOWNLOAD_COMPLETION_TIMEOUT_MS, 30_000);
 	assertEquals(DOWNLOAD_SETTLE_GRACE_MS, 500);
@@ -207,7 +206,7 @@ Deno.test('downloads: setDownloadBehavior points at the profile dir with events 
 		await using h = await harness({ downloadsDir: dir });
 		const calls = h.fixture.requestsFor('Browser.setDownloadBehavior');
 		assertEquals(calls.length, 1);
-		// E-33: `allowAndName` — Chromium names the file by guid, so the recorded path is the written path.
+		// `allowAndName` — Chromium names the file by guid, so the recorded path is the written path.
 		assertEquals(calls[0]?.params.behavior, 'allowAndName');
 		assertEquals(calls[0]?.params.downloadPath, dir);
 		// Without `eventsEnabled` Chrome never fires downloadWillBegin/downloadProgress at all.
@@ -243,7 +242,7 @@ function pdfResponse(h: Harness, url: string): { params: Record<string, unknown>
 	};
 }
 
-Deno.test('downloads: ERRATUM(E-77) acceptDownloads is re-applied at runtime both ways, and the profile follows', async () => {
+Deno.test('downloads: acceptDownloads is re-applied at runtime both ways, and the profile follows', async () => {
 	const recorder = fsRecorder();
 	await using h = await harness({
 		downloadsDir: '/local/downloads',
@@ -276,7 +275,7 @@ Deno.test('downloads: ERRATUM(E-77) acceptDownloads is re-applied at runtime bot
 	assertEquals(h.fixture.requestsFor('Runtime.evaluate').length, 1, 'nothing is auto-downloaded while denying');
 });
 
-Deno.test('downloads: ERRATUM(E-77) a remote browser is switched without a local path', async () => {
+Deno.test('downloads: a runtime switch on a remote browser sends no local path', async () => {
 	const recorder = fsRecorder();
 	await using h = await harness({
 		downloadsDir: '/remote/downloads',
@@ -291,7 +290,7 @@ Deno.test('downloads: ERRATUM(E-77) a remote browser is switched without a local
 	assertEquals(recorder.ensured, [], 'and nothing is created locally for it');
 });
 
-Deno.test('downloads: ERRATUM(E-77) an unarmed watchdog changes nothing, the profile included', async () => {
+Deno.test('downloads: an unarmed watchdog changes nothing, the profile included', async () => {
 	const fixture = ChromeFixture.start({ pages: ['http://127.0.0.1:1/index.html'] });
 	try {
 		const session = new BrowserSession({
@@ -309,7 +308,7 @@ Deno.test('downloads: ERRATUM(E-77) an unarmed watchdog changes nothing, the pro
 	}
 });
 
-Deno.test('downloads: ERRATUM(E-77) a refused runtime switch leaves the profile as it was', async () => {
+Deno.test('downloads: a refused runtime switch leaves the profile as it was', async () => {
 	await using h = await harness({ downloadsDir: '/local/downloads', watchdogOptions: fsRecorder().options });
 	assertEquals(h.session.profile.acceptDownloads, true);
 	h.fixture.script('Browser.setDownloadBehavior', (request, self) => {
@@ -320,7 +319,7 @@ Deno.test('downloads: ERRATUM(E-77) a refused runtime switch leaves the profile 
 });
 
 // ---------------------------------------------------------------------------
-// filename sanitization + containment (SECURITY-AUTH.md §8.3)
+// filename sanitization + containment
 // ---------------------------------------------------------------------------
 
 Deno.test('downloads: a traversal filename is reduced to a contained basename', async () => {
@@ -339,7 +338,7 @@ Deno.test('downloads: a traversal filename is reduced to a contained basename', 
 		assert(record !== undefined);
 		assertEquals(record.fileName, 'passwd', 'sanitization reduces the name to a basename');
 		assertEquals(dirname(record.path), dir);
-		assertEquals(basename(record.path), 'G1', 'E-33: the disk name is the guid, never the suggested name');
+		assertEquals(basename(record.path), 'G1', 'the disk name is the guid, never the suggested name');
 		assert(isContainedIn(dir, record.path), 'the vetted path must resolve inside the downloads dir');
 	} finally {
 		await Deno.remove(dir, { recursive: true });
@@ -387,7 +386,7 @@ Deno.test('downloads: two downloads with the same suggested name get distinct di
 
 		// The display names tell the two apart in a listing…
 		assertEquals(h.watchdog.downloads.map((record) => record.fileName), ['report.pdf', 'report (1).pdf']);
-		// …and the disk names are the guids, so neither can overwrite the other (the E-33 defect).
+		// …and the disk names are the guids, so neither can overwrite the other.
 		assertEquals(h.watchdog.downloads.map((record) => basename(record.path)), ['G1', 'G2']);
 
 		await Deno.writeTextFile(join(dir, 'G1'), 'first');
@@ -402,7 +401,7 @@ Deno.test('downloads: two downloads with the same suggested name get distinct di
 	}
 });
 
-Deno.test('downloads: a progress event arriving right behind downloadWillBegin is not lost (E-33)', async () => {
+Deno.test('downloads: a progress event arriving right behind downloadWillBegin is not lost', async () => {
 	const dir = await scratchDir('bua-dl-fast-');
 	try {
 		await using h = await harness({ downloadsDir: dir });
@@ -514,7 +513,7 @@ Deno.test('downloads: a file that resolves outside the downloads dir is refused'
 	const dir = await scratchDir('bua-dl-escape-');
 	const outside = await scratchDir('bua-dl-outside-');
 	try {
-		// The vetted path was inside; realpath says otherwise — the symlink case §8.3 exists for.
+		// The vetted path was inside; realpath says otherwise — the symlink case realpath exists for.
 		const recorder = fsRecorder({
 			realPath: (path) => Promise.resolve(path.endsWith('G1') ? join(outside, 'a.txt') : path),
 		});
@@ -550,7 +549,7 @@ Deno.test('downloads: a canceled download settles without producing a file', asy
 });
 
 // ---------------------------------------------------------------------------
-// transfer limits and cancellation (E-33)
+// transfer limits and cancellation
 // ---------------------------------------------------------------------------
 
 Deno.test('downloads: a download over the per-file limit is cancelled and its partial removed', async () => {
@@ -783,7 +782,7 @@ Deno.test('downloads: armDownloadWatch resolves with the completed download', as
 });
 
 // ---------------------------------------------------------------------------
-// remote browsers never touch the local filesystem (ARCHITECTURE.md §6.8)
+// remote browsers never touch the local filesystem
 // ---------------------------------------------------------------------------
 
 Deno.test('downloads: a remote browser gets no local path and writes nothing locally', async () => {
@@ -808,7 +807,7 @@ Deno.test('downloads: a remote browser gets no local path and writes nothing loc
 
 	const done = h.events.done[0];
 	assert(done !== undefined);
-	assertEquals(done.fileSize, 0, '§6.8: remote downloads report size 0');
+	assertEquals(done.fileSize, 0, 'remote downloads report size 0');
 	assertEquals(done.fileName, 'a.txt');
 	assert(done.path.includes('a.txt'), 'the path is synthesized for reporting');
 
@@ -895,7 +894,7 @@ Deno.test('downloads: autoDownloadPdfs=false leaves PDFs rendered', async () => 
 });
 
 // ---------------------------------------------------------------------------
-// the BrowserStateRequestEvent side handler (DATA-MODEL.md §5.1.1)
+// the BrowserStateRequestEvent side handler
 // ---------------------------------------------------------------------------
 
 Deno.test('downloads: the state-request side handler returns nothing and never throws', async () => {
@@ -925,7 +924,7 @@ Deno.test('downloads: the auto-download response predicate', () => {
 		true,
 	);
 	assertEquals(shouldAutoDownload('text/html', { 'content-disposition': 'ATTACHMENT' }, 'http://127.0.0.1:1/a'), true);
-	// E-33: a navigation to an attachment is already Chromium's own download — never re-triggered.
+	// A navigation to an attachment is already Chromium's own download — never re-triggered.
 	assertEquals(
 		shouldAutoDownload(
 			'text/plain',
@@ -987,7 +986,7 @@ Deno.test('downloads: a Document attachment response is left to Chromium, an inl
 				mimeType: 'text/plain',
 			},
 		}, sessionId);
-		assertEquals(h.fixture.requestsFor('Runtime.evaluate').length, 0, 'E-33: no second download of a navigation');
+		assertEquals(h.fixture.requestsFor('Runtime.evaluate').length, 0, 'no second download of a navigation');
 		await h.push('Network.responseReceived', {
 			requestId: 'R2',
 			loaderId: 'L2',
@@ -1023,14 +1022,14 @@ Deno.test('downloads: the in-page expression cannot be escaped by a hostile URL'
 });
 
 // ---------------------------------------------------------------------------
-// ERRATUM(E-54): a cancelled download's partial survives a host that is still holding it
+// a cancelled download's partial is removed even while the host still holds it
 // ---------------------------------------------------------------------------
 
-Deno.test('E-54: a removal the host refuses is retried, and succeeds once the handle is released', async () => {
+Deno.test('downloads: a removal the host refuses is retried, and succeeds once the handle is released', async () => {
 	// The Windows shape: `Browser.cancelDownload` has returned, but Chromium has not yet closed the
-	// `.crdownload` handle, so the first removals fail with PermissionDenied. Before E-54 the first
-	// failure was logged at debug and the partial stayed in the session's directory until the session
-	// was reaped, against E-33's contract that a cancelled transfer leaves nothing behind.
+	// `.crdownload` handle, so the first removals fail with PermissionDenied. Without the retry the
+	// partial would stay in the session's directory until the session is reaped, against the contract
+	// that a cancelled transfer leaves nothing behind.
 	let calls = 0;
 	await removeWithRetry(
 		(path) => {
@@ -1045,7 +1044,7 @@ Deno.test('E-54: a removal the host refuses is retried, and succeeds once the ha
 	assertEquals(calls, 3);
 });
 
-Deno.test('E-54: a file that is already gone is success, and a persistent refusal still throws', async () => {
+Deno.test('downloads: a file that is already gone is success, and a persistent refusal still throws', async () => {
 	// Something else removing it first satisfies the contract — the point is that nothing is left
 	// behind, not that this caller is the one who removed it.
 	let notFoundCalls = 0;

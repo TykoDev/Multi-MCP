@@ -1,6 +1,4 @@
-/**
- * D-073 / D-074: the account store, the sign-in store, and the routes over them.
- */
+/** The account store, the sign-in store, and the routes over them. */
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { join } from '@std/path';
 import { createGatewayApp } from './app.ts';
@@ -11,17 +9,12 @@ import { createLogger } from './logger.ts';
 import { LoginStore, MAX_LOGINS_PER_BACKING, sha256Hex } from './logins.ts';
 import { SessionRegistry } from '@tykotech/mcp';
 import { UserStore, UserStoreError } from './users.ts';
+import { scratch } from './support_test.ts';
 
 const ORIGIN = 'http://127.0.0.1:8787';
 const quiet = () => createLogger({ level: 'error' });
 
-async function scratch(): Promise<string> {
-	const dir = join('tests/.scratch', `users-${crypto.randomUUID().slice(0, 8)}`);
-	await Deno.mkdir(dir, { recursive: true });
-	return dir;
-}
-
-Deno.test('users: the secret seeds the store once, then the file is the authority (D-074)', async () => {
+Deno.test('users: the secret seeds the store once, then the file is the authority', async () => {
 	const dir = await scratch();
 	const { record } = await generateAdminUser('root');
 	const first = new UserStore({ dataDir: dir, seed: record });
@@ -107,7 +100,7 @@ Deno.test('users: validation, the last-admin guard, disabling and password chang
 	await Deno.remove(dir, { recursive: true });
 });
 
-Deno.test('D-140: credentialDigest moves with the password, is null for a disabled or removed account, and is never listed', async () => {
+Deno.test('users: credentialDigest moves with the password, is null for a disabled or removed account, and is never listed', async () => {
 	const dir = await scratch();
 	try {
 		const { record } = await generateAdminUser('root');
@@ -139,7 +132,7 @@ Deno.test('D-140: credentialDigest moves with the password, is null for a disabl
 	}
 });
 
-Deno.test('D-140: ownerCredentialDigest answers per realm, and null exactly where ownerScopes does', async () => {
+Deno.test('users: ownerCredentialDigest answers per realm, and null exactly where ownerScopes does', async () => {
 	const { record: root } = await generateAdminUser('root');
 	const key = await generateApiKey('bot', ['mcp:invoke']);
 	const verifier = new VerifierChain({
@@ -153,17 +146,11 @@ Deno.test('D-140: ownerCredentialDigest answers per realm, and null exactly wher
 		assertEquals(verifier.ownerCredentialDigest(gone), null, gone);
 		assertEquals(verifier.ownerScopes(gone), null, gone);
 	}
-	const oauth = new VerifierChain({
-		config: loadConfig({ TTK_OAUTH_ISSUER: 'https://issuer.example.test' }),
-		allowAnonymous: false,
-	});
-	assertEquals(oauth.ownerCredentialDigest('oauth:subject'), 'oauth');
-	assertEquals(oauth.ownerCredentialDigest('oauth:'), null);
 	const anonymous = new VerifierChain({ config: loadConfig({}), allowAnonymous: true });
 	assertEquals(anonymous.ownerCredentialDigest('anonymous-loopback:local'), 'anonymous');
 });
 
-Deno.test('logins: a sign-in survives a restart, expires on time, and dies with its backing (D-073)', async () => {
+Deno.test('logins: a sign-in survives a restart, expires on time, and dies with its backing', async () => {
 	const dir = await scratch();
 	const { record, password } = await generateAdminUser('root');
 	const key = await generateApiKey('bot', ['mcp:invoke']);
@@ -241,7 +228,7 @@ Deno.test('logins: a sign-in survives a restart, expires on time, and dies with 
 	await Deno.remove(dir, { recursive: true });
 });
 
-Deno.test('users: the routes manage accounts and sign-ins with the guards the design names', async () => {
+Deno.test('users: the routes manage accounts and sign-ins behind their guards', async () => {
 	const dir = await scratch();
 	const { record, password } = await generateAdminUser('root');
 	const watcher = await generateApiKey('watcher', ['view:watch']);
@@ -271,7 +258,7 @@ Deno.test('users: the routes manage accounts and sign-ins with the guards the de
 		return { status: response.status, json: text === '' ? null : JSON.parse(text) };
 	};
 	try {
-		// Password login mints a session; an API key logs in to a session of its own, never echoed back (D2).
+		// Password login mints a session; an API key logs in to a session of its own, never echoed back.
 		const login = await call('POST', '/api/v1/auth/login', null, { username: 'root', password });
 		assertEquals(login.status, 200);
 		const root: string = login.json.token;
@@ -394,7 +381,103 @@ Deno.test('users: the routes manage accounts and sign-ins with the guards the de
 	}
 });
 
-Deno.test('users: without a data directory the routes answer persistence-required (D-A3)', async () => {
+/** A gateway over one account, `ops` / `correct horse`, for the guard and budget tests below. */
+async function accountGateway(env: Record<string, string> = {}) {
+	const dir = await scratch();
+	const { record } = await generateAdminUser('root');
+	const config = loadConfig({
+		TTK_HOST: '127.0.0.1',
+		TTK_PORT: '8787',
+		TTK_ADMIN_USER: JSON.stringify(record),
+		TTK_DATA_DIR: dir,
+		...env,
+	});
+	const users = new UserStore({ dataDir: dir, seed: record });
+	await users.create({ username: 'ops', password: 'correct horse', scopes: ['mcp:invoke'] });
+	const logins = new LoginStore({ dataDir: dir });
+	const verifier = new VerifierChain({ config, allowAnonymous: false, users, logins });
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const gateway = createGatewayApp({ config, verifier, registry, version: 'test', logger: quiet() });
+	const call = async (method: string, path: string, token: string | null, body?: unknown) => {
+		const response = await gateway.app.request(`${ORIGIN}${path}`, {
+			method,
+			headers: {
+				host: '127.0.0.1:8787',
+				...(body === undefined ? {} : { 'content-type': 'application/json' }),
+				...(token === null ? {} : { authorization: `Bearer ${token}` }),
+			},
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
+		});
+		const text = await response.text();
+		return {
+			status: response.status,
+			retryAfter: response.headers.get('retry-after'),
+			json: text === '' ? null : JSON.parse(text),
+		};
+	};
+	return {
+		call,
+		async [Symbol.asyncDispose]() {
+			await gateway.close();
+			await registry.shutdown();
+			await logins.flush();
+			await Deno.remove(dir, { recursive: true });
+		},
+	};
+}
+
+Deno.test('users: re-verifying the current password is slowed by the sign-in guard', async () => {
+	await using env = await accountGateway();
+	const login = await env.call('POST', '/api/v1/auth/login', null, { username: 'ops', password: 'correct horse' });
+	assertEquals(login.status, 200);
+	const token: string = login.json.token;
+	// The source's five free failures, then the sixth arms a delay: still a 401, as a failed sign-in is.
+	for (let attempt = 1; attempt <= 6; attempt += 1) {
+		const wrong = await env.call('POST', '/api/v1/auth/password', token, { current: `guess-${attempt}`, next: 'x' });
+		assertEquals(wrong.status, 401, `attempt ${attempt}`);
+	}
+	// Blocked now: even the right password is not checked, and the answer is the sign-in route's own 429.
+	const blocked = await env.call('POST', '/api/v1/auth/password', token, {
+		current: 'correct horse',
+		next: 'brand new pass',
+	});
+	assertEquals(blocked.status, 429);
+	assertEquals(blocked.json.type.endsWith('rate-limited'), true);
+	assert(Number(blocked.retryAfter) >= 1, `retry-after ${blocked.retryAfter}`);
+	// The block is shared with the sign-in route: the same source cannot move its guessing there instead.
+	const viaLogin = await env.call('POST', '/api/v1/auth/login', null, { username: 'ops', password: 'nope' });
+	assertEquals(viaLogin.status, 429);
+});
+
+Deno.test('users: a right current password clears the account counter and the change goes through', async () => {
+	await using env = await accountGateway();
+	const login = await env.call('POST', '/api/v1/auth/login', null, { username: 'ops', password: 'correct horse' });
+	const token: string = login.json.token;
+	assertEquals((await env.call('POST', '/api/v1/auth/password', token, { current: 'wrong', next: 'x' })).status, 401);
+	assertEquals(
+		(await env.call('POST', '/api/v1/auth/password', token, { current: 'correct horse', next: 'brand new pass' }))
+			.status,
+		204,
+	);
+});
+
+Deno.test('logins: a correct sign-in is charged to the per-principal rate limit', async () => {
+	// 3 rpm gives a burst of one request: the first sign-in spends it and the second, at once, is refused.
+	await using env = await accountGateway({ TTK_RATE_RPM: '3' });
+	const first = await env.call('POST', '/api/v1/auth/login', null, { username: 'ops', password: 'correct horse' });
+	assertEquals(first.status, 200);
+	// Sign-out is exempt, so charging the sign-in is what closes a sign-in/sign-out loop.
+	assertEquals((await env.call('POST', '/api/v1/auth/logout', first.json.token)).status, 204);
+	const second = await env.call('POST', '/api/v1/auth/login', null, { username: 'ops', password: 'correct horse' });
+	assertEquals(second.status, 429);
+	assertEquals(second.json.token, undefined, 'no session is minted over budget');
+	assert(Number(second.retryAfter) >= 1);
+	// A failed guess is the guard's business, never the principal's budget: a stranger cannot spend it.
+	const wrong = await env.call('POST', '/api/v1/auth/login', null, { username: 'ops', password: 'nope' });
+	assertEquals(wrong.status, 401);
+});
+
+Deno.test('users: without a data directory the routes answer persistence-required', async () => {
 	const { record, password } = await generateAdminUser('root');
 	const config = loadConfig({ TTK_HOST: '127.0.0.1', TTK_PORT: '8787', TTK_ADMIN_USER: JSON.stringify(record) });
 	const verifier = new VerifierChain({ config, allowAnonymous: false });

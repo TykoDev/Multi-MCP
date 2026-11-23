@@ -1,8 +1,6 @@
 /**
- * The accessibility snapshot's value rules (R11, design §2.8, D-120), against the AX trees Chromium recorded for the
- * DOM capture corpus (D-TEST1) — so "what a typed value looks like in the tree" is what Chromium produced, not what a
- * fake asserted. `live_value_vs_attribute` and `react_controlled_inputs` type into fields by script after load;
- * `form_attributes` carries a filled password field, a field whose label repeats its value, and a contenteditable.
+ * The accessibility snapshot's value rules, against the AX trees Chromium recorded for the DOM capture corpus — so
+ * "what a typed value looks like in the tree" is what Chromium produced, not what a fake asserted.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { fromFileUrl } from '@std/path';
@@ -33,9 +31,8 @@ function find(tree: AxOut, role: string, name?: string): AxOut | undefined {
 	return all(tree).find((node) => node.role === role && (name === undefined || node.name === name));
 }
 
-Deno.test('R11: a typed value appears nowhere — not as a value, not as the field’s text, not in its name', async () => {
+Deno.test('a typed value appears nowhere — not as a value, not as the field’s text, not in its name', async () => {
 	const nodes = await axNodesOf('live_value_vs_attribute');
-	// The capture does carry the values: the rule is about what leaves, so prove the input has them first.
 	const raw = JSON.stringify(nodes);
 	assertStringIncludes(raw, 'live-typed-value');
 	const { tree, outline } = buildAxTree(nodes, { interestingOnly: true, maxNodes: 1000 });
@@ -48,18 +45,16 @@ Deno.test('R11: a typed value appears nowhere — not as a value, not as the fie
 	assert(textbox !== undefined, outline);
 	assertEquals(textbox.name, 'Text, markup says markup-only-value', 'a label that does not repeat the value stays');
 	assertEquals(textbox.children, [], "the field's inner editor and its text runs are not emitted");
-	// The spin button's 42 and the slider's 9 travel the same way, as a text run and as valuenow.
 	const spin = find(tree, 'spinbutton');
 	assert(spin !== undefined);
 	assertEquals(spin.children, []);
 	assertEquals(spin.properties.valuenow, undefined);
 	assertEquals(find(tree, 'slider')?.properties.valuenow, undefined);
 	assertEquals(all(tree).filter((node) => node.role === 'StaticText' && node.name === '42'), []);
-	// Page text outside the controls is untouched.
 	assert(find(tree, 'heading', 'Live value versus markup attribute') !== undefined, outline);
 });
 
-Deno.test('R11: a select keeps its options; a text field and a textarea keep none of their text', async () => {
+Deno.test('a select keeps its options; a text field and a textarea keep none of their text', async () => {
 	const nodes = await axNodesOf('react_controlled_inputs');
 	const { tree, outline } = buildAxTree(nodes, { interestingOnly: true, maxNodes: 1000 });
 	const combobox = find(tree, 'combobox', 'Controlled select');
@@ -71,14 +66,12 @@ Deno.test('R11: a select keeps its options; a text field and a textarea keep non
 		assert(field !== undefined, `${name}: ${outline}`);
 		assertEquals(field.children, []);
 	}
-	// Review R2-4 (rule 5): "mirror: initial-state" is the page's own paragraph, but it repeats the text field's
-	// current value, so it is blanked like any name that carries a typed value.
 	const mirror = all(tree).filter((node) => node.name.includes('initial-state')).map((node) => node.name);
 	assertEquals(mirror, []);
 	assert(!JSON.stringify(tree).includes('area-state'), 'the textarea value must not leave');
 });
 
-Deno.test('R11: a name that repeats the value is blanked, and a password field keeps only its label', async () => {
+Deno.test('a name that repeats the value is blanked, and a password field keeps only its label', async () => {
 	const nodes = await axNodesOf('form_attributes');
 	const passwordNode = nodes.find((node) => node.name?.value === 'Account password');
 	assert(passwordNode?.backendDOMNodeId !== undefined);
@@ -88,7 +81,6 @@ Deno.test('R11: a name that repeats the value is blanked, and a password field k
 		passwordBackendIds: new Set([passwordNode.backendDOMNodeId]),
 	});
 	const emitted = JSON.stringify(tree);
-	// The two fields whose accessible name IS their value (`aria-label` = value, and a value-named field).
 	assert(!emitted.includes('duplicated-attribute-value'), outline);
 	assert(!emitted.includes('"abc"'), outline);
 	assert(!emitted.includes('short-value'), 'a long label stays, the value it does not contain still does not leave');
@@ -96,11 +88,10 @@ Deno.test('R11: a name that repeats the value is blanked, and a password field k
 	const password = find(tree, 'textbox', 'Account password');
 	assert(password !== undefined, outline);
 	assertEquals(password.children, []);
-	// Chromium masks a password's own value with bullets; neither the mask nor any run of it is emitted.
 	assert(!emitted.includes('•'), 'no masked value either');
 });
 
-Deno.test('R11: a node the caller marks as a password field is a field whatever role the page gave it', () => {
+Deno.test('a node the caller marks as a password field is a field whatever role the page gave it', () => {
 	const nodes: RawAxNode[] = [
 		{ nodeId: '1', ignored: false, role: { type: 'role', value: 'RootWebArea' }, childIds: ['2'], backendDOMNodeId: 1 },
 		{
@@ -128,7 +119,7 @@ Deno.test('R11: a node the caller marks as a password field is a field whatever 
 	assert(!JSON.stringify(marked.tree).includes('hunter2'), JSON.stringify(marked.tree));
 });
 
-Deno.test('R11: every emitted string passes the redactor, and the outline is built from the redacted tree', () => {
+Deno.test('every emitted string passes the redactor, and the outline is built from the redacted tree', () => {
 	const nodes: RawAxNode[] = [
 		{
 			nodeId: '1',
@@ -161,7 +152,7 @@ Deno.test('R11: every emitted string passes the redactor, and the outline is bui
 	assertEquals(tree.children[0]?.properties.url, 'https://x.test/?k=[secret]');
 });
 
-Deno.test('R11: max_nodes keeps the first nodes in document order and reports the whole', async () => {
+Deno.test('max_nodes keeps the first nodes in document order and reports the whole', async () => {
 	const nodes = await axNodesOf('form_attributes');
 	const whole = buildAxTree(nodes, { interestingOnly: true, maxNodes: 5000 });
 	assert(!whole.truncated);
@@ -171,25 +162,22 @@ Deno.test('R11: max_nodes keeps the first nodes in document order and reports th
 	assertEquals(cut.nodesTotal, whole.nodesTotal);
 	assertEquals(count(cut.tree), 7);
 	assertEquals(cut.outline.split('\n').length, 7);
-	// Pre-order: the first seven lines of the whole outline, exactly.
 	assertEquals(cut.outline, whole.outline.split('\n').slice(0, 7).join('\n'));
 });
 
-Deno.test('R11: interesting_only drops ignored nodes, unnamed containers and text runs, hoisting children', async () => {
+Deno.test('interesting_only drops ignored nodes, unnamed containers and text runs, hoisting children', async () => {
 	const nodes = await axNodesOf('live_value_vs_attribute');
 	const lean = buildAxTree(nodes, { interestingOnly: true, maxNodes: 5000 });
 	const full = buildAxTree(nodes, { interestingOnly: false, maxNodes: 5000 });
 	assert(lean.nodesTotal < full.nodesTotal, `${lean.nodesTotal} < ${full.nodesTotal}`);
 	assertEquals(all(lean.tree).filter((node) => node.role === 'InlineTextBox' || node.role === 'none'), []);
 	assert(all(full.tree).some((node) => node.role === 'InlineTextBox'));
-	// A heading's text run repeats the heading and is dropped; the heading is not.
 	const heading = find(lean.tree, 'heading');
 	assertEquals(heading?.children, []);
-	// The rules about values hold either way.
 	assert(!JSON.stringify(full.tree).includes('live-typed-value'));
 });
 
-Deno.test('R11: indices come from the held table, keyed by backend node id', async () => {
+Deno.test('indices come from the held table, keyed by backend node id', async () => {
 	const nodes = await axNodesOf('live_value_vs_attribute');
 	const button = nodes.find((node) => node.name?.value === 'Tail control');
 	assert(button?.backendDOMNodeId !== undefined);
@@ -202,8 +190,7 @@ Deno.test('R11: indices come from the held table, keyed by backend node id', asy
 	assertStringIncludes(outline, '- button "Tail control" [12]');
 });
 
-Deno.test('R11: a partial or malformed tree neither loops nor throws', () => {
-	// A partial tree: one element whose parent was not fetched, naming children that were not either.
+Deno.test('a partial or malformed tree neither loops nor throws', () => {
 	const partial: RawAxNode[] = [{
 		nodeId: '9',
 		ignored: false,
@@ -217,7 +204,6 @@ Deno.test('R11: a partial or malformed tree neither loops nor throws', () => {
 	const one = buildAxTree(partial, { interestingOnly: true, maxNodes: 10 });
 	assertEquals(one.tree, { role: 'button', name: 'Save', properties: { focusable: true }, children: [] });
 	assertEquals(one.nodesTotal, 1);
-	// A cycle.
 	const cyclic: RawAxNode[] = [
 		{ nodeId: 'a', ignored: false, role: { type: 'role', value: 'group' }, childIds: ['b'], backendDOMNodeId: 1 },
 		{ nodeId: 'b', ignored: false, role: { type: 'role', value: 'group' }, childIds: ['a'], parentId: 'a' },
@@ -226,7 +212,7 @@ Deno.test('R11: a partial or malformed tree neither loops nor throws', () => {
 	assertEquals(buildAxTree([], { interestingOnly: true, maxNodes: 10 }).nodesTotal, 0);
 });
 
-Deno.test('R11: the outline prints role, name, index and the states that matter', () => {
+Deno.test('the outline prints role, name, index and the states that matter', () => {
 	const tree: AxOut = {
 		role: 'RootWebArea',
 		name: 'Doc',
@@ -244,7 +230,7 @@ Deno.test('R11: the outline prints role, name, index and the states that matter'
 	);
 });
 
-// --- review R2-4: another node's name is not a way around the value rule ------------------------------------------
+// --- another node's name is not a way around the value rule ---------------------------------------------------------
 
 /** One raw AX node, as Chromium shapes it. */
 function axNode(nodeId: string, role: string, name: string, extra: Record<string, unknown> = {}): RawAxNode {
@@ -257,7 +243,7 @@ function axNode(nodeId: string, role: string, name: string, extra: Record<string
 	} as unknown as RawAxNode;
 }
 
-Deno.test('R2-4: a name Chromium computed from another field’s value is blanked (aria-labelledby, wrapping label)', () => {
+Deno.test('a name Chromium computed from another field’s value is blanked (aria-labelledby, wrapping label)', () => {
 	const { tree, outline } = buildAxTree([
 		axNode('1', 'RootWebArea', 'page', { childIds: ['2', '3', '4', '5', '6'] }),
 		axNode('2', 'textbox', 'Query', {
@@ -280,7 +266,7 @@ Deno.test('R2-4: a name Chromium computed from another field’s value is blanke
 	assertStringIncludes(outline, 'link "Ordinary link"');
 });
 
-Deno.test('R2-4: beside a password field, a run of masking bullets is blanked wherever it is a name', () => {
+Deno.test('beside a password field, a run of masking bullets is blanked wherever it is a name', () => {
 	const nodes = () => [
 		axNode('1', 'RootWebArea', 'page', { childIds: ['2', '3', '4'] }),
 		axNode('2', 'textbox', 'Password', {
@@ -297,11 +283,10 @@ Deno.test('R2-4: beside a password field, a run of masking bullets is blanked wh
 		passwordBackendIds: new Set([20]),
 	});
 	assert(!JSON.stringify(masked.tree).includes('••'), masked.outline);
-	// A single list bullet is page text, not a mask: it stays.
 	assertStringIncludes(masked.outline, '"• Home"');
 });
 
-Deno.test('R2-4: a one- or two-character value blanks only a name that is exactly it', () => {
+Deno.test('a one- or two-character value blanks only a name that is exactly it', () => {
 	assertEquals(AX_VALUE_CONTAIN_MIN, 3);
 	const { tree, outline } = buildAxTree([
 		axNode('1', 'RootWebArea', 'page', { childIds: ['2', '3', '4'] }),

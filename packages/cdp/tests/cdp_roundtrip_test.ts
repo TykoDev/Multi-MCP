@@ -1,12 +1,12 @@
 /**
- * Tier 2 — **the M0 exit criterion**: the client drives real headless Chromium through
- * navigate / screenshot / evaluate round-trips (COMPLETIONS-CRITERIA.md §3.1, ROADMAP.md M0).
+ * Tier 2 — the client drives real headless Chromium through
+ * navigate / screenshot / evaluate round-trips.
  *
  * This is the one suite that imports the package's public surface (`../mod.ts`), because it is the
  * only place where the launch half and the transport half have to meet: launch → `/json/version` →
- * `CdpClient.connect(ws)` is exactly the convergence ARCHITECTURE.md §7.4 specifies.
+ * `CdpClient.connect(ws)` is exactly the launch/connect convergence.
  *
- * Every page is served from a per-test loopback fixture; no remote URL appears anywhere (D-TEST1).
+ * Every page is served from a per-test loopback fixture; no remote URL appears anywhere.
  */
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
@@ -47,7 +47,7 @@ browserTest('m0: navigate / evaluate / screenshot round-trip against a real brow
 	assert(navigation.loaderId !== undefined, 'a cross-document navigation must report a loaderId');
 
 	// --- evaluate -----------------------------------------------------------
-	// Poll until the document is parsed; the readiness state machine itself is M1's contract.
+	// Poll until the document is parsed; the readiness state machine itself belongs to the browser layer.
 	let title = '';
 	for (let attempt = 0; attempt < 100 && title !== 'bua fixture'; attempt++) {
 		const evaluated = await client.send.Runtime.evaluate(

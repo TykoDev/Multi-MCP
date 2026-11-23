@@ -1,36 +1,16 @@
-/**
- * G15 / D-098 (AC21): `admin` left the default grant (C7), and the accounts that relied on the old default keep it.
- *
- * A version-1 store is upgraded once — every scope-less account is given `LEGACY_DEFAULT_SCOPES` in writing and the
- * file becomes version 2 — and never again; a seed without scopes seeds with the same grant; the cluster's KV is
- * upgraded under its own marker key, outside the accounts' prefix (N2); a store with accounts and no enabled admin
- * is warned about; and `doctor --grant` repairs one account offline, in the file or in the KV.
- */
+/** The default grant excludes `admin`, and a scope-less version-1 account keeps the grant that includes it. */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
-import { DEFAULT_SCOPES, LEGACY_DEFAULT_SCOPES } from '@tykotech/mcp';
+import { DEFAULT_SCOPES, SCOPELESS_ACCOUNT_SCOPES } from '@tykotech/mcp';
 import { generateAdminUser } from './admin_auth.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { createLogger } from './logger.ts';
 import { startGateway } from './server.ts';
-import {
-	apiKeyAdminWarning,
-	grantScopesInCluster,
-	grantScopesInFile,
-	USERS_SCHEMA_KEY,
-	USERS_SCHEMA_VERSION,
-	UserStore,
-	UserStoreError,
-} from './users.ts';
+import { apiKeyAdminWarning, grantScopesInFile, USERS_SCHEMA_VERSION, UserStore, UserStoreError } from './users.ts';
+import { scratch } from './support_test.ts';
 
 const sorted = (names: readonly string[]) => [...names].sort();
-
-async function scratch(): Promise<string> {
-	const dir = join('tests/.scratch', `migrate-${crypto.randomUUID().slice(0, 8)}`);
-	await Deno.mkdir(dir, { recursive: true });
-	return dir;
-}
 
 /** A logger that keeps what it was told. */
 function recorder() {
@@ -42,26 +22,26 @@ function recorder() {
 	};
 }
 
-/** A stored account as a 0.2.0 store wrote it: no `scopes` meant the default grant, `admin` included. */
-async function legacyAccount(username: string, scopes?: string[]) {
+/** A stored account as a version-1 store holds it: no `scopes` means the grant that includes `admin`. */
+async function versionOneAccount(username: string, scopes?: string[]) {
 	const { record, password } = await generateAdminUser(username, 'correct horse battery');
 	const { scopes: _dropped, ...bare } = record;
 	const at = '2026-09-01T00:00:00.000Z';
 	return { password, stored: { ...bare, ...(scopes === undefined ? {} : { scopes }), created_at: at, updated_at: at } };
 }
 
-Deno.test('users: a version-1 store is upgraded once; a scope-less admin keeps admin (G15, AC21)', async () => {
+Deno.test('users: a version-1 store is upgraded once; a scope-less admin keeps admin', async () => {
 	const dir = await scratch();
 	try {
-		const root = await legacyAccount('root');
-		const narrow = await legacyAccount('watcher', ['view:watch']);
+		const root = await versionOneAccount('root');
+		const narrow = await versionOneAccount('watcher', ['view:watch']);
 		const path = join(dir, 'users.json');
 		await Deno.writeTextFile(path, JSON.stringify({ version: 1, users: [root.stored, narrow.stored] }));
 
 		const log = recorder();
 		const store = new UserStore({ dataDir: dir, seed: null, logger: log });
 		assertEquals(store.status, 'ok');
-		assertEquals(sorted([...store.scopesOf('root')!]), sorted(LEGACY_DEFAULT_SCOPES), 'root still holds admin');
+		assertEquals(sorted([...store.scopesOf('root')!]), sorted(SCOPELESS_ACCOUNT_SCOPES), 'root still holds admin');
 		assert(store.scopesOf('root')!.has('admin'));
 		assertEquals([...store.scopesOf('watcher')!], ['view:watch'], 'an account that named its scopes is untouched');
 		assertEquals(log.lines, [['info', 'user store migrated: 1 account given explicit scopes']]);
@@ -71,7 +51,7 @@ Deno.test('users: a version-1 store is upgraded once; a scope-less admin keeps a
 			users: Array<{ username: string; scopes?: string[]; updated_at: string }>;
 		};
 		assertEquals(file.version, USERS_SCHEMA_VERSION);
-		assertEquals(file.users.find((user) => user.username === 'root')?.scopes, [...LEGACY_DEFAULT_SCOPES]);
+		assertEquals(file.users.find((user) => user.username === 'root')?.scopes, [...SCOPELESS_ACCOUNT_SCOPES]);
 		assertEquals(file.users.find((user) => user.username === 'root')?.updated_at, root.stored.updated_at);
 		assert((await store.verify('root', root.password)) !== null, 'the password still verifies');
 
@@ -83,7 +63,7 @@ Deno.test('users: a version-1 store is upgraded once; a scope-less admin keeps a
 		assertEquals(await Deno.readTextFile(path), before);
 		assert(second.scopesOf('root')!.has('admin'));
 
-		// After the upgrade, an account created without scopes gets the new defaults — no admin.
+		// After the upgrade, an account created without scopes gets the defaults — no admin.
 		const fresh = await second.create({ username: 'fresh', password: 'correct horse battery' });
 		assertEquals(sorted(fresh.scopes), sorted(DEFAULT_SCOPES));
 		assert(!fresh.scopes.includes('admin'));
@@ -92,7 +72,7 @@ Deno.test('users: a version-1 store is upgraded once; a scope-less admin keeps a
 	}
 });
 
-Deno.test('users: an API key record without scopes resolves to the new defaults, without admin (C7)', async () => {
+Deno.test('users: an API key record without scopes resolves to the defaults, without admin', async () => {
 	const key = await generateApiKey('bot');
 	assertEquals(key.record.scopes, undefined);
 	const verifier = new VerifierChain({
@@ -101,10 +81,10 @@ Deno.test('users: an API key record without scopes resolves to the new defaults,
 	});
 	const principal = await verifier.resolve(key.key);
 	assertEquals(sorted([...principal!.scopes]), sorted(DEFAULT_SCOPES));
-	assert(!principal!.scopes.has('admin'), 'a key that names no scopes is not an administrator any more');
+	assert(!principal!.scopes.has('admin'), 'a key that names no scopes is not an administrator');
 });
 
-Deno.test('users: a scope-less seed seeds the store with the legacy grant, on disk and in memory (G15)', async () => {
+Deno.test('users: a scope-less seed seeds the store with SCOPELESS_ACCOUNT_SCOPES, on disk and in memory', async () => {
 	const dir = await scratch();
 	try {
 		const { record, password } = await generateAdminUser('root', 'correct horse battery');
@@ -115,7 +95,7 @@ Deno.test('users: a scope-less seed seeds the store with the legacy grant, on di
 		assert(seeded.scopesOf('root')!.has('admin'));
 		const file = JSON.parse(await Deno.readTextFile(join(dir, 'users.json')));
 		assertEquals(file.version, USERS_SCHEMA_VERSION);
-		assertEquals(file.users[0].scopes, [...LEGACY_DEFAULT_SCOPES]);
+		assertEquals(file.users[0].scopes, [...SCOPELESS_ACCOUNT_SCOPES]);
 		assertEquals(log.lines, [[
 			'info',
 			'user store migrated: 1 account given explicit scopes (the TTK_ADMIN_USER seed)',
@@ -134,10 +114,10 @@ Deno.test('users: a scope-less seed seeds the store with the legacy grant, on di
 	}
 });
 
-Deno.test('users: a store with accounts but no enabled admin is warned about at startup (G15)', async () => {
+Deno.test('users: a store with accounts but no enabled admin is warned about at startup', async () => {
 	const dir = await scratch();
 	try {
-		const watcher = await legacyAccount('watcher', ['view:watch']);
+		const watcher = await versionOneAccount('watcher', ['view:watch']);
 		const path = join(dir, 'users.json');
 		await Deno.writeTextFile(path, JSON.stringify({ version: 2, users: [watcher.stored] }));
 		const warning = new UserStore({ dataDir: dir, seed: null }).adminWarning();
@@ -146,7 +126,7 @@ Deno.test('users: a store with accounts but no enabled admin is warned about at 
 		assertStringIncludes(warning, 'doctor --grant');
 
 		// A disabled administrator is no administrator.
-		const disabled = await legacyAccount('root', ['admin']);
+		const disabled = await versionOneAccount('root', ['admin']);
 		await Deno.writeTextFile(path, JSON.stringify({ version: 2, users: [{ ...disabled.stored, disabled: true }] }));
 		assert(new UserStore({ dataDir: dir, seed: null }).adminWarning() !== null);
 
@@ -159,81 +139,17 @@ Deno.test('users: a store with accounts but no enabled admin is warned about at 
 	}
 });
 
-Deno.test({
-	name: 'users: the cluster KV is upgraded once, under its own marker key outside the accounts (G15, N2, AC21)',
-	sanitizeResources: false,
-	sanitizeOps: false,
-	fn: async () => {
-		const dir = await scratch();
-		const file = join(dir, 'cluster.kv');
-		const kvA = await Deno.openKv(file);
-		const kvB = await Deno.openKv(file);
-		const kvC = await Deno.openKv(file);
-		const root = await legacyAccount('root');
-		const narrow = await legacyAccount('watcher', ['view:watch']);
-		// A cluster as 0.2.0 left it: scope-less accounts under ['ttk','users'] and that collection's change counter.
-		await kvA.atomic()
-			.set(['ttk', 'users', 'root'], root.stored)
-			.set(['ttk', 'users', 'watcher'], narrow.stored)
-			.set(['ttk', 'users', '\u0000version'], crypto.randomUUID())
-			.commit();
-		const logA = recorder();
-		const logB = recorder();
-		const nodeA = new UserStore({ dataDir: null, seed: null, logger: logA });
-		const nodeB = new UserStore({ dataDir: null, seed: null, logger: logB });
-		const nodeC = new UserStore({ dataDir: null, seed: null });
-		try {
-			await nodeA.attachCluster(kvA, { pollMs: 50 });
-			assert(nodeA.scopesOf('root')!.has('admin'), 'root keeps admin across the upgrade');
-			assertEquals([...nodeA.scopesOf('watcher')!], ['view:watch']);
-			assertEquals(logA.lines, [['info', 'user store migrated: 1 account given explicit scopes (cluster store)']]);
-			const stored = await kvA.get<{ scopes?: string[] }>(['ttk', 'users', 'root']);
-			assertEquals(stored.value?.scopes, [...LEGACY_DEFAULT_SCOPES], 'written into the KV, not only memory');
-			assertEquals((await kvA.get(USERS_SCHEMA_KEY)).value, USERS_SCHEMA_VERSION);
-			// The marker is not under the accounts' prefix: the replica never lists it as an account.
-			const listed: string[] = [];
-			for await (const entry of kvA.list({ prefix: ['ttk', 'users'] })) listed.push(String(entry.key.at(-1)));
-			assertEquals(listed.filter((key) => key !== '\u0000version').sort(), ['root', 'watcher']);
-
-			// A second node finds the marker and does nothing.
-			await nodeB.attachCluster(kvB, { pollMs: 50 });
-			assertEquals(logB.lines, []);
-			assert(nodeB.scopesOf('root')!.has('admin'));
-
-			// The marker, not the change counter, says the upgrade ran: a scope-less record written after it (by
-			// anything) moves the counter and is still not upgraded by a node that attaches later.
-			const late = await legacyAccount('late');
-			await kvA.atomic()
-				.set(['ttk', 'users', 'late'], late.stored)
-				.set(['ttk', 'users', '\u0000version'], crypto.randomUUID())
-				.commit();
-			await nodeC.attachCluster(kvC, { pollMs: 50 });
-			assertEquals(sorted([...nodeC.scopesOf('late')!]), sorted(DEFAULT_SCOPES), 'the new defaults, no admin');
-			assertEquals((await kvA.get<{ scopes?: string[] }>(['ttk', 'users', 'late'])).value?.scopes, undefined);
-		} finally {
-			nodeA.detachCluster();
-			nodeB.detachCluster();
-			nodeC.detachCluster();
-			kvA.close();
-			kvB.close();
-			kvC.close();
-			await new Promise((resolve) => setTimeout(resolve, 100));
-			await Deno.remove(dir, { recursive: true }).catch(() => {});
-		}
-	},
-});
-
-Deno.test('doctor --grant (file): repairs one account offline, upgrading a v1 store in the same write (G15, AC21)', async () => {
+Deno.test('doctor --grant (file): repairs one account offline, upgrading a v1 store in the same write', async () => {
 	const dir = await scratch();
 	try {
-		const root = await legacyAccount('root');
-		const alice = await legacyAccount('alice', ['view:watch']);
+		const root = await versionOneAccount('root');
+		const alice = await versionOneAccount('alice', ['view:watch']);
 		const path = join(dir, 'users.json');
 		await Deno.writeTextFile(path, JSON.stringify({ version: 1, users: [root.stored, alice.stored] }));
 
 		const granted = await grantScopesInFile(dir, 'alice', ['mcp:invoke', 'admin']);
 		assertEquals(granted.user.scopes, ['mcp:invoke', 'admin']);
-		assertEquals(granted.migrated, 1, 'root was given its legacy grant in the same write');
+		assertEquals(granted.migrated, 1, 'root was given SCOPELESS_ACCOUNT_SCOPES in the same write');
 		const file = JSON.parse(await Deno.readTextFile(path));
 		assertEquals(file.version, USERS_SCHEMA_VERSION);
 
@@ -257,62 +173,18 @@ Deno.test('doctor --grant (file): repairs one account offline, upgrading a v1 st
 	}
 });
 
-Deno.test({
-	name: 'doctor --grant (cluster): writes the KV through the replica, and a running node picks it up (N2, AC21)',
-	sanitizeResources: false,
-	sanitizeOps: false,
-	fn: async () => {
-		const dir = await scratch();
-		const file = join(dir, 'cluster.kv');
-		const kvNode = await Deno.openKv(file);
-		const kvDoctor = await Deno.openKv(file);
-		const watcher = await legacyAccount('watcher', ['view:watch']);
-		await kvNode.atomic()
-			.set(['ttk', 'users', 'watcher'], watcher.stored)
-			.set(['ttk', 'users', '\u0000version'], crypto.randomUUID())
-			.commit();
-		const node = new UserStore({ dataDir: null, seed: null });
-		try {
-			await node.attachCluster(kvNode, { pollMs: 50 });
-			assert(node.adminWarning() !== null, 'the cluster has no administrator');
-
-			const { user, migrated } = await grantScopesInCluster(kvDoctor, 'watcher', ['view:watch', 'admin']);
-			assertEquals(user.scopes, ['view:watch', 'admin']);
-			assertEquals(migrated, 0, 'the node already upgraded the cluster');
-			const deadline = Date.now() + 5_000;
-			while (!node.scopesOf('watcher')?.has('admin')) {
-				if (Date.now() > deadline) throw new Error('the running node never saw the grant');
-				await new Promise((resolve) => setTimeout(resolve, 20));
-			}
-			assertEquals(node.adminWarning(), null);
-			await assertRejects(() => grantScopesInCluster(kvDoctor, 'ghost', ['admin']), UserStoreError, 'no user');
-			await assertRejects(
-				() => grantScopesInCluster(kvDoctor, 'watcher', ['view:watch']),
-				UserStoreError,
-				'admin scope',
-			);
-		} finally {
-			node.detachCluster();
-			kvNode.close();
-			kvDoctor.close();
-			await new Promise((resolve) => setTimeout(resolve, 100));
-			await Deno.remove(dir, { recursive: true }).catch(() => {});
-		}
-	},
-});
-
-Deno.test('R1-10: keys configured and no key or enabled account holding admin is warned about, naming the remedy', async () => {
+Deno.test('users: keys configured and no key or enabled account holding admin is warned about, naming the remedy', async () => {
 	assertEquals(apiKeyAdminWarning([], 0), null, 'no keys: the account warning and the bind policy speak to that');
 	const warning = apiKeyAdminWarning([{ scopes: ['mcp:invoke'] }, {}], 0);
 	assert(warning !== null);
 	assertStringIncludes(warning, 'no API key and no enabled account holds the admin scope');
 	assertStringIncludes(warning, `add "admin" to a key's "scopes"`);
-	assertStringIncludes(warning, 'no longer include admin', 'a scope-less key is named as the likely cause');
+	assertStringIncludes(warning, 'which do not include admin', 'a scope-less key is named as the likely cause');
 	assertEquals(apiKeyAdminWarning([{}, { scopes: ['mcp:invoke', 'admin'] }], 0), null, 'one admin key is enough');
 	assertEquals(apiKeyAdminWarning([{}], 1), null, 'an enabled admin account manages the control plane');
 
-	// At startup, through the real composition: an upgrade whose only administrator was a scope-less key.
-	const legacy = await generateApiKey('legacy');
+	// At startup, through the real composition: a deployment whose only intended administrator is a scope-less key.
+	const scopeless = await generateApiKey('scopeless');
 	const reader = await generateApiKey('reader', ['mcp:invoke']);
 	const started = async (records: unknown[]): Promise<string[]> => {
 		const lines: string[] = [];
@@ -326,9 +198,9 @@ Deno.test('R1-10: keys configured and no key or enabled account holding admin is
 		await gateway.finished;
 		return lines.map((line) => (JSON.parse(line) as { msg: string }).msg);
 	};
-	const warned = await started([legacy.record, reader.record]);
+	const warned = await started([scopeless.record, reader.record]);
 	assert(warned.some((msg) => msg.startsWith('no API key and no enabled account holds the admin scope')), `${warned}`);
 	const admin = await generateApiKey('admin-key', ['mcp:invoke', 'admin']);
-	const quiet = await started([legacy.record, admin.record]);
+	const quiet = await started([scopeless.record, admin.record]);
 	assert(!quiet.some((msg) => msg.includes('admin scope')), `${quiet}`);
 });

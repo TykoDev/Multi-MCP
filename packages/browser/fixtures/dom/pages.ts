@@ -1,16 +1,12 @@
 /**
- * The DOM fixture corpus — **one** corpus, `tests/fixtures/pages/`.
+ * The DOM fixture corpus — **one** corpus, `tests/fixtures/pages/`, the same static HTML the
+ * reference goldens were recorded against: comparing output on different bytes would measure nothing.
+ * Pages the reference did not record (`deep_nesting`, `same_tag_siblings`, `empty_page`,
+ * `iframe_same_site_port`, `iframe_oopif_scrolled`, `iframe_hidden_elements`,
+ * `iframe_oopif_index_collision`, …) carry `hasGolden: false`, so they are never counted as a pass.
  *
- * It used to be two: 30 programmatic pages generated here, and the 25 static HTML pages the Python
- * reference was recorded against. Comparing our output on our bytes to the reference's output on its
- * bytes measures nothing, so the programmatic set is gone and this module now enumerates the shared
- * corpus. Pages that only our set covered were promoted to static HTML in the same directory
- * (`deep_nesting`, `same_tag_siblings`, `empty_page`, `iframe_same_site_port`,
- * `iframe_oopif_scrolled`, `iframe_hidden_elements`, `iframe_oopif_index_collision`); they have no
- * Python golden, which the parity report surfaces as `NO-GOLDEN` rather than as a pass.
- *
- * Recording conditions are pinned by `tests/fixtures/manifest.json → provenance` and reproduced by
- * `packages/core/tests/parity/live.ts`. Two of them are structural rather than stylistic:
+ * Recording conditions are pinned by `tests/fixtures/manifest.json → provenance`. Two of them are
+ * structural rather than stylistic:
  *
  * - **1280 × 900 viewport, `deviceScaleFactor` 1.** Visibility is a viewport test with ±1000 px of
  *   vertical slack, so the viewport decides which elements exist in the output at all.
@@ -19,10 +15,6 @@
  *   spellings of loopback are what separates the `DOM.getDocument` pierce path (same site, in the
  *   host renderer) from the session-recursion path (cross site, its own renderer and its own
  *   `backendNodeId` space). `iframe_same_site_port` and `iframe_crossorigin` are exactly that pair.
- *
- * Captures are re-recorded by `deno task parity -- --record`, which writes
- * `packages/core/fixtures/dom/<page>.capture.json` from the same live run it reports on — so the
- * fixture and the reported result are one measurement, not two.
  */
 
 import { fromFileUrl } from '@std/path';
@@ -35,11 +27,11 @@ export interface DomFixturePage {
 	readonly exercises: string;
 	/** Pathname served by both fixture origins. */
 	readonly path: string;
-	/** True when the Python reference recorded a golden for this page. */
+	/** True when the reference recorded a golden for this page. */
 	readonly hasGolden: boolean;
 }
 
-/** The canonical HTML corpus directory. Both sides of the cleanroom wall serve these bytes. */
+/** The canonical HTML corpus directory. */
 export const CANONICAL_PAGES_DIR: string = fromFileUrl(
 	new URL('../../../../tests/fixtures/pages', import.meta.url),
 );
@@ -57,7 +49,7 @@ export const DEFAULT_FIXTURE_VIEWPORT = { width: 1280, height: 900 } as const;
 export const PRIMARY_ORIGIN = 'http://127.0.0.1:38111' as const;
 export const SECONDARY_ORIGIN = 'http://localhost:38112' as const;
 
-/** What each promoted page covers that the recorded 25 do not. */
+/** What each page outside the manifest covers that the recorded pages do not. */
 const ADDED_PAGES: Readonly<Record<string, string>> = {
 	deep_nesting: 'xpath through 40 levels of structural nesting',
 	same_tag_siblings: '1-based same-tag sibling xpath indexing with interleaved tags, outside a table',
@@ -65,8 +57,8 @@ const ADDED_PAGES: Readonly<Record<string, string>> = {
 	iframe_same_site_port: 'cross-origin same-site frame: pierced in-process, different documentURL, one session',
 	iframe_oopif_scrolled: 'out-of-process iframe whose inner document is scrolled: frame scrollOffset subtraction',
 	iframe_hidden_elements: 'hiddenElementsInfo / hasHiddenContent: interactive frame content below the frame fold',
-	iframe_oopif_index_collision: 'R6.1 synthetic index: an OOPIF whose backendNodeIds collide with the host session',
-	live_value_vs_attribute: 'the live DOM property and the markup attribute disagree (§6.5 AX-value override)',
+	iframe_oopif_index_collision: 'synthetic selector index: an OOPIF whose backendNodeIds collide with the host session',
+	live_value_vs_attribute: 'the live DOM property and the markup attribute disagree (AX-value override)',
 	visibility_collapse: 'visibility:collapse inside and outside a table, and a descendant that undoes it',
 	scroll_page_prescrolled: 'a scrolled main document: page-absolute geometry vs the moved viewport band',
 	iframe_hidden_far: 'frame content beyond the ±1000px slack, so hiddenElementsInfo actually fires',

@@ -1,12 +1,12 @@
 /**
  * @module
- * D-143 W2: a loopback stand-in for a model provider, speaking both wire formats the clients dial — the OpenAI
+ * A loopback stand-in for a model provider, speaking both wire formats the clients dial — the OpenAI
  * chat-completions shape at `/v1/chat/completions` and the Anthropic Messages shape at `/v1/messages` — from one
  * scripted list of turns. Every request is recorded with its headers and parsed body, so a test can assert what the
  * client sent (the key header, the operator headers, the version header, the tool definitions, the transcript) and
  * how many times it dialled. Nothing here is reachable off the host: `127.0.0.1`, an ephemeral port.
  *
- * D-158: `GET /v1/models` answers `{ data: [{ id }] }` from `models` (a 404 while it is `null`), recorded like a call
+ * `GET /v1/models` answers `{ data: [{ id }] }` from `models` (a 404 while it is `null`), recorded like a call
  * with an empty body, so a test can assert the list request's headers too.
  */
 
@@ -69,7 +69,7 @@ export interface FakeProvider {
 	/** Turns consumed in order; once empty, every request gets `fallback`. */
 	script: FakeTurn[];
 	fallback: FakeTurn;
-	/** D-158: what `GET /v1/models` lists; `null` answers 404 (a provider without a model list). */
+	/** What `GET /v1/models` lists; `null` answers 404 (a provider without a model list). */
 	models: string[] | null;
 	/** The requests seen at a path the clients must never dial (a redirect target). */
 	readonly stray: string[];

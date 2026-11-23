@@ -1,36 +1,21 @@
 /**
- * Agent-expansion authority, end to end through the real gateway: tasks and streams stay bound to the exact
- * credential that created them (GW-1, GW-3), owners never collide across realms or with the administrator
- * (GW-4, GW-5), and the public login route is no oracle for delegated bearers (GW-11).
+ * Agent-expansion authority, end to end through the real gateway: tasks and streams stay bound to the exact credential
+ * that created them, owners never collide across realms or with the administrator, and the public login route is no
+ * oracle for delegated bearers.
  */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import { extensionTools, registerCatalog, SessionRegistry } from '@tykotech/mcp';
 import { A2UI_CATALOG_ID } from '@tykotech/wire';
 import { generateAdminUser } from './admin_auth.ts';
 import { createGatewayApp } from './app.ts';
 import { expansionOwner, generateApiKey, type Principal, principalFromAuthInfo, VerifierChain } from './auth.ts';
 import { ConfigError, loadConfig, parseApiKeys } from './config.ts';
-import { createLogger } from './logger.ts';
+import { fakeSession, quiet } from './support_test.ts';
 
 const ORIGIN = 'http://127.0.0.1:8787';
-const quiet = (): ReturnType<typeof createLogger> => createLogger({ level: 'error', write: (): void => {} });
-
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'agent-authority-test' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
 
 /** A registry whose first browser launch waits for the test, so tool-calling tasks hold their slots. */
 function blockedRegistry(): { registry: SessionRegistry; release(): void } {
@@ -52,7 +37,8 @@ function call(
 		headers: {
 			host: '127.0.0.1:8787',
 			authorization: `Bearer ${token}`,
-			...(init.body === undefined ? {} : { 'content-type': 'application/json', 'a2a-version': '1.0' }),
+			'a2a-version': '1.0',
+			...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
 		},
 		...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
 	}));
@@ -118,9 +104,9 @@ async function drain(body: ReadableStream<Uint8Array>, ms: number): Promise<{ te
 
 const statusText = (view: TaskView): string => view.status.message?.parts.map((part) => part.text ?? '').join('') ?? '';
 
-// --- GW-1 -------------------------------------------------------------------------------------------------------
+// --- Tasks stay bound to the credential that created them -------------------------------------------------------
 
-Deno.test('GW-1 PROBE-1: rotating a key fails its queued and running tasks and ends their event streams', async () => {
+Deno.test('agent authority: rotating a key fails its queued and running tasks and ends their event streams', async () => {
 	const alice = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const rotated = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([alice.record]) });
@@ -133,7 +119,7 @@ Deno.test('GW-1 PROBE-1: rotating a key fails its queued and running tasks and e
 		const queued = await submit(gateway.app, alice.key);
 		await settle();
 		assertEquals((await task(gateway.app, alice.key, queued)).status.state, 'TASK_STATE_SUBMITTED');
-		const events = await call(gateway.app, `/api/v1/agent/tasks/${queued}/events`, alice.key);
+		const events = await call(gateway.app, `/a2a/v1/tasks/${queued}:subscribe`, alice.key);
 		assertEquals(events.status, 200);
 
 		// The operator rotates alice's key. Her pre-rotation work must not run on the old credential's authority.
@@ -151,7 +137,7 @@ Deno.test('GW-1 PROBE-1: rotating a key fails its queued and running tasks and e
 	}
 });
 
-Deno.test('GW-1 PROBE-1: a key narrowed while its task waits never lends that task the scopes it lost', async () => {
+Deno.test('agent authority: a key narrowed while its task waits never lends that task the scopes it lost', async () => {
 	const alice = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([alice.record]) });
 	const verifier = new VerifierChain({ config, allowAnonymous: false });
@@ -180,7 +166,7 @@ Deno.test('GW-1 PROBE-1: a key narrowed while its task waits never lends that ta
 	}
 });
 
-Deno.test('GW-1 PROBE-2: a delegation is never issued to a pre-rotation task, even after the new key authenticates', async () => {
+Deno.test('agent authority: a pre-rotation task is never authorized, even after the new key authenticates', async () => {
 	const original = await generateApiKey('rotating', ['mcp:invoke', 'agent:invoke', 'sandbox:execute']);
 	const replacement = await generateApiKey('rotating', ['mcp:invoke', 'agent:invoke', 'sandbox:execute']);
 	const verifier = new VerifierChain({
@@ -188,30 +174,20 @@ Deno.test('GW-1 PROBE-2: a delegation is never issued to a pre-rotation task, ev
 		allowAnonymous: false,
 	});
 	const requested = new Set(['mcp:invoke', 'sandbox:execute']);
-	try {
-		// The task was submitted under the original key; this is the credential it carries.
-		const before = principalFromAuthInfo(await verifier.verifyAccessToken(original.key));
-		assert(before.credential, 'the bearer gate fingerprints the credential');
-		verifier.replaceApiKeys([replacement.record]);
-		// The owner keeps working with the new key, which refreshes the owner's cached authority.
-		const after = principalFromAuthInfo(await verifier.verifyAccessToken(replacement.key));
-		assertEquals(expansionOwner(before), expansionOwner(after));
-		assertEquals(await verifier.delegateMcp('api-key:rotating', requested, before.credential), null);
-		assertEquals(await verifier.delegateMcp('api-key:rotating', requested, undefined), null);
-		const fresh = await verifier.delegateMcp('api-key:rotating', requested, after.credential);
-		assert(fresh, 'the replacement credential’s own tasks still get one');
-		fresh.close();
-		// The task-authority check agrees with the delegation one.
-		assertEquals(verifier.authorizeTask('api-key:rotating', requested, before.credential), null);
-		assertEquals([...verifier.authorizeTask('api-key:rotating', requested, after.credential)!], [...requested]);
-	} finally {
-		verifier.closeDelegations();
-	}
+	// The task was submitted under the original key; this is the credential it carries.
+	const before = principalFromAuthInfo(await verifier.verifyAccessToken(original.key));
+	assert(before.credential, 'the bearer gate fingerprints the credential');
+	verifier.replaceApiKeys([replacement.record]);
+	// The owner keeps working with the new key.
+	const after = principalFromAuthInfo(await verifier.verifyAccessToken(replacement.key));
+	assertEquals(expansionOwner(before), expansionOwner(after));
+	assertEquals(verifier.authorizeTask('api-key:rotating', requested, before.credential), null);
+	assertEquals([...verifier.authorizeTask('api-key:rotating', requested, after.credential)!], [...requested]);
 });
 
-// --- GW-3 -------------------------------------------------------------------------------------------------------
+// --- Event streams stay bound to the credential that opened them ------------------------------------------------
 
-Deno.test('GW-3: an A2UI event stream ends when its key is rotated and never sees the new key’s surfaces', async () => {
+Deno.test('agent authority: an A2UI event stream ends when its key is rotated and never sees the new key’s surfaces', async () => {
 	const alice = await generateApiKey('alice', ['agent:invoke', 'a2ui:publish']);
 	const rotated = await generateApiKey('alice', ['agent:invoke', 'a2ui:publish']);
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([alice.record]) });
@@ -237,35 +213,9 @@ Deno.test('GW-3: an A2UI event stream ends when its key is rotated and never see
 	}
 });
 
-// --- GW-11 ------------------------------------------------------------------------------------------------------
+// --- No owner collides with the administrator -------------------------------------------------------------------
 
-Deno.test('GW-11: the public login route refuses delegated bearers instead of describing them', async () => {
-	const parent = await generateApiKey('parent', ['mcp:invoke', 'agent:invoke']);
-	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([parent.record]) });
-	const verifier = new VerifierChain({ config, allowAnonymous: false });
-	const registry = new SessionRegistry({ reapIntervalMs: 0 });
-	const gateway = createGatewayApp({ config, verifier, registry, version: 'test', logger: quiet() });
-	try {
-		const principal = principalFromAuthInfo(await verifier.verifyAccessToken(parent.key));
-		const delegated = await verifier.delegateMcp('api-key:parent', new Set(['mcp:invoke']), principal.credential);
-		assert(delegated);
-		const response = await gateway.app.request(`${ORIGIN}/api/v1/auth/login`, {
-			method: 'POST',
-			headers: { host: '127.0.0.1:8787', 'content-type': 'application/json' },
-			body: JSON.stringify({ apiKey: delegated.token }),
-		});
-		assertEquals(response.status, 401);
-		assertEquals(JSON.stringify(await response.json()).includes('parent'), false);
-		delegated.close();
-	} finally {
-		await gateway.close();
-		await registry.shutdown();
-	}
-});
-
-// --- GW-4 -------------------------------------------------------------------------------------------------------
-
-Deno.test('GW-4: an API-key id cannot claim the administrator’s owner, a control character or an unbounded length', async () => {
+Deno.test('agent authority: an API-key id cannot claim the administrator’s owner, a control character or an unbounded length', async () => {
 	const key = await generateApiKey('placeholder');
 	for (const id of ['admin:admin', 'ADMIN:root', 'line\nbreak', 'tab\there', 'x'.repeat(129)]) {
 		assertThrows(
@@ -281,120 +231,32 @@ Deno.test('GW-4: an API-key id cannot claim the administrator’s owner, a contr
 	assertEquals(parseApiKeys(JSON.stringify([{ ...key.record, id: 'administrator' }]), 'test').length, 1);
 });
 
-Deno.test('GW-4: administrator authority is the admin record and a live session, never an id prefix', async () => {
+Deno.test('agent authority: administrator authority is the admin record and a live session, never an id prefix', async () => {
 	const { record, password } = await generateAdminUser('admin', 'correct horse battery', ['agent:invoke', 'admin']);
 	const config = loadConfig({ TTK_ADMIN_USER: JSON.stringify(record) });
 	const verifier = new VerifierChain({ config, allowAnonymous: false });
 	const forged: Principal = { kind: 'api-key', id: 'admin:someone', scopes: new Set(['admin']) };
-	assertEquals(verifier.stillAuthorized(forged), false, 'an admin: id with no admin record behind it');
-	assertEquals(verifier.stillAuthorized({ ...forged, id: 'admin:admin' }), false, 'no session credential');
+	assertEquals(verifier.currentScopes(forged), null, 'an admin: id with no admin record behind it');
+	assertEquals(verifier.currentScopes({ ...forged, id: 'admin:admin' }), null, 'no session credential');
 	const admin = await verifier.verifyAdmin('admin', password);
 	assert(admin);
 	const { token } = await verifier.mintSession(admin);
 	const session = principalFromAuthInfo(await verifier.verifyAccessToken(token));
-	assertEquals(verifier.stillAuthorized(session), true);
+	assert(verifier.currentScopes(session) !== null);
 	const owner = expansionOwner(session);
 	assert(verifier.authorizeTask(owner, new Set(['agent:invoke']), session.credential));
 	// Logging out ends the session's authority: its streams at the next re-check, its tasks at once.
 	await verifier.closeSession(token);
-	assertEquals(verifier.stillAuthorized(session), false);
+	assertEquals(verifier.currentScopes(session), null);
 	assertEquals(verifier.authorizeTask(owner, new Set(['agent:invoke']), session.credential), null);
 	// A second verifier with no admin record does not honour a session-shaped credential either.
 	const bare = new VerifierChain({ config: loadConfig({}), allowAnonymous: false });
-	assertEquals(bare.stillAuthorized(session), false);
+	assertEquals(bare.currentScopes(session), null);
 });
 
-// --- GW-5 -------------------------------------------------------------------------------------------------------
+// --- Owners are the gate's stamp -----------------------------------------------------------------------------------
 
-// The fixture substitutes only signature verification; the gate, owner composition, runtime and stores are real.
-const OAUTH_FIXTURE = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJzYW1lLWlkIn0.';
-class RealmFixtureVerifier extends VerifierChain {
-	override async resolve(token: string): Promise<Principal | null> {
-		if (token === OAUTH_FIXTURE) {
-			return {
-				kind: 'oauth',
-				id: 'same-id',
-				scopes: new Set(['mcp:invoke', 'agent:invoke', 'a2ui:publish']),
-				credential: `oauth:${Date.now() + 3_600_000}`,
-			};
-		}
-		return await super.resolve(token);
-	}
-}
-
-async function mcpTool(app: App, token: string, name: string, args: Record<string, unknown>): Promise<{
-	isError?: boolean;
-	structuredContent?: { result?: Record<string, unknown> };
-}> {
-	const response = await app.request(`${ORIGIN}/mcp`, {
-		method: 'POST',
-		headers: {
-			host: '127.0.0.1:8787',
-			authorization: `Bearer ${token}`,
-			'content-type': 'application/json',
-			accept: 'application/json, text/event-stream',
-		},
-		body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
-	});
-	const text = await response.text();
-	assertEquals(response.status, 200, text);
-	const line = text.trimStart().startsWith('{')
-		? text
-		: text.split('\n').find((entry) => entry.startsWith('data:'))!.slice(5);
-	const body = JSON.parse(line) as { result?: Record<string, unknown>; error?: unknown };
-	assert(body.result, line);
-	return body.result;
-}
-
-Deno.test('GW-5: matching API-key and OAuth ids never share tasks over /a2a, REST or MCP extension tools', async () => {
-	const api = await generateApiKey('same-id', ['mcp:invoke', 'agent:invoke', 'a2ui:publish']);
-	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([api.record]) });
-	const verifier = new RealmFixtureVerifier({ config, allowAnonymous: false });
-	const registry = new SessionRegistry({ reapIntervalMs: 0 });
-	const gateway = createGatewayApp({ config, verifier, registry, version: 'test', logger: quiet() });
-	const app = gateway.app;
-	try {
-		const body = await json(call(app, '/a2a', api.key, { body: sendMessage('browser_list_sessions', false) }));
-		const id = (body.result as { task: { id: string } }).task.id;
-		// REST, as the colliding OAuth subject.
-		assertEquals((await json(call(app, '/api/v1/agent/tasks', OAUTH_FIXTURE))).tasks, []);
-		for (
-			const [path, method] of [
-				[`/api/v1/agent/tasks/${id}`, 'GET'],
-				[`/api/v1/agent/tasks/${id}/events`, 'GET'],
-				[`/api/v1/agent/tasks/${id}/cancel`, 'POST'],
-			] as const
-		) {
-			const response = await call(app, path, OAUTH_FIXTURE, { method });
-			assertEquals(response.status, 404, `${method} ${path}`);
-			await response.body?.cancel();
-		}
-		// A2A, as the colliding OAuth subject.
-		const rpc = (method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> =>
-			json(call(app, '/a2a', OAUTH_FIXTURE, { body: { jsonrpc: '2.0', id: 2, method, params } }));
-		assertEquals(((await rpc('GetTask', { id })).error as { code: number }).code, -32001);
-		assertEquals(((await rpc('CancelTask', { id })).error as { code: number }).code, -32001);
-		assertEquals(((await rpc('ListTasks', {})).result as { tasks: unknown[] }).tasks, []);
-		// MCP extension tools, whose owner the MCP mount now reads from the gate's stamp.
-		assertEquals((await mcpTool(app, OAUTH_FIXTURE, 'agent_get_task', { task_id: id })).isError, true);
-		const own = await mcpTool(app, api.key, 'agent_get_task', { task_id: id });
-		assertEquals((own.structuredContent?.result?.task as { id?: string } | undefined)?.id, id);
-		await mcpTool(app, OAUTH_FIXTURE, 'a2ui_publish', {
-			message: { version: 'v0.9', createSurface: { surfaceId: 'oauth-owned', catalogId: A2UI_CATALOG_ID } },
-		});
-		assertEquals((await json(call(app, '/api/v1/a2ui/surfaces', api.key))).surfaces, []);
-		const mine = (await json(call(app, '/api/v1/a2ui/surfaces', OAUTH_FIXTURE))).surfaces as { surfaceId: string }[];
-		assertEquals(mine.map((surface) => surface.surfaceId), ['oauth-owned']);
-		// And the owner itself appears in the API key's own task list.
-		const listed = (await json(call(app, '/api/v1/agent/tasks', api.key))).tasks as { id: string }[];
-		assertEquals(listed.map((entry) => entry.id), [id]);
-	} finally {
-		await gateway.close();
-		await registry.shutdown();
-	}
-});
-
-Deno.test('GW-5: the MCP mount reads the gate-stamped owner and offers extension tools to no unstamped caller', async () => {
+Deno.test('agent authority: the MCP mount reads the gate-stamped owner and offers extension tools to no unstamped caller', async () => {
 	const api = await generateApiKey('same-id', ['mcp:invoke', 'agent:invoke']);
 	const verifier = new VerifierChain({
 		config: loadConfig({ TTK_API_KEYS: JSON.stringify([api.record]) }),
@@ -415,8 +277,11 @@ Deno.test('GW-5: the MCP mount reads the gate-stamped owner and offers extension
 		assertEquals(fromGate.ctx.extensionPrincipal, 'api-key:same-id');
 		assert(fromGate.permitted.has('agent_peers'));
 		// One derivation: whatever the gate stamped is the owner, whatever kind it names.
-		const other = dispatch({ ...stamped, extra: { ...stamped.extra, principalKind: 'oauth', owner: 'oauth:same-id' } });
-		assertEquals(other.ctx.extensionPrincipal, 'oauth:same-id');
+		const other = dispatch({
+			...stamped,
+			extra: { ...stamped.extra, principalKind: 'anonymous-loopback', owner: 'other:same-id' },
+		});
+		assertEquals(other.ctx.extensionPrincipal, 'other:same-id');
 		// An AuthInfo the gateway did not stamp gets no extension tool rather than a guessed realm.
 		const unstamped = dispatch({ ...stamped, extra: { principalKind: 'api-key' } });
 		assertEquals(unstamped.ctx.extensionPrincipal, undefined);

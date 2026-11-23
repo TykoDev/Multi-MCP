@@ -32,6 +32,8 @@ Thumbs.db
 /.playwright-mcp/
 /.claude/settings.local.json
 /.claude/scheduled_tasks.lock
+/.harness-state/
+/skillset-saves/
 
 # Python bytecode
 __pycache__/

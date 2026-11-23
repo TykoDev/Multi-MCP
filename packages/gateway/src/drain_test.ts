@@ -1,6 +1,4 @@
-/**
- * F5 (BACKEND §7 stage 1): draining refuses new sessions, tickets and live-view sockets; health keeps answering.
- */
+/** Draining refuses new sessions, tickets and live-view sockets; health keeps answering. */
 import { assertEquals, assertRejects } from '@std/assert';
 import { SessionRegistry, ToolError } from '@tykotech/mcp';
 import { createGatewayApp } from './app.ts';

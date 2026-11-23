@@ -1,6 +1,9 @@
 /** Composes optional coding services and agent protocols behind the gateway's existing guards. */
 import {
 	a2aFetch,
+	a2aHttpError,
+	a2aHttpFailure,
+	a2aHttpStatus,
 	a2aInvoke,
 	AGENT_PROFILES,
 	agentCard,
@@ -52,7 +55,7 @@ import type { ExpansionConfig } from './expansion_config.ts';
 import { a2aStreamFarewell, A2uiStore, attachA2uiRoutes, StreamGuard } from './a2ui.ts';
 import { type EmbedStreamCaller, EmbedStreams, type EmbedStreamsOptions } from './embed_streams.ts';
 import type { ModelProvidersConfig, ModelProviderSettings, ProviderView } from './model_providers.ts';
-import { HttpProblem, problemResponse } from './problem.ts';
+import { HttpProblem, problemResponse, type ProblemSlug } from './problem.ts';
 import { MODEL_EXCLUDED, NOT_TASKABLE, notTaskable } from './taskable.ts';
 import type { MemoryStore } from './memory.ts';
 import { memoryActions } from './memory_tools.ts';
@@ -62,41 +65,25 @@ export interface ExpansionServices {
 	readonly surfaces: A2uiStore;
 	readonly tools: readonly ToolDefinition[];
 	readonly publish: (owner: string, message: unknown) => Record<string, unknown>;
-	/** GW-3: every open A2UI and task event stream, re-checked on credential changes and ended at shutdown. */
+	/** Every open A2UI and A2A event stream, re-checked on credential changes and ended at shutdown. */
 	readonly streams: StreamGuard;
+	/** The MCP tools a caller holding `scopes` may invoke as structured A2A tool tasks, for the extended card. */
+	readonly invocableTools: (scopes: ReadonlySet<string>) => readonly AgentToolSkill[];
 	/**
-	 * A11: the MCP tools a caller holding `scopes` may invoke as structured A2A tool tasks, for the extended card.
-	 * Absent: the extended card is not served (`-32004`) and the card says `extendedAgentCard: false`.
-	 */
-	readonly invocableTools?: (scopes: ReadonlySet<string>) => readonly AgentToolSkill[];
-	/**
-	 * D-143: the tools a task submitted by a caller holding `scopes` could run — the one predicate behind
-	 * {@linkcode invocableTools} and the built-in model agent's tool list (`forModel` also subtracts `MODEL_EXCLUDED`).
+	 * The tools a task submitted by a caller holding `scopes` could run — the one predicate behind {@linkcode
+	 * invocableTools} and the built-in model agent's tool list (`forModel` also subtracts `MODEL_EXCLUDED`).
 	 */
 	readonly taskableTools: (scopes: ReadonlySet<string>, forModel?: boolean) => ToolDefinition[];
 	/**
-	 * D-143 (addendum B): every A2UI action name a surface may bind — the two built-ins plus the operator's
-	 * `TTK_A2UI_ACTIONS` names — sorted, computed once (actions are fail-fast configuration). Names only, never the
-	 * tool behind a configured one.
-	 */
-	readonly actionNames: readonly string[];
-	/** D-143 (C3): whether an ACP bridge is configured, for `GET /api/v1/agent/providers`. */
-	readonly acp: boolean;
-	/**
-	 * D-143 (§3.3, §3.7): the configured providers as the route and the diagnostics show them, with the grant proof
-	 * applied — built at startup from `ExpansionOptions.modelProviders` and {@linkcode modelGrantProven}, and rebuilt by
-	 * {@linkcode applyModelProviders} (D-152, D-153), so read it at each use rather than keeping it. A view carries no
-	 * key, no URL path and no header; the route strips `host`/`reason` for a caller without `model:invoke`. Empty with
-	 * no provider configured.
+	 * The configured providers as the route and the diagnostics show them, with the grant proof applied — built at
+	 * startup from `ExpansionOptions.modelProviders` and {@linkcode modelGrantProven}, and rebuilt by {@linkcode
+	 * applyModelProviders}, so read it at each use rather than keeping it.
 	 */
 	readonly modelProviders: { readonly default: string | null; readonly providers: readonly ProviderView[] };
 	/**
-	 * D-152 / D-153: installs a new providers set in the running process — one client per provider, the grant proof
-	 * recomputed against the same permissions API, the runtime's map and default swapped in place and
-	 * {@linkcode modelProviders} replaced — so the next task, route read, diagnostics read and agent card see it with no
-	 * restart. A task already running keeps the client it started with. Present whenever providers could ever be added
-	 * — a providers file or a data directory (`ExpansionOptions.dataDir`) — because the runtime's `model` option is
-	 * fixed at construction; absent otherwise (stdio without a file), where nothing is managed.
+	 * Installs a new providers set in the running process — one client per provider, the grant proof recomputed against
+	 * the same permissions API, the runtime's map and default swapped in place and {@linkcode modelProviders} replaced
+	 * — so the next task, route read, diagnostics read and agent card see it with no restart.
 	 */
 	readonly applyModelProviders?: (next: ModelProvidersConfig) => void;
 	/**
@@ -107,51 +94,31 @@ export interface ExpansionServices {
 	close(): Promise<void>;
 }
 
-/** The two action names every deployment binds (`A2uiToolActionsSchema` reserves them; `publish` registers them). */
-const BUILTIN_ACTION_NAMES = ['cancelTask', 'permissionDecision'] as const;
-
 /** What the composition root adds beyond configuration. */
 export interface ExpansionOptions {
-	/**
-	 * B1 / G5: tasks and surfaces persist under `<dataDir>/agents/`; `null` or absent keeps them in memory. D-153: set,
-	 * the model providers are managed (the control plane's store lives there), so the runtime is composed able to gain
-	 * providers even when it starts with none.
-	 */
+	/** Tasks and surfaces persist under `<dataDir>/agents/`; `null` or absent keeps them in memory. */
 	readonly dataDir?: string | null;
 	readonly logger?: { warn(message: string): void; info(message: string): void };
-	/** A11: what the push gate probes; `Deno.permissions` unless a test injects a fake. */
+	/** What the push gate probes; `Deno.permissions` unless a test injects a fake. */
 	readonly permissions?: Pick<Deno.Permissions, 'querySync'>;
-	/** A11, tests only: overrides of the push policy (a resolver, a fetch, loopback http). Never from configuration. */
+	/** Tests only: overrides of the push policy (a resolver, a fetch, loopback http). Never from configuration. */
 	readonly push?: Partial<PushOptions>;
-	/** B-6, tests only: the one-time DNS resolver probe; {@linkcode resolverPermitted} unless injected. */
+	/** Tests only: the one-time DNS resolver probe; {@linkcode resolverPermitted} unless injected. */
 	readonly resolverProbe?: (host: string) => Promise<boolean>;
 	/**
-	 * R1 (D-121): told the id of every task created here, so a cluster can record which node holds it and route
-	 * `agent_get_task` / `agent_cancel_task` there. Review R3-5: every task the runtime creates — by an MCP tool
-	 * (`agent_run_tool`, `agent_prompt`, `agent_delegate`), over A2A or its HTTP+JSON binding, or over REST — not only
-	 * the MCP ones (the runtime's `onTaskCreated`). Must not throw; the gateway's callback records asynchronously and
-	 * swallows a store failure, and a get that races the record is looked for across the cluster (`firstFound`).
-	 */
-	readonly onToolTask?: (taskId: string) => void;
-	/**
-	 * D-143 (W3): the model providers in force at startup — the operator's `TTK_MODEL_PROVIDERS_FILE` as the CLI
-	 * resolved it, followed (D-153) by the providers the control plane's store adds. `null` or absent: none yet, and a
-	 * text task needs the ACP bridge; with `dataDir` set the runtime can still gain some (`applyModelProviders`). The key
-	 * on each entry reaches its client by argument here and is read nowhere else in this module.
+	 * The model providers in force at startup — the operator's `TTK_MODEL_PROVIDERS_FILE` as the CLI resolved it,
+	 * followed by the providers the control plane's store adds. `null` or absent: none yet, and a text task is refused;
+	 * with `dataDir` set the runtime can still gain some (`applyModelProviders`).
 	 */
 	readonly modelProviders?: ModelProvidersConfig | null;
-	/**
-	 * D-154: the agents' vector memory in the database. Present, the four `memory_*` tools are offered (reading needs
-	 * `files:read`, changing `files:write`), owner-scoped like every other owned resource; absent (no data directory),
-	 * they are not.
-	 */
+	/** The agents' vector memory in the database. */
 	readonly memory?: MemoryStore;
 	/**
-	 * D-154: seals an A2A push webhook's token in `agents/tasks.json` (`syncSealer` over `TTK_DB_KEY_FILE`). Absent, a
-	 * token is never written: it lives in memory only and its config does not survive a restart.
+	 * Seals an A2A push webhook's token in `agents/tasks.json` (`syncSealer` over `TTK_DB_KEY_FILE`). Absent, a token
+	 * is never written: it lives in memory only and its config does not survive a restart.
 	 */
 	readonly sealer?: SecretSealer;
-	/** D-158: the administrator's per-agent settings, read at every use (`AgentSettingsStore.current`). */
+	/** The administrator's per-agent settings, read at every use (`AgentSettingsStore.current`). */
 	readonly agents?: () => AgentSettings;
 	/**
 	 * MCP Apps is on (`TTK_MCP_APPS`): the socket origin, the embed origin gate and the shared connection ceiling the
@@ -160,14 +127,8 @@ export interface ExpansionOptions {
 	readonly embeds?: Pick<EmbedStreamsOptions, 'socketBase' | 'admitOrigin' | 'connections'>;
 }
 
-/**
- * Build gate B-6: whether this process may use the system DNS resolver. Under a scoped `--allow-net`, Deno checks the
- * resolver's own address against the grant before any query, so a refusal arrives as `NotCapable` (or
- * `PermissionDenied`) without network traffic; any other outcome — an answer, NXDOMAIN, a timeout — proves the
- * permission. Push deliveries re-resolve every webhook host, so without this a scoped grant would advertise push and
- * then fail every delivery.
- */
-export async function resolverPermitted(host: string): Promise<boolean> {
+/** Whether this process may use the system DNS resolver. */
+async function resolverPermitted(host: string): Promise<boolean> {
 	try {
 		await Deno.resolveDns(host, 'A');
 		return true;
@@ -185,34 +146,20 @@ function netUnscoped(permissions: Pick<Deno.Permissions, 'querySync'> = Deno.per
 	}
 }
 
-/**
- * B1: the directory, under the data root, that holds `tasks.json` and `surfaces.json`. Node-local by design (G8):
- * cluster nodes must not share one data directory's agent files.
- */
+/** The directory, under the data root, that holds `tasks.json` and `surfaces.json`. */
 export const AGENT_STATE_DIR = 'agents';
 
 /**
- * X-1 (D-141): the taskable set and its refusal live in the leaf `taskable.ts`, which configuration can import without
- * this module's graph; re-exported here so every importer of `expansion.ts` is unchanged.
- */
-export { NOT_TASKABLE, notTaskable, SAMPLING_TOOLS } from './taskable.ts';
-
-/**
- * R1 (D-121): `agent_list_tasks`' `active` filter — every state a task can still leave.
- *
- * ERRATUM(E-100). Design §2.9 listed submitted, working and input-required. The runtime also has
- * `TASK_STATE_AUTH_REQUIRED`, which is not terminal; a closed list of three would show such a task under neither
- * `active` nor `finished`. "Not terminal" (`terminal()`, the runtime's own definition) is that list plus it.
+ * `agent_list_tasks`' `active` filter — every state a task can still leave: "not terminal" (`terminal()`, the runtime's
+ * own definition).
  */
 function activeTask(state: string): boolean {
 	return !terminal(state);
 }
 
 /**
- * A11 / N1: whether this process holds an outbound net grant for **every** host `TTK_A2A_PUSH_ALLOWED_HOSTS` names,
- * proven through the permissions API the way `browser_head`'s grant is (`probeEgressGrant`), never declared. An
- * unscoped `--allow-net` proves it outright; otherwise each host is queried at its port (443 unless named). An empty
- * list proves nothing, and push is then not offered at all.
+ * Whether this process holds an outbound net grant for **every** host `TTK_A2A_PUSH_ALLOWED_HOSTS` names, proven
+ * through the permissions API the way `browser_head`'s grant is (`probeEgressGrant`), never declared.
  */
 export function pushGrantProven(
 	hosts: readonly string[],
@@ -234,9 +181,8 @@ export function pushGrantProven(
 }
 
 /**
- * D-143 (backend §3): the `--allow-net` spelling of one provider's host — `host:port`, the WHATWG host with the
- * default port the URL parser dropped put back by scheme (443 for `https:`, 80 for `http:`). An IPv6 literal keeps
- * its brackets, as `--allow-net` spells it.
+ * The `--allow-net` spelling of one provider's host — `host:port`, the WHATWG host with the default port the URL parser
+ * dropped put back by scheme (443 for `https:`, 80 for `http:`).
  */
 export function providerNetHost(settings: Pick<ModelProviderSettings, 'host' | 'baseUrl'>): string {
 	const host = settings.host;
@@ -246,12 +192,8 @@ export function providerNetHost(settings: Pick<ModelProviderSettings, 'host' | '
 }
 
 /**
- * D-143 (backend §3, gate condition 3): whether this process holds an outbound net grant for each configured model
- * provider, proven through the permissions API the way the push gate proves its hosts ({@linkcode pushGrantProven}),
- * never declared. An unscoped `--allow-net` reaches every provider; otherwise each is queried at
- * {@linkcode providerNetHost}. Computed at startup and again for each set the control plane installs (D-153) — the
- * matrix itself is immutable while the process runs — and fail-closed: a `querySync` throw is `false`. A provider the proof does not reach is listed `reachable: false` and
- * never dialled (the runtime refuses it with `-32004` before any request).
+ * Whether this process holds an outbound net grant for each configured model provider, proven through the permissions
+ * API the way the push gate proves its hosts ({@linkcode pushGrantProven}), never declared.
  */
 export function modelGrantProven(
 	providers: readonly ModelProviderSettings[],
@@ -270,7 +212,7 @@ export function modelGrantProven(
 	);
 }
 
-/** D-158: `agent_default` for the providers route — the built-in agent's chosen model while a provider lists it. */
+/** `agent_default` for the providers route — the built-in agent's chosen model while a provider lists it. */
 function builtinDefault(services: ExpansionServices): { agent_default?: { provider: string; model: string } } {
 	const chosen = services.runtime.agentSetting('builtin').model;
 	if (chosen === null) return {};
@@ -280,12 +222,12 @@ function builtinDefault(services: ExpansionServices): { agent_default?: { provid
 	return listed ? { agent_default: { provider: chosen.provider, model: chosen.model } } : {};
 }
 
-/** D-143 (W3): one client per provider, by `kind`; the settings (key included) go in by argument and stay inside. */
+/** One client per provider, by `kind`; the settings (key included) go in by argument and stay inside. */
 function modelClient(settings: ModelProviderSettings): ModelProviderClient {
 	return settings.kind === 'anthropic' ? anthropicClient({ settings }) : openAiClient({ settings });
 }
 
-/** D-143 (W3): one taskable tool as the provider sees it — name, description, JSON Schema input; never its scope. */
+/** One taskable tool as the provider sees it — name, description, JSON Schema input; never its scope. */
 function modelTool(tool: ToolDefinition): ModelTool {
 	return {
 		name: tool.name,
@@ -298,7 +240,7 @@ function message(text: string): AgentMessage {
 	return { messageId: crypto.randomUUID(), role: 'ROLE_USER', parts: [{ text }] };
 }
 
-/** E-7: `agent_delegate` sends text, or structured A2A parts as given (the runtime validates and bounds them). */
+/** `agent_delegate` sends text, or structured A2A parts as given (the runtime validates and bounds them). */
 function delegatedMessage(args: Record<string, unknown>): AgentMessage {
 	if (Array.isArray(args.parts)) {
 		return { messageId: crypto.randomUUID(), role: 'ROLE_USER', parts: structuredClone(args.parts) };
@@ -306,13 +248,8 @@ function delegatedMessage(args: Record<string, unknown>): AgentMessage {
 	return message(String(args.message));
 }
 
-/**
- * The tool error an A2UI store refusal becomes. The store speaks the REST problem vocabulary, whose generic mapping
- * (`extension_tools.ts`) turned every refusal into "could not complete; check the service configuration" — a missing
- * surface read as a broken server. Every detail here is the store's or the wire validator's own fixed text (no
- * upstream service is involved), so it is passed on; a missing surface names what to do instead.
- */
-export function a2uiToolError(cause: unknown, surfaceId: string | undefined): ToolError {
+/** The tool error an A2UI store refusal becomes. */
+function a2uiToolError(cause: unknown, surfaceId: string | undefined): ToolError {
 	if (cause instanceof ToolError) return cause;
 	if (cause instanceof HttpProblem) {
 		if (cause.slug === 'not-found') {
@@ -350,9 +287,8 @@ function a2uiSurfaceOf(message: unknown): string | undefined {
 }
 
 /**
- * GW-1: the credential fingerprint the bearer gate stamped on this MCP call's `AuthInfo`, so a task an extension
- * tool submits is re-authorized against the same credential as one submitted over REST or A2A. Absent on stdio,
- * whose runtime has no `authorize` and keeps submitted scopes.
+ * The credential fingerprint the bearer gate stamped on this MCP call's `AuthInfo`, so a task an extension tool submits
+ * is re-authorized against the same credential as one submitted over REST or A2A.
  */
 function credentialOf(ctx: ToolContext): string | undefined {
 	const value = ctx.mcp?.http?.authInfo?.extra?.credential;
@@ -364,15 +300,14 @@ export function createExpansionServices(
 	config: ExpansionConfig,
 	core: McpDeps,
 	sandbox?: SandboxClient,
-	sessionMcp?: AgentRuntimeOptions['sessionMcp'],
-	/** GW-1: re-authorizes tasks against their submitting credential; the gateway passes its verifier's check. */
+	/** Re-authorizes tasks against their submitting credential; the gateway passes its verifier's check. */
 	authorize?: AgentRuntimeOptions['authorize'],
 	options: ExpansionOptions = {},
 ): ExpansionServices {
 	let tools: readonly ToolDefinition[] = [];
 	const logger = options.logger;
 	const stateDir = options.dataDir ? join(options.dataDir, AGENT_STATE_DIR) : undefined;
-	// A11 / N1: push is offered only with an operator host list AND a proven grant for every host on it.
+	// Push is offered only with an operator host list AND a proven grant for every host on it.
 	const pushHosts = config.pushAllowedHosts ?? [];
 	const pushOffered = pushGrantProven(pushHosts, options.permissions);
 	if (pushHosts.length > 0 && !pushOffered) {
@@ -381,8 +316,8 @@ export function createExpansionServices(
 				'outbound net grant for; add each host (and the DNS resolver) to --allow-net to offer them',
 		);
 	} else if (pushOffered) logger?.info(`A2A push notifications are offered for ${pushHosts.join(', ')}`);
-	// B-6: a scoped grant must also cover the DNS resolver every delivery consults. Until a one-time probe proves it,
-	// push is not offered (card, methods); an unscoped grant covers the resolver and needs no probe.
+	// A scoped grant must also cover the DNS resolver every delivery consults. Until a one-time probe proves it, push
+	// is not offered (card, methods); an unscoped grant covers the resolver and needs no probe.
 	let resolverReady = pushOffered && netUnscoped(options.permissions);
 	if (pushOffered && !resolverReady) {
 		const probe = options.resolverProbe ?? resolverPermitted;
@@ -406,17 +341,7 @@ export function createExpansionServices(
 			...options.push,
 		}
 		: undefined;
-	// D-143 (W3, backend §3): the providers file, the grant proof, one client per provider, and the views the route
-	// and the diagnostics show. An unreachable provider is still a client in the map — the routing table (§3.10) tells
-	// "unknown" (`-32602`) from "not reachable" (`-32004`) by its presence — but `reachable` keeps it from being dialled.
-	// The CLI already warned per `allow_http` provider; only the `no-net-grant` warning is this module's.
-	//
-	// D-152 / D-153: the set can be replaced while the process runs (`applyModelProviders`). The runtime holds
-	// `providerClients` and `reachability` by reference and reads `default` through a getter, so a swap clears and
-	// refills these in one synchronous step — no task can observe a half-built set — and the routing semantics stay the
-	// runtime's own. The permissions matrix is still immutable while the process runs; the proof is recomputed because
-	// the hosts changed. D-153: managed whenever providers could ever exist — the operator's file, or a data directory
-	// holding the control plane's store — so a gateway started with neither file nor store providers can gain some.
+	// The providers file, the grant proof, one client per provider, and the views the route and the diagnostics show.
 	const providersConfig = options.modelProviders ?? null;
 	const providersManaged = providersConfig !== null || (options.dataDir ?? null) !== null;
 	const providerClients = new Map<string, ModelProviderClient>();
@@ -457,23 +382,18 @@ export function createExpansionServices(
 		reachability.clear();
 		for (const [id, reachable] of proof) reachability.set(id, reachable);
 		providerDefault = next?.default ?? null;
-		// D-143 (W3): frozen; `default` is the file's (a sole provider, or `null` for several without one).
+		// Frozen; `default` is the file's (a sole provider, or `null` for several without one).
 		providerSnapshot = Object.freeze({ default: providerDefault, providers: Object.freeze(views) });
 	};
 	installProviders(providersConfig);
 	const runtime = new AgentRuntime({
-		...(sessionMcp === undefined ? {} : { sessionMcp }),
 		...(authorize === undefined ? {} : { authorize }),
-		// D-143: absent when no provider can ever exist, so the runtime's text-task answers stay the S0 ones (§3.10 rows
-		// 5–6); D-153: present but empty answers the same.
-		// `tools` is the built-in agent's list — `taskableTools(scopes, true)`, declared below and read only once a task
-		// runs — in the provider-facing shape. `invoke` below is shared with the structured tool-task path: the executor
-		// answers a scope or availability refusal as an `isError` result, never a throw, so the loop feeds it back to
-		// the model as a tool failure; `NOT_TASKABLE` never reaches it from the loop, whose list leaves those out.
+		// Absent when no provider can ever exist, so the runtime refuses a text task without model routing; present but
+		// empty answers the same.
 		...(!providersManaged ? {} : {
 			model: {
 				providers: providerClients,
-				// D-152 / D-153: read at every use, so a live swap moves the default with the set.
+				// Read at every use, so a live swap moves the default with the set.
 				get default(): string | null {
 					return providerDefault;
 				},
@@ -482,15 +402,19 @@ export function createExpansionServices(
 			},
 		}),
 		invoke: async (name, args, owner, scopes, signal): Promise<Record<string, unknown>> => {
-			// Review R1-3: the one door every structured task's tool call passes, whichever entrance submitted it. The
-			// refusal fails the task before the tool runs, so nothing it would have returned is kept as an artifact.
+			// The one door every structured task's tool call passes, whichever entrance submitted it. The refusal fails
+			// the task before the tool runs, so nothing it would have returned is kept as an artifact.
 			if (NOT_TASKABLE.has(name)) throw new AgentError(-32602, notTaskable(name));
 			const call = createToolExecutor({ ...core, extraTools: tools }, owner, scopes as ReadonlySet<Scope>, signal);
 			const result = await call(name, args);
 			return result as Record<string, unknown>;
 		},
-		...(config.bridge === null ? {} : { bridge: config.bridge }),
-		// D-156: SlopLord works only in the coding sandbox; its card and its tasks follow whether one is composed.
+		// A delegated data part must be a tool this caller could run here as a task — the same composed list a
+		// structured task dispatches from (`taskableTools`, declared below and read only when a delegation is
+		// submitted).
+		delegableTool: (tool: string, scopes: ReadonlySet<string>): boolean =>
+			taskableTools(scopes).some((candidate) => candidate.name === tool),
+		// SlopLord works only in the coding sandbox; its card and its tasks follow whether one is composed.
 		codingSandbox: sandbox !== undefined,
 		...(options.agents === undefined ? {} : { agents: options.agents }),
 		peers: config.peers,
@@ -500,23 +424,18 @@ export function createExpansionServices(
 		...(options.sealer === undefined ? {} : { sealer: options.sealer }),
 		...(push === undefined ? {} : { push }),
 		...(logger === undefined ? {} : { logger }),
-		// Review R3-5 (D-121): every task the runtime creates is reported — over MCP, A2A, its HTTP+JSON binding and
-		// REST alike — so a cluster routes its id to this node whichever entrance created it.
-		...(options.onToolTask === undefined ? {} : { onTaskCreated: options.onToolTask }),
 	});
 	const configured = new Map((config.a2uiActions ?? []).map((action) => [action.name, action]));
 	const surfaces = new A2uiStore({
 		...(stateDir === undefined ? {} : { persistPath: join(stateDir, 'surfaces.json') }),
 		...(logger === undefined ? {} : { logger }),
-		// E-4: the operator's tool, the operator's fixed arguments, and only the declared context keys — scalars
-		// resolved from the surface's server-side state. Dispatched through the same executor as an agent's tool
-		// call, so the target tool's own scope is checked against the clicking principal's current scopes.
+		// The operator's tool, the operator's fixed arguments, and only the declared context keys — scalars resolved
+		// from the surface's server-side state.
 		toolAction: async (owner, scopes, name, context): Promise<Record<string, unknown>> => {
 			const action = configured.get(name);
 			if (action === undefined) throw new HttpProblem('not-found', 'no such configured action');
-			// X-1 (D-141): `expansionConfig()` already refuses such an action at startup; this is the second line, for
-			// a configuration that reached the store some other way. A click has no MCP context to confirm through and
-			// no caller to hand a link or ticket to, so it is refused before the executor is even built.
+			// `expansionConfig()` already refuses such an action at startup; this is the second line, for a
+			// configuration that reached the store some other way.
 			if (NOT_TASKABLE.has(action.tool)) throw new ToolError('invalid-arguments', notTaskable(action.tool));
 			const args: Record<string, unknown> = structuredClone(action.arguments) as Record<string, unknown>;
 			for (const key of action.context) {
@@ -531,21 +450,11 @@ export function createExpansionServices(
 		},
 		cancelTask: (owner, _scopes, id): Promise<Record<string, unknown>> =>
 			Promise.resolve({ task: runtime.cancel(owner, id) }),
-		permissionDecision: async (owner, _scopes, requestId, optionId): Promise<Record<string, unknown>> => {
-			for (const task of runtime.list(owner)) {
-				const pending = runtime.permission(owner, task.id);
-				if (pending?.id === requestId) {
-					await runtime.decidePermission(owner, task.id, requestId, optionId);
-					return { resolved: true };
-				}
-			}
-			throw new HttpProblem('not-found', 'permission is no longer pending');
-		},
 	});
 	const publish = (owner: string, value: unknown): Record<string, unknown> => {
 		const result = surfaces.publish(owner, value);
-		// Bind only actions whose target is live and owned. Declarative context cannot choose a tool.
-		// Publishing another surface must not re-arm an already consumed one-shot action.
+		// Bind only actions whose target is live and owned. Declarative context cannot choose a tool. Publishing
+		// another surface must not re-arm an already consumed one-shot action.
 		for (
 			const surface of (result.surface ? [result.surface] : []) as Array<{
 				surfaceId: string;
@@ -566,7 +475,7 @@ export function createExpansionServices(
 						});
 					} catch { /* Foreign and expired targets receive no action authority. */ }
 				} else if (configured.has(event.name ?? '')) {
-					// E-4: bound only when the button declares exactly the context the operator allowed.
+					// Bound only when the button declares exactly the context the operator allowed.
 					const action = configured.get(event.name!)!;
 					const keys = Object.keys(event.context ?? {}).sort();
 					if (JSON.stringify(keys) !== JSON.stringify([...action.context].sort())) continue;
@@ -574,39 +483,15 @@ export function createExpansionServices(
 						kind: 'toolAction',
 						name: action.name,
 					});
-				} else if (
-					event.name === 'permissionDecision' && typeof event.context?.requestId === 'string' &&
-					typeof event.context?.optionId === 'string'
-				) {
-					for (const task of runtime.list(owner)) {
-						const pending = runtime.permission(owner, task.id);
-						const options = (pending?.params as Record<string, unknown> | undefined)?.options;
-						if (
-							pending?.id === event.context.requestId && Array.isArray(options) &&
-							options.some((option: unknown) =>
-								option !== null && typeof option === 'object' &&
-								(option as Record<string, unknown>).optionId === event.context?.optionId &&
-								['allow_once', 'reject_once'].includes(String((option as Record<string, unknown>).kind))
-							)
-						) {
-							surfaces.registerAction(owner, surface.surfaceId, component.id, event.name, {
-								kind: 'permissionDecision',
-								requestId: event.context.requestId,
-								optionId: event.context.optionId,
-							});
-						}
-					}
 				}
 			}
 		}
 		return result;
 	};
-	// R1 (D-121): a task created here is reported for cluster routing by the runtime itself (`onTaskCreated` above,
-	// review R3-5), so the MCP actions below report nothing of their own and no task is recorded twice.
 	const actions: Record<string, ExtensionActions[string]> = {
 		agent_peers: (): Promise<Record<string, unknown>> => Promise.resolve({ peers: runtime.peers() }),
-		// R1 (D-121): one tool call as a background task, through the same runtime (and GW-1 re-authorization before
-		// the call) as an A2A structured task. Refusals come first and name only the tool the caller gave.
+		// One tool call as a background task, through the same runtime (and credential re-authorization before the
+		// call) as an A2A structured task. Refusals come first and name only the tool the caller gave.
 		agent_run_tool: (args, ctx): Promise<Record<string, unknown>> => {
 			const tool = String(args.tool);
 			if (NOT_TASKABLE.has(tool)) throw new ToolError('invalid-arguments', notTaskable(tool));
@@ -628,7 +513,7 @@ export function createExpansionServices(
 			);
 			return Promise.resolve({ task });
 		},
-		// R1 (D-121): this owner's tasks only (`listByCreation` filters by owner), newest-created first, no history.
+		// This owner's tasks only (`listByCreation` filters by owner), newest-created first, no history.
 		agent_list_tasks: (args, ctx): Promise<Record<string, unknown>> => {
 			const limit = typeof args.limit === 'number' ? args.limit : 20;
 			const matching = runtime.listByCreation(ctx.principal).map((entry) => entry.task).filter((task) =>
@@ -670,21 +555,10 @@ export function createExpansionServices(
 				),
 			});
 	}
-	if (config.bridge !== null) {
-		actions.agent_prompt = (args, ctx): Promise<Record<string, unknown>> =>
-			Promise.resolve({
-				task: runtime.submit(
-					ctx.principal,
-					ctx.scopes ?? new Set(),
-					message(String(args.message)),
-					credentialOf(ctx),
-				),
-			});
-	}
 	if (sandbox !== undefined) {
 		const operations = {
 			sandbox_create: 'create',
-			// R12 (design §2.19): offered only while the sandbox's /healthz says it clones (`availability.sandboxClone`).
+			// Offered only while the sandbox's /healthz says it clones (`availability.sandboxClone`).
 			sandbox_clone: 'clone',
 			sandbox_list: 'list',
 			sandbox_read: 'read',
@@ -692,7 +566,7 @@ export function createExpansionServices(
 			sandbox_exec: 'exec',
 			sandbox_diff: 'diff',
 			sandbox_delete: 'remove',
-			// D-076: a live shell session over a workspace.
+			// A live shell session over a workspace.
 			sandbox_session_open: 'session_open',
 			sandbox_session_input: 'session_input',
 			sandbox_session_read: 'session_read',
@@ -708,7 +582,7 @@ export function createExpansionServices(
 				);
 		}
 	}
-	// D-154: the agents' memory, wherever there is a database to hold it.
+	// The agents' memory, wherever there is a database to hold it.
 	if (options.memory !== undefined) Object.assign(actions, memoryActions(options.memory));
 	// MCP Apps streams: the terminal of a shell session and the live surface, behind app-only ticket tools.
 	const embedStreams = options.embeds === undefined ? undefined : new EmbedStreams({
@@ -740,11 +614,9 @@ export function createExpansionServices(
 	tools = extensionTools(actions);
 	const streams = new StreamGuard();
 	/**
-	 * A11 / D-143: exactly the tools a structured task submitted by this caller could run — the composed catalog the
-	 * task executor dispatches from, filtered by the caller's scopes and by what this deployment can offer right now,
-	 * and without the tools `invoke` refuses (review R1-3: the whole of `NOT_TASKABLE`, the sampling tools a task can
-	 * never satisfy among them). A task needs `mcp:invoke` before any tool at all. The built-in model agent's list
-	 * (`forModel`) also leaves out `MODEL_EXCLUDED`, so a model never fans out into another text task.
+	 * Exactly the tools a structured task submitted by this caller could run — the composed catalog the task executor
+	 * dispatches from, filtered by the caller's scopes and by what this deployment can offer right now, and without the
+	 * tools `invoke` refuses (the whole of `NOT_TASKABLE`, the sampling tools a task can never satisfy among them).
 	 */
 	const taskableTools = (scopes: ReadonlySet<string>, forModel = false): ToolDefinition[] => {
 		if (!scopes.has('mcp:invoke')) return [];
@@ -756,8 +628,6 @@ export function createExpansionServices(
 	};
 	const invocableTools = (scopes: ReadonlySet<string>): readonly AgentToolSkill[] =>
 		taskableTools(scopes).map((tool) => ({ name: tool.name, title: tool.title, description: tool.description }));
-	// D-143 (addendum B): static per process; `TTK_A2UI_ACTIONS` is fail-fast configuration (`expansion_config.ts`).
-	const actionNames: readonly string[] = Object.freeze([...BUILTIN_ACTION_NAMES, ...configured.keys()].sort());
 	return {
 		runtime,
 		surfaces,
@@ -767,14 +637,12 @@ export function createExpansionServices(
 		...(embedStreams === undefined ? {} : { embedStreams }),
 		invocableTools,
 		taskableTools,
-		actionNames,
-		acp: config.bridge !== null,
-		// D-143 (W3) / D-152 / D-153: the views in force — a getter, so every reader (the providers route, the diagnostics, the
+		// The views in force — a getter, so every reader (the providers route, the diagnostics, the
 		// `capabilities.tykotech.model` counts) sees a live swap on its next read.
 		get modelProviders(): ExpansionServices['modelProviders'] {
 			return providerSnapshot;
 		},
-		// D-152 / D-153: only where the runtime holds a `model` option to swap; one info line per apply, never a value.
+		// Only where the runtime holds a `model` option to swap; one info line per apply, never a value.
 		...(!providersManaged ? {} : {
 			applyModelProviders: (next: ModelProvidersConfig): void => {
 				installProviders(next);
@@ -784,18 +652,13 @@ export function createExpansionServices(
 		close: async (): Promise<void> => {
 			streams.closeAll();
 			embedStreams?.closeAll();
-			// B1: both stores write their state before they let go of it.
+			// Both stores write their state before they let go of it.
 			await Promise.all([surfaces.close(), runtime.close()]);
 		},
 	};
 }
 
-/**
- * Mounts routes after bearer, host/origin, and rate guards; public card is metadata only.
- *
- * `authorized` (GW-3) re-checks the principal behind a long-lived stream: its credential is still in force and
- * still holds `agent:invoke`. The gateway passes its verifier's live check; without one only the lifetime applies.
- */
+/** Mounts routes after bearer, host/origin, and rate guards; public card is metadata only. */
 export function attachExpansionRoutes(
 	app: Hono<{ Variables: AppVariables }>,
 	services: ExpansionServices,
@@ -807,22 +670,17 @@ export function attachExpansionRoutes(
 		if (!principal.scopes.has('agent:invoke')) throw new HttpProblem('forbidden-scope');
 		return principal;
 	};
-	const failure = (cause: unknown, requestId: string): Response => {
-		if (cause instanceof HttpProblem) return problemResponse(cause.slug, requestId);
-		const code = (cause as { code?: number })?.code;
-		return problemResponse(code === -32001 ? 'not-found' : 'invalid-request', requestId);
-	};
-	// A11: what this mount serves beyond JSON-RPC, so the card describes exactly that.
-	const cardOptions = { extendedCard: services.invocableTools !== undefined, httpJson: true };
-	const extendedCard = (principal: Principal) =>
-		services.invocableTools === undefined
-			? undefined
-			: () => extendedAgentCard(publicUrl, services.runtime, services.invocableTools!(principal.scopes), cardOptions);
+	/** A refusal on either A2A binding, before the operation (`owner`, the body bound) or inside it, as A2A shapes it. */
+	const bindingFailure = (cause: unknown): Response =>
+		cause instanceof HttpProblem ? a2aHttpError(cause.status, cause.message) : a2aHttpFailure(cause);
+	// What this mount serves beyond JSON-RPC, so the card describes exactly that.
+	const cardOptions = { extendedCard: true, httpJson: true };
+	const extendedCard = (principal: Principal) => () =>
+		extendedAgentCard(publicUrl, services.runtime, services.invocableTools(principal.scopes), cardOptions);
 	/**
-	 * A6 (D-106): an A2A event stream re-earns its authorization like every other long-lived stream (GW-3): the
-	 * caller's credential and `agent:invoke` are re-checked every 300 s and on every key reload or logout, and the
-	 * stream ends at 1800 s — each time with a terminal JSON-RPC error event instead of an SSE `bye` an A2A client
-	 * would not recognize. Before this, a second credential of the task's owner kept receiving for the task's life.
+	 * An A2A event stream re-earns its authorization like every other long-lived stream: the caller's credential and
+	 * `agent:invoke` are re-checked every 300 s and on every key reload or logout, and the stream ends at 1800 s — each
+	 * time with a terminal JSON-RPC error event instead of an SSE `bye` an A2A client would not recognize.
 	 */
 	const guarded =
 		(principal: Principal) =>
@@ -830,9 +688,8 @@ export function attachExpansionRoutes(
 			services.streams.wrap(body, () => authorized(principal), a2aStreamFarewell(rpcId));
 	app.get('/.well-known/agent-card.json', (c) => c.json(agentCard(publicUrl, services.runtime, cardOptions)));
 	/**
-	 * The JSON-RPC endpoint. D-156: one handler for the main agent and for each built-in profile's own endpoint
-	 * (`agent` fixed), so auth, bounds, streams, push and ownership cannot drift between them. A profile endpoint
-	 * serves no extended card (its card says `extendedAgentCard: false`).
+	 * The JSON-RPC endpoint: one handler for the main agent and for each built-in profile's own endpoint (`agent`
+	 * fixed), so auth, bounds, streams, push and ownership cannot drift between them.
 	 */
 	const jsonRpc = (agent?: AgentProfile) => async (c: Context<{ Variables: AppVariables }>): Promise<Response> => {
 		try {
@@ -851,18 +708,19 @@ export function attachExpansionRoutes(
 				},
 			);
 		} catch (cause) {
-			return failure(cause, c.get('requestId'));
+			return bindingFailure(cause);
 		}
 	};
-	/** A11: the HTTP+JSON binding below `root`, on the same handlers as JSON-RPC (`a2aInvoke`); D-156 as above. */
+	/** The HTTP+JSON binding below `root`, on the same handlers as JSON-RPC (`a2aInvoke`), for the main agent and each profile. */
 	const httpJson =
 		(root: string, agent?: AgentProfile) => async (c: Context<{ Variables: AppVariables }>): Promise<Response> => {
-			const requestId = c.get('requestId');
 			try {
 				const principal = owner(c.get('principal'));
 				if (c.req.header('a2a-version') !== '1.0') throw new AgentError(-32009, 'A2A-Version 1.0 required');
 				const route = await restOperation(c, root);
-				if (route === null) return problemResponse('not-found', requestId);
+				if (route === null) {
+					return a2aHttpError(404, `No A2A operation at ${c.req.method} ${new URL(c.req.url).pathname}`);
+				}
 				const card = agent === undefined ? extendedCard(principal) : undefined;
 				const outcome = await a2aInvoke(route.method, route.params, {
 					principal: expansionOwner(principal),
@@ -879,14 +737,13 @@ export function attachExpansionRoutes(
 				}
 				return c.json(outcome.result, 200, { 'a2a-version': '1.0' });
 			} catch (cause) {
-				return restFailure(cause, requestId);
+				return bindingFailure(cause);
 			}
 		};
 	app.post('/a2a', jsonRpc());
 	app.all(`${A2A_REST_ROOT}/*`, httpJson(A2A_REST_ROOT));
-	// D-156: each built-in profile (SlopLord) as its own A2A agent — a public card (`PUBLIC_PATHS` in `app.ts`) and the
-	// two bindings, every message routed to the profile. Registered after `/a2a/v1/*`, which never matches below
-	// `/a2a/agents/`.
+	// Each built-in profile (SlopLord) as its own A2A agent — a public card (`PUBLIC_PATHS` in `app.ts`) and the two
+	// bindings, every message routed to the profile.
 	for (const profile of AGENT_PROFILES.values()) {
 		const base = profileA2aPath(profile.id);
 		app.get(
@@ -898,31 +755,16 @@ export function attachExpansionRoutes(
 	}
 	app.get('/api/v1/agent/tasks', (c): Response => {
 		try {
-			// D-146 (amendment): newest-created first, ties by id (AG-14's order), each task carrying `created_at`. The
-			// control plane threads an owner's tasks as chat turns, and a task's status timestamp cannot order those — it
-			// moves with every update, so a long-running turn would jump past later ones. Creation never changes.
-			const principal = expansionOwner(owner(c.get('principal')));
-			// `?workspace_id=<id>`: the tasks that touched one coding workspace — its id in the request, the history, the
-			// artifacts or the run log (a tool call's arguments, a sandbox_create result). A workspace id is a UUID, so a
-			// textual match names that workspace and no other.
-			const workspace = c.req.query('workspace_id');
-			if (workspace !== undefined && !UUID.test(workspace)) {
-				throw new HttpProblem('invalid-request', 'workspace_id must be a workspace id (a UUID)');
-			}
-			const needle = workspace?.toLowerCase();
-			const tasks = services.runtime.listByCreation(principal).filter((entry) =>
-				needle === undefined || JSON.stringify(entry.task).toLowerCase().includes(needle) ||
-				JSON.stringify(services.runtime.runLog(principal, entry.task.id).entries).toLowerCase().includes(needle)
-			).map((entry) => ({ ...entry.task, created_at: new Date(entry.created).toISOString() }));
+			// Newest-created first, ties by id, each task carrying `created_at`.
+			const tasks = services.runtime.listByCreation(expansionOwner(owner(c.get('principal'))))
+				.map((entry) => ({ ...entry.task, created_at: new Date(entry.created).toISOString() }));
 			return c.json({ tasks });
 		} catch (cause) {
-			return failure(cause, c.get('requestId'));
+			return taskFailure(cause, c.get('requestId'));
 		}
 	});
 	/**
-	 * D-143 (§3.3): the configured providers, keys and URL paths never among them. `invocable` is the caller's own
-	 * `model:invoke`; `acp` says whether a bridge exists. `host` and `reason` are told only to a caller who could use
-	 * the provider (gate F9, SEC-16): a caller without the scope sees the list, not the map of the hosts behind it.
+	 * The configured providers, keys and URL paths never among them. `invocable` is the caller's own `model:invoke`.
 	 */
 	app.get('/api/v1/agent/providers', (c): Response => {
 		try {
@@ -930,13 +772,11 @@ export function attachExpansionRoutes(
 			const invocable = principal.scopes.has('model:invoke');
 			return c.json({
 				invocable,
-				// D-158: whether the bridge takes text tasks now (configured, and not switched off by an administrator).
-				acp: services.runtime.routesToBridge(),
 				default: services.modelProviders.default,
-				// D-158: the built-in agent's own default model, when an administrator chose one still in force.
+				// The built-in agent's own default model, when an administrator chose one still in force.
 				...builtinDefault(services),
 				providers: services.modelProviders.providers.map((view) => providerView(view, invocable)),
-				// D-156: the built-in profiles, whether this deployment can run each (`profileReady`) and its card.
+				// The built-in profiles, whether this deployment can run each (`profileReady`) and its card.
 				agents: [...AGENT_PROFILES.values()].map((profile) => ({
 					id: profile.id,
 					name: profile.name,
@@ -946,16 +786,15 @@ export function attachExpansionRoutes(
 				})),
 			});
 		} catch (cause) {
-			return failure(cause, c.get('requestId'));
+			return taskFailure(cause, c.get('requestId'));
 		}
 	});
 	app.post('/api/v1/agent/tasks', async (c): Promise<Response> => {
 		try {
 			const principal = owner(c.get('principal'));
 			const raw = await boundedBody(c.req.raw);
-			// D-143 (§3.4, addendum C): `provider` and `model` join `message`; each `undefined` or a string of at most
-			// 64 characters. Naming a provider without `model:invoke` is refused here, before any task exists.
-			// D-156: `agent` names a built-in profile (SlopLord); anything but a known id is `invalid-request`.
+			// `provider` and `model` join `message`; each `undefined` or a string of at most 64 characters. Naming a
+			// provider without `model:invoke` is refused here, before any task exists.
 			if (
 				typeof raw.message !== 'string' || raw.message.length > 65_536 ||
 				Object.keys(raw).some((key) => !['message', 'provider', 'model', 'agent'].includes(key)) ||
@@ -963,8 +802,8 @@ export function attachExpansionRoutes(
 				(raw.agent !== undefined && !AGENT_PROFILES.has(String(raw.agent)))
 			) throw new HttpProblem('invalid-request');
 			if (raw.provider !== undefined && !principal.scopes.has('model:invoke')) throw new HttpProblem('forbidden-scope');
-			// CR-1 / BUG-6: a model without a provider is refused here too, before any task exists, with the runtime's
-			// own text as `detail` — the same answer the runtime and the A2A binding give (`-32602`).
+			// A model without a provider is refused here too, before any task exists, with the runtime's own text as
+			// `detail` — the same answer the runtime and the A2A binding give (`-32602`).
 			if (raw.model !== undefined && raw.provider === undefined) {
 				throw new HttpProblem('invalid-request', MODEL_REQUIRES_PROVIDER);
 			}
@@ -985,117 +824,54 @@ export function attachExpansionRoutes(
 				),
 			}, 202);
 		} catch (cause) {
-			// §3.4 (gate F18): the runtime's `-32602`/`-32004` reach the SPA as `400 invalid-request` with the text as
-			// `detail`, through the mapper the HTTP+JSON binding already uses — which is itself unchanged.
-			return restFailure(cause, c.get('requestId'));
+			// The runtime's `-32602`/`-32004` reach the SPA as `400 invalid-request` with the text as `detail`
+			// (`taskFailure`, at the status the A2A bindings give the same error).
+			return taskFailure(cause, c.get('requestId'));
 		}
 	});
 	app.get('/api/v1/agent/tasks/:id', (c): Response => {
 		try {
 			return c.json({
 				task: services.runtime.get(expansionOwner(owner(c.get('principal'))), c.req.param('id')),
-				permission: services.runtime.permission(expansionOwner(owner(c.get('principal'))), c.req.param('id')),
 			});
 		} catch (cause) {
-			return failure(cause, c.get('requestId'));
-		}
-	});
-	// A task's run history: its times and the bounded, redacted run log (provider requests, tool calls, states).
-	app.get('/api/v1/agent/tasks/:id/log', (c): Response => {
-		try {
-			return c.json(services.runtime.runLog(expansionOwner(owner(c.get('principal'))), c.req.param('id')));
-		} catch (cause) {
-			return failure(cause, c.get('requestId'));
+			return taskFailure(cause, c.get('requestId'));
 		}
 	});
 	app.post('/api/v1/agent/tasks/:id/cancel', (c): Response => {
 		try {
 			return c.json({ task: services.runtime.cancel(expansionOwner(owner(c.get('principal'))), c.req.param('id')) });
 		} catch (cause) {
-			return failure(cause, c.get('requestId'));
+			return taskFailure(cause, c.get('requestId'));
 		}
 	});
-	app.post('/api/v1/agent/tasks/:id/permission', async (c): Promise<Response> => {
-		try {
-			const principal = owner(c.get('principal'));
-			const raw = await boundedBody(c.req.raw);
-			if (
-				typeof raw.permissionId !== 'string' || (raw.optionId !== undefined && typeof raw.optionId !== 'string') ||
-				Object.keys(raw).some((key) => !['permissionId', 'optionId'].includes(key))
-			) throw new HttpProblem('invalid-request');
-			await services.runtime.decidePermission(
-				expansionOwner(principal),
-				c.req.param('id'),
-				raw.permissionId,
-				raw.optionId as string | undefined,
-			);
-			return c.json({ resolved: true });
-		} catch (cause) {
-			return failure(cause, c.get('requestId'));
-		}
-	});
-	app.get('/api/v1/agent/tasks/:id/events', (c): Response => {
-		try {
-			const principal = owner(c.get('principal'));
-			const events = services.runtime.subscribe(expansionOwner(principal), c.req.param('id')).getReader();
-			const body = new ReadableStream<Uint8Array>({
-				async pull(controller): Promise<void> {
-					const next = await events.read();
-					if (next.done) controller.close();
-					else controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(next.value)}\n\n`));
-				},
-				cancel: (): Promise<void> => events.cancel(),
-			});
-			// GW-3: the subscription re-earns its authorization on the gateway's horizon and ends at a lifetime.
-			return new Response(
-				services.streams.wrap(body, () => authorized(principal)),
-				{
-					headers: {
-						'content-type': 'text/event-stream',
-						'cache-control': 'no-store',
-						'x-content-type-options': 'nosniff',
-					},
-				},
-			);
-		} catch (cause) {
-			return failure(cause, c.get('requestId'));
-		}
-	});
-	attachA2uiRoutes(app, services.surfaces, services.publish, {
-		streams: services.streams,
-		authorized,
-		actionNames: services.actionNames,
-	});
+	attachA2uiRoutes(app, services.surfaces, services.publish, { streams: services.streams, authorized });
 }
 
-/** A coding workspace id as `sandbox_create` issues it. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** D-143 (§3.4): a `provider`/`model` body value — absent, or a string of at most 64 characters. */
+/** A `provider`/`model` body value — absent, or a string of at most 64 characters. */
 function selectionText(value: unknown): boolean {
 	return value === undefined || (typeof value === 'string' && value.length > 0 && value.length <= 64);
 }
 
-/** D-143 (§3.3, gate F9): one provider as the caller may see it — `host` and `reason` only with `model:invoke`. */
+/** One provider as the caller may see it — `host` and `reason` only with `model:invoke`. */
 function providerView(view: ProviderView, invocable: boolean): Record<string, unknown> {
 	const { host, reason, ...shared } = view;
 	return invocable ? { ...shared, host, ...(reason === undefined ? {} : { reason }) } : shared;
 }
 
-/** A11: where the HTTP+JSON binding is mounted; the card lists it as the `HTTP+JSON` interface URL. */
-export const A2A_REST_ROOT = '/a2a/v1';
+/** Where the HTTP+JSON binding is mounted; the card lists it as the `HTTP+JSON` interface URL. */
+const A2A_REST_ROOT = '/a2a/v1';
 
 /** The A2A JSON-RPC body bound (`readJson` in `@tykotech/agents`), so both bindings take the same messages. */
 const A2A_BODY_BYTES = 512 * 1024;
 
 /**
- * A11: one HTTP+JSON request as the A2A operation and parameters the JSON-RPC binding would carry, or `null` for a
- * path or method the binding does not define. Path ids are decoded once; query values are typed as JSON-RPC would
- * send them, so `a2aInvoke` validates both bindings with the same checks.
+ * One HTTP+JSON request as the A2A operation and parameters the JSON-RPC binding would carry, or `null` for a path or
+ * method the binding does not define.
  */
 async function restOperation(
 	c: Context<{ Variables: AppVariables }>,
-	root: string = A2A_REST_ROOT,
+	root: string,
 ): Promise<{ method: string; params: Record<string, unknown> } | null> {
 	const url = new URL(c.req.url);
 	const path = url.pathname.slice(root.length);
@@ -1145,7 +921,7 @@ async function restOperation(
 			return { method: 'GetTask', params: defined({ id, historyLength: integer('historyLength') }) };
 		}
 		if (match[2] === 'cancel' && verb === 'POST') return { method: 'CancelTask', params: { id } };
-		// The design names GET; POST is accepted too, as some A2A HTTP+JSON clients send it.
+		// The binding is GET; POST is accepted too, as some A2A HTTP+JSON clients send it.
 		if (match[2] === 'subscribe' && (verb === 'GET' || verb === 'POST')) {
 			return { method: 'SubscribeToTask', params: { id } };
 		}
@@ -1172,9 +948,8 @@ async function restOperation(
 }
 
 /**
- * The task runtime's own refusals over MCP: an id this owner does not hold (`-32001`) or a task that has already
- * ended (`-32002`) is the caller's to fix, so it is `invalid-arguments` with the runtime's public message. Without
- * this the extension wrapper, which reads only an HTTP `status`, reported both as a service fault.
+ * The task runtime's own refusals over MCP: an id this owner does not hold (`-32001`) or a task that has already ended
+ * (`-32002`) is the caller's to fix, so it is `invalid-arguments` with the runtime's public message.
  */
 function taskRefusal<T>(run: () => T): T {
 	try {
@@ -1188,24 +963,23 @@ function taskRefusal<T>(run: () => T): T {
 }
 
 /**
- * A11: an HTTP+JSON failure as problem+json. The A2A code chooses the status — `-32001` not found, `-32002` (not
- * cancelable) a conflict, `-32603` (runtime closed, capacity, subscriber limit) unavailable, every other code a
- * request the caller can fix — and its public, credential-free message is the detail.
+ * A failure on the web app's task routes as problem+json: the status the A2A bindings give the same error
+ * (`a2aHttpStatus`), and the runtime's public message as `detail`, so all three surfaces say the same thing.
  */
-function restFailure(cause: unknown, requestId: string): Response {
+function taskFailure(cause: unknown, requestId: string): Response {
 	if (cause instanceof HttpProblem) return problemResponse(cause.slug, requestId, cause.detail);
-	if (cause instanceof AgentError) {
-		const slug = cause.code === -32001
-			? 'not-found'
-			: cause.code === -32002
-			? 'conflict'
-			: cause.code === -32603
-			? 'service-unavailable'
-			: 'invalid-request';
-		return problemResponse(slug, requestId, cause.message);
-	}
-	return problemResponse('internal', requestId);
+	if (!(cause instanceof AgentError)) return problemResponse('internal', requestId);
+	const slug = TASK_PROBLEMS[a2aHttpStatus(cause.code)] ?? 'invalid-request';
+	return problemResponse(slug, requestId, cause.message);
 }
+
+/** The problem for each status `a2aHttpStatus` gives; every other one is 400 `invalid-request`. */
+const TASK_PROBLEMS: Readonly<Record<number, ProblemSlug>> = {
+	403: 'forbidden-scope',
+	404: 'not-found',
+	500: 'internal',
+	503: 'service-unavailable',
+};
 
 /** Bounded non-stream operation reader. Long-lived stream cleanup is handled by stream.cancel(). */
 async function boundedBody(request: Request, limit = 256 * 1024): Promise<Record<string, unknown>> {
@@ -1241,12 +1015,7 @@ async function boundedBody(request: Request, limit = 256 * 1024): Promise<Record
 /** The seed bounds the sandbox itself enforces on `create` (64 files, 256 KiB in all). */
 const SEED_LIMITS = { maxFiles: 64, maxBytes: 256 * 1024 } as const;
 
-/**
- * E-6 / D6: `sandbox_create { from_share }` seeds the workspace from a folder of the library's file share. The share
- * is read here, in the gateway that owns it, and handed to the sandbox as ordinary seed files, so the sandbox never
- * sees the data volume. Reading the share is its own grant: the caller needs `files:read` as well as
- * `sandbox:execute`. Files named in `files` win over the share's copy of the same path.
- */
+/** `sandbox_create { from_share }` seeds the workspace from a folder of the library's file share. */
 async function seedFromShare(
 	core: McpDeps,
 	args: Record<string, unknown>,

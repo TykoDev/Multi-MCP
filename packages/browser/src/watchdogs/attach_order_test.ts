@@ -1,11 +1,11 @@
 /**
- * The §6 attach order, as a contract (ARCHITECTURE.md §6 intro; COMPLETIONS-CRITERIA.md §3.2:
- * "All 14 watchdogs of ARCHITECTURE.md §6 … attach order verified (LocalBrowserWatchdog before
- * `BrowserLaunchEvent`); CrashWatchdog is speced defined-not-attached").
+ * The attach order, as a contract: all 14 watchdogs, LocalBrowserWatchdog subscribed before
+ * `BrowserLaunchEvent`, and CrashWatchdog defined but not attached.
  *
- * The order is prose in the spec and data here; this file is what stops the two drifting. It runs on
- * a real bus with a real `ChromeFixture` behind the host, because `attachWatchdogs` really attaches
- * all thirteen and the registration order it produces is the thing under test.
+ * The order is written out here and held as data in `attach_order.ts`; this file is what stops the two
+ * drifting. It runs on a real bus with a real `ChromeFixture` behind the host, because
+ * `attachWatchdogs` really attaches all thirteen and the registration order it produces is the thing
+ * under test.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -27,16 +27,14 @@ import {
 } from './attach_order.ts';
 
 /**
- * ARCHITECTURE.md §6 intro, transcribed — with the one documented deviation.
+ * The expected attach order.
  *
- * ERRATUM(E-21): `AboutBlankWatchdog` runs before `LocalBrowserWatchdog` rather
- * than after `SecurityWatchdog`. Handler order is registration order, and
- * `LocalBrowserWatchdog` awaits the kill it dispatches from its own
- * `BrowserStopEvent` handler — so in the spec's order the browser is already
- * dying, and its tabs already closing, before `AboutBlankWatchdog` disarms.
- * See the comment at the deviation site.
+ * `AboutBlankWatchdog` runs before `LocalBrowserWatchdog`: handler order is registration order, and
+ * `LocalBrowserWatchdog` awaits the kill it dispatches from its own `BrowserStopEvent` handler — so
+ * behind it the browser would already be dying, and its tabs closing, before `AboutBlankWatchdog`
+ * disarms. See the comment in `attach_order.ts`.
  */
-const SPEC_ORDER = [
+const EXPECTED_ORDER = [
 	'DownloadsWatchdog',
 	'StorageStateWatchdog',
 	'AboutBlankWatchdog',
@@ -52,7 +50,7 @@ const SPEC_ORDER = [
 	'CaptchaWatchdog',
 ];
 
-/** Everything §6.9/§6.12/§6.13/§6.14 makes conditional. */
+/** Every conditional watchdog switched on. */
 const EVERYTHING_ON: BrowserProfileInit = {
 	storageState: '/does/not/need/to/exist.json',
 	recordVideoDir: '/does/not/need/to/exist',
@@ -60,8 +58,8 @@ const EVERYTHING_ON: BrowserProfileInit = {
 	captchaSolver: true,
 };
 
-Deno.test('attach order: the list is ARCHITECTURE.md §6 verbatim', () => {
-	assertEquals(WATCHDOG_ATTACH_ORDER.map((entry) => entry.name), SPEC_ORDER);
+Deno.test('attach order: the list matches the expected order exactly', () => {
+	assertEquals(WATCHDOG_ATTACH_ORDER.map((entry) => entry.name), EXPECTED_ORDER);
 	// The class is carried, not just the name, so a missing watchdog is a compile error in
 	// `attach_order.ts` rather than a row that quietly disappears.
 	for (const entry of WATCHDOG_ATTACH_ORDER) {
@@ -70,7 +68,7 @@ Deno.test('attach order: the list is ARCHITECTURE.md §6 verbatim', () => {
 });
 
 Deno.test('attach order: fourteen watchdogs, thirteen attached and Crash defined-not-attached', () => {
-	assertEquals(ALL_WATCHDOGS.length, 14, 'ARCHITECTURE.md §6 heading: "Watchdogs (14)"');
+	assertEquals(ALL_WATCHDOGS.length, 14, 'there are 14 watchdogs');
 	assertEquals(WATCHDOG_ATTACH_ORDER.length, 13);
 	assertEquals(UNATTACHED_WATCHDOGS.map((entry) => entry.name), ['CrashWatchdog']);
 	assertEquals(new Set(ALL_WATCHDOGS.map((entry) => entry.name)).size, 14, 'no duplicates');
@@ -82,7 +80,7 @@ Deno.test('attach order: LocalBrowserWatchdog is subscribed before anything can 
 	const listens = WATCHDOG_ATTACH_ORDER[index]?.watchdog.LISTENS_TO ?? [];
 	assert(
 		listens.some((cls) => cls === BrowserLaunchEvent),
-		'the ordering constraint of §6 only means anything because this watchdog handles the event',
+		'the ordering constraint only means anything because this watchdog handles the event',
 	);
 	// Nothing earlier in the list handles it, so its position cannot be an accident of another row.
 	for (const entry of WATCHDOG_ATTACH_ORDER.slice(0, index)) {
@@ -114,14 +112,14 @@ Deno.test('attach order: a default profile attaches ten of the thirteen', () => 
 		'DefaultActionWatchdog',
 		'ScreenshotWatchdog',
 		'DOMWatchdog',
-		// Captcha survives: `captchaSolver` defaults to `true` (DATA-MODEL.md §5.2).
+		// Captcha survives: `captchaSolver` defaults to `true`.
 		'CaptchaWatchdog',
 	]);
 });
 
 Deno.test('attach order: turning every conditional on yields the full thirteen, in order', () => {
 	const names = watchdogsForProfile(createBrowserProfile(EVERYTHING_ON)).map((entry) => entry.name);
-	assertEquals(names, SPEC_ORDER);
+	assertEquals(names, EXPECTED_ORDER);
 });
 
 Deno.test('attach order: switching every conditional off drops exactly the four', () => {
@@ -170,10 +168,10 @@ Deno.test('attach order: attachWatchdogs subscribes them in order, on a real bus
 	let attached: BaseWatchdog[] = [];
 	try {
 		attached = attachWatchdogs(host);
-		assertEquals(attached.map((watchdog) => watchdog.name), SPEC_ORDER);
+		assertEquals(attached.map((watchdog) => watchdog.name), EXPECTED_ORDER);
 		assertEquals(attached.every((watchdog) => watchdog.attached), true);
 
-		// E-16: `BrowserStopEvent`'s handler list is a set, not an order — but every watchdog that
+		// `BrowserStopEvent`'s handler list is a set, not an order — but every watchdog that
 		// declares it must be registered before `BrowserSession`, which closes the socket. Here that
 		// means: the session is not in this list, and the stop handlers that exist are all watchdogs'.
 		const stopHandlers = watchdogsForProfile(host.profile)
@@ -183,7 +181,7 @@ Deno.test('attach order: attachWatchdogs subscribes them in order, on a real bus
 		assert(
 			['LocalBrowserWatchdog', 'StorageStateWatchdog', 'AboutBlankWatchdog', 'RecordingWatchdog']
 				.every((name) => stopHandlers.includes(name)),
-			`DATA-MODEL.md §5.1.2 names these as BrowserStopEvent handlers; got ${stopHandlers.join(', ')}`,
+			`these four handle BrowserStopEvent; got ${stopHandlers.join(', ')}`,
 		);
 	} finally {
 		for (const watchdog of [...attached].reverse()) watchdog.detach();
@@ -193,13 +191,12 @@ Deno.test('attach order: attachWatchdogs subscribes them in order, on a real bus
 	}
 });
 
-Deno.test('attach order: attachWatchdogs wires the click→download seam (E-28)', async () => {
-	// Regression for a seam gap that self-tested green on BOTH sides. DefaultActionWatchdog declares
-	// the download channel structurally instead of importing DownloadsWatchdog — deliberately, so the
-	// two stay independently compilable — which means neither builder's suite could observe that
-	// nobody ever joined them. Click-download detection was silently inert: clicks worked, downloads
-	// were simply never noticed. A default profile attaches both, so the wiring must be live with no
-	// opt-in.
+Deno.test('attach order: attachWatchdogs wires the click→download seam', async () => {
+	// Each side of this seam passes its own suite. DefaultActionWatchdog declares the download channel
+	// structurally instead of importing DownloadsWatchdog — deliberately, so the two stay independently
+	// compilable — which means neither watchdog's suite can observe whether anybody joined them. Unjoined,
+	// click-download detection is silently inert: clicks work, downloads are simply never noticed. A
+	// default profile attaches both, so the wiring must be live with no opt-in.
 	await using fixture = ChromeFixture.start({ pages: ['about:blank'] });
 	const client = await CdpClient.connect(fixture.wsUrl);
 	const bus = new EventBus({ name: 'download-seam-test', logger: silentBusLogger });

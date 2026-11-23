@@ -1,30 +1,6 @@
-/**
- * BF-8 — the parameterised surface matrix.
- *
- * Every surface that describes an element to a caller is enumerated here, by name, with a pinned
- * count, and each is fed the same three password fields carrying the same sentinel.
- *
- * **What the count pin does and does not do (R-6 of the independent review, corrected here).**
- * `assertEquals(SURFACES.length, SURFACE_COUNT)` compares the list to a constant declared a few lines
- * below it in this same file. It catches an edit to one without the other. It **cannot** catch someone
- * adding an element-describing surface to the product and never opening this file — the earlier
- * wording of this comment, and the build record that quoted it, claimed otherwise. A security
- * control's recorded proof must not be stronger than the control, so the claim is now what the
- * mechanism actually is.
- *
- * **The structural half is the call-site pin below.** Every element record in the product is built by
- * `buildElementRecord`, which has exactly two production call sites; `browser_find`,
- * `browser_locator_candidates` and `browser_verify_locator` all take their records from those. A third
- * call site is what a new element-describing surface looks like from here, and
- * "BF-8: the element-record producer has exactly the call sites this matrix covers" fails on it,
- * naming the file. That is a check on the *product*, not on this file's own bookkeeping.
- *
- * The containment check in `observe_test.ts` bounds where a value may be *read*; this matrix bounds
- * where one may be *emitted*. The two together are invariant I-14.
- */
+/** The parameterised surface matrix. */
 import { assert, assertEquals } from '@std/assert';
-import type { EnhancedDomTreeNode } from '@tykotech/browser';
-import { mintStateToken } from '@tykotech/browser';
+import { type EnhancedDomTreeNode, mintStateToken } from '@tykotech/browser';
 import { attrsOf, buildElementRecord, inputStateOf, resolveFields, textOf } from './element_record.ts';
 import { buildDocumentIndex, locatorCandidates } from './locators.ts';
 import { labelOf, type Observation, observationPayload, observationStructured, promptBlock } from './observe.ts';
@@ -122,19 +98,10 @@ const SURFACES: readonly Surface[] = [
 		emit: (node) => mintStateToken({ topUrl: 'https://example.com/', frames: [], selectorMap: new Map([[1, node]]) }),
 	},
 	{
-		// B1.9. The matrix's own header named a `focus` event descriptor as a
-		// surface that must join it before the kind could mint, and this is that
-		// row. It exercises the **producer's own builder**, not a reconstruction:
-		// the redaction contract is enforced at mint, so a test that rebuilt the
-		// payload here would prove something about the test instead.
 		name: 'focus event descriptor (events.ts focusPayload)',
 		emit: (node) => focusPayload(1, node, node.frameId, labelOf(node)),
 	},
 	{
-		// B2.1. `browser_element_at` and the live view's `hover` reply both build their record through
-		// `elementAtPoint`, which calls this builder with the caller's fields (the socket: `core`).
-		// The row exercises the builder at the widest preset the tool accepts, so a field a later
-		// preset adds is caught here rather than on the socket.
 		name: 'browser_element_at / live hover reply (elementAtPoint record)',
 		emit: (node) =>
 			buildElementRecord(1, node, {
@@ -146,19 +113,10 @@ const SURFACES: readonly Surface[] = [
 			}),
 	},
 	{
-		// B2.8. `browser_fill_secret` names the element it refused, and the obvious way to do that is
-		// to serialise the node's attribute map — which on a password field the browser has already
-		// filled means putting the credential into an error string that reaches the transcript and the
-		// logs. The row exercises the producer, not a reconstruction, against all three password
-		// shapes; each of them carries the sentinel in the map this function must not iterate.
 		name: 'browser_fill_secret refusal descriptor (secrets.ts describeFillTarget)',
 		emit: (node) => describeFillTarget(node as unknown as { nodeName: string; attributes: Record<string, string> }),
 	},
 	{
-		// B2.8. The refusal *message*, which is the string that actually travels — a clean descriptor
-		// wrapped in a message that then quoted the node would leak just the same. `assertFillable`
-		// throws for a password input only when the shape is wrong, so the row drives the `<div>` arm
-		// carrying the same sentinel attributes.
 		name: 'browser_fill_secret refusal message (secrets.ts assertFillable)',
 		emit: (node) => {
 			try {
@@ -170,10 +128,6 @@ const SURFACES: readonly Surface[] = [
 		},
 	},
 	{
-		// B2.8. The audit ledger's entry for a secret fill. It is built from the element, so it is a
-		// surface a later field could be added to from the node — `index` and `frame_id` are already
-		// there. The row exercises the ledger's own `append`, so the shape it actually mints is what
-		// is asserted rather than a literal that agrees with it today.
 		name: 'audit entry, secret-fill (audit.ts append)',
 		emit: (node) => {
 			const ledger = new AuditLedger();
@@ -191,26 +145,15 @@ const SURFACES: readonly Surface[] = [
 	},
 ];
 
-/**
- * Grows with the product. Every addition is a deliberate edit to both the list and this number.
- *
- * This is bookkeeping, not enforcement: it fires when the list and the number disagree, and says
- * nothing about a surface the product grew that nobody added here. The call-site pin below is the
- * half that watches the product.
- */
+/** Grows with the product. Every addition is a deliberate edit to both the list and this number. */
 const SURFACE_COUNT = 15;
 
-Deno.test('BF-8: the surface registry is pinned', () => {
+Deno.test('the surface registry is pinned', () => {
 	assertEquals(SURFACES.length, SURFACE_COUNT);
 	assertEquals(new Set(SURFACES.map((surface) => surface.name)).size, SURFACES.length, 'names are unique');
 });
 
-/**
- * Where `buildElementRecord` is called in production, by module, with the call count.
- *
- * Every element record the product emits comes through here, so this is the waist a new
- * element-describing surface has to cross. Its own declaration is excluded; imports are not counted.
- */
+/** Where `buildElementRecord` is called in production, by module, with the call count. */
 const PRODUCER_CALL_SITES: Readonly<Record<string, number>> = {
 	'packages/mcp/src/observe.ts': 1,
 	'packages/mcp/src/tools/perception.ts': 1,
@@ -218,12 +161,6 @@ const PRODUCER_CALL_SITES: Readonly<Record<string, number>> = {
 
 async function* sources(dir: URL): AsyncGenerator<URL> {
 	for await (const entry of Deno.readDir(dir)) {
-		// Dot-directories are skipped as well as the build outputs, and the reason
-		// is not tidiness: this walk starts at the repository root, and
-		// `tests/.scratch` is created and destroyed by other test files *while it
-		// runs* under `--parallel`. Enumerating a directory that is removed before
-		// the recursion reaches it fails the whole test with a `NotFound` that has
-		// nothing to do with what it asserts. None of these hold product source.
 		if (entry.name.startsWith('.')) continue;
 		if (entry.name === 'node_modules' || entry.name === 'fixtures' || entry.name === 'dist') continue;
 		if (entry.name === 'coverage') continue;
@@ -233,7 +170,7 @@ async function* sources(dir: URL): AsyncGenerator<URL> {
 	}
 }
 
-Deno.test('BF-8: the element-record producer has exactly the call sites this matrix covers', async () => {
+Deno.test('the element-record producer has exactly the call sites this matrix covers', async () => {
 	const root = new URL('../../../', import.meta.url);
 	const counts: Record<string, number> = {};
 	for await (const file of sources(root)) {
@@ -243,8 +180,6 @@ Deno.test('BF-8: the element-record producer has exactly the call sites this mat
 			if (/buildElementRecord\(/.test(line)) counts[path] = (counts[path] ?? 0) + 1;
 		}
 	}
-	// A new call site is a new element-describing surface. Add it to SURFACES, bump SURFACE_COUNT,
-	// and add it here — in that order, because the matrix is what proves it does not leak a value.
 	assertEquals(
 		counts,
 		PRODUCER_CALL_SITES,
@@ -253,19 +188,17 @@ Deno.test('BF-8: the element-record producer has exactly the call sites this mat
 });
 
 for (const surface of SURFACES) {
-	Deno.test(`BF-8: ${surface.name} never carries a password value`, () => {
+	Deno.test(`surface matrix: ${surface.name} never carries a password value`, () => {
 		for (const [i, node] of passwordNodes().entries()) {
 			const emitted = JSON.stringify(surface.emit(node)) ?? '';
 			assert(!emitted.includes(SENTINEL), `arm ${i + 1}: ${emitted}`);
-			// Not a prefix or a length either: the value's first characters and its length are as
-			// disclosing as the value on a field a caller knows to be a password.
 			assert(!emitted.includes(SENTINEL.slice(0, 6)), `arm ${i + 1} leaks a prefix: ${emitted}`);
 			assert(!emitted.includes(`"typed_length":${SENTINEL.length}`), `arm ${i + 1} leaks the length`);
 		}
 	});
 }
 
-Deno.test('BF-8: the matrix is not vacuous — an ordinary field DOES surface its value on the value-bearing rows', () => {
+Deno.test('the surface matrix is not vacuous — an ordinary field DOES surface its value on the value-bearing rows', () => {
 	const [password] = passwordNodes();
 	assert(password !== undefined);
 	const ordinary = { ...password, attributes: { type: 'text', name: 'city', value: 'London' } } as EnhancedDomTreeNode;

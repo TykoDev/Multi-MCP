@@ -1,6 +1,6 @@
 /// <reference lib="deno.ns" />
 /**
- * D-111: the A2UI renderer against a minimal document — enough of the DOM for `el()`, `icon()` and the renderer,
+ * The A2UI renderer against a minimal document — enough of the DOM for `el()`, `icon()` and the renderer,
  * which is the whole point: the renderer only ever creates elements, sets attributes and text, and listens. A fake
  * that lacks `innerHTML` and every parser proves by construction that no path through it needs one. Real Chromium
  * renders the same surfaces in `tests/e2e/a2ui_e2e_test.ts`.
@@ -19,7 +19,6 @@ import {
 	SHARE_CONCURRENCY,
 	textOn,
 } from './a2ui.ts';
-import { inWorkspace, releaseSurfaces, surfacesFor } from './workspace_surfaces.ts';
 
 /** The least favourable light and dark surfaces the renderer derives inks against (`a2ui.ts`). */
 const LIGHT_SURFACE = '#e4e5e9';
@@ -157,7 +156,7 @@ const EVERYTHING = [
 	{ id: 'when', component: 'DateTimeInput', label: 'When', value: { path: '/when' } },
 ];
 
-Deno.test('D-111: every new component renders through the kit mapping, with no markup and no foreign URL', () => {
+Deno.test('every new component renders through the kit mapping, with no markup and no foreign URL', () => {
 	const root = withDocument(() =>
 		renderA2uiSurface(surface(EVERYTHING), () => Promise.resolve()) as unknown as FakeElement
 	);
@@ -224,7 +223,7 @@ Deno.test('D-111: every new component renders through the kit mapping, with no m
 	assertEquals([when.getAttribute('type'), when.value, when.getAttribute('label')], ['date', '2026-10-04', 'When']);
 });
 
-Deno.test('D-111 (AC5): Html is a sandboxed frame over its route; the document itself is nowhere in the page', () => {
+Deno.test('Html is a sandboxed frame over its route; the document itself is nowhere in the page', () => {
 	const root = withDocument(() =>
 		renderA2uiSurface(surface(EVERYTHING), () => Promise.resolve()) as unknown as FakeElement
 	);
@@ -251,7 +250,7 @@ Deno.test('D-111 (AC5): Html is a sandboxed frame over its route; the document i
 	assertEquals(a2uiHtmlPath('a b', 'c/d'), '/api/v1/a2ui/surfaces/a%20b/html/c%2Fd');
 });
 
-Deno.test('D-111: a theme writes only its kit tokens on the surface root, and an unvalidated one is refused', () => {
+Deno.test('a theme writes only its kit tokens on the surface root, and an unvalidated one is refused', () => {
 	const themed = withDocument(() =>
 		renderA2uiSurface(
 			surface([{ id: 'root', component: 'Text', text: 'hi' }], {
@@ -266,11 +265,11 @@ Deno.test('D-111: a theme writes only its kit tokens on the surface root, and an
 		'--accent': '#336699',
 		'--wa-color-brand-fill-loud': '#336699',
 		'--wa-color-brand-border-loud': '#336699',
-		// RV-1: derived at :root from the brand fill, so restated on the surface or checkboxes stay shell blue.
+		// Derived at :root from the brand fill, so restated on the surface or checkboxes stay shell blue.
 		'--wa-form-control-activated-color': '#336699',
-		// RV-3: the label on the primary, by luminance.
+		// The label on the primary, by luminance.
 		'--wa-color-brand-on-loud': '#ffffff',
-		// RV-1: the primary as text, one ink per shell theme (agents.css picks it for the active tab label).
+		// The primary as text, one ink per shell theme (agents.css picks it for the active tab label).
 		'--a2ui-primary-ink-light': inkOn('#336699', LIGHT_SURFACE),
 		'--a2ui-primary-ink-dark': inkOn('#336699', DARK_SURFACE),
 		'--a2ui-font': "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
@@ -280,7 +279,7 @@ Deno.test('D-111: a theme writes only its kit tokens on the surface root, and an
 		'--wa-border-radius-m': '6px',
 		'--wa-border-radius-l': '6px',
 		'--wa-form-control-border-radius': '6px',
-		// RV-2: the dialog's panel radius is derived at :root too.
+		// The dialog's panel radius is derived at :root too.
 		'--wa-panel-border-radius': '6px',
 		'--a2ui-gap': '6px',
 		'--a2ui-pad': '8px',
@@ -315,7 +314,7 @@ Deno.test('D-111: a theme writes only its kit tokens on the surface root, and an
 	);
 });
 
-// --- share media (D-111, R3-4) ---------------------------------------------------------------------------------
+// --- share media ---------------------------------------------------------------------------------
 
 /** A loader the test drives: every request is recorded with its signal and answered when the test says so. */
 function scriptedShare() {
@@ -336,7 +335,7 @@ const png = (bytes = 3, length: number | null = bytes): Response =>
 		headers: { 'content-type': 'image/png', ...(length === null ? {} : { 'content-length': String(length) }) },
 	});
 
-Deno.test('D-111: share media is read through the authenticated loader, shown from blob:, and released', async () => {
+Deno.test('share media is read through the authenticated loader, shown from blob:, and released', async () => {
 	const share = scriptedShare();
 	const components = [
 		{ id: 'root', component: 'Column', children: ['a', 'b'] },
@@ -356,7 +355,7 @@ Deno.test('D-111: share media is read through the authenticated loader, shown fr
 	assert(img!.getAttribute('src')?.startsWith('blob:'), 'the image is shown from an object URL');
 	// Once released, the read still in flight is aborted, and nothing it would have made reaches the page.
 	releaseA2uiSurface(root as unknown as Element);
-	assert(share.requests[1]!.signal.aborted, 'R3-4: a released surface stops downloading');
+	assert(share.requests[1]!.signal.aborted, 'a released surface stops downloading');
 	share.requests[1]!.answer(new Response(new Uint8Array(4)));
 	await flush();
 	assertEquals(byTag(root, 'video')[0]!.getAttribute('src'), null);
@@ -369,7 +368,7 @@ Deno.test('D-111: share media is read through the authenticated loader, shown fr
 	assertEquals(byTag(bare, 'img')[0]!.getAttribute('data-unavailable'), 'true');
 });
 
-Deno.test('R3-4: one share path is fetched once per render however many components show it', async () => {
+Deno.test('one share path is fetched once per render however many components show it', async () => {
 	const share = scriptedShare();
 	const ids = Array.from({ length: 40 }, (_, i) => `img${i}`);
 	const components = [
@@ -391,7 +390,7 @@ Deno.test('R3-4: one share path is fetched once per render however many componen
 	releaseA2uiSurface(root as unknown as Element);
 });
 
-Deno.test('R3-4: share reads run at most eight at a time, and the queue never starts once released', async () => {
+Deno.test('share reads run at most eight at a time, and the queue never starts once released', async () => {
 	const share = scriptedShare();
 	const ids = Array.from({ length: 12 }, (_, i) => `img${i}`);
 	const components = [
@@ -415,7 +414,7 @@ Deno.test('R3-4: share reads run at most eight at a time, and the queue never st
 	assert(share.requests.slice(1).every((request) => request.signal.aborted));
 });
 
-Deno.test('R3-4: a surface downloads at most 32 MiB of share media; past it the placeholder shows', async () => {
+Deno.test('a surface downloads at most 32 MiB of share media; past it the placeholder shows', async () => {
 	assertEquals(SHARE_BYTES_PER_SURFACE, 32 * 1024 * 1024);
 	// A declared length that cannot fit is refused before a byte of its body is read.
 	let pulled = 0;
@@ -492,7 +491,7 @@ Deno.test('R3-4: a surface downloads at most 32 MiB of share media; past it the 
 	releaseA2uiSurface(one as unknown as Element);
 });
 
-Deno.test('R3-4: leaving the Agents screen (or a failed load) releases every surface it rendered', async () => {
+Deno.test('releasing rendered surfaces aborts their share reads and revokes their object URLs', async () => {
 	const share = scriptedShare();
 	const revoked: string[] = [];
 	const revoke = URL.revokeObjectURL;
@@ -518,30 +517,19 @@ Deno.test('R3-4: leaving the Agents screen (or a failed load) releases every sur
 			request.answer(png());
 		}
 		await flush();
-		releaseSurfaces(nodes, releaseA2uiSurface);
-		assertEquals(nodes.size, 0, 'forgotten, so the next load renders afresh');
+		for (const { surface: node } of nodes.values()) releaseA2uiSurface(node);
 		assertEquals(revoked.length, 2, 'both object URLs revoked');
 		assert(share.requests.every((request) => request.signal.aborted), 'every read aborted');
-		// The panel calls it from both places: its teardown, and the failed-load branch before the placeholder.
-		const view = await Deno.readTextFile(new URL('./workspace_surfaces.ts', import.meta.url));
-		const stop = view.slice(view.indexOf('stop: (): void => {'));
-		assert(stop.slice(0, stop.indexOf('},')).includes('releaseSurfaces(surfaceNodes'), 'stop releases the surfaces');
-		const failed = view.slice(view.indexOf('} catch (cause) {', view.indexOf('async function load(')));
-		assert(
-			failed.indexOf('releaseSurfaces(surfaceNodes') !== -1 &&
-				failed.indexOf('releaseSurfaces(surfaceNodes') < failed.indexOf('list.replaceChildren()'),
-			'a failed load releases before it replaces',
-		);
 	} finally {
 		URL.revokeObjectURL = revoke;
 	}
 });
 
-// --- theme colours (RV-1, RV-3) -------------------------------------------------------------------------------
+// --- theme colours -------------------------------------------------------------------------------
 
-Deno.test('RV-3: a Button label is black or white by luminance, and always readable', () => {
+Deno.test('a Button label is black or white by luminance, and always readable', () => {
 	assertEquals(contrastRatio('#000000', '#ffffff'), 21);
-	// The rendered-verification colour: white was 3.1:1 on it; black is 6.8:1.
+	// A mid-tone primary: white is 3.1:1 on it, black 6.8:1.
 	assertEquals(textOn('#e76f51'), '#000000');
 	assert(contrastRatio('#e76f51', '#000000') > 6.5);
 	assertEquals(textOn('#336699'), '#ffffff');
@@ -559,7 +547,7 @@ Deno.test('RV-3: a Button label is black or white by luminance, and always reada
 	assert(worst >= 4.5, `worst label contrast ${worst.toFixed(2)}:1`);
 });
 
-Deno.test('RV-1: the primary used as text keeps its hue and reaches 4.5:1 on its theme surfaces', () => {
+Deno.test('the primary used as text keeps its hue and reaches 4.5:1 on its theme surfaces', () => {
 	for (const primary of ['#e76f51', '#ffd166', '#336699', '#06d6a0', '#7b2cbf', '#000000', '#ffffff']) {
 		const light = inkOn(primary, LIGHT_SURFACE);
 		const dark = inkOn(primary, DARK_SURFACE);
@@ -580,7 +568,7 @@ Deno.test('RV-1: the primary used as text keeps its hue and reaches 4.5:1 on its
 	assert(r > g && g > b, `${ink} keeps the hue`);
 });
 
-Deno.test('D-136: the MCP Apps embed mode renders every component read-only, kit-free and fetching nothing', () => {
+Deno.test('the MCP Apps embed mode renders every component read-only, kit-free and fetching nothing', () => {
 	const sent: unknown[] = [];
 	const components = [
 		...EVERYTHING.map((component) =>
@@ -651,7 +639,7 @@ Deno.test('D-136: the MCP Apps embed mode renders every component read-only, kit
 		'2026-10-04',
 		true,
 	]);
-	// Media: an inline image still shows; players and share files are notes that load nothing (RV-6).
+	// Media: an inline image still shows; players and share files are notes that load nothing.
 	assertEquals(byTag(root, 'img').map((img) => img.getAttribute('src')), [PNG]);
 	assertEquals([...byTag(root, 'video'), ...byTag(root, 'audio')], [], 'no player that could never play');
 	const notes = byClass(root, 'a2ui-media-placeholder');
@@ -667,7 +655,7 @@ Deno.test('D-136: the MCP Apps embed mode renders every component read-only, kit
 	assertEquals(sent, []);
 });
 
-Deno.test('RV-6: kit-free, a share Image is the media note, and every caption sits inside its own note', () => {
+Deno.test('kit-free, a share Image is the media note, and every caption sits inside its own note', () => {
 	const components = [
 		{ id: 'root', component: 'Column', children: ['chart', 'logo', 'sound', 'clip'] },
 		{ id: 'chart', component: 'Image', url: 'ttk://share/charts/q3.png', description: 'Q3 revenue' },
@@ -707,31 +695,6 @@ Deno.test('RV-6: kit-free, a share Image is the media note, and every caption si
 	assertEquals(byTag(spa, 'img').length, 2);
 	assertEquals([byTag(spa, 'audio').length, byTag(spa, 'video').length], [1, 1]);
 	releaseA2uiSurface(spa as unknown as Element);
-});
-
-Deno.test('workspace surfaces: a surface is shown under its workspace, loose ones are offered, the builder creates in it', () => {
-	const surface = (surfaceId: string, workspaceId?: string): A2uiSurface => ({
-		surfaceId,
-		catalogId: A2UI_CATALOG_ID,
-		revision: 1,
-		components: [],
-		dataModel: {},
-		...(workspaceId === undefined ? {} : { workspaceId }),
-	});
-	const here = '2276732b-a79d-436f-9cea-1a80b68a06b2';
-	const there = '6d1527ec-24ea-437f-8905-933b447a6f61';
-	const split = surfacesFor([surface('a', here), surface('b', there), surface('c'), surface('d', here)], here);
-	assertEquals(split.attached.map((entry) => entry.surfaceId), ['a', 'd']);
-	assertEquals(split.loose.map((entry) => entry.surfaceId), ['c']);
-	assertEquals(
-		inWorkspace({ version: 'v0.9', createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID } }, here),
-		{ version: 'v0.9', createSurface: { workspaceId: here, surfaceId: 's', catalogId: A2UI_CATALOG_ID } },
-	);
-	// A message naming its own workspace keeps it; other operations pass through untouched.
-	const own = { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: A2UI_CATALOG_ID, workspaceId: there } };
-	assertEquals((inWorkspace(own, here) as typeof own).createSurface.workspaceId, there);
-	const update = { version: 'v0.9', updateDataModel: { surfaceId: 's', value: {} } };
-	assertEquals(inWorkspace(update, here), update);
 });
 
 Deno.test('formatString and formatNumber: a Slider and a TextField drive computed text and a lookup on the page', () => {

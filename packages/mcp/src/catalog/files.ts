@@ -1,13 +1,12 @@
-/** Session-file tools (E-33). */
+/** Session-file tools. */
 import * as z from 'zod';
 import * as handlers from '../tools.ts';
 import { OUTPUT } from '../schemas.ts';
 import { def, sessionId, stateTokenArg, type ToolDefinition } from './shared.ts';
 
 export const FILE_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
-	// --- session files (E-33) ---------------------------------------------------
-	// Both are read-only *peeks*: they never create a browser, and they stay
-	// usable while a human holds the session, because reading what the browser
+	// --- session files --------------------------------------------------------- Both are read-only *peeks*: they
+	// never create a browser, and they stay usable while a human holds the session, because reading what the browser
 	// already downloaded is observation, not interference.
 	def({
 		name: 'browser_list_files',
@@ -43,7 +42,7 @@ export const FILE_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		outputSchema: OUTPUT.browser_get_file,
 		handler: handlers.browserGetFile,
 	}),
-	// --- B1.12 ---------------------------------------------------------------
+	// --- downloads and HEAD probes ---------------------------------------------
 	def({
 		name: 'browser_download',
 		title: 'Download a file',
@@ -82,17 +81,14 @@ export const FILE_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		}),
 		mutates: false,
 		hints: { openWorld: true },
-		// Two static deployment facts, and the tool needs both: a proven outbound
-		// grant (SR-HEAD-REDIRECT) and a browser this server's own request can
-		// follow (SR3-M2). The second carries its own sentence rather than a
-		// boolean, so a caller that reaches the tool anyway is told which flag and
-		// what to do instead of "needs egress on this deployment".
+		// Two static deployment facts, and the tool needs both: a proven outbound grant (proven at startup) and a
+		// browser this server's own request can follow (no proxy in the way).
 		available: (state) => state.egress && (state.headRouting ?? null) === null,
 		unavailableDetail: (state) => state.headRouting ?? undefined,
 		outputSchema: OUTPUT.browser_head,
 		handler: handlers.browserHead,
 	}),
-	// --- B2.9 -----------------------------------------------------------------
+	// --- file retention and transfer policy ------------------------------------
 	def({
 		name: 'browser_file_policy',
 		title: 'Read the file retention and transfer policy',

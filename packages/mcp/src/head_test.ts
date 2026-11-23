@@ -1,20 +1,4 @@
-/**
- * `browser_head` as a server-side HEAD (SR-HEAD-REDIRECT, D-042), proven on loopback.
- *
- * The upstream here is a **raw** `Deno.listen` HTTP/1.1 responder rather than
- * `Deno.serve`, for a measured reason: `Deno.serve` drains a streaming
- * response body on a HEAD request even though it writes none of it to the
- * socket (`build/evidence/b1_12_sr_head_egress_probe.log`: 196 608 bytes
- * pulled, 0 sent), so a `pull`-counting fixture would over-report. This one
- * counts the bytes it actually writes, records every request line and header
- * it received, and can misbehave on request — a redirect loop, a `Location`
- * off the allowlist, a private-address `Location`, a stall.
- *
- * Runs under the unit tier's own grant, `--allow-net=127.0.0.1,localhost`,
- * which is exactly the shape of an operator-elected grant: `127.0.0.1` is on
- * the allowlist here **by exact name**, so the loopback deny is lifted for it
- * and for nothing else.
- */
+/** `browser_head` as a server-side HEAD, proven on loopback. */
 import { assert, assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { attachmentDisposition } from './files.ts';
 import { ToolError } from './errors.ts';
@@ -33,7 +17,7 @@ import {
 	probeEgressGrant,
 } from './head.ts';
 import { SessionRegistry } from './registry.ts';
-import { browserHead } from './tools/files.ts';
+import { browserHead, hrefOf } from './tools/files.ts';
 
 interface Seen {
 	readonly method: string;
@@ -44,9 +28,8 @@ interface Seen {
 interface Upstream {
 	readonly origin: string;
 	/**
-	 * The allowlist a test uses against this upstream: the loopback literal by
-	 * exact name (lifting the address deny for it alone) and, because the port
-	 * is ephemeral, the exact `host:port` the non-default-port rule requires.
+	 * The allowlist a test uses against this upstream: the loopback literal by exact name (lifting the address deny
+	 * for it alone) and, because the port is ephemeral, the exact `host:port` the non-default-port rule requires.
 	 */
 	readonly allow: string[];
 	readonly seen: Seen[];
@@ -101,7 +84,6 @@ function startUpstream(route: Route, options: { stallMs?: number } = {}): Upstre
 					}
 					seen.push({ method, path: target, headers });
 					if (options.stallMs !== undefined) {
-						// Tied to close(), so a stall never outlives the test that asked for it.
 						await new Promise<void>((resolve) => {
 							const timer = setTimeout(resolve, options.stallMs);
 							closing.signal.addEventListener('abort', () => {
@@ -110,7 +92,6 @@ function startUpstream(route: Route, options: { stallMs?: number } = {}): Upstre
 							});
 						});
 					}
-					// The request target carries the query; routes see the path alone.
 					const reply = route(new URL(target, origin).pathname, origin);
 					const body = method === 'HEAD' ? new Uint8Array(0) : (reply.body ?? new Uint8Array(0));
 					let raw = `HTTP/1.1 ${reply.status} X\r\nconnection: close\r\n`;
@@ -123,12 +104,12 @@ function startUpstream(route: Route, options: { stallMs?: number } = {}): Upstre
 					}
 					upstream.bytesWritten += written;
 				} catch {
-					// A peer that went away mid-exchange is not this test's concern.
+					// The client hung up mid-write.
 				} finally {
 					try {
 						conn.close();
 					} catch {
-						// already closed
+						// Already closed.
 					}
 				}
 			})();
@@ -178,9 +159,6 @@ Deno.test('head: a HEAD walk transfers no body, forwards no credential, and repo
 		assertEquals(result.filename, 'résumé (final).pdf');
 		assertEquals(result.final_url, `${up.origin}/big`, 'origin plus path, no query, no fragment');
 		assertEquals(result.hops, 3);
-		// What the upstream measured: every request was a HEAD, and the bytes it
-		// wrote are headers only — a 4 MiB resource cost it well under a kilobyte
-		// per response. This is the number U-4 used to be 33 554 432.
 		assertEquals(up.seen.length, 4);
 		for (const request of up.seen) {
 			assertEquals(request.method, 'HEAD');
@@ -224,8 +202,6 @@ Deno.test('head: a hop off the allowlist stops the walk and names only the block
 Deno.test('head: a hop to a private literal address is refused even though the allowlist is empty', async () => {
 	const up = startUpstream(plainRoute);
 	try {
-		// The allowlist names the upstream and nothing else, and no name entry
-		// could lift an address deny anyway.
 		const error = await assertRejects(() => headWalk(`${up.origin}/private`, up.allow), ToolError);
 		assertEquals(error.code, 'navigation-blocked');
 		assertStringIncludes(error.message, 'http://169.254.169.254');
@@ -242,9 +218,6 @@ Deno.test('head: localhost is refused unless named exactly; a suffix entry does 
 		const refused = await assertRejects(() => headWalk(`${up.origin}/localhost`, up.allow), ToolError);
 		assertEquals(refused.code, 'navigation-blocked');
 		assertStringIncludes(refused.message, 'http://localhost:9');
-		// Named exactly: the deny lifts, the walk proceeds, and the next gate —
-		// the permission query for localhost:9 — is what answers (granted in this
-		// tier), after which the closed port is a coded error rather than a hang.
 		const reached = await assertRejects(
 			() => headWalk(`${up.origin}/localhost`, [...up.allow, 'localhost', 'localhost:9'], { hopTimeoutMs: 2_000 }),
 			ToolError,
@@ -275,8 +248,6 @@ Deno.test('head: a 3xx without Location is the final answer; a malformed Locatio
 		assertEquals(result.hops, 0);
 		const error = await assertRejects(() => headWalk(`${up.origin}/badlocation`, up.allow), ToolError);
 		assertEquals(error.code, 'browser-error');
-		// Two joined `Location` values are not a redirect either (m2), and a 300
-		// is an answer, not a hop (m3).
 		const joined = await assertRejects(() => headWalk(`${up.origin}/joined`, up.allow), ToolError);
 		assertEquals(joined.code, 'browser-error');
 		const choice = await headWalk(`${up.origin}/notfollowed`, up.allow);
@@ -290,15 +261,11 @@ Deno.test('head: a 3xx without Location is the final answer; a malformed Locatio
 Deno.test('head: the permission-denied path is feature-unavailable {egress}, and nothing is requested', async () => {
 	const up = startUpstream(plainRoute);
 	try {
-		// The real permissions API, under this tier's real grant: a public name
-		// is on the allowlist but the process holds no grant for it.
 		const error = await assertRejects(() => headWalk('https://docs.example/file.pdf', ['docs.example']), ToolError);
 		assertEquals(error.code, 'feature-unavailable');
 		assertEquals(error.extras.feature, 'egress');
 		assertStringIncludes(error.message, 'docs.example:443');
 		assertEquals(up.seen.length, 0);
-		// And the belt behind the braces: a `NotCapable` thrown by the runtime is
-		// mapped, not propagated, should a query ever disagree with a dial.
 		const lying = { query: () => Promise.resolve({ state: 'granted' as const }) };
 		const denied = await assertRejects(
 			() =>
@@ -340,8 +307,6 @@ Deno.test('head: userinfo, non-http schemes, the first hop off the allowlist and
 	assertEquals(off.code, 'navigation-blocked');
 	assertStringIncludes(off.message, 'https://evil.example');
 	assertEquals(off.message.includes('SECRET'), false);
-	// A non-default port needs an exact host:port entry (m5): the allowlist
-	// ignores ports and a bare-host grant covers all of them.
 	const port = assertThrowsTool(() => gateHop('http://127.0.0.1:8443/x', allow));
 	assertEquals(port.code, 'navigation-blocked');
 	assertStringIncludes(port.message, 'non-default port');
@@ -385,7 +350,6 @@ function assertThrowsTool(fn: () => unknown): ToolError {
 }
 
 Deno.test('head: the literal-address deny covers every measured spelling, and an exact entry lifts only itself', () => {
-	// The forms WHATWG folds before the gate sees them (measured in the probe log).
 	for (
 		const url of [
 			'http://2130706433/',
@@ -425,7 +389,6 @@ Deno.test('head: the literal-address deny covers every measured spelling, and an
 		assert(isForbiddenLiteralHost(hostname, []), `${url} (${hostname}) must be refused`);
 		assert(isForbiddenLiteralHost(hostname, ['example.com', 'localhost.example']), `${url} not lifted by names`);
 	}
-	// Public addresses and names pass the address gate (the allowlist is a separate gate).
 	for (
 		const url of [
 			'http://8.8.8.8/',
@@ -437,7 +400,6 @@ Deno.test('head: the literal-address deny covers every measured spelling, and an
 	) {
 		assertEquals(isForbiddenLiteralHost(new URL(url).hostname, []), false, url);
 	}
-	// An exact entry lifts exactly that host.
 	assertEquals(isForbiddenLiteralHost('127.0.0.1', ['127.0.0.1']), false);
 	assertEquals(isForbiddenLiteralHost('127.0.0.2', ['127.0.0.1']), true);
 	assertEquals(isForbiddenLiteralHost('localhost', ['localhost']), false);
@@ -446,26 +408,38 @@ Deno.test('head: the literal-address deny covers every measured spelling, and an
 	assertEquals(isForbiddenLiteralHost('[::1]', ['[::1]']), false);
 });
 
+Deno.test('head: IPv4-compatible ::/96 is judged as its IPv4, and local-use NAT64 64:ff9b:1::/48 is refused', () => {
+	for (
+		const url of [
+			'http://[::127.0.0.1]/', // WHATWG folds this to [::7f00:1]
+			'http://[::7f00:1]/',
+			'http://[::a9fe:a9fe]/', // 169.254.169.254
+			'http://[::10.0.0.1]/',
+			'http://[::192.168.1.1]/',
+			'http://[::0.0.0.2]/',
+			'http://[64:ff9b:1::1]/',
+			'http://[64:ff9b:1:ffff::808:808]/',
+		]
+	) {
+		const hostname = new URL(url).hostname;
+		assert(isForbiddenLiteralHost(hostname, []), `${url} (${hostname}) must be refused`);
+	}
+	assertEquals(isForbiddenLiteralHost(new URL('http://[::8.8.8.8]/').hostname, []), false);
+	assertEquals(isForbiddenLiteralHost(new URL('http://[64:ff9b::808:808]/').hostname, []), false);
+	assertEquals(isForbiddenLiteralHost('[64:ff9b:2::1]', []), false);
+});
+
 Deno.test('head: availability is proven by the permissions API, never declared, and loopback proves nothing', async () => {
-	// Under this tier's real grant (`127.0.0.1,localhost`): a loopback-only
-	// allowlist is granted and still proves nothing, because the shipped
-	// matrices grant loopback for the browser connection and that is not an
-	// election of outbound net (M4); a public-only allowlist proves none; an
-	// empty allowlist cannot be proven without an unscoped grant.
 	assertEquals(await probeEgressGrant(['127.0.0.1']), false);
 	assertEquals(await probeEgressGrant(['localhost', '[::1]']), false);
 	assertEquals(await probeEgressGrant(['docs.example']), false);
 	assertEquals(await probeEgressGrant([]), false);
-	// A real grant on a public name, through the injectable seam (the tier
-	// holds none, by construction); the stdio tier proves the same in a real
-	// process with a real flag.
 	const scoped = {
 		query: (desc: Deno.NetPermissionDescriptor) =>
 			Promise.resolve({ state: desc.host === 'docs.example:443' ? 'granted' as const : 'prompt' as const }),
 	};
 	assertEquals(await probeEgressGrant(['docs.example'], scoped), true);
 	assertEquals(await probeEgressGrant(['cdn.example'], scoped), false, 'a grant on another host proves nothing');
-	// A host-scoped grant that happens to cover loopback proves nothing either.
 	const loopbackOnly = {
 		query: (desc: Deno.NetPermissionDescriptor) =>
 			Promise.resolve({ state: desc.host?.startsWith('127.0.0.1:') ? 'granted' as const : 'prompt' as const }),
@@ -482,7 +456,6 @@ Deno.test('head: availability is proven by the permissions API, never declared, 
 		'10.0.0.5',
 		'localhost.',
 	]);
-	// A query that throws is a refusal, not a crash.
 	const broken = { query: () => Promise.reject(new Error('no permissions API')) };
 	assertEquals(await probeEgressGrant(['127.0.0.1'], broken), false);
 });
@@ -506,13 +479,9 @@ Deno.test('head: Content-Disposition names decode through the same form this ser
 	assertEquals(dispositionFilename(`attachment; filename="${'a'.repeat(400)}"`)?.length, 255);
 });
 
-// --- SR3-M2: two egress paths, and the tool refuses rather than answer about the wrong one ---
+// --- two egress paths, and the tool refuses rather than answer about the wrong one ---
 
-Deno.test('head: any Chromium proxy flag makes browser_head refuse (SR3-M2)', () => {
-	// The server's HEAD is a `fetch` and follows the process proxy environment;
-	// the browser follows its flag. A deployment configuring the browser's route
-	// separately gets two network paths from one tool surface, and an answer about
-	// the wrong one is wrong in the shape of being right.
+Deno.test('head: any Chromium proxy flag makes browser_head refuse', () => {
 	for (const flag of CHROMIUM_PROXY_FLAGS) {
 		const args = flag === '--proxy-auto-detect' || flag === '--no-proxy-server'
 			? [flag]
@@ -521,16 +490,12 @@ Deno.test('head: any Chromium proxy flag makes browser_head refuse (SR3-M2)', ()
 		const refusal = headRoutingRefusal(args);
 		assert(refusal !== null, `${flag} must refuse`);
 		assertStringIncludes(refusal, flag);
-		// The remedy is a configuration where the divergence cannot arise, not a
-		// restatement of the problem.
 		assertStringIncludes(refusal, 'TTK_BROWSER_ARGS');
 		assertStringIncludes(refusal, 'network-level egress control');
 	}
 });
 
-Deno.test('head: the refusal names the flag and never its value (DD-7)', () => {
-	// A `--proxy-server` value can carry userinfo, and a proxy password is a
-	// password. The message names what the operator edits, never what it holds.
+Deno.test('head: the refusal names the flag and never its value', () => {
 	const secret = 'http://ops:hunter2@proxy.internal:3128';
 	const refusal = headRoutingRefusal([`--proxy-server=${secret}`, '--window-size=800,600']);
 	assert(refusal !== null);
@@ -541,22 +506,14 @@ Deno.test('head: the refusal names the flag and never its value (DD-7)', () => {
 });
 
 Deno.test('head: a deployment with no browser proxy flag is not refused', () => {
-	// Refusing every deployment would be a cure worse than the finding: with no
-	// flag, Chromium and this process both follow whatever the environment says,
-	// and the tool answers about the path the browser uses.
 	assertEquals(browserProxyFlag([]), null);
 	assertEquals(headRoutingRefusal([]), null);
 	assertEquals(headRoutingRefusal(['--window-size=1280,720', '--lang=en-GB']), null);
-	// A flag that merely *mentions* a proxy in a value is not a proxy flag: the
-	// match is on the argument name, before the `=`, exactly.
 	assertEquals(headRoutingRefusal(['--user-agent=proxy-server/1.0']), null);
 	assertEquals(headRoutingRefusal(['--host-resolver-rules=MAP * --proxy-server']), null);
 });
 
-Deno.test('head: browser_head refuses at the handler, not only at availability (SR3-M2)', async () => {
-	// A control that lives only in `tools/list` is one an out-of-band call walks
-	// past, and this repository already proves a hidden tool can be called
-	// (`tests/.scratch/runtime_smoke.ts`). So the handler holds it alone.
+Deno.test('head: browser_head refuses at the handler, not only at availability', async () => {
 	const registry = new SessionRegistry({
 		reapIntervalMs: 0,
 		browserArgs: ['--proxy-server=http://proxy.internal:3128'],
@@ -572,18 +529,13 @@ Deno.test('head: browser_head refuses at the handler, not only at availability (
 		assertEquals(error.code, 'feature-unavailable');
 		assertEquals(error.extras.feature, 'egress');
 		assertStringIncludes(error.message, '--proxy-server');
-		// It refused **before** any outbound request: the message is about routing,
-		// never about a host that was dialled.
 		assertEquals(error.message.includes('docs.example'), false);
 	} finally {
 		await registry.shutdown('server-shutdown');
 	}
 });
 
-Deno.test('head: the same deployment without the flag reaches the walk (SR3-M2)', async () => {
-	// The complement of the test above: with no proxy flag the refusal is not the
-	// thing that stops the call, so a green refusal test cannot be passing for the
-	// wrong reason.
+Deno.test('head: the same deployment without the flag reaches the walk', async () => {
 	const registry = new SessionRegistry({
 		reapIntervalMs: 0,
 		launch: () => Promise.reject(new Error('no browser is launched by this test')),
@@ -594,7 +546,6 @@ Deno.test('head: the same deployment without the flag reaches the walk (SR3-M2)'
 				browserHead({ url: 'https://docs.example/x' }, { registry, allowedDomains: ['docs.example'], principal: 'p' }),
 			ToolError,
 		);
-		// It got as far as the permission gate, which is the next control in line.
 		assertEquals(error.code, 'feature-unavailable');
 		assertStringIncludes(error.message, 'outbound net access');
 	} finally {
@@ -602,15 +553,14 @@ Deno.test('head: the same deployment without the flag reaches the walk (SR3-M2)'
 	}
 });
 
-// --- K-8 / review R3-3: the cause chain -----------------------------------------------------------------------------
+// --- the cause chain ------------------------------------------------------------------------------------------------
 
-Deno.test('K-8: failureReason reads the cause chain — refused, tls and dns are no longer protocol', () => {
+Deno.test('failureReason reads the cause chain — refused, tls and dns are not classified as protocol', () => {
 	const failed = (detail: string) => new TypeError('fetch failed', { cause: new Error(detail) });
 	assertEquals(failureReason(failed('tcp connect error: Connection refused (os error 10061)')), 'refused');
 	assertEquals(failureReason(failed('client error (Connect): invalid peer certificate: UnknownIssuer')), 'tls');
 	assertEquals(failureReason(failed('dns error: failed to lookup address information: No such host is known.')), 'dns');
 	assertEquals(failureReason(failed('connection reset by peer')), 'reset');
-	// Two levels down still counts; a bare top message with nothing under it is still protocol.
 	assertEquals(
 		failureReason(
 			new TypeError('fetch failed', { cause: new Error('client error', { cause: new Error('Connection refused') }) }),
@@ -618,19 +568,164 @@ Deno.test('K-8: failureReason reads the cause chain — refused, tls and dns are
 		'refused',
 	);
 	assertEquals(failureReason(new TypeError('fetch failed')), 'protocol');
-	// The walk is bounded: a reason buried past FAILURE_CAUSE_DEPTH errors is not read.
 	assertEquals(FAILURE_CAUSE_DEPTH, 5);
 	let deep: Error = new Error('Connection refused');
 	for (let level = 0; level < FAILURE_CAUSE_DEPTH; level++) deep = new Error(`layer ${level}`, { cause: deep });
 	assertEquals(failureReason(deep), 'unknown');
 });
 
-Deno.test('K-8: a real refused connection on this runtime classifies as refused', async () => {
-	// A port nothing listens on: bind one, learn its number, close it.
+Deno.test('a real refused connection on this runtime classifies as refused', async () => {
 	const listener = Deno.listen({ hostname: '127.0.0.1', port: 0 });
 	const port = (listener.addr as Deno.NetAddr).port;
 	listener.close();
 	const error = await fetch(`http://127.0.0.1:${port}/`).then(() => null, (cause: unknown) => cause);
 	assert(error instanceof Error, 'the connection was expected to fail');
 	assertEquals(failureReason(error), 'refused');
+});
+
+// --- Every server-initiated egress path, enumerated once with a pinned count. ---
+
+/** One egress path: where it is, what makes the browser go, and what gates it. */
+interface EgressPath {
+	readonly file: string;
+	/** The source token that performs the egress. */
+	readonly primitive: string;
+	/** How many times the file may contain it. */
+	readonly count: number;
+	readonly tool: string;
+	readonly gate: string;
+}
+
+const EGRESS_PATHS: readonly EgressPath[] = [
+	{
+		file: 'packages/mcp/src/tools/navigation.ts',
+		primitive: 'new NavigateToUrlEvent(',
+		count: 1,
+		tool: 'browser_navigate',
+		gate: 'assertNavigable on the requested URL; the vendored session re-checks it with isUrlAllowed',
+	},
+	{
+		file: 'packages/mcp/src/tools/navigation.ts',
+		primitive: 'new GoBackEvent(',
+		count: 1,
+		tool: 'browser_go_back',
+		gate:
+			'history: the entry it returns to was reached either by this server (gated then) or by the page itself (never gated)',
+	},
+	{
+		file: 'packages/mcp/src/tools/files.ts',
+		primitive: 'new NavigateToUrlEvent(',
+		count: 1,
+		tool: 'browser_download {url}',
+		gate: 'assertNavigable on the requested URL, then the ledger gate on the final download URL',
+	},
+	{
+		file: 'packages/mcp/src/tools/files.ts',
+		primitive: 'new ClickElementEvent(',
+		count: 1,
+		tool: 'browser_download {index}',
+		gate:
+			'assertNavigable on the element href resolved against its frame URL, then the ledger gate on the final download URL',
+	},
+	{
+		file: 'packages/mcp/src/head.ts',
+		primitive: 'await doFetch(',
+		count: 1,
+		tool: 'browser_head (server-side, SR-HEAD-REDIRECT)',
+		gate:
+			'every hop: assertNavigable, then the literal-address deny (isForbiddenLiteralHost), then Deno.permissions.query for the exact host:port; cookie-less; hop cap; timeouts',
+	},
+	{
+		file: 'packages/mcp/src/head.ts',
+		primitive: 'await fetch(',
+		count: 0,
+		tool: 'browser_head (server-side, SR-HEAD-REDIRECT)',
+		gate: 'the runtime fetch is reached only through the injectable doFetch above, so the literal never appears',
+	},
+	{
+		file: 'packages/gateway/src/liveview.ts',
+		primitive: 'new NavigateToUrlEvent(',
+		count: 1,
+		tool: 'live-view navigate',
+		gate: 'assertNavigable on the requested URL',
+	},
+	{
+		file: 'packages/mcp/src/registry.ts',
+		primitive: 'isHostAllowed(',
+		count: 1,
+		tool: 'the download ledger gate (every download, however started)',
+		gate: 'isHostAllowed on the final URL; Browser.cancelDownload and navigation-blocked on the file record',
+	},
+	{
+		file: 'packages/mcp/src/secrets.ts',
+		primitive: "urlMatch(url, pattern, 'secret')",
+		count: 1,
+		tool: 'the secrets domain check (not an egress: decides whether a secret may be typed at the current URL)',
+		gate:
+			"urlMatch in its 'secret' context over the secret's own domains list: https-only for a scheme-less pattern, fail-closed on a host-less, unparseable or new-tab URL",
+	},
+];
+
+/** The files the table covers. Any file outside this set containing an egress primitive fails below. */
+const PRIMITIVES = ['new NavigateToUrlEvent(', 'new GoBackEvent(', 'await fetch(', 'await doFetch('];
+
+function countOf(source: string, token: string): number {
+	return source.split(token).length - 1;
+}
+
+async function sourcesUnder(dir: string): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	for await (const entry of Deno.readDir(dir)) {
+		const path = `${dir}/${entry.name}`;
+		if (entry.isDirectory) {
+			for (const [nested, text] of await sourcesUnder(path)) out.set(nested, text);
+			continue;
+		}
+		if (!entry.name.endsWith('.ts') || entry.name.endsWith('_test.ts')) continue;
+		out.set(path, await Deno.readTextFile(path));
+	}
+	return out;
+}
+
+Deno.test('egress: every server-initiated egress path is in the table, with its gate, and the count is pinned', async () => {
+	assertEquals(EGRESS_PATHS.length, 9, 'the table changed size: a path joined or left without this pin moving');
+	for (const path of EGRESS_PATHS) {
+		const source = await Deno.readTextFile(path.file);
+		assertEquals(countOf(source, path.primitive), path.count, `${path.tool}: ${path.primitive} in ${path.file}`);
+	}
+	const covered = new Set(EGRESS_PATHS.map((path) => path.file));
+	for (const dir of ['packages/mcp/src', 'packages/gateway/src']) {
+		for (const [file, source] of await sourcesUnder(dir)) {
+			if (covered.has(file)) continue;
+			for (const primitive of PRIMITIVES) {
+				assertEquals(
+					countOf(source, primitive),
+					0,
+					`${file} performs an egress (${primitive}) that is not in the table`,
+				);
+			}
+		}
+	}
+});
+
+Deno.test('egress: an element href resolves against its own frame, and only http(s) is gated before the click', () => {
+	const state = {
+		url: 'https://top.example/page',
+		frames: [{ frameId: 'F2', url: 'https://child.example/dir/' }],
+	};
+	assertEquals(hrefOf({ attributes: { href: '/export.csv' }, frameId: 'F1' }, state), 'https://top.example/export.csv');
+	assertEquals(
+		hrefOf({ attributes: { href: 'file.bin' }, frameId: 'F2' }, state),
+		'https://child.example/dir/file.bin',
+	);
+	assertEquals(
+		hrefOf({ attributes: { href: 'http://other.example/x' }, frameId: 'F1' }, state),
+		'http://other.example/x',
+	);
+	assertEquals(hrefOf({ attributes: {}, frameId: 'F1' }, state), null);
+	assertEquals(hrefOf({ attributes: { href: '   ' }, frameId: 'F1' }, state), null);
+	assertEquals(hrefOf({ attributes: { href: 'javascript:download()' }, frameId: 'F1' }, state), null);
+	assertEquals(hrefOf({ attributes: { href: 'blob:https://top.example/uuid' }, frameId: 'F1' }, state), null);
+	assertEquals(hrefOf({ attributes: { href: 'https://a.example/' } }, null), 'https://a.example/');
+	assertEquals(hrefOf({ attributes: { href: '/rel' } }, null), null);
 });

@@ -1,4 +1,4 @@
-/* MCP Apps embeds (R9, D-134/D-135): the live view and the read-only A2UI surface, kit-free.
+/* MCP Apps embeds: the live view and the read-only A2UI surface, kit-free.
  *
  * Inlined into each embed document by `scripts/build_embed.ts` and pinned by hash in its meta CSP; nothing here is
  * fetched. The values are the control plane's tokens (`tokens.css`) resolved to the kit palette they name, because the
@@ -17,7 +17,7 @@
 	--ttk-sunken: #090a0f;
 	--ttk-hairline: color-mix(in oklab, #f1f2f3 8%, transparent);
 	--ttk-hairline-2: color-mix(in oklab, #f1f2f3 14%, transparent);
-	/* RV-1: the fill under a white label is brand 50 in both themes — 4.59:1. Brand 60, the dark accent, is 3.0:1
+	/* The fill under a white label is brand 50 in both themes — 4.59:1. Brand 60, the dark accent, is 3.0:1
 	 * under white, so it stays the accent (focus ring, glyphs) and is never a label's ground. */
 	--ttk-primary: #0071ec; /* brand 50 */
 	--ttk-on-brand: #ffffff;
@@ -227,7 +227,7 @@ body {
 	background: color-mix(in oklab, var(--text) 8%, transparent);
 	color: var(--text);
 }
-/* Darker on hover, never lighter: a white label only gains contrast as its ground darkens (RV-1). */
+/* Darker on hover, never lighter: a white label only gains contrast as its ground darkens. */
 .e-btn.primary:hover:not(:disabled) {
 	background: color-mix(in oklab, var(--ttk-primary) 86%, black);
 	color: var(--ttk-on-brand);
@@ -309,7 +309,7 @@ body {
 	margin: 0;
 	overflow-wrap: anywhere;
 }
-/* RV-10: the operator's detail, folded under the sentence meant for the person in the chat. */
+/* The operator's detail, folded under the sentence meant for the person in the chat. */
 .e-detail {
 	max-width: 46ch;
 	font-size: 12px;
@@ -602,7 +602,7 @@ body {
 	color: var(--text-dim);
 	font-size: 12.5px;
 }
-/* RV-6: a media note carries its own description, first, so the description cannot caption what follows it. */
+/* A media note carries its own description, first, so the description cannot caption what follows it. */
 .a2ui-media-placeholder {
 	display: flex;
 	flex-direction: column;

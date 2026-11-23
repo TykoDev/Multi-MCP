@@ -1,22 +1,20 @@
 /**
- * The library's MCP surface (D-075): `file_*`, `skill_*` and `prompt_*` tools, the `ttk://share/{+path}` and
+ * The library's MCP surface: `file_*`, `skill_*` and `prompt_*` tools, the `ttk://share/{+path}` and
  * `ttk://skill/{name}` resources, and one MCP prompt per stored prompt and per skill.
- *
- * Reads take `files:read`, which is in the default grant; every mutation takes `files:write`, which must be
- * named. The tools are extension tools in the D-064 sense: composed by the gateway and the stdio mount when a data
- * directory exists, absent otherwise, never part of the frozen browser catalog.
  */
 import * as z from 'zod';
-import { type McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
-import type { GetPromptResult, ReadResourceResult } from '@modelcontextprotocol/server';
+import {
+	type GetPromptResult,
+	type McpServer,
+	type ReadResourceResult,
+	ResourceTemplate,
+} from '@modelcontextprotocol/server';
 import type { ToolDefinition, ToolHints } from './catalog.ts';
 import { crypto as stdCrypto } from '@std/crypto';
 import { encodeHex } from '@std/encoding/hex';
-import { untilAborted } from './cancel.ts';
-import { libraryCompleters } from './completions.ts';
-import { ToolError } from './errors.ts';
+import { ToolError, untilAborted } from './errors.ts';
+import { libraryCompleters, RESOURCE_SCHEME } from './resources.ts';
 import { isText, LIBRARY_LIMITS, LibraryError, type LibraryStore, walkShare } from './library.ts';
-import { RESOURCE_SCHEME } from './resources.ts';
 import type { Scope } from './scopes.ts';
 import { peekSession } from './tools/shared.ts';
 import { json, type ToolContext, type ToolResult } from './types.ts';
@@ -24,11 +22,7 @@ import { json, type ToolContext, type ToolResult } from './types.ts';
 const path = z.string().min(1).max(4096);
 const name = z.string().min(1).max(64);
 
-// --- A8 / D-113: typed results, from the store's own types (`library.ts`) ----------------------------------------
-//
-// The store is in-process and its shapes are this package's own, so these are exact objects: the dispatcher's strip
-// mode would drop an undeclared field, and `library_tools_test.ts` drives every tool against a real store and
-// asserts the validated result *equals* the raw one, so a field the store grows before its schema fails a test.
+// --- typed results, from the store's own types (`library.ts`) ----------------------------------------------------
 
 const entry = z.object({
 	name: z.string(),
@@ -74,7 +68,7 @@ export const LIBRARY_OUTPUT: Readonly<Record<string, z.ZodType>> = {
 	prompt_put: prompt,
 	prompt_delete: z.object({ name: z.string(), removed: z.literal(true) }),
 	prompt_render: z.object({ name: z.string(), text: z.string() }),
-	// R10 (design §2.7, D-119): a session file copied into the share.
+	// A session file copied into the share.
 	browser_save_to_share: z.object({ path: z.string(), size: z.number(), sha256: z.string() }),
 };
 
@@ -112,13 +106,13 @@ export function libraryTools(store: LibraryStore | null): readonly ToolDefinitio
 			title: toolName.replaceAll('_', ' '),
 			description,
 			inputSchema,
-			// The D-064 `{ result }` envelope is kept for wire stability; what is inside it is now typed (A8).
+			// The extension tools' `{ result }` envelope is kept for wire stability; what is inside it is typed.
 			outputSchema: z.object({ result: output }),
 			scope,
 			mutates,
 			...(hints === undefined ? {} : { hints }),
 			handler: async (args: unknown, ctx: ToolContext): Promise<ToolResult> => {
-				// A10: nothing starts after a cancellation; a read stops waiting the moment one arrives.
+				// Nothing starts after a cancellation; a read stops waiting the moment one arrives.
 				ctx.signal?.throwIfAborted();
 				let value: Record<string, unknown>;
 				try {
@@ -307,7 +301,7 @@ export function libraryTools(store: LibraryStore | null): readonly ToolDefinitio
 		(args) => store.renderPrompt(args.name, args.arguments ?? {}),
 	);
 
-	// --- R10: a session file into the share ---------------------------------------------------------------------
+	// --- a session file into the share --------------------------------------------------------------------------
 	add(
 		'browser_save_to_share',
 		'Copy a file this session downloaded or printed (a file_id from browser_list_files) into the file share at ' +
@@ -333,17 +327,7 @@ export function libraryTools(store: LibraryStore | null): readonly ToolDefinitio
 	return tools;
 }
 
-/**
- * `browser_save_to_share` — one session file streamed into the share (R10, design §2.7, D-119).
- *
- * `peekSession` semantics: the session must exist and is never launched, and the caller's access rides the lookup
- * (R8). The bytes are never held whole: the session file's leased stream is written chunk by chunk to the share's
- * temporary name and hashed as it goes, then `commit()` renames it into place, so a reader of the share never sees
- * half a file and memory stays one read chunk whatever the size. The cap is the share's own REST limit
- * (`LIBRARY_LIMITS.restFileBytes`), checked against the resolved size before anything is opened and again as the
- * bytes arrive. "Exists" is checked before the copy and once more just before the rename, so the window in which a
- * concurrent writer could be replaced without `overwrite` is the rename itself.
- */
+/** `browser_save_to_share` — one session file streamed into the share. */
 async function saveToShare(
 	store: LibraryStore,
 	ctx: ToolContext,
@@ -405,8 +389,8 @@ async function saveToShare(
 	}
 }
 
-export const SHARE_URI_PREFIX = `${RESOURCE_SCHEME}://share/`;
-export const SKILL_URI_PREFIX = `${RESOURCE_SCHEME}://skill/`;
+const SHARE_URI_PREFIX = `${RESOURCE_SCHEME}://share/`;
+const SKILL_URI_PREFIX = `${RESOURCE_SCHEME}://skill/`;
 
 function mimeOf(path: string, text: boolean): string {
 	const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
@@ -426,13 +410,10 @@ function mimeOf(path: string, text: boolean): string {
 	return known[extension] ?? (text ? 'text/plain' : 'application/octet-stream');
 }
 
-/**
- * Registers the library's resources and prompts for a principal that holds `files:read`. Registered per server
- * instance like the session resources, so `resources/list` and `prompts/list` read the disk as it is now.
- */
+/** Registers the library's resources and prompts for a principal that holds `files:read`. */
 export function registerLibrary(server: McpServer, store: LibraryStore | null, scopes: ReadonlySet<Scope>): void {
 	if (store === null || !scopes.has('files:read')) return;
-	// R13 (D-129): share paths and skill names complete for the caller this registration already admitted.
+	// Share paths and skill names complete for the caller this registration already admitted.
 	const complete = libraryCompleters(store);
 	server.registerResource(
 		'library-share-file',
@@ -494,7 +475,7 @@ export function registerLibrary(server: McpServer, store: LibraryStore | null, s
  * synchronous because the server instance answers its first request right after it is built, and the cache is
  * refreshed by every mutation this process makes and re-read from the volume when stale.
  */
-export function registerPrompts(server: McpServer, store: LibraryStore): void {
+function registerPrompts(server: McpServer, store: LibraryStore): void {
 	const { prompts, skills } = store.cached();
 	for (const prompt of prompts) {
 		const shape: Record<string, z.ZodType> = {};

@@ -1,10 +1,4 @@
-/**
- * Per-principal token-bucket rate limiting.
- *
- * Buckets key by principal, not by address, which is why authentication runs
- * before rate limiting: keying by address would let one noisy client exhaust
- * the budget of everyone behind the same proxy.
- */
+/** Per-principal token-bucket rate limiting. */
 
 export interface RateLimiterOptions {
 	/** Sustained requests per minute. */
@@ -18,15 +12,7 @@ export interface RateDecision {
 	readonly allowed: boolean;
 	/** Seconds to wait before retrying, when refused. */
 	readonly retryAfter: number;
-	/**
-	 * Whole requests still available to this principal after this one was charged (B3.2, §8).
-	 *
-	 * **The limiter's own accounting, not a second calculation.** It is read from the bucket this
-	 * `charge` just wrote, so `x-ratelimit-remaining` cannot drift from what the next `charge` will
-	 * actually allow. Floored, because a client can only make whole requests: reporting `0.8` would
-	 * invite a caller to believe it has a request it does not have. On a refusal it is `0` — the
-	 * bucket holds less than the cost, which is the same statement.
-	 */
+	/** Whole requests still available to this principal after this one was charged. */
 	readonly remaining: number;
 }
 

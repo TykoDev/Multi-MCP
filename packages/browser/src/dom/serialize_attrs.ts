@@ -1,9 +1,9 @@
 /**
- * Attribute emission — DATA-MODEL §6.5, implemented as one ordered pipeline.
+ * Attribute emission, implemented as one ordered pipeline.
  *
  * Order is the whole contract here: dedupe before capping keeps two long values that differ past
- * char 100 distinguishable, capping before dedupe would collapse them. §6.5 lists "Cleanups" before
- * "Caps" and `compound_components` as *appended*, so the pipeline runs:
+ * char 100 distinguishable, capping before dedupe would collapse them. Cleanups run before caps and
+ * `compound_components` is *appended*, so the pipeline runs:
  *
  * | # | stage | rule |
  * |---|---|---|
@@ -24,14 +24,14 @@
  * B2 running after B1 is not cosmetic: B1 would otherwise re-populate `value` from the AX tree with the
  * live typed password.
  *
- * Three stages the recorded reference corpus deleted (DECISION-REGISTER §9.6 (E-23) item 2):
+ * Three stages are absent on purpose, because the recorded reference corpus does not have them:
  *
- * - **A4 `ax_name`** — §6.5's whitelist ends "…and `ax_name`", and **zero** of the 25 goldens contain
- *   the token. It was the single highest-count text divergence, on 17 pages.
- * - **C5 label-ish-equals-text** — the reference keeps them: `f-text-equals-label` renders
+ * - **A4 `ax_name`** — **zero** of the 25 goldens contain the token; emitting it would diverge on
+ *   17 pages.
+ * - **C5 label-ish-equals-text removal** — the reference keeps them: `f-text-equals-label` renders
  *   `title=Save changes aria-label=Save changes` above the text `Save changes`.
- * - **`key=''` for empty values** — §6.5 says empty renders `key=''`; `f-empty-value` carries
- *   `value=""` and `title=""` in its markup and the golden emits neither.
+ * - **`key=''` for empty values** — `f-empty-value` carries `value=""` and `title=""` in its markup
+ *   and the golden emits neither.
  */
 
 import type { EnhancedDomTreeNode } from './types.ts';
@@ -40,13 +40,12 @@ import { isPasswordField as isPasswordNode } from './derived.ts';
 import { compoundComponentsValue } from './serialize_compound.ts';
 
 /**
- * §6.5 whitelist — DOM-sourced names.
+ * Attribute whitelist — DOM-sourced names, matched against the recorded corpus.
  *
- * ERRATUM(M1-parity-3): amended against the recorded corpus. **Added** `aria-checked`,
- * `aria-autocomplete`, `aria-placeholder`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow` — all six
- * appear in goldens and none is in §6.5's list. **Removed** `multiple`: `f-file` and `sel-multi` both
- * carry it in their markup and neither golden prints it. Deliberately still absent, because the corpus
- * shows the reference dropping them next to attributes it keeps: `aria-selected`, `aria-valuetext`,
+ * `aria-checked`, `aria-autocomplete`, `aria-placeholder`, `aria-valuemin`, `aria-valuemax` and
+ * `aria-valuenow` are in because all six appear in goldens. `multiple` is out: `f-file` and
+ * `sel-multi` both carry it in their markup and neither golden prints it. Deliberately absent too,
+ * because the corpus shows the reference dropping them next to attributes it keeps: `aria-selected`, `aria-valuetext`,
  * `aria-required`, `aria-invalid`, `aria-haspopup`, `aria-keyshortcuts`, `aria-controls`,
  * `aria-describedby`, `aria-hidden`, `tabindex`, `open`.
  */
@@ -83,19 +82,16 @@ const DOM_INCLUDE_ATTRIBUTES = [
 ] as const;
 
 /**
- * §6.5 "data-mask hints".
- *
- * ERRATUM(M1-dom-serialize-8): the spec names the category, not its members. Implemented as the three
- * attributes input-mask plugins actually write. Overridable through `AgentSettings.includeAttributes`,
+ * Data-mask hints: the three attributes input-mask plugins actually write. Overridable through `AgentSettings.includeAttributes`,
  * which bounds the blast radius of the guess.
  */
 const DATA_MASK_HINT_ATTRIBUTES = ['data-date-format', 'data-mask', 'data-inputmask'] as const;
 
-/** §6.5 synthetic hint keys. */
+/** Synthetic hint keys. */
 const SYNTHETIC_ATTRIBUTES = ['format', 'expected_format'] as const;
 
 /**
- * §6.5 whitelist — AX property names.
+ * Attribute whitelist — AX property names.
  *
  * This is a *filter*, not an order: the reference emits AX properties in the order Chrome reports them
  * (`c-required` renders `invalid=true checked=false`, and `f-aria` renders
@@ -123,7 +119,7 @@ const AX_PROPERTY_ATTRIBUTES = [
 	'live',
 ] as const;
 
-/** `AgentSettings.includeAttributes` default (DATA-MODEL §2.1 → §6.5). */
+/** `AgentSettings.includeAttributes` default. */
 export const DEFAULT_INCLUDE_ATTRIBUTES: readonly string[] = [
 	...DOM_INCLUDE_ATTRIBUTES,
 	...DATA_MASK_HINT_ATTRIBUTES,
@@ -134,7 +130,7 @@ export const DEFAULT_INCLUDE_ATTRIBUTES: readonly string[] = [
 /** DOM-sourced names, as a set, for the A1 source-order scan. */
 const DOM_SOURCED: ReadonlySet<string> = new Set<string>([...DOM_INCLUDE_ATTRIBUTES, ...DATA_MASK_HINT_ATTRIBUTES]);
 
-/** §6.5 — HTML5 date/time input placeholders. */
+/** HTML5 date/time input placeholders. */
 const HTML5_FORMAT_HINTS: Readonly<Record<string, string>> = {
 	'date': 'YYYY-MM-DD',
 	'time': 'HH:MM',
@@ -144,7 +140,7 @@ const HTML5_FORMAT_HINTS: Readonly<Record<string, string>> = {
 	'tel': '123-456-7890',
 };
 
-/** §6.5 — datepicker-plugin default when the element carries no `data-date-format`. */
+/** Datepicker-plugin default when the element carries no `data-date-format`. */
 export const DEFAULT_DATEPICKER_FORMAT = 'mm/dd/yyyy';
 
 /** AngularJS datepicker popup attributes whose value becomes `expected_format`. */
@@ -155,10 +151,10 @@ const ANGULAR_POPUP_ATTRIBUTES = [
 	'data-datepicker-popup',
 ] as const;
 
-/** Tags whose live value the AX tree owns (§6.5 "AX value overrides DOM value"). */
+/** Tags whose live value the AX tree owns: the AX value overrides the DOM value. */
 const VALUE_BEARING_TAGS: ReadonlySet<string> = new Set(['input', 'textarea', 'select']);
 
-/** §6.5 — never dropped by the duplicate-value dedupe. */
+/** Never dropped by the duplicate-value dedupe. */
 const DEDUPE_PROTECTED_KEYS: ReadonlySet<string> = new Set([
 	'format',
 	'expected_format',
@@ -168,10 +164,10 @@ const DEDUPE_PROTECTED_KEYS: ReadonlySet<string> = new Set([
 	'title',
 ]);
 
-/** §6.5 — duplicate values are only deduped above this length. */
+/** Duplicate values are only deduped above this length. */
 const DEDUPE_MIN_LENGTH = 5;
 
-/** §6.5 — per-value character cap. */
+/** Per-value character cap. */
 export const ATTRIBUTE_VALUE_CAP = 100;
 
 /** Keys whose value must never reach the LLM for a password field. */
@@ -205,44 +201,37 @@ function axProperty(node: EnhancedDomTreeNode, name: string): string | null {
 }
 
 /**
- * Password detection, biased towards over-scrubbing — the emission-path spelling of §6.5's predicate.
+ * Password detection, biased towards over-scrubbing — the emission-path spelling of the predicate.
  *
  * `type=password` covers the static case and — because setting `el.type` reflects to the attribute —
  * also a field switched to password after load, provided extraction re-read the attribute. The
  * `autocomplete` arm catches password managers' text-typed reveal fields: a value the page itself
  * labels as a password never belongs in a prompt.
  *
- * ERRATUM(E-33): the rule itself now lives in exactly one place. This used to be a second
- * implementation of it, and under E-29 the two had drifted — `derived.ts` checked only `type` while
- * this one also checked `autocomplete`, and the **narrow** copy was the one guarding §6.5. E-29 fixed
- * the drift by making both copies say the same thing, which is a repair with a short half-life: two
- * bodies encoding one security rule will diverge again the next time only one of them is edited. The
- * `tag` parameter survives because every caller here has already lowercased the node name, and
- * re-deriving it per attribute would be wasted work — but it is now only an assertion, not a second
- * definition of what an `<input>` is.
+ * The rule itself lives in exactly one place, `derived.ts`: two bodies encoding one security rule
+ * diverge the first time only one of them is edited. The `tag` parameter exists because every caller
+ * here has already lowercased the node name, and re-deriving it per attribute would be wasted work —
+ * but it is only an assertion, not a second definition of what an `<input>` is.
  *
- * ERRATUM(E-38, security review): renamed from `isPasswordField`. Two exported functions with the
- * same name, one taking one argument and one taking two, were both reachable through the package
- * barrel; only the explicit re-export at `mod.ts` made `observe.ts`'s one-argument call bind the real
- * predicate. Had it bound this one, `tag` would have been `undefined`, `tag !== 'input'` would always
- * have held, and EVERY password label would have gone unscrubbed. It resolves correctly today and a
- * removal would be a compile error rather than a silent flip — but E-29's whole point was one
- * definition, and a second *name* for it held in place by one line in a barrel file is the same
- * mistake wearing different clothes.
+ * It is deliberately not named `isPasswordField`: two exported functions of that name, one taking one
+ * argument and one taking two, would both be reachable through the package barrel, and a one-argument
+ * call bound to this one would pass `tag === undefined`, so `tag !== 'input'` would always hold and
+ * EVERY password label would go unscrubbed.
  */
 export function isPasswordInputTag(node: EnhancedDomTreeNode, tag: string): boolean {
-	if (tag !== 'input') return false;
+	// A `<textarea>` the server typed a secret into is a password field too (see
+	// `markSecretFilled` in `derived.ts`); B1 emits its live AX value as `value=`, so B2 must reach it.
+	if (tag !== 'input' && tag !== 'textarea') return false;
 	return isPasswordNode(node);
 }
 
 /**
  * A2 — the synthetic `format` hint, or `null` when the element needs none.
  *
- * ERRATUM(M1-parity-4): the HTML5 branch fires **only** when the input declares no `placeholder`, and
- * when it fires the reference mirrors the hint into `placeholder` as well as `format`. Both read
- * straight off the corpus: `f-date` has no markup placeholder and renders
- * `format=YYYY-MM-DD placeholder=YYYY-MM-DD`; `f-tel` carries `placeholder="123-456-7890"` in its
- * markup and renders that placeholder and **no** `format` at all. §6.5 describes neither half.
+ * The HTML5 branch fires **only** when the input declares no `placeholder`, and when it fires the
+ * hint is mirrored into `placeholder` as well as `format`. Both read straight off the corpus:
+ * `f-date` has no markup placeholder and renders `format=YYYY-MM-DD placeholder=YYYY-MM-DD`; `f-tel`
+ * carries `placeholder="123-456-7890"` in its markup and renders that placeholder and **no** `format`.
  */
 function formatHint(
 	node: EnhancedDomTreeNode,
@@ -275,7 +264,7 @@ export function capValue(value: string): string {
 }
 
 /**
- * Runs the whole §6.5 pipeline and returns the rendered attribute string (empty when nothing
+ * Runs the whole attribute pipeline and returns the rendered attribute string (empty when nothing
  * survives).
  */
 export function buildAttributeString(node: EnhancedDomTreeNode, options: AttributeOptions): string {
@@ -290,10 +279,8 @@ export function buildAttributeMap(node: EnhancedDomTreeNode, options: AttributeO
 	const include = new Set(options.includeAttributes ?? DEFAULT_INCLUDE_ATTRIBUTES);
 	const tag = options.derived.tagName(node);
 	const attributes = new Map<string, string>();
-	// ERRATUM(M1-dom-serialize-11, REVERSED by M1-parity-5): §6.4 renders `|IFRAME|<iframe src=... />`
-	// but `src` is absent from the §6.5 whitelist, and this file used to re-admit it for frames. The
-	// recorded reference prints no `src` on any of its four iframe lines, so the whitelist wins and the
-	// grammar example is wrong (DECISION-REGISTER §9.6 (E-23) item 2).
+	// No special case re-admits `src` for frames: the recorded reference prints no `src` on any of its
+	// four iframe lines, so the whitelist alone decides.
 	const allowed = (key: string): boolean => include.has(key);
 
 	// A1 — DOM attributes, source order. An empty value is dropped, not rendered `key=''`.
@@ -332,9 +319,9 @@ export function buildAttributeMap(node: EnhancedDomTreeNode, options: AttributeO
 	// B1 — AX value overrides the DOM value for value-bearing controls.
 	if (VALUE_BEARING_TAGS.has(tag)) {
 		const axValue = axProperty(node, 'valuetext') ?? axProperty(node, 'value');
-		// ERRATUM(M1-parity-16): the standalone `valuetext` key used to be deleted here as a restatement
-		// of `value`. The reference keeps both — `f-number` renders `value=7 … valuetext=7` — so the
-		// override replaces the *value* and leaves the AX key that sourced it alone.
+		// The standalone `valuetext` key stays: the reference keeps both — `f-number` renders
+		// `value=7 … valuetext=7` — so the override replaces the *value* and leaves the AX key that
+		// sourced it alone.
 		if (axValue !== null && allowed('value')) attributes.set('value', collapseWhitespace(axValue));
 	}
 
@@ -357,9 +344,7 @@ export function buildAttributeMap(node: EnhancedDomTreeNode, options: AttributeO
 
 	// C6 — duplicate-value dedupe.
 	//
-	// ERRATUM(M1-parity-14): §6.5 says only "duplicate values >5 chars deduped (protected keys: …)",
-	// which reads as "first occurrence wins, protected keys exempt". It is not: `f-dupe` carries the
-	// same 25-char value on `name`, `title`, `placeholder`, `aria-label` and `value`, `name` comes
+	// Not plain "first occurrence wins, protected keys exempt": `f-dupe` carries the same 25-char value on `name`, `title`, `placeholder`, `aria-label` and `value`, `name` comes
 	// **first** in source order, and the reference drops `name` and keeps the other four. So a protected
 	// key claims its value regardless of position, and only then does first-wins decide among the rest.
 	const seen = new Set<string>();

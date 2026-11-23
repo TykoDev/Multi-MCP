@@ -1,21 +1,12 @@
 /**
- * D-077: file reads, writes and listings done inside a cage, for a workspace that has a live session.
- *
- * The service's own file path (`WorkspaceService.#path` and the reads and writes after it) checks each segment
- * with lstat and then opens by name. That is sound only while nothing else changes the tree between the check
- * and the open, which the workspace lock guaranteed until D-076: a live session's shell keeps running beside the
- * files and can swap a checked directory for a link. A link such as `sub -> ../.owners` points nowhere inside a
- * cage (the checkout is `/workspace`, and its parent is the cage's empty root) but reaches the rest of the work
- * volume in the service's view (`/work/<id>/sub` → `/work/.owners`). So while a session is open, the operation
- * runs where links can only ever resolve inside the cage.
- *
- * The scripts here are fixed text. The path reaches them as `TTK_PATH`, already normalised by `parseCwd` (no
- * `..`, no absolute path, no `.git`), and a write's content arrives on standard input; nothing a caller sends is
- * ever part of the script. Each script also refuses a link anywhere on the way (`realpath -m` must give back the
- * path unchanged), so a caged call answers the way the fast path does.
+ * File operations inside a cage, for a workspace with a live session: the service's own lstat-then-open is sound
+ * only while nothing swaps a checked directory for a link, and a session's shell can. Inside the cage a link such as
+ * `sub -> ../.owners` resolves nowhere. The scripts are fixed text: the normalised path arrives as `TTK_PATH`, a
+ * write's content on stdin, and each refuses a link on the way (`realpath -m` must return the path unchanged).
  */
+import type { CageResult } from './cage.ts';
 import { RequestError } from './request.ts';
-import { ApiError } from './sandbox.ts';
+import { ApiError, cageFailed } from './sandbox.ts';
 
 /** What a caller may ask of a caged file operation. */
 export type CagedFileOp =
@@ -25,6 +16,8 @@ export type CagedFileOp =
 
 /** The largest file read or written through the API; one byte more is read to tell "too large". */
 export const CAGED_FILE_BYTES = 256 * 1024;
+/** What a caged operation may print before it is stopped: a whole file and room to spare. */
+export const CAGED_OUTPUT_BYTES = CAGED_FILE_BYTES + 64 * 1024;
 /** Directory entries a listing returns before it says it was cut. */
 export const CAGED_LIST_ENTRIES = 1000;
 
@@ -82,12 +75,18 @@ export function cagedScript(kind: CagedFileOp['kind']): string {
 	].join('\n');
 }
 
-/** Turns a script's exit status and output into the reply, or the error the fast path would have raised. */
+/** Turns a script's run and output into the reply, or the error the fast path would have raised. */
 export function cagedResult(
 	op: CagedFileOp,
-	exitCode: number | null,
+	result: CageResult,
 	output: Uint8Array,
+	signal: AbortSignal,
 ): Record<string, unknown> {
+	if (!result.started) throw cageFailed(result.diagnostics);
+	if (result.killed === 'cancelled') signal.throwIfAborted();
+	if (result.killed === 'timeout') throw new ApiError(504, 'file_timeout', 'The file operation took too long.');
+	// Cut short for size: only a read can say this much, and it says "too large".
+	const exitCode = result.killed === 'output' ? EXIT.tooLarge : result.exitCode;
 	if (exitCode === EXIT.notFound) throw new ApiError(404, 'not_found', 'Path not found.');
 	if (exitCode === EXIT.link) {
 		throw new RequestError('path', 'symbolic links and non-directory parents are forbidden');

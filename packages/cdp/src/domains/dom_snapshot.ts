@@ -2,9 +2,9 @@
  * CDP `DOMSnapshot` domain — the flat, string-table-encoded page snapshot.
  *
  * This is the geometry + computed-style third of `EnhancedDomTreeNode`
- * (SPECS/DATA-MODEL.md §6.1, §6.2). Everything is index-into-`strings`; `Rare*Data` arrays are
+ * Everything is index-into-`strings`; `Rare*Data` arrays are
  * sparse `{index, value}` column pairs. `REQUIRED_COMPUTED_STYLES` is exactly 10 properties —
- * asking for more crashes Chrome on heavy pages (DATA-MODEL §6.2).
+ * asking for more crashes Chrome on heavy pages.
  */
 
 import type { BackendNodeId, EmptyResult, NoParams } from './common.ts';
@@ -101,7 +101,7 @@ export interface DocumentSnapshot {
 
 export interface DomSnapshotParams {
 	'DOMSnapshot.captureSnapshot': {
-		/** Whitelist of computed style names to return; exactly the 10 in DATA-MODEL §6.2. */
+		/** Whitelist of computed style names to return; exactly `REQUIRED_COMPUTED_STYLES`. */
 		computedStyles: string[];
 		includePaintOrder?: boolean;
 		includeDOMRects?: boolean;

@@ -1,5 +1,5 @@
 /**
- * Shared type surface for `@tykotech/bus` (AGENTS.md §3: shared types live in `src/types.ts`).
+ * Shared type surface for `@tykotech/bus`: shared types live in `src/types.ts`.
  *
  * This file declares types only — no runtime values — so it can be imported from anywhere in the
  * package without creating an initialisation cycle.
@@ -11,7 +11,7 @@ import type { BaseEvent } from './event.ts';
  * Reads a single environment variable, returning `undefined` when unset or unreadable.
  *
  * Injectable so that timeout overrides are testable without `--allow-env` and so that embedders can
- * supply their own config source. D-CFG1 requires env to be read through a getter at use time, never
+ * supply their own config source. Env is read through a getter at use time, never
  * snapshotted at import.
  */
 export type EnvSource = (name: string) => string | undefined;
@@ -92,8 +92,8 @@ export interface HandlerOutcome<T = unknown> {
 /**
  * Options for {@linkcode EventHandle.eventResult}.
  *
- * ERRATUM(M0-bus-6): the specs never state the defaults. Both flags default to `false`, matching the
- * ARCHITECTURE.md §4 example which passes `{ raiseIfAny: true }` explicitly.
+ * Both flags default to `false`; a caller that wants errors re-thrown passes `{ raiseIfAny: true }`
+ * explicitly.
  */
 export interface EventResultOptions {
 	/** Re-throw the first handler error (including timeouts) instead of ignoring it. */
@@ -122,7 +122,7 @@ export interface EventHandle<T> extends Promise<void> {
  * Injected connection-state provider backing the circuit breaker.
  *
  * `@tykotech/bus` deliberately knows nothing about CDP; `@tykotech/browser` supplies the CDP-flavoured
- * implementation (ARCHITECTURE.md §4.6, §7.4).
+ * implementation.
  */
 export interface ConnectionPolicy {
 	/** `true` when the underlying transport is usable right now. */
@@ -130,8 +130,8 @@ export interface ConnectionPolicy {
 	/**
 	 * `true` while a reconnect attempt sequence is in flight. Absent means "never reconnecting".
 	 *
-	 * ERRATUM(M0-bus-7): ARCHITECTURE.md §4.6 needs "disconnected → skip" and "reconnecting → wait" to
-	 * be distinguishable, which `isConnected()` alone cannot express.
+	 * The circuit breaker needs "disconnected → skip" and "reconnecting → wait" to be
+	 * distinguishable, which `isConnected()` alone cannot express.
 	 */
 	isReconnecting?(): boolean;
 	/** Resolves `true` once reconnected, `false` if the attempt sequence gave up. */

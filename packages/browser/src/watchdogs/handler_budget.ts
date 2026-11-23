@@ -1,7 +1,7 @@
 /**
  * @module
- * The cooperative handler budget — ERRATUM(KILL-1), lifted out of `local_browser.ts` by
- * ERRATUM(CANCEL-0) so the three watchdogs that needed the same repair share one implementation.
+ * The cooperative handler budget, shared by the watchdogs whose handlers do filesystem or process
+ * work that cannot be aborted mid-flight.
  *
  * ## Why a budget rather than an abort
  *
@@ -16,18 +16,18 @@
  * Neither `Deno.remove` nor `Deno.writeFile` nor `Deno.ChildProcess.kill` takes an `AbortSignal`, so
  * the only honest cancellation on offer is "check before starting the next operation". Racing a timer
  * against an op does not cancel the op — `withTimeout(Deno.remove(…), ms)` merely stops *awaiting*
- * it, which is how the side effect escaped in the first place and how Deno's op sanitizer found it.
+ * it, and the side effect lands after the handler has been given up on (Deno's op sanitizer flags it).
  * The working shape is many small operations with {@linkcode HandlerBudget.expired} consulted between
  * them, so that "stop now" genuinely means "stop with nothing in flight".
  *
  * ## Why `context` is optional at every call site
  *
  * A handler invoked directly — from a test, from a timer, from another watchdog — has no dispatch and
- * therefore no budget. That case must keep the old unbudgeted behaviour rather than silently receive a
+ * therefore no budget. That case must stay unbudgeted rather than silently receive a
  * zero budget, which would turn every direct call into an immediate no-op. `handlerBudget(undefined)`
  * is deliberately infinite.
  *
- * Not a spec constant: ARCHITECTURE.md §8 fixes the *budgets* (`BrowserStopEvent.timeoutSec` = 45,
+ * The event classes fix the *budgets* (`BrowserStopEvent.timeoutSec` = 45,
  * `BrowserKillEvent.timeoutSec` = 30, …), not how a handler spends one.
  */
 
@@ -53,7 +53,7 @@ export interface HandlerBudget {
 	 * The context this budget was derived from, `undefined` outside a dispatch.
 	 *
 	 * Carried so that work threading a budget down through helpers can also reach
-	 * `BaseWatchdog.cdpFor(budget.context)` — ERRATUM(E-52). Passing the budget *and* the context as
+	 * `BaseWatchdog.cdpFor(budget.context)`. Passing the budget *and* the context as
 	 * two parameters would be two spellings of one fact, free to disagree; this keeps it one.
 	 */
 	readonly context: HandlerContext | undefined;

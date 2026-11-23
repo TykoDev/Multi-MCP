@@ -1,26 +1,8 @@
 /**
- * A seccomp filter for inside each cage: no new user namespaces.
- *
- * The container's own profile has to let bubblewrap create namespaces, and a program inside a cage
- * would otherwise inherit that. A new user namespace hands its creator every capability inside it,
- * which reaches parts of the kernel (netfilter, filesystem mounts) an unprivileged process never
- * touches, and that is where most namespace escapes have been found. So bubblewrap installs this
- * filter just before it starts the command, and from then on:
- *
- * - `clone` and `unshare` with CLONE_NEWUSER fail with EPERM;
- * - `clone3` fails with ENOSYS, because its flags sit in memory a filter cannot read, and every C
- *   library then falls back to `clone` (Docker's default profile does the same without
- *   CAP_SYS_ADMIN);
- * - the x32 ABI is closed on x86-64 (ENOSYS), since its syscall numbers would slip past the checks;
- * - everything else is left to the container's profile.
- *
- * Other namespaces need CAP_SYS_ADMIN, which a cage never has, so the kernel refuses them itself.
- * Programs that want namespaces of their own, such as Chrome's sandbox, need their fallback
- * (`--no-sandbox`), as they do in any Docker container.
- *
- * The program is classic BPF for the host's architecture, handed to bubblewrap on standard input
- * (`--seccomp 0`). Hosts other than x86-64 and arm64 get no filter, and the sandbox says so when it
- * starts.
+ * A seccomp filter inside each cage: no new user namespaces, where most namespace escapes start (the container's
+ * profile must allow them for bubblewrap). `clone`/`unshare` with CLONE_NEWUSER fail EPERM; `clone3` fails ENOSYS
+ * (its flags are unreadable to a filter; libcs fall back to `clone`); the x32 ABI is closed on x86-64. Classic BPF,
+ * handed to bubblewrap on stdin (`--seccomp 0`); hosts other than x86-64 and arm64 get none.
  */
 
 const LD_W_ABS = 0x20;

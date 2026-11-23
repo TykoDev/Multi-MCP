@@ -1,6 +1,6 @@
 /**
- * `RecordingWatchdog` contract (ARCHITECTURE.md §6.12; COMPLETIONS-CRITERIA.md §3.2 watchdog row 12:
- * "screencast frame capture + buffering + focus-change restart (mp4 OUT, D-SCOPE1)").
+ * `RecordingWatchdog` contract: screencast frame capture, buffering and focus-change restart (no mp4
+ * encoding).
  *
  * Real bus, real `CdpClient`, real `Page.screencastFrame` frames over `ChromeFixture`, real files in
  * `tests/.scratch`. The three assertions that matter are the three mechanisms: the screencast starts
@@ -262,7 +262,7 @@ Deno.test('recording: stop stops the screencast and writes the frames plus a man
 	) as RecordingManifest;
 	assertEquals(manifest.version, RECORDING_MANIFEST_VERSION);
 	assertEquals(manifest.format, RECORDING_FRAME_FORMAT);
-	// mp4 encoding is OUT (D-SCOPE1); the framerate is carried as intent for whatever encodes later.
+	// There is no mp4 encoding; the framerate is carried as intent for whatever encodes later.
 	assertEquals(manifest.framerate, 30);
 	assertEquals(manifest.droppedFrames, 0);
 	assertEquals(manifest.frames.length, 2);
@@ -272,7 +272,7 @@ Deno.test('recording: stop stops the screencast and writes the frames plus a man
 });
 
 // ---------------------------------------------------------------------------
-// the flush budget — ERRATUM(CANCEL-1)
+// the flush budget
 // ---------------------------------------------------------------------------
 
 /** A budget that survives `n` checks and is spent thereafter. Deterministic; no clock involved. */
@@ -280,18 +280,18 @@ function budgetFor(checks: number): HandlerBudget {
 	let seen = 0;
 	const expired = (): boolean => ++seen > checks;
 	// `context: undefined` — this budget is a counter, not a dispatch; the CDP facade it would feed
-	// (ERRATUM(E-52)) is not what this test exercises.
+	// is not what this test exercises.
 	return { expired, clamp: (ms) => expired() ? 0 : ms, context: undefined };
 }
 
-Deno.test('ERRATUM(CANCEL-1): a flush out of budget stops between frames, keeps the rest, writes the manifest', async () => {
+Deno.test('recording: a flush out of budget stops between frames, keeps the rest, writes the manifest', async () => {
 	await using h = await harness();
 	await h.bus.dispatch(new BrowserConnectedEvent({ cdpUrl: h.fixture.wsUrl }));
 	for (let index = 0; index < 4; index++) h.emitFrame(h.sessions.a, index);
 	await h.settle();
 	assertEquals(h.watchdog.frames.length, 4);
 
-	// Spent after two frames: 301 unchecked `Deno.writeFile` calls was the defect (E-43's twin).
+	// Spent after two frames: the budget is checked between `Deno.writeFile` calls.
 	const result = await h.watchdog.flush(budgetFor(2));
 	assertEquals(result?.frameFiles, ['frame-000001.jpeg', 'frame-000002.jpeg']);
 	assertEquals(
@@ -301,7 +301,7 @@ Deno.test('ERRATUM(CANCEL-1): a flush out of budget stops between frames, keeps 
 	);
 
 	// The asymmetry: the manifest is written even though the budget was spent, because a directory of
-	// numbered JPEGs with no index is not a recording (D-SCOPE1 defers the encoder, not the manifest).
+	// numbered JPEGs with no index is not a recording (there is no encoder, so the manifest is the deliverable).
 	const afterFirst = (await Array.fromAsync(Deno.readDir(h.videoDir))).map((entry) => entry.name).sort();
 	assertEquals(afterFirst, ['frame-000001.jpeg', 'frame-000002.jpeg', RECORDING_MANIFEST_FILENAME].sort());
 	const truncated = JSON.parse(
@@ -324,7 +324,7 @@ Deno.test('ERRATUM(CANCEL-1): a flush out of budget stops between frames, keeps 
 	]);
 });
 
-Deno.test('ERRATUM(CANCEL-1): a flush with nothing left to spend starts no frame write at all', async () => {
+Deno.test('recording: a flush with nothing left to spend starts no frame write at all', async () => {
 	await using h = await harness();
 	await h.bus.dispatch(new BrowserConnectedEvent({ cdpUrl: h.fixture.wsUrl }));
 	h.emitFrame(h.sessions.a, 1);

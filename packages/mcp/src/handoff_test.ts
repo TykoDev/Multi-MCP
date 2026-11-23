@@ -1,24 +1,19 @@
-/**
- * R2 (D-124, AC19) and the handoff half of F3 (D-126, AC23): `browser_request_human` through the real HTTP entry.
- *
- * Off by default, and then on with a capture-backed session so the handler reads a real element table: the URL
- * elicitation a URL-capable 2026 client receives, both answers to it, the link every other client receives, and the
- * `requestState` it is sealed with — tampered, replayed by another principal, and replayed against another session.
- */
+/** `browser_request_human`, and the handoff half of the sealed `requestState`, through the real HTTP entry. */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import {
+	type AuthInfo,
 	CLIENT_CAPABILITIES_META_KEY,
+	type ClientCapabilities,
 	createMcpHandler,
 	PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
-import type { AuthInfo, ClientCapabilities } from '@modelcontextprotocol/server';
-import { captureHarness } from '../fixtures/capture_session.ts';
-import { HANDOFF_OUTPUT } from './catalog/handoff.ts';
+import { captureHarness, readRpc } from '../fixtures/capture_session.ts';
+import { HANDOFF_OUTPUT } from './catalog/session.ts';
 import { createBuildServer, type McpDeps } from './server.ts';
-import { HANDOFF_KEY } from './tools/handoff.ts';
+import { HANDOFF_KEY } from './tools/session.ts';
 
 const MODERN = '2026-07-28';
-const LEGACY = '2025-06-18';
+const ERA_2025 = '2025-06-18';
 const PUBLIC = 'https://mcp.example.test';
 const viewUrl = (id: string) => new URL(`/#/view/${encodeURIComponent(id)}`, PUBLIC).href;
 const URL_CLIENT: ClientCapabilities = { elicitation: { url: {} } };
@@ -26,15 +21,6 @@ const REASON = 'Please solve the CAPTCHA on the sign-in page.';
 
 function principal(clientId: string): AuthInfo {
 	return { token: 't', clientId, scopes: ['mcp:invoke', 'view:watch', 'view:control'], extra: {} };
-}
-
-async function readRpc(response: Response): Promise<Record<string, unknown>> {
-	const text = await response.text();
-	if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {
-		for (const line of text.split('\n')) if (line.startsWith('data:')) return JSON.parse(line.slice(5).trim());
-		throw new Error(`no data frame in SSE body: ${text}`);
-	}
-	return JSON.parse(text);
 }
 
 interface Call {
@@ -113,8 +99,8 @@ function roundTrips(result: Result): Record<string, unknown> {
 
 // --- off --------------------------------------------------------------------------------------------------------
 
-for (const era of [LEGACY, MODERN]) {
-	Deno.test(`AC19 (${era}): off by default — absent from tools/list, and a call names TTK_HUMAN_HANDOFF`, async () => {
+for (const era of [ERA_2025, MODERN]) {
+	Deno.test(`handoff (${era}): off by default — absent from tools/list, and a call names TTK_HUMAN_HANDOFF`, async () => {
 		await using s = await served(false);
 		const listed = resultOf(await rpc(s.handler, { era, method: 'tools/list' })) as { tools?: Array<{ name: string }> };
 		const names = (listed.tools ?? []).map((tool) => tool.name);
@@ -125,14 +111,13 @@ for (const era of [LEGACY, MODERN]) {
 		assertEquals(refused.isError, true);
 		assertEquals(refused.structuredContent?.error?.code, 'feature-unavailable');
 		assertStringIncludes(refused.structuredContent?.error?.message ?? '', 'TTK_HUMAN_HANDOFF');
-		// An opt-in switch is not a `feature` (design §2.4): the closed extra stays persistence|recording|egress.
 		assertEquals(refused.structuredContent?.error?.feature, undefined);
 	});
 }
 
 // --- on ---------------------------------------------------------------------------------------------------------
 
-Deno.test('AC19: a URL-capable 2026 client is asked to open <public>/#/view/<id>, with no query and no ticket', async () => {
+Deno.test('handoff: a URL-capable 2026 client is asked to open <public>/#/view/<id>, with no query and no ticket', async () => {
 	await using s = await served(true);
 	const listed = resultOf(await rpc(s.handler, { method: 'tools/list' })) as { tools?: Array<{ name: string }> };
 	assert((listed.tools ?? []).some((tool) => tool.name === 'browser_request_human'), 'not listed while on');
@@ -149,7 +134,7 @@ Deno.test('AC19: a URL-capable 2026 client is asked to open <public>/#/view/<id>
 	assert(!String(asked.requestState).includes('default'), 'the state is a sealed envelope, not the session id');
 });
 
-Deno.test('AC19: accept answers accepted with a fresh state token; decline and cancel answer user-declined', async () => {
+Deno.test('handoff: accept answers accepted with a fresh state token; decline and cancel answer user-declined', async () => {
 	await using s = await served(true);
 	const state = resultOf(await rpc(s.handler, { caps: URL_CLIENT })).requestState!;
 
@@ -182,13 +167,13 @@ Deno.test('AC19: accept answers accepted with a fresh state token; decline and c
 	}
 });
 
-Deno.test('AC19: a client without elicitation.url gets the live view URL as a result, on every era', async () => {
+Deno.test('handoff: a client without elicitation.url gets the live view URL as a result, on every era', async () => {
 	await using s = await served(true);
 	const shapes: Call[] = [
 		{ era: MODERN, caps: {} },
 		{ era: MODERN, caps: { elicitation: {} } },
 		{ era: MODERN, caps: { elicitation: { form: {} } } },
-		{ era: LEGACY },
+		{ era: ERA_2025 },
 	];
 	for (const shape of shapes) {
 		const linked = resultOf(await rpc(s.handler, shape));
@@ -201,14 +186,14 @@ Deno.test('AC19: a client without elicitation.url gets the live view URL as a re
 	}
 });
 
-Deno.test('AC19: the tool never creates a session', async () => {
+Deno.test('handoff: the tool never creates a session', async () => {
 	await using s = await served(true);
 	const refused = resultOf(await rpc(s.handler, { args: { reason: REASON, session_id: 'nobody' } }));
 	assertEquals(refused.structuredContent?.error?.code, 'unknown-session');
 	assertEquals(s.registry.peek('nobody'), undefined);
 });
 
-Deno.test('AC19/AC23: a tampered state and a state replayed by another principal are refused at the seam', async () => {
+Deno.test('handoff: a tampered state and a state replayed by another principal are refused before the handler', async () => {
 	await using s = await served(true);
 	const state = resultOf(await rpc(s.handler, { caps: URL_CLIENT })).requestState!;
 	const answer = { [HANDOFF_KEY]: { action: 'accept' } };
@@ -220,20 +205,17 @@ Deno.test('AC19/AC23: a tampered state and a state replayed by another principal
 		assertEquals((refused.error as { code?: number } | undefined)?.code, -32602, `accepted a forged state ${forged}`);
 	}
 
-	// F3: the state is bound to the principal it was minted for; another one echoing it is refused before the
-	// handler runs, with the same frozen error — it learns nothing about whose state it was.
 	const replayed = await rpc(s.handler, { caps: URL_CLIENT, responses: answer, state, auth: principal('mallory') });
 	assertEquals((replayed.error as { code?: number } | undefined)?.code, -32602);
 	assertEquals((replayed.error as { message?: string } | undefined)?.message, 'Invalid or expired requestState');
 
-	// And the principal it was minted for is still served.
 	assertEquals(
 		roundTrips(resultOf(await rpc(s.handler, { caps: URL_CLIENT, responses: answer, state }))).outcome,
 		'accepted',
 	);
 });
 
-Deno.test('AC19: a genuine state for another session, or none at all, does not complete this handoff', async () => {
+Deno.test('handoff: a genuine state for another session, or none at all, does not complete this handoff', async () => {
 	await using s = await served(true);
 	const second = await s.registry.createNew('second');
 	const other = resultOf(await rpc(s.handler, { caps: URL_CLIENT, args: { reason: REASON, session_id: second.id } }))

@@ -11,7 +11,7 @@ import {
 
 class RegAlphaEvent extends BaseEvent<void> {}
 class RegBetaEvent extends BaseEvent<void> {}
-/** Contains `RegAlphaEvent` as a substring — the second rule of the D-BUS1 name contract. */
+/** Contains `RegAlphaEvent` as a substring — the second rule of the name contract (no name is a substring of another). */
 class RegAlphaEventDeluxe extends BaseEvent<void> {}
 
 function makeNamedDuplicate(): [typeof RegAlphaEvent, typeof RegAlphaEvent] {

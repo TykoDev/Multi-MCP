@@ -1,6 +1,6 @@
 /**
  * @module
- * The navigation readiness state machine (ARCHITECTURE.md §7.5).
+ * The navigation readiness state machine.
  *
  * All five steps, in order:
  *
@@ -19,7 +19,7 @@
  *    than an error it will pointlessly retry.
  *
  * This module owns readiness only. Target resolution, focus, the security veto, and the
- * `NavigationStarted`/`NavigationComplete` events belong to `BrowserSession` (§7.5 preamble).
+ * `NavigationStarted`/`NavigationComplete` events belong to `BrowserSession`.
  */
 
 import type { CdpClient, SessionId, TargetId } from '@tykotech/cdp';
@@ -29,23 +29,23 @@ import type { WaitUntil } from '../types.ts';
 import type { LifecycleRecord, SessionManager } from './session_manager.ts';
 
 // ---------------------------------------------------------------------------
-// timing constants (ARCHITECTURE.md §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// timing constants (load-bearing: the tests pin each value)
 // ---------------------------------------------------------------------------
 
-/** Ring-buffer poll cadence while waiting for readiness (ARCHITECTURE.md §7.5 step 4, §8). */
+/** Ring-buffer poll cadence while waiting for readiness. */
 export const LIFECYCLE_POLL_INTERVAL_MS = 50;
 
-/** Heuristic readiness budget when the navigation stays on the same domain (§7.5 step 5). */
+/** Heuristic readiness budget when the navigation stays on the same domain. */
 export const READINESS_TIMEOUT_SAME_DOMAIN_MS = 3_000;
 
-/** Heuristic readiness budget for a cross-domain navigation (§7.5 step 5). */
+/** Heuristic readiness budget for a cross-domain navigation. */
 export const READINESS_TIMEOUT_CROSS_DOMAIN_MS = 8_000;
 
-/** `Page.navigate` is issued with this transition type (ARCHITECTURE.md §7.5 step 1). */
+/** `Page.navigate` is issued with this transition type. */
 export const NAVIGATE_TRANSITION_TYPE = 'address_bar';
 
 /**
- * Lifecycle event names that satisfy each `waitUntil` level (ARCHITECTURE.md §7.5 step 4):
+ * Lifecycle event names that satisfy each `waitUntil` level:
  * `networkIdle` always counts; `load` counts for load/domcontentloaded; `DOMContentLoaded` counts for
  * domcontentloaded. `commit` never reaches the poller (step 2 returns first) but is listed so the
  * table is total.
@@ -64,7 +64,7 @@ export const ACCEPTABLE_LIFECYCLE_EVENTS: Readonly<Record<WaitUntil, readonly st
 /**
  * How the wait ended.
  *
- * `'abandoned'` (ERRATUM(E-62)) is the readiness wait stopping because the *caller* was cancelled
+ * `'abandoned'` is the readiness wait stopping because the *caller* was cancelled
  * rather than because the budget ran out. It is a separate member rather than another `'timeout'`
  * because `loadingStatus` becomes prompt content: reporting "timeout after 8s" on a wait that lasted
  * 200 ms would put a false number in front of the model.
@@ -73,11 +73,11 @@ export type NavigationResolution = 'commit' | 'same-document' | 'lifecycle' | 't
 
 /** Options for {@linkcode navigateAndWait}. */
 export interface NavigateOptions {
-	/** Readiness level (DATA-MODEL.md §5.1.1, default `'load'`). */
+	/** Readiness level (default `'load'`). */
 	readonly waitUntil?: WaitUntil | undefined;
 	/** Explicit readiness cap; `null`/omitted selects the same/cross-domain heuristic. */
 	readonly timeoutMs?: number | null | undefined;
-	/** Cap on `Page.navigate` itself — the event timeout (ARCHITECTURE.md §7.5 step 1). */
+	/** Cap on `Page.navigate` itself — the event timeout. */
 	readonly navigateTimeoutMs?: number | undefined;
 	/** The target's url before the navigation; drives the same/cross-domain heuristic. */
 	readonly fromUrl?: string | null | undefined;
@@ -85,7 +85,7 @@ export interface NavigateOptions {
 	readonly pollIntervalMs?: number | undefined;
 	/**
 	 * Cancellation. Gates **entry** to step 1 and is honoured throughout the readiness wait; it is
-	 * deliberately **not** bound to the `Page.navigate` call itself — ERRATUM(E-62), see the note on
+	 * deliberately **not** bound to the `Page.navigate` call itself — see the note on
 	 * {@linkcode navigateAndWait}.
 	 */
 	readonly signal?: AbortSignal | undefined;
@@ -113,9 +113,9 @@ export interface NavigationResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Runs the full §7.5 machine against one already-focused target.
+ * Runs the full readiness machine against one already-focused target.
  *
- * ## Cancellation, and the one step that is deliberately uncancellable — ERRATUM(E-62)
+ * ## Cancellation, and the one step that is deliberately uncancellable
  *
  * The two phases have opposite answers to *"what is safe to abandon mid-flight?"*, so they get
  * opposite treatment:
@@ -123,7 +123,7 @@ export interface NavigationResult {
  * - **Steps 4–5, the readiness wait, are fully cancellable.** Abandoning them changes nothing about
  *   the browser — the page goes on loading exactly as it was. All that stops is our waiting, and this
  *   is the phase that actually spends the budget (up to 8 s on the cross-domain heuristic). An
- *   abandoned wait returns the ordinary non-fatal `'timeout'` result, so the caller still gets a
+ *   abandoned wait returns the non-fatal `'abandoned'` result, so the caller still gets a
  *   `NavigationResult` describing what was observed.
  * - **Step 1, `Page.navigate`, is NOT bound to the signal.** Once that command is on the wire Chrome
  *   navigates whether or not we are still listening, so binding a signal there does not *cancel* a
@@ -133,10 +133,6 @@ export interface NavigationResult {
  *   handler throws before the command is composed, which is the honest cancellation on offer and the
  *   one with all of the value. The call cannot outlive the socket either way — `@tykotech/cdp` composes
  *   the client's own lifetime signal into every request, so a closed transport settles it at once.
- *
- * ERRATUM(E-62) note: `options.signal` *was* spread into the `Page.navigate` call, and that branch
- * had never executed — no caller passed a signal until this change. Making the option live without
- * re-deciding its semantics would have shipped the hazard above on the first real use.
  *
  * @throws {BrowserError} only for a hard `Page.navigate` failure (step 1). A readiness timeout is a
  * success carrying {@linkcode NavigationResult.loadingStatus} — that asymmetry is the whole point of
@@ -207,8 +203,7 @@ export async function navigateAndWait(
 			// Abandoned — the only way `delay` rejects is its signal, whether that signal was already
 			// aborted when we got here or aborted while the timer was pending. Both are the same event and
 			// take the same exit, so there is deliberately no second `signal.aborted` pre-check above:
-			// a redundant branch nothing can distinguish is a branch no test can defend (ERRATUM(E-62) —
-			// it was written, and a mutation removing it survived).
+			// a redundant branch nothing can distinguish is a branch no test can defend.
 			//
 			// Step 5's contract is that running out of *time* is a non-fatal result; running out of
 			// *permission* is the same kind of event — the page is still loading, we simply stopped
@@ -238,7 +233,7 @@ export async function navigateAndWait(
 // ---------------------------------------------------------------------------
 
 /**
- * §7.5 step 5: explicit `timeoutMs` wins; otherwise 3 s same-domain / 8 s cross-domain.
+ * Step 5: explicit `timeoutMs` wins; otherwise 3 s same-domain / 8 s cross-domain.
  *
  * An unparseable or absent `fromUrl` is treated as cross-domain: the longer budget is the safe
  * direction, since overrunning it costs latency while undershooting costs a `loadingStatus` on a page
@@ -253,7 +248,7 @@ export function resolveReadinessTimeoutMs(
 	return isSameDomain(fromUrl, toUrl) ? READINESS_TIMEOUT_SAME_DOMAIN_MS : READINESS_TIMEOUT_CROSS_DOMAIN_MS;
 }
 
-/** Hostname equality through the WHATWG parser — never a string prefix (SECURITY-AUTH.md §4.1 M9). */
+/** Hostname equality through the WHATWG parser — never a string prefix. */
 export function isSameDomain(fromUrl: string | null, toUrl: string): boolean {
 	if (fromUrl === null || fromUrl === '') return false;
 	const from = URL.parse(fromUrl);
@@ -264,7 +259,7 @@ export function isSameDomain(fromUrl: string | null, toUrl: string): boolean {
 }
 
 /**
- * §7.5 step 4 staleness rule. A record counts when it belongs to this navigation's `loaderId`, or —
+ * The step 4 staleness rule. A record counts when it belongs to this navigation's `loaderId`, or —
  * for records Chrome sent without one — when it arrived after the navigation started.
  */
 export function isFreshFor(record: LifecycleRecord, loaderId: string, navStartedAt: number): boolean {
@@ -272,13 +267,13 @@ export function isFreshFor(record: LifecycleRecord, loaderId: string, navStarted
 	return record.loaderId === loaderId;
 }
 
-/** `'timeout after 3s waiting for load (saw: init, DOMContentLoaded)'` (ARCHITECTURE.md §7.5). */
+/** `'timeout after 3s waiting for load (saw: init, DOMContentLoaded)'`. */
 export function formatLoadingStatus(budgetMs: number, waitUntil: WaitUntil, observed: readonly string[]): string {
 	return _formatStatus('timeout', budgetMs, waitUntil, observed);
 }
 
 /**
- * `'abandoned after 0.2s waiting for load (saw: init)'` — ERRATUM(E-62).
+ * `'abandoned after 0.2s waiting for load (saw: init)'`.
  *
  * Carries the time actually **waited**, not the budget: the budget is not what ended this wait, and
  * the number reaches the model.

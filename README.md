@@ -9,46 +9,32 @@
 <img alt="MCP" src="https://img.shields.io/badge/MCP-2026--07--28-purple">
 </p>
 
-Multi-MCP (`tykotech-mcp`) gives MCP clients a server-side Chromium as deterministic tools, and gives people a live view
-of the same browser where they can take control. A private coding sandbox, agents and an encrypted state database come
-with it. Built on Deno 2.9 and the MCP TypeScript SDK v2.
+Multi-MCP (`tykotech-mcp`) gives AI assistants a server-side Chromium they drive through MCP tools, and gives people a
+live view of the same browser where they can take over. A private coding sandbox, agents and an encrypted state database
+come with it. Built on Deno 2.9 and the MCP TypeScript SDK v2.
 
 ![Live view](docs/assets/screens/live-view.jpg)
-
-## What you get
 
 | Area       | Included                                                                                                                                                                        |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Browser    | **57 browser tools**: navigate, click, type, state with stable element indices, frames, screenshots, PDF, downloads, network and console logs, accessibility tree, performance. |
-| Live view  | JPEG screencast over WebSocket, mouse/keyboard input, an exclusive takeover lock, model-to-human handoff.                                                                       |
+| Live view  | Screencast in the web app, mouse and keyboard, an exclusive takeover lock, model-to-human handoff, recording.                                                                   |
 | Library    | File share, skills and prompt templates, served as tools, resources and MCP prompts.                                                                                            |
 | Sandbox    | Private coding workspaces: one bubblewrap cage per command, no network by default, git clone, live shell.                                                                       |
-| Agents     | Built-in model agent (OpenAI-compatible or Anthropic providers), SlopLord coding agent, vector memory, A2A 1.0, ACP bridge, A2UI surfaces.                                      |
-| Access     | Hashed API keys, password accounts, OAuth 2.1 resource server, 14 scopes, per-owner isolation.                                                                                  |
+| Agents     | Built-in model agent (OpenAI-compatible or Anthropic providers), SlopLord coding agent, vector memory, A2A 1.0, A2UI surfaces.                                                  |
+| Access     | Hashed API keys, password accounts, 14 scopes, per-owner isolation.                                                                                                             |
 | State      | One SQLite database; every stored secret sealed with AES-256-GCM.                                                                                                               |
 | Transports | Streamable HTTP (`/mcp`) and stdio.                                                                                                                                             |
 
-```mermaid
-flowchart LR
-  C[MCP clients] -- /mcp --> G[Multi-MCP gateway]
-  P[People] -- web app, live view --> G
-  A[A2A agents] -- /a2a --> G
-  G --> B[Sandboxed Chromium]
-  G --> S[Coding sandbox]
-  G --> D[(ttk.db)]
-```
-
 ## Run it
 
-Needs Docker with Compose v2 and Deno 2.9 (for the one-time setup).
+You need [Docker Desktop](https://docs.docker.com/get-started/get-docker/) (Windows, macOS) or Docker Engine with the
+Compose and Buildx plugins (Linux). Download this repository, then in its folder double-click **`start.cmd`** (Windows)
+or run `./start.sh` (macOS, Linux). The script builds everything, creates your secrets and opens
+<http://127.0.0.1:8787/>. **The first run prints the administrator password and an API key once: save them.** Sign in as
+`admin`.
 
-```sh
-deno task setup                 # every file in secrets/, and .env; prints the admin password and API key once
-docker compose up -d --build    # gateway, coding sandbox and an A2A peer
-```
-
-Open <http://127.0.0.1:8787/> and sign in as `admin`. Full walkthrough, LAN access and local development:
-[QUICK-START.md](QUICK-START.md); every secret file and option: [secrets/README.md](secrets/README.md).
+Step by step, settings and troubleshooting: [QUICK-START.md](QUICK-START.md).
 
 ## Connect a client
 
@@ -56,25 +42,19 @@ Open <http://127.0.0.1:8787/> and sign in as `admin`. Full walkthrough, LAN acce
 claude mcp add --transport http multi-mcp http://127.0.0.1:8787/mcp --header "Authorization: Bearer ttk_<key>"
 ```
 
-Other clients and stdio: [Connecting clients](docs/guides/connecting-clients.md). A stdio client, or a 2025-era client
-on a stateful session (on by default outside a cluster), first lists one `use_<group>` tool for each group its
-credential holds tools in (browser, library, sandbox, agent, memory, A2UI); calling one adds that group's tools
-([tool groups](docs/reference/mcp-tools.md#tool-groups)).
+Other clients and stdio: [Guide › Connecting clients](docs/guide.md#connecting-clients).
 
 ## Documentation
 
-| Start                                                   | Operate                                                           | Reference                                                        |
-| ------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [Quick start](QUICK-START.md)                           | [Deploying to production](docs/guides/deploying-to-production.md) | [MCP tools](docs/reference/mcp-tools.md)                         |
-| [Web app](docs/guides/web-app.md)                       | [Managing access](docs/guides/managing-access.md)                 | [Environment variables](docs/reference/environment-variables.md) |
-| [Architecture](docs/concepts/architectural-overview.md) | [Agents and sandbox](docs/guides/coding-and-agents.md)            | [HTTP API](docs/reference/api-endpoints.md)                      |
-| [Security model](docs/concepts/security-model.md)       | [Monitoring](docs/guides/setting-up-monitoring.md)                | [All docs](docs/index.md)                                        |
-
-## Contributing
+| Page                                                             | For                                                                              |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Quick start](QUICK-START.md)                                    | Installing and starting it, day-to-day commands, troubleshooting.                |
+| [Guide](docs/guide.md)                                           | The web app, clients, access, the sandbox and agents, production, monitoring.    |
+| [Security](docs/security.md)                                     | What guards each boundary, how secrets are kept.                                 |
+| [Development](docs/development.md)                               | Architecture, running from source, rules, tests, commands, contributing.         |
+| [MCP reference](docs/reference/mcp.md)                           | Every tool, browser sessions, resources, errors, MCP Apps, the live-view socket. |
+| [HTTP API, data and Docker](docs/reference/api.md)               | REST routes, problem documents, the data directory, images and Compose.          |
+| [Environment variables](docs/reference/environment-variables.md) | Every setting.                                                                   |
 
 [CONTRIBUTING.md](CONTRIBUTING.md) · [Code of Conduct](CONDUCT.md) · report vulnerabilities privately via
-[SECURITY.md](SECURITY.md) · [CHANGELOG.md](CHANGELOG.md)
-
-## License
-
-[MIT](LICENSE)
+[SECURITY.md](SECURITY.md) · [CHANGELOG.md](CHANGELOG.md) · [MIT License](LICENSE)

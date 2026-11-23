@@ -1,7 +1,6 @@
 /**
  * `setup`'s `apparmor` unit: the sandbox's AppArmor profile is installed and loaded through sudo exactly when the host
  * runs AppArmor and lacks it current, and every way that can fail is an outcome `setup` turns into manual commands.
- * The host is stood in for; nothing here runs sudo or reads /sys.
  */
 import { assert, assertEquals } from '@std/assert';
 import { fromFileUrl } from '@std/path';

@@ -1,16 +1,6 @@
 /**
  * `setup`'s `apparmor` unit: the coding sandbox's AppArmor profile, `docker/apparmor-sandbox` (the file explains the
  * profile itself), installed and loaded on a host that runs AppArmor.
- *
- * Docker's default AppArmor profile denies every mount, and bubblewrap builds each cage's root with mounts, so on an
- * AppArmor host (Ubuntu, Debian, SUSE) `tykotech-sandbox` must be loaded before `docker compose up`: until it is,
- * Docker refuses the sandbox's container ("unable to apply apparmor profile") and the gateway, which waits for the
- * sandbox, never starts. Loading a profile takes root, so `setup` runs two fixed commands through sudo, on the terminal
- * (where sudo asks for the password), and only when the installed copy differs from the checkout's or the kernel has
- * none loaded. On a host without AppArmor Docker ignores the option, and nothing is done.
- *
- * The host is asked through AppArmor's own unprivileged tools, not read from securityfs: Deno refuses every path under
- * /sys to anything short of `--allow-all`, whatever `--allow-read` names.
  */
 
 /** The profile in the checkout, the name `docker-compose.yml` asks for, and where the host keeps it (boot loads it). */

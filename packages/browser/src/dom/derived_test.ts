@@ -1,14 +1,13 @@
 /**
- * Derived-member contract (DATA-MODEL §6.1 "Derived members").
+ * Derived-member contract.
  *
  * Two halves: recorded-fixture tests, which prove the members against real Chrome geometry from the
  * shared corpus in `tests/fixtures/pages/`, and hand-built IR nodes for the edge cases no corpus page
  * reaches on demand (a `null` snapshot, an unlimited-depth text walk, a partially scrolled container).
  *
- * ERRATUM(M1-dom-test-repair): the corpus moved from 30 programmatic pages to the 32 shared static
- * ones, so every fixture-backed test here changed page. Two legs had to move from a fixture to
- * hand-built IR because no corpus page can express them: a container scrolled to a non-zero offset
- * (every corpus page is captured at rest) and therefore a mid-range `horizontalPercent`.
+ * Two legs use hand-built IR because no corpus page can express them: a container scrolled to a
+ * non-zero offset (every corpus page is captured at rest) and therefore a mid-range
+ * `horizontalPercent`.
  */
 
 import { assert, assertAlmostEquals, assertEquals } from '@std/assert';
@@ -157,7 +156,7 @@ Deno.test('dom-derived: xpath numbers only tags that actually have same-tag sibl
 		'html/body/main/section[1]/span[2]',
 	]);
 	// `html`, `body` and `main` are lone children of their tag and carry no position at all — the
-	// reference spelling (DECISION-REGISTER §9.6 (E-23) item 2), pinned here so it cannot drift back.
+	// reference spelling, pinned here so it cannot drift.
 	assertEquals(xpath(byId(root, 'sts-b1')).startsWith('html/body/main/'), true);
 	// Sibling counting restarts inside each parent, so the second section's controls index from 1.
 	assertEquals(xpath(byId(root, 'sts-b2')), 'html/body/main/section[2]/button[1]');
@@ -212,14 +211,14 @@ Deno.test('dom-derived: xpath handles a node reachable only through shadowRoots'
 // ---------------------------------------------------------------------------
 
 /**
- * Gate 1 — ERRATUM(E-33). `DOM.Node.isScrollable` is an **optional** field (`packages/cdp/src/domains/
- * dom.ts:56`) that Blink sets only when the box owns a scrollable area; it is never emitted as
+ * Gate 1. `DOM.Node.isScrollable` is an **optional** field (`packages/cdp/src/domains/dom.ts`) that
+ * Blink sets only when the box owns a scrollable area; it is never emitted as
  * `false`. Measured: all 24 occurrences across the 37 recorded captures are `true`, zero are `false`,
  * and `extract_merge.ts` maps "absent" to `null`. So a gate written `isScrollable === false` can never
  * fire, and the predicate silently degrades into "recompute Blink's answer from computed `overflow`
  * plus snapshot rects" — dropping the authority's own verdict.
  *
- * This test pins the tri-state directly so the dead branch cannot come back.
+ * This test pins the tri-state directly so a dead `=== false` branch cannot appear.
  */
 Deno.test('dom-derived: isActuallyScrollable requires Chrome to have flagged the box', () => {
 	const geometry = {
@@ -313,7 +312,7 @@ Deno.test('dom-derived: scrollInfo reports pages above/below and a horizontal pe
 	// `DOM.Node.isScrollable` unset for it, so the flag gate cannot decide and the geometry gate sees a
 	// real overflow — the `overflow` computed style is the only signal that says "clipped, not
 	// scrollable". The reference golden emits `|scroll element|` for `#scroller` and `#auto-scroller`
-	// and renders `#hidden-overflow`'s buttons bare (DECISION-REGISTER §9.6 (E-23) item 3).
+	// and renders `#hidden-overflow`'s buttons bare.
 	const clipped = byId(root, 'hidden-overflow');
 	assertEquals(clipped.isScrollable, null, 'Chrome does not flag an overflow:hidden box as scrollable');
 	assertEquals(clipped.snapshotNode?.computedStyles?.overflow, 'hidden');
@@ -346,7 +345,7 @@ Deno.test('dom-derived: scrollInfo clamps rather than reporting negative or abse
 		null,
 		'a zero-height client box has no pages',
 	);
-	// ERRATUM(M1-dom-test-repair): every corpus page is captured at rest, so a *partially scrolled*
+	// Every corpus page is captured at rest, so a *partially scrolled*
 	// container — the only state in which `pagesAbove` and a mid-range `horizontalPercent` are both
 	// non-trivial — is hand-built here rather than replayed.
 	const midScroll = scrollInfo(build({
@@ -398,7 +397,7 @@ Deno.test('dom-derived: getAllChildrenText joins visible descendant text, depth-
 	assertEquals(getAllChildrenText(tree, 2), 'outer text depth two shadow text');
 	assertEquals(getAllChildrenText(tree, 0), '', 'depth 0 sees no children');
 	// `<script>`/`<style>` are markup, an invisible subtree is not LLM-visible, and an iframe's text
-	// belongs to the iframe (ERRATUM M1-dom-extract-8).
+	// belongs to the iframe.
 	assertEquals(getAllChildrenText(tree, -1).includes('never()'), false);
 	assertEquals(getAllChildrenText(tree, -1).includes('display none copy'), false);
 	assertEquals(getAllChildrenText(tree, -1).includes('frame text'), false);
@@ -432,7 +431,7 @@ Deno.test('dom-derived: getAllChildrenText normalises whitespace from real marku
 	assertEquals(joined.includes('First link'), true);
 });
 
-Deno.test('dom-derived: getMeaningfulTextForLlm walks the §6.1 attribute ladder before children text', async () => {
+Deno.test('dom-derived: getMeaningfulTextForLlm walks the attribute ladder before children text', async () => {
 	assertEquals([...MEANINGFUL_TEXT_ATTRIBUTES], ['value', 'aria-label', 'title', 'placeholder', 'alt']);
 	const withAll = build({
 		nodeName: 'INPUT',
@@ -461,7 +460,7 @@ Deno.test('dom-derived: getMeaningfulTextForLlm walks the §6.1 attribute ladder
 	assertEquals(getMeaningfulTextForLlm(byId(links, 'l-one')), 'First link', 'with no attribute, children text');
 });
 
-Deno.test('dom-derived: a password field never yields its value (DATA-MODEL §6.5)', async () => {
+Deno.test('dom-derived: a password field never yields its value', async () => {
 	const root = await loadTree('form_attributes');
 	const password = byId(root, 'f-password');
 	assertEquals(isPasswordField(password), true);
@@ -471,12 +470,11 @@ Deno.test('dom-derived: a password field never yields its value (DATA-MODEL §6.
 	assertEquals(getMeaningfulTextForLlm(password), 'Account password', 'the ladder skips value, lands on aria-label');
 	assertEquals(getMeaningfulTextForLlm(password).includes(sentinel), false);
 
-	// FINDING(M1-dom-test-repair): Chrome's user-agent shadow root for `<input type=password>` carries
+	// Chrome's user-agent shadow root for `<input type=password>` carries
 	// the *unmasked* value in its inner-editor text node, so the merged IR does contain the secret in a
 	// second place besides `attributes.value`. What stops it is the visibility gate — that node is
-	// `isVisible: false`, and `getAllChildrenText` skips invisible subtrees (ERRATUM M1-dom-extract-8).
-	// The reference agrees on the outcome: no golden in `tests/fixtures/python-golden/` contains the
-	// sentinel. Pinned here so that a future change to either rule fails loudly rather than silently
+	// `isVisible: false`, and `getAllChildrenText` skips invisible subtrees.
+	// The reference agrees on the outcome: no recorded golden contains the sentinel. Pinned here so that a future change to either rule fails loudly rather than silently
 	// opening the channel.
 	const shadowText = (password.shadowRoots ?? []).flatMap((shadowRoot) =>
 		walkTree(shadowRoot).filter((node) => node.nodeType === 3)
@@ -520,15 +518,15 @@ Deno.test("dom-derived: domNodeDerived exposes exactly this file's half of DomNo
 });
 
 /**
- * The password-predicate matrix (SEC-04, BF-7, E-37).
+ * The password-predicate matrix.
  *
  * The predicate is a security control, not a heuristic convenience: it is the single gate on `value`
- * reaching the attribute string, `getMeaningfulTextForLlm`, `browser_get_state` labels (E-34) and the
- * `state_token` content half (E-36). So every arm is pinned positively AND its nearest false positive
+ * reaching the attribute string, `getMeaningfulTextForLlm`, `browser_get_state` labels and the
+ * `state_token` content half. So every arm is pinned positively AND its nearest false positive
  * is pinned negatively, because a predicate that scrubs half the page is abandoned and then the
  * control is gone.
  */
-Deno.test('dom-derived: the password predicate covers all five arms (SEC-04, E-37)', () => {
+Deno.test('dom-derived: the password predicate covers all five arms', () => {
 	const input = (attributes: Record<string, string>, axName?: string) => {
 		const node = build({ nodeName: 'INPUT', attributes });
 		if (axName !== undefined) {
@@ -570,19 +568,19 @@ Deno.test('dom-derived: the password predicate covers all five arms (SEC-04, E-3
 		assertEquals(isPasswordField(input({ type: 'text', name })), false, `name=${name} is not a credential field`);
 	}
 	// Accepted over-scrubs, recorded rather than engineered away. `password_hint_shown` opens on the
-	// token `password`; `boarding_pass` ends on the token `pass`, which E-38 added because `name="pass"`
+	// token `password`; `boarding_pass` ends on the token `pass`, which is in because `name="pass"`
 	// is the commonest credential field name in PHP and Rails forms. The bias is deliberate and the
 	// alternative rules are worse: requiring the token to be the whole name misses `password_confirm`,
 	// and dropping `pass` misses the field the arm exists for.
 	assertEquals(isPasswordField(input({ type: 'text', name: 'password_hint_shown' })), true);
 	assertEquals(isPasswordField(input({ type: 'text', name: 'boarding_pass' })), true);
 
-	// --- E-38: the arms the security review of E-37 found missing ---------------------------------
-	// The evasion that made the whole predicate optional: HTML renders an unrecognised `type` keyword
-	// as a text box, and the old ALLOWLIST of scrubbable types returned false before arms 2-5 ran.
+	// --- evasions and wider spellings ---------------------------------------------------------------
+	// HTML renders an unrecognised `type` keyword as a text box, so an allowlist of scrubbable types
+	// would return false before arms 2-5 ran.
 	assertEquals(isPasswordField(input({ type: 'passcode', name: 'password', autocomplete: 'current-password' })), true);
 	assertEquals(isPasswordField(input({ type: 'hidden', name: 'user_password' })), true);
-	// `name="pass"` — the commonest credential field name there is — and the other missing spellings.
+	// `name="pass"` — the commonest credential field name there is — and the other short spellings.
 	for (const name of ['pass', 'user_pass', 'pw', 'account.secret', 'api_key', 'access_token', 'pin']) {
 		assertEquals(isPasswordField(input({ type: 'text', name })), true, `name=${name} is a credential field`);
 	}
@@ -593,8 +591,8 @@ Deno.test('dom-derived: the password predicate covers all five arms (SEC-04, E-3
 	) {
 		assertEquals(isPasswordField(input({ type: 'text', 'aria-label': label })), true, `label ${label}`);
 	}
-	// A card number is not a password, but it is the same class of value DD-7 exists to keep out of a
-	// transcript, and arm 3 already scrubbed the `cvv` name spelling.
+	// A card number is not a password, but it is the same class of value that must stay out of a
+	// transcript, and arm 3 already scrubs the `cvv` name spelling.
 	assertEquals(isPasswordField(input({ type: 'text', autocomplete: 'cc-number' })), true);
 	// The common reveal-widget shape marks the WRAPPER; the input itself carries only `form-control`.
 	const wrapped = build({
@@ -619,11 +617,9 @@ Deno.test('dom-derived: the password predicate covers all five arms (SEC-04, E-3
 	assertEquals(getAllChildrenText(revealed, 5).includes('hunter2'), false);
 });
 
-Deno.test('dom-derived: a password field is detected by autocomplete, not only by type (E-29)', () => {
-	// Surfaced by assembling packages/core/mod.ts: two definitions of "is a password field" existed —
-	// this one (type only) and serialize_attrs.ts's (type OR autocomplete). They had drifted, and the
-	// narrower one guards the §6.5 anti-exfiltration path, so a text-typed input that a password
-	// manager fills would have had its value emitted into LLM-visible text.
+Deno.test('dom-derived: a password field is detected by autocomplete, not only by type', () => {
+	// The predicate guards the anti-exfiltration path, so a type-only check would let a text-typed
+	// input that a password manager fills have its value emitted into LLM-visible text.
 	const byAutocomplete = build({
 		nodeName: 'INPUT',
 		attributes: { type: 'text', autocomplete: 'current-password', value: 'hunter2' },

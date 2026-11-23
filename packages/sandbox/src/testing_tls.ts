@@ -1,12 +1,6 @@
 /**
- * Test support for R12 (design §2.19, M8): a throwaway certificate authority and one server certificate it signs,
- * built in memory with WebCrypto (ECDSA P-256) and a few lines of DER, so a test can run a TLS upstream on loopback
- * that a client trusts only through `caCerts` — no openssl, no file, no network. Every key lives as long as the test.
- *
- * Also a reader for the server name (SNI) a TLS ClientHello carries, so a test relay in front of that upstream can
- * prove which name the client asked for.
- *
- * Not exported from mod.ts; only the package's tests (and the sandbox tier) import it.
+ * Test support: a throwaway CA and one server certificate, built in memory with WebCrypto (ECDSA P-256) and a little
+ * DER, so a test can run a loopback TLS upstream trusted only through `caCerts`.
  */
 const encoder = new TextEncoder();
 
@@ -149,35 +143,4 @@ export async function testPki(dnsNames: readonly string[]): Promise<TestPki> {
 	});
 	const key = new Uint8Array(await crypto.subtle.exportKey('pkcs8', server.privateKey));
 	return { caCert: pem('CERTIFICATE', caCert), cert: pem('CERTIFICATE', cert), key: pem('PRIVATE KEY', key) };
-}
-
-/**
- * The server name a TLS ClientHello asks for (its `server_name` extension), or null when `bytes` hold a complete
- * ClientHello without one; `undefined` while more bytes are needed.
- */
-export function clientHelloServerName(bytes: Uint8Array): string | null | undefined {
-	if (bytes.length < 5) return undefined;
-	if (bytes[0] !== 0x16) return null;
-	const recordLength = (bytes[3]! << 8) | bytes[4]!;
-	if (bytes.length < 5 + recordLength) return undefined;
-	const hello = bytes.subarray(5, 5 + recordLength);
-	if (hello[0] !== 0x01) return null;
-	let at = 4 + 2 + 32; // handshake header, version, random
-	at += 1 + hello[at]!; // session id
-	at += 2 + ((hello[at]! << 8) | hello[at + 1]!); // cipher suites
-	at += 1 + hello[at]!; // compression methods
-	const end = at + 2 + ((hello[at]! << 8) | hello[at + 1]!);
-	at += 2;
-	while (at + 4 <= end) {
-		const type = (hello[at]! << 8) | hello[at + 1]!;
-		const size = (hello[at + 2]! << 8) | hello[at + 3]!;
-		const data = hello.subarray(at + 4, at + 4 + size);
-		if (type === 0) {
-			// server_name_list: list length (2), then name type (1, 0 = host_name), name length (2), name.
-			const nameLength = (data[3]! << 8) | data[4]!;
-			return new TextDecoder().decode(data.subarray(5, 5 + nameLength));
-		}
-		at += 4 + size;
-	}
-	return null;
 }

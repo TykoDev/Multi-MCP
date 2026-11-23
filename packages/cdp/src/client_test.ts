@@ -7,7 +7,7 @@ import {
 	assertStringIncludes,
 } from '@std/assert';
 // The CDP transport itself is never mocked — every test drives a real local WebSocket fixture server
-// (D-TEST1 forbids mocking the transport, so the fixture is mandatory, not a convenience).
+// (the transport is never mocked, so the fixture is mandatory, not a convenience).
 // mock-seam: the stderr write sink, to assert wire-log output — a module seam inside @tykotech/cdp.
 import { stub } from '@std/testing/mock';
 import { FakeTime } from '@std/testing/time';
@@ -125,7 +125,7 @@ Deno.test('cdp client: assigns incrementing ids and correlates out-of-order resp
 		const second = client.send.Runtime.evaluate({ expression: '2' });
 		const third = client.send.Runtime.evaluate({ expression: '3' });
 		await fixture.waitForRequest('Runtime.evaluate');
-		// ERRATUM(E-118): yield a macrotask, not a microtask. A microtask-only loop never lets the event loop read the
+		// Yield a macrotask, not a microtask. A microtask-only loop never lets the event loop read the
 		// socket, so when the three frames arrive in separate reads it spins at 100% CPU forever.
 		while (held.length < 3) await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -302,7 +302,7 @@ Deno.test('cdp client: BUA_CDP_TIMEOUT_S and its BROWSER_USE_ alias are read at 
 	assertRejectsSync(() => resolveRequestTimeoutMs(Number.NaN));
 
 	if (!(await envIsGranted(CDP_TIMEOUT_ENV, CDP_TIMEOUT_ENV_COMPAT))) {
-		// D-CFG1 getters must degrade to the documented default under a tighter --allow-env, not crash.
+		// Env getters must degrade to the documented default under a tighter --allow-env, not crash.
 		assertEquals(resolveRequestTimeoutMs(), DEFAULT_CDP_REQUEST_TIMEOUT_MS);
 		return;
 	}
@@ -312,7 +312,7 @@ Deno.test('cdp client: BUA_CDP_TIMEOUT_S and its BROWSER_USE_ alias are read at 
 
 		Deno.env.set(CDP_TIMEOUT_ENV, '5');
 		assertEquals(resolveRequestTimeoutMs(), 5_000);
-		// Re-read on every call — never snapshotted at import (D-CFG1).
+		// Re-read on every call — never snapshotted at import.
 		Deno.env.set(CDP_TIMEOUT_ENV, '9');
 		assertEquals(resolveRequestTimeoutMs(), 9_000);
 
@@ -447,7 +447,7 @@ Deno.test('cdp client: the event registry is multi-listener and every subscripti
 		fixture.emit('Target.targetCreated', info('T1'));
 		await waitFor(() => first.length === 1);
 
-		// cdp-use's single-slot registry would have lost the first two registrations here.
+		// A single-slot registry would lose the first two registrations here.
 		assertEquals(first, ['T1']);
 		assertEquals(second, ['T1']);
 
@@ -658,7 +658,7 @@ Deno.test('cdp client: the wire log records CDP errors without a body', async ()
 
 Deno.test('cdp client: wireLog:true and the default listener-error handler write to stderr', async () => {
 	await using fixture = CdpFixtureServer.start();
-	// Stubbing `console.error` is a module seam inside this package, which OBS §4.1.5 permits; it is
+	// Stubbing `console.error` is a module seam inside this package; it is
 	// the only way to assert the normative "wire channel writes to stderr, never a client stream".
 	const written: string[] = [];
 	const errorStub = stub(console, 'error', (...args: unknown[]) => void written.push(args.join(' ')));
@@ -688,7 +688,7 @@ Deno.test('cdp client: wireLog:true and the default listener-error handler write
 });
 
 // ---------------------------------------------------------------------------------------------
-// 10. Drop detection seam for @tykotech/browser's reconnect policy (ARCHITECTURE §7.4)
+// 10. Drop detection seam for @tykotech/browser's reconnect policy
 // ---------------------------------------------------------------------------------------------
 
 Deno.test('cdp client: an unintentional drop is reported as such to closed/onClose', async () => {
@@ -716,7 +716,7 @@ Deno.test('cdp client: an unintentional drop is reported as such to closed/onClo
 // Escape hatch
 // ---------------------------------------------------------------------------------------------
 
-Deno.test('cdp client: sendRaw reaches methods outside the typed D-CDP2 surface', async () => {
+Deno.test('cdp client: sendRaw reaches methods outside the typed domain surface', async () => {
 	await using fixture = CdpFixtureServer.start();
 	fixture.on('BrowserUse.startCaptchaSolver', (request, server) => server.reply(request.id, { started: true }));
 
@@ -740,7 +740,7 @@ Deno.test('cdp client: sendRaw reaches methods outside the typed D-CDP2 surface'
  *
  * This is not a sleep and carries no duration semantics — `setTimeout(0)` is simply the only way to
  * get past the microtask queue to the op-completion queue. Timing *behaviour* (the 60 s budget) is
- * tested with `FakeTime` above, per D-TEST1.
+ * tested with `FakeTime` above.
  */
 function yieldToEventLoop(): Promise<void> {
 	return new Promise<void>((resolve) => {

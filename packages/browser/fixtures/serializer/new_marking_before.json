@@ -1,6 +1,6 @@
 {
 	"name": "new_marking_before",
-	"pins": "R6.2 step 1 — no previous state at all, so nothing is marked new",
+	"pins": "new-element marking, step 1 — no previous state at all, so nothing is marked new",
 	"tree": {
 		"tag": "HTML",
 		"children": [

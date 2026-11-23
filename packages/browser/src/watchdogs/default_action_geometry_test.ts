@@ -1,12 +1,11 @@
 /**
- * Click-cascade geometry contract (ARCHITECTURE.md §6.10 "scrollIntoView → geometry fallback chain →
- * occlusion check → mouse move/press/release with 3s/5s caps"; §8 timing hierarchy).
+ * Click-cascade geometry contract (scrollIntoView → geometry fallback chain → occlusion check →
+ * mouse move/press/release with 3 s / 5 s caps).
  *
- * Two tiers, no mocks (D-TEST1): the arithmetic is pinned as pure functions, and the CDP-shaped half
- * runs against `ChromeFixture` — a real `Deno.serve` listener speaking real CDP frames — so the wire
+ * Two tiers, no mocks: the arithmetic is pinned as pure functions, and the CDP-shaped half runs
+ * against `ChromeFixture` — a real `Deno.serve` listener speaking real CDP frames — so the wire
  * shape of every `Input.dispatchMouseEvent` and the order of the fallback chain are asserted on
- * actual protocol traffic. The same paths run against real Chromium in
- * `packages/core/tests/integration/watchdog_action_test.ts`.
+ * actual protocol traffic.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -75,7 +74,7 @@ Deno.test('geometry: a point outside the viewport is pulled back inside it', () 
 	assertEquals(clampToViewport({ x: 100, y: 900 }, METRICS), { x: 100, y: 599, clamped: true });
 });
 
-Deno.test('geometry: the §8 mouse caps are 3 s press / 5 s release, verbatim', () => {
+Deno.test('geometry: the mouse caps are 3 s press / 5 s release', () => {
 	assertEquals(MOUSE_PRESS_TIMEOUT_MS, 3_000);
 	assertEquals(MOUSE_RELEASE_TIMEOUT_MS, 5_000);
 });
@@ -308,7 +307,7 @@ Deno.test('geometry: a press that never answers is data, and the release is stil
 		pressTimeoutMs: 60,
 		releaseTimeoutMs: 60,
 	});
-	assertEquals(outcome.pressTimedOut, true, 'ERRATUM(M1-watchdogs-action-2): an expired cap is non-fatal');
+	assertEquals(outcome.pressTimedOut, true, 'an expired cap is non-fatal');
 	assertEquals(outcome.releaseTimedOut, false);
 	const types = wired.fixture.requestsFor('Input.dispatchMouseEvent').map((frame) => frame.params.type);
 	assert(types.includes('mouseReleased'), 'an un-released button would leave the page dragging');

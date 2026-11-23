@@ -3,9 +3,7 @@
  * The click cascade's geometry half: `scrollIntoViewIfNeeded` → the geometry fallback chain → the
  * occlusion check → mouse move/press/release under the 3 s / 5 s caps.
  *
- * Contract owners: SPECS/ARCHITECTURE.md §6.10 ("CDP-native click (scrollIntoView → geometry fallback
- * chain → occlusion check → mouse move/press/release with 3s/5s caps)") and §8 ("Fine-grained CDP
- * interaction caps … 3s/5s mouse press/release … preserved verbatim — they encode CDP behavior").
+ * The 3 s / 5 s press/release caps are kept exactly as they are because they encode CDP behaviour.
  *
  * ## Coordinate spaces, which is where this gets subtle
  *
@@ -14,7 +12,7 @@
  * iframes, because one renderer lays the whole frame tree out together. A cross-process iframe
  * (OOPIF) has its own session and its own origin, so its quads are frame-local and unusable as click
  * coordinates. For those the chain falls through to `absolutePosition` — page-absolute CSS px with
- * accumulated frame offsets already applied (DATA-MODEL.md §6.1) — minus the page scroll offset.
+ * accumulated frame offsets already applied — minus the page scroll offset.
  *
  * The occlusion check sidesteps the whole problem by never leaving the element's own document: it
  * asks the element for its own centre and hit-tests *there*, so the verdict is correct in every frame
@@ -28,17 +26,16 @@ import type { DomRect } from '../dom/types.ts';
 import { callOnNode, ensureDomEnabled, isStaleNodeError, type NodeHandle } from './default_action_dom.ts';
 
 // ---------------------------------------------------------------------------
-// timing constants (ARCHITECTURE.md §8 — load-bearing, DECISION-REGISTER rule §2.5:
-// changing one needs real-browser evidence)
+// timing constants (load-bearing: changing one needs real-browser evidence)
 // ---------------------------------------------------------------------------
 
-/** Cap on the `mousePressed` CDP round trip (ARCHITECTURE.md §6.10, §8). */
+/** Cap on the `mousePressed` CDP round trip. */
 export const MOUSE_PRESS_TIMEOUT_MS = 3_000;
 
-/** Cap on the `mouseReleased` CDP round trip (ARCHITECTURE.md §6.10, §8). */
+/** Cap on the `mouseReleased` CDP round trip. */
 export const MOUSE_RELEASE_TIMEOUT_MS = 5_000;
 
-/** Cap on the `mouseMoved` that precedes a press. Not speced; kept equal to the press cap. */
+/** Cap on the `mouseMoved` that precedes a press. Kept equal to the press cap. */
 export const MOUSE_MOVE_TIMEOUT_MS = MOUSE_PRESS_TIMEOUT_MS;
 
 /** CDP `Input` button bitfield for the `buttons` field of a press. */
@@ -85,7 +82,7 @@ export async function readViewportMetrics(client: CdpClient, sessionId: SessionI
 // the geometry fallback chain
 // ---------------------------------------------------------------------------
 
-/** Which link of the chain produced the point — the R5 audit surface. */
+/** Which link of the chain produced the point — the input-fidelity audit surface. */
 export type ClickPointStrategy =
 	| 'contentQuads'
 	| 'boxModel'
@@ -159,7 +156,7 @@ export interface ClickPointOptions {
 	 * `absolutePosition`.
 	 */
 	readonly sameSessionAsPage: boolean;
-	/** DATA-MODEL §6.1 `absolutePosition` — page-absolute CSS px, frame offsets included. */
+	/** The IR's `absolutePosition` — page-absolute CSS px, frame offsets included. */
 	readonly absolutePosition: DomRect | null;
 	readonly metrics: ViewportMetrics;
 }
@@ -171,7 +168,7 @@ const BOUNDING_RECT_FUNCTION = `function () {
 }`;
 
 /**
- * The geometry fallback chain, in ARCHITECTURE.md §6.10's order.
+ * The geometry fallback chain, in order.
  *
  * 1. `DOM.getContentQuads` — the truth for transformed, wrapped and multi-box elements;
  * 2. `DOM.getBoxModel` — one border box, for nodes Chrome refuses quads for;
@@ -350,7 +347,7 @@ export interface MouseClickOptions {
 	readonly button: MouseButton;
 	readonly clickCount?: number;
 	readonly modifiers?: number;
-	/** Overrides {@linkcode MOUSE_PRESS_TIMEOUT_MS}; the default is the §8 contract tests pin. */
+	/** Overrides {@linkcode MOUSE_PRESS_TIMEOUT_MS}; the default is the contract tests pin. */
 	readonly pressTimeoutMs?: number;
 	/** Overrides {@linkcode MOUSE_RELEASE_TIMEOUT_MS}. */
 	readonly releaseTimeoutMs?: number;
@@ -364,10 +361,9 @@ export interface MouseClickOutcome {
 }
 
 /**
- * Move → press → release, with the §8 caps on the press (3 s) and release (5 s).
+ * Move → press → release, with caps on the press (3 s) and release (5 s).
  *
- * ERRATUM(M1-watchdogs-action-2): §8 fixes the two caps but not what happens when one expires. They
- * are treated as **non-fatal**: a press that does not answer inside 3 s almost always means the click
+ * An expired cap is **non-fatal**: a press that does not answer inside 3 s almost always means the click
  * already did its job and the renderer is busy with the consequences (a synchronous `alert`, a
  * same-thread navigation, a heavy re-render). Aborting the action there would report a failure for a
  * click that landed, so the outcome is recorded on the result instead and the release is still
@@ -411,7 +407,7 @@ export async function dispatchMouseClick(options: MouseClickOptions): Promise<Mo
 /**
  * The move on its own — the first third of {@linkcode dispatchMouseClick}, with nothing pressed.
  *
- * ERRATUM(E-49). A hover is the move a click already performs before it presses, so it shares the
+ * A hover is the move a click already performs before it presses, so it shares the
  * cap and the timeout-is-data rule rather than inventing its own. Returns whether the move timed
  * out; like the click's, a timeout is recorded and not thrown, because a `mouseMoved` that does not
  * answer inside the cap has almost always already reached the renderer.

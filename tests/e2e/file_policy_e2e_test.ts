@@ -1,5 +1,5 @@
 /**
- * B2.9 — `sha256`, `Range` and `browser_file_policy` against a real download.
+ * `sha256`, `Range` and `browser_file_policy` against a real download.
  *
  * The unit tier proves the range arithmetic, the digest and the policy constants against files on
  * disk. This suite proves the three of them on a file **the browser actually downloaded**, over the
@@ -51,7 +51,7 @@ interface GetFile {
 }
 
 Deno.test({
-	name: 'e2e file_policy (B2.9): a real download reports its sha256, serves a Range, and the policy is the constants',
+	name: 'e2e file_policy: a real download reports its sha256, serves a Range, and the policy is the constants',
 	ignore,
 	async fn(t) {
 		await using h = await harness();
@@ -59,7 +59,6 @@ Deno.test({
 
 		await t.step('the policy answers before any file exists, and reports the enforced numbers', async () => {
 			const policy = await h.callJson<Policy>('browser_file_policy', {});
-			console.log(`[B2.9] browser_file_policy: ${JSON.stringify(policy)}`);
 			assertEquals(policy.retention.mode, 'session-lifetime');
 			assertEquals(policy.max_files_per_session, 100);
 			assertEquals(policy.max_file_bytes, 100 * 1024 * 1024);
@@ -74,7 +73,7 @@ Deno.test({
 		await t.step('a downloaded file carries a sha256 that matches an independent digest', async () => {
 			// `browser_download`, not `browser_navigate`: navigating to an attachment ends in
 			// `net::ERR_ABORTED` because the document never commits, and the download tool is the one that
-			// knows that is the expected outcome (B1.12).
+			// knows that is the expected outcome.
 			await h.callJson('browser_download', {
 				url: `${h.site.url}opendownload?name=b29.txt&body=${encodeURIComponent(BODY)}`,
 			});
@@ -89,7 +88,6 @@ Deno.test({
 				await new Promise((resolve) => setTimeout(resolve, 150));
 			}
 			assert(file !== undefined, 'the download never completed with a digest');
-			console.log(`[B2.9] listing entry: ${JSON.stringify(file)}`);
 			assertEquals(file.size, new TextEncoder().encode(BODY).length);
 
 			// The independent computation: the whole body through the platform digest, which is a
@@ -97,7 +95,6 @@ Deno.test({
 			const expected = encodeHex(
 				new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(BODY))),
 			);
-			console.log(`[B2.9] sha256 reported=${file.sha256} independent=${expected}`);
 			assertEquals(file.sha256, expected);
 		});
 
@@ -106,7 +103,6 @@ Deno.test({
 			const result = await h.call('browser_get_file', { file_id: file.file_id, delivery: 'stream' });
 			assertEquals(result.isError, undefined, JSON.stringify(result.content));
 			const payload = result.structuredContent as GetFile;
-			console.log(`[B2.9] browser_get_file delivery=stream: ${JSON.stringify(payload)}`);
 			assertEquals(payload.delivery, 'stream');
 			assertEquals(payload.range_supported, true);
 			assertEquals(payload.file.sha256, file.sha256);
@@ -119,9 +115,6 @@ Deno.test({
 			const bytes = new TextEncoder().encode(BODY);
 
 			const ranged = await h.fetch(path, { headers: { range: 'bytes=100-199' } });
-			console.log(
-				`[B2.9] Range bytes=100-199 -> ${ranged.status} content-range=${ranged.headers.get('content-range')}`,
-			);
 			assertEquals(ranged.status, 206);
 			assertEquals(ranged.headers.get('content-range'), `bytes 100-199/${bytes.length}`);
 			assertEquals(ranged.headers.get('content-length'), '100');
@@ -133,7 +126,6 @@ Deno.test({
 			assertEquals(new Uint8Array(await tail.arrayBuffer()), bytes.slice(bytes.length - 50));
 
 			const past = await h.fetch(path, { headers: { range: `bytes=${bytes.length}-${bytes.length + 10}` } });
-			console.log(`[B2.9] Range past the end -> ${past.status} content-range=${past.headers.get('content-range')}`);
 			assertEquals(past.status, 416, 'refused, never clamped');
 			assertEquals(past.headers.get('content-range'), `bytes */${bytes.length}`);
 			await past.body?.cancel();
@@ -144,7 +136,6 @@ Deno.test({
 			assertEquals(whole.headers.get('accept-ranges'), 'bytes');
 			assertEquals(whole.headers.get('content-length'), String(bytes.length));
 			assertEquals(new Uint8Array(await whole.arrayBuffer()), bytes);
-			console.log('[B2.9] whole-file read is unchanged: 200, full length, accept-ranges advertised');
 		});
 	},
 });

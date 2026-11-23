@@ -1,16 +1,10 @@
 /**
- * The sandbox container's seccomp profile: Docker's default, plus the seven calls bubblewrap needs
- * to build a cage. scripts/sandbox_seccomp.ts reads the default profile vendored at the commit pinned in
- * docker/seccomp-sandbox-source.json (docker/seccomp-sandbox-base.json) and writes the result to
- * docker/seccomp-sandbox.json; this is the part that changes it, kept here so the tests can check it.
- *
- * Docker's default allows these calls only to a container holding CAP_SYS_ADMIN (and `clone` only
- * without namespace flags). The sandbox holds no capability at all, so the conditional rules that
- * mention them are taken out and one unconditional rule allows all seven. Nothing else changes: the
- * other rules, the default action and the architectures are Docker's.
+ * The sandbox container's seccomp profile: Docker's vendored default (scripts/sandbox_seccomp.ts writes
+ * docker/seccomp-sandbox.json) with the CAP_SYS_ADMIN-conditional rules for the seven calls bubblewrap needs replaced
+ * by one unconditional rule (the container holds no capability). Nothing else of Docker's profile changes.
  */
 
-/** What bubblewrap calls to make a cage, and nothing more (the research proved these suffice). */
+/** What bubblewrap calls to make a cage, and nothing more. */
 export const NAMESPACE_CALLS = [
 	'clone',
 	'clone3',

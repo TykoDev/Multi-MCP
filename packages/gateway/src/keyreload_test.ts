@@ -1,18 +1,6 @@
-/**
- * The API-key reload, and the revocation it makes reachable (SR2-M3).
- *
- * The finding was that `EVENT_STREAM_REVALIDATE_MS` could not deny an API-key
- * principal: the store was built once and never changed, so `hasId` answered
- * "still present" forever and revoking a key meant a restart. The last test here
- * is the proof the finding asked for — a **live SSE stream terminated because its
- * principal's record disappeared from a reloaded file** — and it runs against a
- * real file on disk, a real `VerifierChain` and the real transport, so nothing in
- * the chain is stubbed except the clock.
- */
+/** The API-key reload, and the revocation it makes reachable. */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { Hono } from 'hono';
-import type { BrowserSession } from '@tykotech/browser';
-import { EventBus } from '@tykotech/bus';
 import { SessionRegistry } from '@tykotech/mcp';
 import { ulid } from '@std/ulid';
 import { ApiKeyFileWatcher } from './keyreload.ts';
@@ -22,16 +10,7 @@ import { createLogger } from './logger.ts';
 import { attachEventStream, EventStreamRegistry } from './eventstream.ts';
 import type { AppVariables } from './app.ts';
 import type { Principal } from './auth.ts';
-
-/** A logger that keeps what it was told, so a warning can be asserted rather than assumed. */
-function recorder(): { info(msg: string): void; warn(msg: string): void; lines: string[] } {
-	const lines: string[] = [];
-	return {
-		lines,
-		info: (msg: string) => lines.push(`info ${msg}`),
-		warn: (msg: string) => lines.push(`warn ${msg}`),
-	};
-}
+import { fakeSession } from './support_test.ts';
 
 /** A scratch directory under the one path the unit tier may write to. */
 async function scratch(): Promise<{ dir: string; file: string; write(text: string): Promise<void>; drop(): void }> {
@@ -42,13 +21,7 @@ async function scratch(): Promise<{ dir: string; file: string; write(text: strin
 		dir,
 		file,
 		write: (text: string) => Deno.writeTextFile(file, text),
-		drop: () => {
-			try {
-				Deno.removeSync(dir, { recursive: true });
-			} catch {
-				// A directory already gone is the state this wanted.
-			}
-		},
+		drop: () => Deno.remove(dir, { recursive: true }).catch(() => {}),
 	};
 }
 
@@ -56,214 +29,99 @@ function recordsOf(...ids: string[]): ApiKeyRecord[] {
 	return ids.map((id, index) => ({ id, sha256: `${index}`.repeat(1).padStart(64, 'a') }));
 }
 
-// --- the store's own refusals -----------------------------------------------
-
-Deno.test('keyreload: the store swaps its records and can then answer "gone"', () => {
+/** A store holding `worker-1`, a watcher whose file reads as `readFile` says, and what the watcher logged. */
+function watched(
+	readFile: (path: string) => Promise<string>,
+	extra: Partial<ConstructorParameters<typeof ApiKeyFileWatcher>[0]> = {},
+) {
+	const lines: string[] = [];
 	const store = new ApiKeyStore(recordsOf('worker-1', 'human-1'));
-	assert(store.hasId('worker-1'));
-	assertEquals(store.replace(recordsOf('human-1')), true);
-	// The whole finding in one assertion: `hasId` can now say no.
-	assertEquals(store.hasId('worker-1'), false);
-	assertEquals(store.size, 1);
-	assertEquals(store.records.map((record) => record.id), ['human-1']);
-});
+	const watcher = new ApiKeyFileWatcher({
+		path: 'keys.json',
+		apply: (records) => store.replace(records),
+		logger: { info: (msg: string) => lines.push(`info ${msg}`), warn: (msg: string) => lines.push(`warn ${msg}`) },
+		readFile,
+		...extra,
+	});
+	return { store, watcher, lines, warned: () => lines.find((line) => line.startsWith('warn')) ?? '' };
+}
 
-Deno.test('keyreload: the store refuses to reach zero records', () => {
-	// An empty store makes `credentialed` false, and on a loopback bind that mints
-	// an anonymous principal for every credential-less request — so emptying the
-	// key file would grant access in the name of revoking it.
-	const store = new ApiKeyStore(recordsOf('worker-1'));
+Deno.test('keyreload: a changed file swaps the records, so a removed id is denied; the store never reaches zero', async () => {
+	const { store, watcher, lines } = watched(() => Promise.resolve(JSON.stringify(recordsOf('human-1'))));
+	assertEquals(await watcher.reload(), 'applied');
+	assertEquals([store.hasId('worker-1'), store.hasId('human-1'), store.size], [false, true, 1]);
+	// The count reaches the log; an id never does.
+	assert(lines.includes('info API key records reloaded: 1 in force'));
+	assert(!lines.some((line) => line.includes('human-1')));
+	await watcher.close();
+	// An empty store makes `credentialed` false, which on loopback mints an anonymous principal: emptying is refused.
 	assertEquals(store.replace([]), false);
 	assertEquals(store.size, 1);
-	assert(store.hasId('worker-1'));
+	const emptied = watched(() => Promise.resolve('[]\n'));
+	assertEquals(await emptied.watcher.reload(), 'refused');
+	assert(emptied.store.hasId('worker-1'));
+	assertStringIncludes(emptied.warned(), 'refusing to leave this server with no credentials');
+	assertStringIncludes(emptied.warned(), 'restart to remove the last credential');
+	await emptied.watcher.close();
 });
 
-// --- the reload path ---------------------------------------------------------
-
-Deno.test('keyreload: a changed file replaces the records, and the removed id is denied', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1', 'human-1'));
-	const files = new Map<string, string>([['keys.json', JSON.stringify(recordsOf('human-1'))]]);
-	const watcher = new ApiKeyFileWatcher({
-		path: 'keys.json',
-		apply: (records) => store.replace(records),
-		logger: log,
-		readFile: (path) => Promise.resolve(files.get(path)!),
-	});
-
-	assertEquals(await watcher.reload(), 'applied');
-	assertEquals(store.hasId('worker-1'), false);
-	assert(store.hasId('human-1'));
-	// The count reaches the log; an id never does.
-	assert(log.lines.some((line) => line === 'info API key records reloaded: 1 in force'));
-	assert(!log.lines.some((line) => line.includes('human-1')));
-	await watcher.close();
-});
-
-Deno.test('keyreload: a malformed file keeps the previous good records and warns', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1'));
-	const bad = new Map<string, string>([
-		// Exactly what a half-finished editor save leaves behind.
-		['keys.json', '[{"id":"worker-2","sha'],
-	]);
-	const watcher = new ApiKeyFileWatcher({
-		path: 'keys.json',
-		apply: (records) => store.replace(records),
-		logger: log,
-		readFile: (path) => Promise.resolve(bad.get(path)!),
-	});
-
-	assertEquals(await watcher.reload(), 'failed');
-	assert(store.hasId('worker-1'), 'the previous records must stand');
-	assertEquals(store.size, 1);
-	const warned = log.lines.find((line) => line.startsWith('warn'));
-	assert(warned !== undefined);
-	assertStringIncludes(warned, 'the previous key records stand');
-	await watcher.close();
-});
-
-Deno.test('keyreload: a file that has been emptied is refused, not applied', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1'));
-	const watcher = new ApiKeyFileWatcher({
-		path: 'keys.json',
-		apply: (records) => store.replace(records),
-		logger: log,
-		readFile: () => Promise.resolve('[]\n'),
-	});
-
-	assertEquals(await watcher.reload(), 'refused');
-	assert(store.hasId('worker-1'));
-	const warned = log.lines.find((line) => line.startsWith('warn'));
-	assert(warned !== undefined);
-	assertStringIncludes(warned, 'refusing to leave this server with no credentials');
-	assertStringIncludes(warned, 'restart to remove the last credential');
-	await watcher.close();
-});
-
-Deno.test('keyreload: an unreadable file keeps the records rather than throwing', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1'));
-	const watcher = new ApiKeyFileWatcher({
-		path: 'gone.json',
-		apply: (records) => store.replace(records),
-		logger: log,
-		readFile: () => Promise.reject(new Deno.errors.NotFound('no such file')),
-	});
-
-	assertEquals(await watcher.reload(), 'failed');
-	assert(store.hasId('worker-1'));
-	await watcher.close();
-});
-
-Deno.test('keyreload: a reloaded file cannot introduce a raw key (DD-7)', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1'));
+Deno.test('keyreload: a malformed, unreadable or refused file keeps the previous records; raw keys are stripped', async () => {
+	for (
+		const read of [
+			// Exactly what a half-finished editor save leaves behind.
+			() => Promise.resolve('[{"id":"worker-2","sha'),
+			() => Promise.reject(new Deno.errors.NotFound('no such file')),
+			// `holder_name` reaches every viewer, so markup in a label is refused by the startup parser, not sanitised.
+			() => Promise.resolve(JSON.stringify([{ id: 'worker-2', sha256: 'b'.repeat(64), label: '<img src=x>' }])),
+		]
+	) {
+		const { store, watcher, warned } = watched(read);
+		assertEquals(await watcher.reload(), 'failed');
+		assertEquals([store.hasId('worker-1'), store.hasId('worker-2'), store.size], [true, false, 2]);
+		assertStringIncludes(warned(), 'the previous key records stand');
+		await watcher.close();
+	}
+	// An operator pasting the raw key beside the hash: the field is stripped at parse, and the hash still verifies.
 	const minted = await generateApiKey('worker-2');
-	// An operator pasting the raw key beside the hash is exactly the mistake the
-	// record schema exists to survive: the field is stripped at parse.
-	const text = JSON.stringify([{ ...minted.record, key: minted.key, secret: minted.key }]);
-	const watcher = new ApiKeyFileWatcher({
-		path: 'keys.json',
-		apply: (records) => store.replace(records),
-		logger: log,
-		readFile: () => Promise.resolve(text),
-	});
-
+	const { store, watcher } = watched(() =>
+		Promise.resolve(JSON.stringify([{ ...minted.record, key: minted.key, secret: minted.key }]))
+	);
 	assertEquals(await watcher.reload(), 'applied');
-	const held = store.records;
-	assertEquals(held.length, 1);
-	assertEquals(Object.keys(held[0]!).sort(), ['id', 'sha256']);
-	assertEquals(JSON.stringify(held).includes(minted.key), false);
-	// And the hash still verifies, so nothing was lost in stripping.
+	assertEquals(store.records.map((record) => Object.keys(record).sort()), [['id', 'sha256']]);
+	assert(!JSON.stringify(store.records).includes(minted.key));
 	assert(await store.verify(minted.key) !== null);
 	await watcher.close();
 });
 
-Deno.test('keyreload: a label the parser refuses does not reach the store (SEC-15)', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1'));
-	const watcher = new ApiKeyFileWatcher({
-		path: 'keys.json',
-		apply: (records) => store.replace(records),
-		logger: log,
-		// `holder_name` reaches every viewer of every session, so a label carrying
-		// markup is refused by the same parser startup uses, not sanitised here.
-		readFile: () => Promise.resolve(JSON.stringify([{ id: 'worker-2', sha256: 'b'.repeat(64), label: '<img src=x>' }])),
-	});
-
-	assertEquals(await watcher.reload(), 'failed');
-	assert(store.hasId('worker-1'));
-	assertEquals(store.hasId('worker-2'), false);
-	await watcher.close();
-});
-
-Deno.test('keyreload: a filesystem that cannot be watched warns and keeps serving', async () => {
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1'));
-	const watcher = new ApiKeyFileWatcher({
-		path: 'keys.json',
-		apply: (records) => store.replace(records),
-		logger: log,
+Deno.test('keyreload: an unwatchable filesystem warns and keeps serving; a real edit on disk reloads', async () => {
+	const unwatchable = watched(() => Promise.resolve('[]'), {
 		watch: () => {
 			throw new Deno.errors.NotSupported('watching is not supported on this filesystem');
 		},
 	});
+	unwatchable.watcher.start();
+	assertEquals(unwatchable.watcher.watching, false);
+	assertStringIncludes(unwatchable.warned(), 'key records stand until this process restarts');
+	await unwatchable.watcher.close();
 
-	watcher.start();
-	assertEquals(watcher.watching, false);
-	const warned = log.lines.find((line) => line.startsWith('warn'));
-	assert(warned !== undefined);
-	assertStringIncludes(warned, 'key records stand until this process restarts');
-	await watcher.close();
-});
-
-// --- against a real file ------------------------------------------------------
-
-Deno.test('keyreload: a real edit on disk reloads without any write grant of its own', async () => {
 	const files = await scratch();
-	const log = recorder();
-	const store = new ApiKeyStore(recordsOf('worker-1', 'human-1'));
 	await files.write(JSON.stringify(recordsOf('worker-1', 'human-1')));
-	const watcher = new ApiKeyFileWatcher({
-		path: files.file,
-		apply: (records) => store.replace(records),
-		logger: log,
-		debounceMs: 10,
-	});
+	const { store, watcher } = watched((path) => Deno.readTextFile(path), { path: files.file, debounceMs: 10 });
 	try {
 		watcher.start();
 		assertEquals(watcher.watching, true);
 		await files.write(JSON.stringify(recordsOf('human-1')));
-		// The watch is a filesystem notification, so the deadline is generous and
-		// the assertion is on the observed effect rather than on a timer.
+		// A filesystem notification: a generous deadline, asserting the observed effect rather than a timer.
 		const deadline = Date.now() + 10_000;
-		while (store.hasId('worker-1') && Date.now() < deadline) {
-			await new Promise((resolve) => setTimeout(resolve, 25));
-		}
-		assertEquals(store.hasId('worker-1'), false, 'the watch did not deliver the change within 10 s');
-		assert(store.hasId('human-1'));
+		while (store.hasId('worker-1') && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+		assertEquals([store.hasId('worker-1'), store.hasId('human-1')], [false, true]);
 	} finally {
 		await watcher.close();
-		files.drop();
+		await files.drop();
 	}
 });
 
-// --- the proof the finding asked for -------------------------------------------
-
-function fakeSession(): BrowserSession {
-	return {
-		tabs: [],
-		cachedBrowserState: null,
-		agentFocusTargetId: null,
-		cdpClient: null,
-		sessionManager: null,
-		eventBus: new EventBus({ name: 'keyreload-test' }),
-		stop: () => Promise.resolve(),
-		kill: () => Promise.resolve(),
-	} as unknown as BrowserSession;
-}
+// --- the end-to-end proof: a live stream ends on revocation ------------------
 
 Deno.test('keyreload: a live stream ends when its principal disappears from a reloaded key file', async () => {
 	const files = await scratch();
@@ -276,9 +134,13 @@ Deno.test('keyreload: a live stream ends when its principal disappears from a re
 	const verifier = new VerifierChain({ config, allowAnonymous: false });
 	const principal = await verifier.resolve(worker.key);
 	assert(principal !== null);
-	assertEquals(verifier.stillAuthorized(principal), true);
+	assert(verifier.currentScopes(principal) !== null);
 
-	const log = recorder();
+	const log = {
+		lines: [] as string[],
+		info: (m: string) => void log.lines.push(m),
+		warn: (m: string) => void log.lines.push(m),
+	};
 	const watcher = new ApiKeyFileWatcher({
 		path: files.file,
 		apply: (records) => verifier.replaceApiKeys(records),
@@ -305,7 +167,7 @@ Deno.test('keyreload: a live stream ends when its principal disappears from a re
 		keepAliveMs: 20,
 		revalidateMs: 1,
 		// The production wiring, verbatim (`app.ts`).
-		revalidate: (subject) => verifier.stillAuthorized(subject),
+		scopesNow: (subject) => verifier.currentScopes(subject),
 	});
 
 	let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -330,12 +192,12 @@ Deno.test('keyreload: a live stream ends when its principal disappears from a re
 		// Revocation: the operator removes the worker's record from the key file.
 		await files.write(JSON.stringify([human.record]));
 		const deadline = Date.now() + 10_000;
-		while (verifier.stillAuthorized(principal) && Date.now() < deadline) {
+		while (verifier.currentScopes(principal) !== null && Date.now() < deadline) {
 			await new Promise((resolve) => setTimeout(resolve, 25));
 		}
 		assertEquals(
-			verifier.stillAuthorized(principal),
-			false,
+			verifier.currentScopes(principal),
+			null,
 			'the reload did not remove the principal within 10 s',
 		);
 
@@ -350,6 +212,6 @@ Deno.test('keyreload: a live stream ends when its principal disappears from a re
 		await reader?.cancel().catch(() => {});
 		await watcher.close();
 		await registry.shutdown('server-shutdown');
-		files.drop();
+		await files.drop();
 	}
 });

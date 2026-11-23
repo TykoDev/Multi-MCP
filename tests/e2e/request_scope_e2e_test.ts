@@ -1,38 +1,20 @@
 /**
- * The request scope on real Chromium (D-138, D-139; ERRATUM(E-114), ERRATUM(E-115), ERRATUM(E-116)) — AC14, AC15,
- * AC16 and the build measurements MB1 and MB3.
+ * The request scope (`TTK_ALLOWED_DOMAINS_SCOPE`) on real Chromium. One page issues every request class a page can
+ * (stylesheet, font, image, script, audio, iframe, `<a ping>`, fetch, XHR, EventSource, WebSocket, beacon, dedicated,
+ * shared and service workers, preload/prefetch/prerender/preconnect hints, speculation rules) off the allowlist, next
+ * to on-list equivalents on a second site. The off-list host is a raw TCP recorder counting connections, reached by
+ * names Chromium resolves to loopback itself, so "zero" is measured.
  *
- * One page carries every request class the design probe measured (§2.9 C1): stylesheet, font, background image,
- * script, image, audio, an off-list iframe, `<a ping>`, `fetch`, XHR, EventSource, a WebSocket, a beacon, a dedicated
- * worker (its fetch and `importScripts`), a shared worker, a service worker (its `importScripts`, install fetch and
- * fetch-handler fetch), `<link rel=preload|modulepreload|prefetch|prerender|dns-prefetch|preconnect>` and a
- * speculation-rules prefetch — all aimed **off the allowlist**, next to on-list equivalents on a second site.
- *
- * The off-list host is a raw TCP recorder: it counts **connections**, so an HTTP request, a WebSocket upgrade and a
- * bare preconnect all register, and "zero" is read from it rather than inferred. It is reached by names Chromium
- * resolves to loopback by itself (`localhost`, `*.localhost` — no resolver rule maps them, so only the resolver layer
- * can refuse them) and, in its own leg, by an IP literal. The tier's net grant is loopback by name
- * (`127.0.0.1,localhost`) and this file does not widen it; the second on-list site is a name the browser alone maps to
- * `127.0.0.1` (`--host-resolver-rules`, folded into the layer by the registry).
- *
- * - **AC15** (`documents`, the default): the off-list subresources still arrive — unchanged, and proof the recorder
- *   is reachable — while `<link rel=prefetch>` to three hosts and `<link rel=prerender>` do not (G4), preload and
- *   modulepreload do (F13), speculation sends nothing, and the off-list iframe document is the one E0 record.
- * - **AC14** (`all`): the recorder sees **no connection at all** — from the page, from a `window.open` pop-up of an
- *   on-list page and from an out-of-process iframe (an on-list site) whose requests aim off-list — while the on-list
- *   equivalents load, WebSocket included. `browser_network_log` names the refusals `net::ERR_BLOCKED_BY_CLIENT.Inspector`
- *   (MB1), the off-list iframe document is still one record, and refused subresources add none. MB3: every attached target
- *   type but `worker` took `Fetch.enable` before its resume (no arming warning, the service and shared workers' first
- *   requests refused, the service worker still activates).
- * - **AC14, IP literal**: the same with `localhost` on the list and `127.0.0.1` off it.
- * - **AC16** (`all` under a recording proxy): no HTTP request for the off-list host reaches the proxy; the WebSocket
- *   `CONNECT` does — the measured residual (design C9), asserted so a change in either direction is seen.
- *
- * Browser tier — requires `--allow-run=<resolved chromium>`.
+ * - `documents`: off-list subresources still arrive; hints and speculation do not; the off-list iframe document is
+ *   vetoed before it is sent (one record).
+ * - `all`: no connection at all, from the page, a pop-up or an OOPIF; on-list loads; refusals are logged as
+ *   `net::ERR_BLOCKED_BY_CLIENT.Inspector`; worker targets are armed before resume. Also for an IP literal.
+ * - `all` under a proxy: no HTTP request for the off-list host reaches it; the WebSocket `CONNECT` does (the
+ *   measured residual).
  */
 import { assert, assertEquals, assertGreater } from '@std/assert';
 import type { EventRecord } from '@tykotech/wire';
-import { type Harness, harness, skipUnlessBrowser } from '../support/harness.ts';
+import { type Harness, harness, poll, skipUnlessBrowser } from '../support/harness.ts';
 
 const ignore = skipUnlessBrowser('request scope e2e');
 
@@ -126,7 +108,7 @@ interface Aim {
 	readonly siteB: string;
 }
 
-/** Every request class of design §2.9 C1, aimed at `aim.off`; on-list equivalents on `aim.siteB`. */
+/** Every request class, aimed at `aim.off`; on-list equivalents on `aim.siteB`. */
 function allPage(aim: Aim): Response {
 	const [first = ''] = aim.off;
 	const q = `?code=${CODE}`;
@@ -184,10 +166,7 @@ interface Site {
 	close(): Promise<void>;
 }
 
-/**
- * Two on-list servers on loopback: `a` (reached as `aHost`) serves the probe pages and the workers; `b` (reached as
- * `ttk-site-b.test`) serves the second site's image, its WebSocket and the OOPIF document.
- */
+/** Two on-list servers: `a` (as `aHost`) serves the pages and workers; `b` (as `ttk-site-b.test`) the second site. */
 function site(aHost: string, aim: (a: string, b: string) => Aim): Site {
 	const aHits: string[] = [];
 	const bHits: string[] = [];
@@ -272,14 +251,8 @@ interface Element {
 	attrs?: Record<string, string>;
 }
 
-async function structured<T>(h: Harness, name: string, args: Record<string, unknown> = {}): Promise<T> {
-	const result = await h.call(name, args);
-	assert(result.isError !== true, `${name} failed: ${JSON.stringify(result.content)}`);
-	return result.structuredContent as T;
-}
-
 async function clickById(h: Harness, id: string): Promise<void> {
-	const state = await structured<{ interactive_elements: Element[] }>(h, 'browser_get_state', {
+	const state = await h.callStructured<{ interactive_elements: Element[] }>('browser_get_state', {
 		fields: ['core', 'attrs'],
 	});
 	const element = state.interactive_elements.find((entry) => entry.attrs?.id === id);
@@ -287,48 +260,21 @@ async function clickById(h: Harness, id: string): Promise<void> {
 	await h.call('browser_click', { index: element.index });
 }
 
-async function until<T>(
-	what: string,
-	probe: () => Promise<T | undefined> | T | undefined,
-	timeoutMs = 12_000,
-): Promise<T> {
-	const deadline = Date.now() + timeoutMs;
-	for (;;) {
-		const found = await probe();
-		if (found !== undefined) return found;
-		if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-		await new Promise((resolve) => setTimeout(resolve, 150));
-	}
-}
-
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Every blocked navigation record on the default session's ring. */
 function blocked(h: Harness): EventRecord[] {
-	const record = h.gateway.registry.peek('default') as
-		| { events: { epoch: string; read(cursor: unknown): EventRecord[] } }
-		| undefined;
-	if (record === undefined) return [];
-	return record.events.read({ kind: 'cursor', epoch: record.events.epoch, seq: 0 })
+	const events = h.gateway.registry.peek('default')?.events;
+	return (events?.read({ kind: 'cursor', epoch: events.epoch, seq: 0 }) ?? [])
 		.filter((event) => event.kind === 'navigation' && event.payload.blocked === true);
 }
 
-/** The default session's vendored `SessionManager` — for MB3's per-type refusal counts and attached types. */
-function manager(h: Harness): {
-	requestRefusals: ReadonlyMap<string, number>;
-	targets: ReadonlyMap<string, { type: string }>;
-	requestScope: string;
-} {
-	const record = h.gateway.registry.peek('default') as unknown as {
-		session: {
-			sessionManager: {
-				requestRefusals: ReadonlyMap<string, number>;
-				targets: ReadonlyMap<string, { type: string }>;
-				requestScope: string;
-			};
-		};
-	};
-	return record.session.sessionManager;
+type Manager = { requestRefusals: ReadonlyMap<string, number>; requestScope: string };
+
+/** The default session's vendored `SessionManager`: the scope and the per-target-type refusal counts. */
+function manager(h: Harness): Manager {
+	return (h.gateway.registry.peek('default') as unknown as { session: { sessionManager: Manager } }).session
+		.sessionManager;
 }
 
 /** Collects the vendored logger's `warn` lines (it writes them through `console.warn`) while `run` executes. */
@@ -345,10 +291,10 @@ async function capturingWarnings<T>(run: (warnings: string[]) => Promise<T>): Pr
 	}
 }
 
-// --- AC15: documents ------------------------------------------------------------------------------------------------
+// --- documents ------------------------------------------------------------------------------------------------------
 
 Deno.test({
-	name: 'e2e request scope (AC15): documents — subresources unchanged, hints refused, the iframe document is E0',
+	name: 'e2e request scope (documents): subresources unchanged, hints refused, the iframe document is vetoed',
 	ignore,
 	async fn() {
 		const rec = recorder();
@@ -366,31 +312,20 @@ Deno.test({
 				},
 			});
 			await h.callText('browser_navigate', { url: `${s.a}/all.html` });
-			await until('the service worker to activate', () => s.aHits.includes('/sw-ready') ? true : undefined);
+			await poll('the service worker to activate', () => s.aHits.includes('/sw-ready') ? true : undefined);
 			await pause(3_000);
 			const paths = rec.lines.map((line) => line.split(' ')[1]?.split('?')[0] ?? line);
 			const records = blocked(h);
-			console.log(
-				`[AC15] off-list recorder: ${rec.connections()} connections; paths ${
-					JSON.stringify([...new Set(paths)].sort())
-				}; ` +
-					`blocked records ${JSON.stringify(records.map((event) => event.payload))}; scope ${manager(h).requestScope}`,
-			);
 			assertEquals(manager(h).requestScope, 'documents');
-			// Unchanged: subresources still leave — which also proves the recorder is reachable by these names.
+			// Subresources still leave, which also proves the recorder is reachable by these names.
 			for (const path of ['/img.png', '/script.js', '/style.css', '/fetch', '/xhr', '/worker-fetch']) {
 				assert(paths.includes(path), `documents: ${path} must still reach the off-list host`);
 			}
-			// F13: preload and modulepreload are subresources, received in documents (documented).
 			assert(paths.includes('/preload.js') && paths.includes('/modulepreload.js'), JSON.stringify(paths));
-			// G4: no hint reaches any of the three hosts, and the prerender's NoState prefetch does not either.
-			for (const path of ['/lp-0', '/lp-1', '/lp-2', '/link-prerender']) {
-				assert(!paths.includes(path), `documents: the hint ${path} must not be sent`);
+			// No hint, no prerender prefetch, no speculation (off under an allowlist), no iframe document.
+			for (const path of ['/lp-0', '/lp-1', '/lp-2', '/link-prerender', '/spec-prefetch', '/frame.html']) {
+				assert(!paths.includes(path), `documents: ${path} must not be sent`);
 			}
-			// ERRATUM(E-110): speculation is off under an allowlist, so the rule sends nothing.
-			assert(!paths.includes('/spec-prefetch'), 'speculation sent a request');
-			// The iframe's off-list document is refused before it is sent — the one record.
-			assert(!paths.includes('/frame.html'), 'the off-list iframe document was sent');
 			assertEquals(records.length, 1, JSON.stringify(records.map((event) => event.payload)));
 			assertEquals(records[0]?.payload.containment, 'request-blocked');
 			assertEquals(records[0]?.payload.path, '/frame.html');
@@ -402,10 +337,10 @@ Deno.test({
 	},
 });
 
-// --- AC14 / MB1 / MB3: all ------------------------------------------------------------------------------------------
+// --- all ------------------------------------------------------------------------------------------------------------
 
 Deno.test({
-	name: 'e2e request scope (AC14, MB1, MB3): all — no off-list connection from a page, a pop-up or an OOPIF',
+	name: 'e2e request scope (all): no off-list connection from a page, a pop-up or an OOPIF',
 	ignore,
 	async fn(t) {
 		const rec = recorder();
@@ -422,39 +357,32 @@ Deno.test({
 					},
 				});
 
-				await t.step('the C1 page: every request class aimed off-list sends nothing; on-list loads', async () => {
-					await h.callText('browser_navigate', { url: `${s.a}/all.html` });
-					await until('the service worker to activate', () => s.aHits.includes('/sw-ready') ? true : undefined);
-					await pause(3_000);
-					const records = blocked(h);
-					const refusals = Object.fromEntries(manager(h).requestRefusals);
-					const types = [...new Set([...manager(h).targets.values()].map((target) => target.type))].sort();
-					console.log(
-						`[AC14] off-list recorder: ${rec.connections()} connections ${JSON.stringify(rec.lines)}; ` +
-							`site B saw ${JSON.stringify([...new Set(s.bHits)].sort())}; blocked records ` +
-							`${JSON.stringify(records.map((event) => event.payload))}`,
-					);
-					console.log(
-						`[MB3] attached target types ${JSON.stringify(types)}; refusals by type ${JSON.stringify(refusals)}; ` +
-							`arming warnings ${JSON.stringify(warnings.filter((line) => line.includes('could not be armed')))}`,
-					);
-					assertEquals(manager(h).requestScope, 'all');
-					assertEquals(rec.connections(), 0, 'no request, WebSocket or preconnect may reach the off-list host');
-					// On-list equivalents load, the WebSocket included (the layer excludes the allowlist).
-					assert(s.bHits.includes('/siteb.png'), JSON.stringify(s.bHits));
-					assert(s.bHits.includes('/ws-onlist[ws]'), `on-list WebSocket: ${JSON.stringify(s.bHits)}`);
-					// One record per refused document — the off-list iframe — and none for the refused subresources.
-					assertEquals(records.length, 1, JSON.stringify(records.map((event) => event.payload)));
-					assertEquals(records[0]?.payload.path, '/frame.html');
-					assert(!JSON.stringify(records).includes(CODE), 'a query reached the ring');
-					// MB3: armed before resume on the worker types, without a stall (the service worker activated above).
-					assertGreater(refusals.service_worker ?? 0, 0, 'the service worker’s own requests were judged');
-					assertGreater(refusals.shared_worker ?? 0, 0, 'the shared worker’s own requests were judged');
-					assertEquals(warnings.filter((line) => line.includes('could not be armed')), []);
-				});
+				await t.step(
+					'the all-classes page: every request class aimed off-list sends nothing; on-list loads',
+					async () => {
+						await h.callText('browser_navigate', { url: `${s.a}/all.html` });
+						await poll('the service worker to activate', () => s.aHits.includes('/sw-ready') ? true : undefined);
+						await pause(3_000);
+						const records = blocked(h);
+						const refusals = Object.fromEntries(manager(h).requestRefusals);
+						assertEquals(manager(h).requestScope, 'all');
+						assertEquals(rec.connections(), 0, 'no request, WebSocket or preconnect may reach the off-list host');
+						// On-list equivalents load, the WebSocket included (the layer excludes the allowlist).
+						assert(s.bHits.includes('/siteb.png'), JSON.stringify(s.bHits));
+						assert(s.bHits.includes('/ws-onlist[ws]'), `on-list WebSocket: ${JSON.stringify(s.bHits)}`);
+						// One record per refused document — the off-list iframe — and none for the refused subresources.
+						assertEquals(records.length, 1, JSON.stringify(records.map((event) => event.payload)));
+						assertEquals(records[0]?.payload.path, '/frame.html');
+						assert(!JSON.stringify(records).includes(CODE), 'a query reached the ring');
+						// Armed before resume on the worker types, without a stall (the service worker activated above).
+						assertGreater(refusals.service_worker ?? 0, 0, 'the service worker’s own requests were judged');
+						assertGreater(refusals.shared_worker ?? 0, 0, 'the shared worker’s own requests were judged');
+						assertEquals(warnings.filter((line) => line.includes('could not be armed')), []);
+					},
+				);
 
-				await t.step('MB1: browser_network_log names each refusal net::ERR_BLOCKED_BY_CLIENT', async () => {
-					const log = await structured<{
+				await t.step('browser_network_log names each refusal net::ERR_BLOCKED_BY_CLIENT', async () => {
+					const log = await h.callStructured<{
 						entries: Array<{
 							origin: string;
 							path: string;
@@ -462,18 +390,9 @@ Deno.test({
 							error_text: string | null;
 							blocked_reason: string | null;
 						}>;
-					}>(h, 'browser_network_log', { failed_only: true, limit: 500 });
+					}>('browser_network_log', { failed_only: true, limit: 500 });
 					const refused = log.entries.filter((entry) => off.includes(entry.origin));
-					console.log(
-						`[MB1] failed entries for off-list origins: ${
-							JSON.stringify(
-								refused.map((entry) => [entry.resource_type, entry.path, entry.error_text, entry.blocked_reason]),
-							)
-						}`,
-					);
-					// Measured on Chrome 154: a `Fetch.failRequest(BlockedByClient)` reaches `Network.loadingFailed` as
-					// `net::ERR_BLOCKED_BY_CLIENT.Inspector` with `blockedReason: 'inspector'`; a refused document as M12's
-					// `net::ERR_ABORTED`.
+					// How Chrome reports `Fetch.failRequest(BlockedByClient)`; a refused document is `net::ERR_ABORTED`.
 					const subresources = refused.filter((entry) => entry.resource_type !== 'Document');
 					assertGreater(subresources.length, 10, JSON.stringify(refused));
 					for (const entry of subresources) {
@@ -487,28 +406,26 @@ Deno.test({
 					assert(!JSON.stringify(log).includes(CODE), 'the request log is redacted at mint');
 				});
 
-				await t.step('F11: a window.open pop-up of an on-list page sends nothing off-list', async () => {
+				await t.step('a window.open pop-up of an on-list page sends nothing off-list', async () => {
 					await h.callText('browser_navigate', { url: `${s.a}/popup.html` });
 					const before = s.aHits.length;
 					await clickById(h, 'go');
-					await until(
+					await poll(
 						'the pop-up to load',
 						() => s.aHits.slice(before).includes('/popup-child.html') ? true : undefined,
 					);
 					await pause(2_500);
-					console.log(`[AC14] pop-up: off-list recorder ${rec.connections()} connections`);
 					assertEquals(rec.connections(), 0);
 				});
 
-				await t.step('F11: an OOPIF (an on-list site) whose img/fetch/WS aim off-list sends nothing', async () => {
+				await t.step('an OOPIF (an on-list site) whose img/fetch/WS aim off-list sends nothing', async () => {
 					const before = s.bHits.length;
 					await h.callText('browser_navigate', { url: `${s.a}/oopif.html` });
-					await until(
+					await poll(
 						'the OOPIF to load',
 						() => s.bHits.slice(before).includes('/oopif-inner.html') ? true : undefined,
 					);
 					await pause(2_500);
-					console.log(`[AC14] OOPIF: off-list recorder ${rec.connections()} connections`);
 					assertEquals(rec.connections(), 0);
 				});
 			});
@@ -520,7 +437,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e request scope (AC14): all — an off-list IP literal is refused by Fetch and the layer alike',
+	name: 'e2e request scope (all, IP literal): an off-list IP literal is refused by Fetch and the layer alike',
 	ignore,
 	async fn() {
 		const rec = recorder();
@@ -536,7 +453,6 @@ Deno.test({
 			});
 			await h.callText('browser_navigate', { url: `${s.a}/leave.html` });
 			await pause(3_000);
-			console.log(`[AC14] IP literal: off-list recorder ${rec.connections()} connections ${JSON.stringify(rec.lines)}`);
 			assert(s.aHits.includes('/leave.html'), 'the on-list page loaded by name');
 			assertEquals(rec.connections(), 0);
 		} finally {
@@ -546,10 +462,10 @@ Deno.test({
 	},
 });
 
-// --- AC16: all under a proxy ----------------------------------------------------------------------------------------
+// --- all under a proxy ----------------------------------------------------------------------------------------------
 
 Deno.test({
-	name: 'e2e request scope (AC16): all under a proxy — no HTTP request reaches it; the WebSocket CONNECT does',
+	name: 'e2e request scope (all, proxy): no HTTP request reaches it; the WebSocket CONNECT does',
 	ignore,
 	async fn() {
 		const rec = recorder();
@@ -568,14 +484,11 @@ Deno.test({
 			await h.callText('browser_navigate', { url: `${s.a}/leave.html` });
 			await pause(3_000);
 			const forOff = proxy.lines.filter((line) => line.includes('ttk-off.test'));
-			console.log(
-				`[AC16] proxy saw ${JSON.stringify(proxy.lines)}; off-list direct ${rec.connections()} connections`,
-			);
 			assert(s.aHits.includes('/leave.html'));
 			assertEquals(forOff.filter((line) => !line.startsWith('CONNECT ')), [], 'no HTTP request for the off-list host');
 			assert(
 				forOff.some((line) => line.startsWith(`CONNECT ${offHost} `)),
-				`the measured residual (C9): the WebSocket CONNECT reaches the proxy — ${JSON.stringify(proxy.lines)}`,
+				`the measured residual: the WebSocket CONNECT reaches the proxy — ${JSON.stringify(proxy.lines)}`,
 			);
 			assert(!proxy.lines.some((line) => line.includes(CODE)), 'a refused request’s query reached the proxy');
 			assertEquals(rec.connections(), 0, 'nothing reached the off-list host directly');

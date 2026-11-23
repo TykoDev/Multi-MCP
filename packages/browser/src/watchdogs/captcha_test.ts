@@ -1,6 +1,6 @@
 /**
- * `CaptchaWatchdog` contract (ARCHITECTURE.md §6.14; COMPLETIONS-CRITERIA.md §3.2 watchdog row 14:
- * "vendor event re-broadcast; `waitIfCaptchaSolving(≤120 s)` called pre-step").
+ * `CaptchaWatchdog` contract: vendor events are re-broadcast, and `waitIfCaptchaSolving(≤120 s)` is
+ * called before each step.
  *
  * Real bus, real `CdpClient`, real vendor `BrowserUse.captchaSolver*` frames over `ChromeFixture` —
  * the same frames a cloud proxy browser sends, which a stock Chromium simply never does.
@@ -130,7 +130,7 @@ Deno.test('captcha: the wait budget is overridable but never above the 120 s cei
 	assertEquals(resolveCaptchaWaitTimeoutMs(undefined, () => ''), CAPTCHA_WAIT_TIMEOUT_MS);
 });
 
-Deno.test('captcha: LISTENS_TO is connect + stopped, EMITS is the two §5.1.7 events', async () => {
+Deno.test('captcha: LISTENS_TO is connect + stopped, EMITS is the two captcha-solver events', async () => {
 	await using h = await harness();
 	assertEquals(CaptchaWatchdog.LISTENS_TO.map((cls) => cls.eventName), [
 		'BrowserConnectedEvent',
@@ -213,7 +213,7 @@ Deno.test('captcha: captchaSolver=false leaves the vendor frames unsubscribed', 
 });
 
 // ---------------------------------------------------------------------------
-// the pre-step wait (AGENT-RUNTIME.md §4 Phase 0)
+// the pre-step wait
 // ---------------------------------------------------------------------------
 
 Deno.test('captcha: a wait resolves when the vendor finishes, carrying vendor/url/duration', async () => {

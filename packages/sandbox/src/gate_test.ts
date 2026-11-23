@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects } from '@std/assert';
-import { Gate, GateError, Runs } from './gate.ts';
+import { Gate, GateError, OwnerGates, Runs } from './gate.ts';
+import { LIMITS } from './limits.ts';
 
 const RUN = '0f0e8c6a-3d2b-4c1a-9e8f-7a6b5c4d3e2f';
 const tick = () => new Promise((r) => setTimeout(r, 5));
@@ -52,7 +53,7 @@ Deno.test('gate: waiting too long is refused as busy', async () => {
 	assertEquals(gate.running, 0);
 });
 
-Deno.test('gate: a caller that goes away leaves the queue, and is told it was cancelled (SB-10)', async () => {
+Deno.test('gate: a caller that goes away leaves the queue, and is told it was cancelled', async () => {
 	const gate = new Gate(1, 4, 10_000);
 	const release = await gate.enter();
 	const controller = new AbortController();
@@ -121,4 +122,47 @@ Deno.test("runs: the caller's own signal reaches the work", async () => {
 	);
 	controller.abort();
 	assertEquals(await seen, true);
+});
+
+Deno.test('owner gates: an owner past its share waits behind its own, then is refused; another goes first', async () => {
+	const shares = new OwnerGates(1, 2, 10_000);
+	const shared = new Gate(2, 8, 10_000);
+	// Alice takes her one slot of the shared gate...
+	const aliceShare = await shares.enter('alice');
+	const aliceSlot = await shared.enter();
+	// ...her next two wait behind her own, not in the shared queue, and a fourth is refused as busy.
+	const second = shares.enter('alice');
+	const third = shares.enter('alice');
+	const refused = await assertRejects(() => shares.enter('alice'), GateError);
+	assertEquals([refused.status, refused.code], [429, 'busy']);
+	await tick();
+	assertEquals([shared.running, shared.waiting], [1, 0]);
+	// Bob is not held up by any of it: the shared gate's other slot is his at once.
+	const bobShare = await shares.enter('bob');
+	const bobSlot = await shared.enter();
+	assertEquals(shared.running, 2);
+	bobSlot();
+	bobShare();
+	// Alice's next goes once her first is done, and her share is forgotten when nothing holds or waits on it.
+	aliceSlot();
+	aliceShare();
+	(await second)();
+	(await third)();
+	assertEquals(shares.size, 0);
+});
+
+Deno.test('owner gates: a caller that goes away leaves its owner’s queue, and is forgotten', async () => {
+	const shares = new OwnerGates(1, 4, 10_000);
+	const held = await shares.enter('alice');
+	const controller = new AbortController();
+	const waiting = shares.enter('alice', controller.signal);
+	controller.abort();
+	const cancelled = await assertRejects(() => waiting, GateError);
+	assertEquals([cancelled.status, cancelled.code], [499, 'cancelled']);
+	held();
+	held();
+	assertEquals(shares.size, 0);
+	// The defaults are the documented share: half the shared slots, at least one.
+	assertEquals(new OwnerGates().max, Math.max(1, Math.floor(LIMITS.running / 2)));
+	assertEquals(LIMITS.ownerSessions, Math.max(1, Math.floor(LIMITS.sessionsRunning / 2)));
 });

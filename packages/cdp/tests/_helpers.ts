@@ -1,10 +1,10 @@
 /**
- * Shared Tier 2 harness for `@tykotech/cdp` (OBSERVABILITY-TESTING-CICD.md §4.3, §4.6).
+ * Shared Tier 2 harness for `@tykotech/cdp`.
  *
  * Rules this file exists to enforce:
- * - real headless Chromium, never a stub (D-TEST1);
+ * - real headless Chromium, never a stub;
  * - every page under test is served by a per-test `Deno.serve({ port: 0 })` fixture bound to
- *   127.0.0.1 — no remote URLs, ever (D-TEST1, AGENTS.md §4.3);
+ *   127.0.0.1 — no remote URLs, ever;
  * - per-test `timeout: 120_000` via {@linkcode browserTest} so a hang fails a *test*, not the job;
  * - sanitizers stay on: browsers, profile dirs, sockets and fixture servers are torn down in
  *   `finally`, including on failure.
@@ -26,7 +26,7 @@ import { skipBrowserTier } from '../../../tests/support/browser_tier.ts';
 const SCRATCH_ROOT = fromFileUrl(new URL('../../../tests/.scratch', import.meta.url));
 
 /**
- * Chromium for the browser tier: `BUA_TEST_CHROMIUM` first (OBSERVABILITY-TESTING-CICD.md §7.3 makes
+ * Chromium for the browser tier: `BUA_TEST_CHROMIUM` first (CI makes
  * it the only `--allow-run` value CI hands out), else whatever discovery finds locally.
  *
  * Resolves to `null` when nothing is available, and the browser suites then report as `ignored`
@@ -48,7 +48,7 @@ async function resolveTestBrowser(): Promise<string | null> {
 export const TEST_BROWSER: string | null = await resolveTestBrowser();
 
 /**
- * ERRATUM(SKIP-1): the tier's precondition is the resolved path **and** `--allow-run` for it. The
+ * The tier's precondition is the resolved path **and** `--allow-run` for it. The
  * skip is announced on stderr instead of being inferred from a count, and `BUA_REQUIRE_BROWSER`
  * (set by the CI legs that provision a browser) makes an unmet precondition a failure.
  */
@@ -142,11 +142,11 @@ export type FixtureServer = {
 };
 
 /**
- * Serves `routes` from an ephemeral loopback port (OBSERVABILITY-TESTING-CICD.md §4.3).
+ * Serves `routes` from an ephemeral loopback port.
  *
- * ERRATUM(M0-cdp-launch-ci-6): `hostname: '127.0.0.1'` is missing from the §4.3 snippet but is not
+ * `hostname: '127.0.0.1'` is not
  * optional — `Deno.serve` defaults to `0.0.0.0`, which the `--allow-net=127.0.0.1,localhost` test
- * matrix (SECURITY-AUTH.md §3.6) rightly denies.
+ * matrix rightly denies.
  */
 export function startFixtureServer(
 	routes: Record<string, (req: Request) => Response | Promise<Response>>,

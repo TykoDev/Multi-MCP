@@ -1,6 +1,6 @@
 {
 	"name": "paint_order",
-	"pins": "§6.3 paint-order occlusion: a later-painting opaque overlay suppresses what it covers, but never its own subtree or its ancestors",
+	"pins": "paint-order occlusion: a later-painting opaque overlay suppresses what it covers, but never its own subtree or its ancestors",
 	"tree": {
 		"tag": "HTML",
 		"children": [

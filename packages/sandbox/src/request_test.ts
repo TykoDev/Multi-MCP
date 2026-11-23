@@ -75,10 +75,10 @@ Deno.test('request: sizes and ranges are enforced', () => {
 	}
 	assertEquals(exec({ network: 'registries' }).network, 'registries');
 	assertThrows(() => exec({ network: 'open' }), RequestError, 'network');
-	// R12: the clone step's network is internal; a request can never name it, nor bring an egress of its own.
+	// The clone step's network is internal; a request can never name it, nor bring an egress of its own.
 	assertThrows(() => exec({ network: 'git' }), RequestError, 'network');
 	assertThrows(() => exec({ egress: 'x' }), RequestError, 'egress');
-	// C15: the donor's `scratch` mode (answer runs) was never reachable through the API, and is gone.
+	// No `scratch` mode: every run works in a workspace.
 	assertThrows(() => exec({ scratch: true }), RequestError, 'scratch');
 	assertEquals(exec({ stdin: 'print(1)' }).stdin, 'print(1)');
 	assertThrows(() => exec({ stdin: 'x'.repeat(LIMITS.stdinBytes + 1) }), RequestError, 'stdin');

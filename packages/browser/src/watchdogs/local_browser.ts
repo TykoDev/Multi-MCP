@@ -1,6 +1,6 @@
 /**
  * @module
- * `LocalBrowserWatchdog` — owner of the browser subprocess (ARCHITECTURE.md §6.1, D-BROWSER1).
+ * `LocalBrowserWatchdog` — owner of the browser subprocess.
  *
  * Handles `BrowserLaunchEvent`: composes launch args from the profile, asserts `--user-data-dir` is
  * set, resolves the executable, spawns via `@tykotech/cdp`'s `launchBrowser`, polls `/json/version`
@@ -15,32 +15,36 @@
  * - This watchdog owns the *policy*: when to launch, where the temp profile lives, and how the
  *   browser dies.
  *
- * ## Windows process-tree teardown (residual R3, carried forward from the M0 gate)
+ * ## Windows process-tree teardown
  *
- * Deno maps **both** `SIGTERM` and `SIGKILL` to `TerminateProcess` on Windows. The speced
+ * Deno maps **both** `SIGTERM` and `SIGKILL` to `TerminateProcess` on Windows. The
  * SIGTERM → 5 s → SIGKILL grace is therefore a no-op there, and `TerminateProcess` reaps only the
  * process it names — Chrome's renderer/GPU/utility children survive as orphans. So graceful shutdown
  * goes through CDP `Browser.close()` first, which makes Chrome tear down its **own** process tree,
  * and the process kill is the fallback for a browser that is already unreachable. What remains
  * genuinely unenforceable from Deno: if `Browser.close()` cannot be delivered (socket already dead,
  * hung renderer), the child processes are not reaped by us on Windows — no job-object API is exposed.
- * Temp profiles therefore keep the `bua-tmp-*` prefix that `bua doctor`'s zombie sweep targets, which
- * is the documented cleanup path for that case.
+ * Temp profiles therefore keep the `bua-tmp-*` prefix, so a leftover is recognisable and can be swept by prefix,
+ * which is the cleanup path for that case.
  *
- * ERRATUM(E-110) (review R2-1): **under a deployment allowlist the profile launches with preloading off.** A
- * speculation-rules `prefetch` — and the prefetch Chrome runs ahead of a cross-site `prerender` — is sent by the
- * browser's prefetch service, outside every `Fetch` interception point, so the document veto (E0, ERRATUM(E-94))
- * cannot refuse it, and the navigation it then serves sends no request at all: an off-list document committed with
- * nothing paused and nothing recorded. Measured on Chrome 154 (`tests/.scratch/fxb_flag_probe.log`, throwaway
- * profiles): no `--disable-features` / `--disable-blink-features` switch tried (`Prerender2`, `NoStatePrefetch`,
- * `SpeculationRulesPrefetchFuture`, blink `SpeculationRules`) stops it, and the user preference
+ * **Under a deployment allowlist the profile launches with preloading off.** A speculation-rules `prefetch` — and the
+ * prefetch Chrome runs ahead of a cross-site `prerender` — is sent by the browser's prefetch service, outside every
+ * `Fetch` interception point, so the document veto (E0) cannot refuse it, and the navigation it then serves sends no
+ * request at all: an off-list document would commit with nothing paused and nothing recorded. Measured on Chrome 154
+ * with throwaway profiles: no `--disable-features` / `--disable-blink-features` switch (`Prerender2`,
+ * `NoStatePrefetch`, `SpeculationRulesPrefetchFuture`, blink `SpeculationRules`) stops it, and the user preference
  * `net.network_prediction_options = 2` ("preload pages: never") does — neither the prefetch nor the prerender is sent.
  * So before the spawn, with a non-empty `allowedDomains`, that one key is merged into the profile's `Preferences`
  * file (created when absent; an existing file is rewritten through a temp file and a rename, every other key kept).
- * Without an allowlist nothing is written and the launch is the donor's. A file that does not parse as a JSON object
- * is left untouched (a warning, no clobber): the main-frame commit check in `SessionManager` remains behind it, as it
- * does for an attached browser this watchdog does not launch and for a profile-lock retry, which `launchBrowser`
- * runs on a fresh temp directory this hook never sees.
+ * Without an allowlist nothing is written. A file that does not parse as a JSON object is left untouched (a warning,
+ * no clobber): the main-frame commit check in `SessionManager` remains behind it, as it does for an attached browser
+ * this watchdog does not launch and for a profile-lock retry, which `launchBrowser` runs on a fresh temp directory
+ * this hook never sees.
+ *
+ * With `requestScope: 'all'` the same write also sets {@linkcode WEBRTC_UDP_OFF_PREFERENCE}, so WebRTC sends no UDP
+ * at all: ICE traffic never reaches `Fetch`, so the request filter alone cannot keep it on the allowlist. The lockdown
+ * script `SessionManager` registers and the host's resolver layer stand beside it (`webrtc_lockdown.ts`). A
+ * profile-lock retry's fresh directory misses this preference too; those two layers do not.
  */
 
 import type { HandlerContext } from '@tykotech/bus';
@@ -62,29 +66,50 @@ import { type HandlerBudget, handlerBudget } from './handler_budget.ts';
 import { BaseWatchdog, type WatchdogHost } from './base.ts';
 
 // ---------------------------------------------------------------------------
-// constants (ARCHITECTURE.md §6.1, §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// constants (load-bearing timing budgets)
 // ---------------------------------------------------------------------------
 
-/** `/json/version` readiness cadence (ARCHITECTURE.md §6.1). */
+/** `/json/version` readiness cadence. */
 export const JSON_VERSION_POLL_INTERVAL_MS = 100;
 
-/** Hard cap on the `/json/version` readiness wait (ARCHITECTURE.md §6.1). */
+/** Hard cap on the `/json/version` readiness wait. */
 export const JSON_VERSION_TIMEOUT_MS = 30_000;
 
-/** Attempts including the first; each retry gets a fresh temp profile dir (D-BROWSER1). */
+/** Attempts including the first; each retry gets a fresh temp profile dir. */
 export const PROFILE_LOCK_MAX_ATTEMPTS = 3;
 
 /**
- * ERRATUM(E-110): the Chrome preference a deployment allowlist sets before launch — `net.network_prediction_options`,
+ * The Chrome preference a deployment allowlist sets before launch — `net.network_prediction_options`,
  * where `2` is "never preload" (Chrome's `NETWORK_PREDICTION_NEVER`). It is what turns speculation-rules prefetch and
  * prerender off on Chrome 154; see the module note.
  */
 export const PRELOADING_OFF_PREFERENCE = { section: 'net', key: 'network_prediction_options', value: 2 } as const;
 
-/** ERRATUM(E-110): the profile file the preference lives in, inside `<userDataDir>/<profileDirectory>/`. */
+/**
+ * The Chrome preference `requestScope: 'all'` (over an allowlist) adds
+ * before launch — `webrtc.ip_handling_policy = disable_non_proxied_udp`, which turns off every WebRTC UDP socket (host
+ * candidates, STUN, TURN over UDP) unless a proxy carries UDP, which none does. Measured on Chromium 158: no UDP
+ * packet and no host candidate under it, where a page without it sent STUN to an off-list IP literal. It is a profile
+ * preference, not a switch, because `--force-webrtc-ip-handling-policy` measured inert on the branded build. What it
+ * leaves — WebRTC over TCP — goes through the resolver layer; see `webrtc_lockdown.ts`.
+ */
+export const WEBRTC_UDP_OFF_PREFERENCE = {
+	section: 'webrtc',
+	key: 'ip_handling_policy',
+	value: 'disable_non_proxied_udp',
+} as const;
+
+/** One profile preference this watchdog merges before a launch: `<section>.<key> = value`. */
+export interface ContainmentPreference {
+	readonly section: string;
+	readonly key: string;
+	readonly value: string | number;
+}
+
+/** The profile file the preference lives in, inside `<userDataDir>/<profileDirectory>/`. */
 export const PREFERENCES_FILENAME = 'Preferences';
 
-/** SIGTERM grace before SIGKILL (ARCHITECTURE.md §6.1). See the module note about Windows. */
+/** SIGTERM grace before SIGKILL. See the module note about Windows. */
 export const GRACEFUL_KILL_MS = 5_000;
 
 /** How long the CDP `Browser.close()` path waits before falling back to the process kill. */
@@ -92,8 +117,8 @@ export const BROWSER_CLOSE_TIMEOUT_MS = 5_000;
 
 /**
  * Temp profile prefix. `@tykotech/cdp` uses the same literal but does not export it (its `mod.ts` is the
- * only sanctioned import surface), and `bua doctor --kill-zombies` sweeps this exact glob
- * (SETUP-WIZARD.md §4.4) — so the two copies are pinned equal by `local_browser_test.ts`.
+ * only sanctioned import surface), and leftovers are swept by this exact prefix,
+ * so the two copies are pinned equal by `local_browser_test.ts`.
  */
 export const TEMP_PROFILE_PREFIX = 'bua-tmp-';
 
@@ -106,8 +131,8 @@ const DISPLAY_ENV_KEYS: readonly string[] = ['DISPLAY', 'WAYLAND_DISPLAY'];
 
 /**
  * Injection seams. Every default is the real implementation; they exist because the tier-1 test
- * matrix grants neither `--allow-run` nor a writable temp root
- * (OBSERVABILITY-TESTING-CICD.md §4.6), so arg composition and the kill ladder are exercised without
+ * matrix grants neither `--allow-run` nor a writable temp root,
+ * so arg composition and the kill ladder are exercised without
  * a browser while `tests/integration/session_lifecycle_test.ts` covers the real spawn.
  */
 export interface LocalBrowserWatchdogOptions {
@@ -116,7 +141,7 @@ export interface LocalBrowserWatchdogOptions {
 	readonly ensureDir?: ((path: string) => Promise<void>) | undefined;
 	/**
 	 * Removes one owned profile directory. `expired()` is the kill budget: an implementation MUST
-	 * consult it between operations and stop when it returns `true` (ERRATUM(KILL-3)). A seam that
+	 * consult it between operations and stop when it returns `true`. A seam that
 	 * ignores it still type-checks — a one-argument function is assignable here — which is exactly the
 	 * shape a test recorder wants.
 	 */
@@ -142,7 +167,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	#launched: LaunchedBrowser | null = null;
 	#launchPlan: BrowserLaunchPlan | null = null;
 	/**
-	 * The spawn between "started" and "landed" (ERRATUM(CANCEL-4)). See
+	 * The spawn between "started" and "landed". See
 	 * {@linkcode LocalBrowserWatchdog.onBrowserLaunchEvent}: without this, that window is a hole in the
 	 * only record this process keeps of the subprocess.
 	 */
@@ -176,29 +201,25 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	 * Spawns the browser and returns its CDP URL. Idempotent: a second launch on a live browser —
 	 * or on one whose spawn is still in flight — returns the same URL rather than starting a second
 	 * Chrome against the same profile.
+	 * ## The window between "Chrome has been forked" and "we have a handle on it"
 	 *
-	 * ERRATUM(CANCEL-4): this is a **bookkeeping** repair, not a budget one, and it is the only defect
-	 * in this batch that loses a resource rather than merely writing late. `#launched` used to be
-	 * assigned *after* the spawn await, so between "Chrome has been forked" and "we have a handle on
-	 * it" the watchdog's own record said there was no browser. A `BrowserStopEvent` arriving in that
-	 * window read `#launched === null`, returned without dispatching a kill, and left a Chrome running
-	 * with nothing in-process aware of it. `bua doctor --kill-zombies` sweeps the `bua-tmp-*` profile
-	 * directory afterwards; it cannot recover the process.
+	 * `LaunchedBrowser` does not exist until the spawn resolves, so `#launched` can only be assigned
+	 * *after* the spawn await. On its own that leaves a window in which the watchdog's own record says
+	 * there is no browser: a `BrowserStopEvent` arriving then would read `#launched === null`, return
+	 * without dispatching a kill, and leave a Chrome running with nothing in-process aware of it
+	 * (the `bua-tmp-*` profile directory can be swept by prefix afterwards, but that cannot
+	 * recover the process).
 	 *
-	 * Three repairs were available and only one of them is honest:
-	 *
-	 * 1. *Assign before the await* — impossible. `LaunchedBrowser` does not exist until the spawn
-	 *    resolves; there is nothing to assign.
-	 * 2. *Make the stop await the spawn* — trades an orphan for a hang. The spawn is bounded by
-	 *    3 × {@linkcode JSON_VERSION_TIMEOUT_MS} = 90 s, which is twice `BrowserStopEvent`'s 45 s
-	 *    budget, so the stop would become the straggler this whole class of fix exists to prevent.
-	 * 3. *Track the pending spawn and let it reap itself* — taken. `#launching` makes the in-flight
-	 *    spawn visible to the stop handler, and `#launchGeneration` lets this handler discover, when
-	 *    its spawn finally lands, that a kill overtook it — in which case **it** closes the browser it
-	 *    just created, because by then it is the only code holding the handle.
+	 * Making the stop await the spawn would trade an orphan for a hang: the spawn is bounded by
+	 * 3 × {@linkcode JSON_VERSION_TIMEOUT_MS} = 90 s, twice `BrowserStopEvent`'s 45 s budget, so the
+	 * stop would become a straggler. Instead the pending spawn is tracked and reaps itself:
+	 * `#launching` makes the in-flight spawn visible to the stop handler, and `#launchGeneration` lets
+	 * this handler discover, when its spawn finally lands, that a kill overtook it — in which case
+	 * **it** closes the browser it just created, because by then it is the only code holding the
+	 * handle.
 	 *
 	 * That last step deliberately runs work after the dispatch may have been abandoned. It is the same
-	 * asymmetry ERRATUM(KILL-1) chose: `launched.close()` is bounded by construction (it ends in
+	 * asymmetry the kill handler makes: `launched.close()` is bounded by construction (it ends in
 	 * SIGKILL), and an orphaned Chrome is a strictly worse outcome than one escaped bounded operation.
 	 */
 	async onBrowserLaunchEvent(_event: BrowserLaunchEvent, _context?: HandlerContext): Promise<BrowserLaunchResult> {
@@ -220,16 +241,21 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 			onWarn: (message) => this.logger.warn('browser profile resolution', { message }),
 		});
 
-		// Normative assertion of ARCHITECTURE.md §6.1. `resolveBrowserProfile` also asserts it; the
+		// The `--user-data-dir` invariant. `resolveBrowserProfile` also asserts it; the
 		// second check is deliberate, because "never launch against the user's real Chrome profile" is
 		// the one launch invariant whose violation is silent and destructive.
 		assertUserDataDirPresent(resolved.args);
 		await this.#ensureDir(resolved.downloadsPath);
-		// ERRATUM(E-110): an allowlist launches with preloading off — the one control that stops speculation-rules
+		// An allowlist launches with preloading off — the one control that stops speculation-rules
 		// prefetch/prerender before a request leaves (module note). Never throws: the commit check stands behind it.
 		const allowed = profile.allowedDomains;
 		if (allowed !== null && allowed !== undefined && allowed.length > 0) {
-			await this.#disablePreloading(join(resolved.userDataDir, resolved.profileDirectory));
+			// `all` also turns WebRTC's UDP off, in the same one write. Like the
+			// session manager's scope, it is inert without an allowlist.
+			const preferences: ContainmentPreference[] = profile.requestScope === 'all'
+				? [PRELOADING_OFF_PREFERENCE, WEBRTC_UDP_OFF_PREFERENCE]
+				: [PRELOADING_OFF_PREFERENCE];
+			await this.#writeContainmentPreferences(join(resolved.userDataDir, resolved.profileDirectory), preferences);
 		}
 
 		const plan = toLaunchPlan(profile, resolved);
@@ -280,25 +306,24 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	/**
 	 * Kills the browser and removes the temp profiles this watchdog created. Idempotent.
 	 *
-	 * ERRATUM(KILL-1): the `HandlerContext` is **read**, not dropped. `BrowserKillEvent.timeoutSec` is
-	 * 30 (DATA-MODEL.md §5.1.1) and the bus enforces it by aborting a signal and rejecting the
-	 * dispatch — it has no way to stop the handler itself, so an unbounded teardown simply carried on
-	 * past the rejection. The escaping side effect was a `Deno.remove` still in flight while unrelated
-	 * work ran, which is where Deno's op sanitizer found it. `context` is optional so that a direct
-	 * call outside a dispatch keeps the old unbudgeted behaviour rather than a zero budget.
+	 * The `HandlerContext` is **read**, not dropped. `BrowserKillEvent.timeoutSec` is 30 and the bus
+	 * enforces it by aborting a signal and rejecting the dispatch — it has no way to stop the handler
+	 * itself, so an unbounded teardown would simply carry on past the rejection, leaving a
+	 * `Deno.remove` in flight while unrelated work runs. `context` is optional so that a direct call
+	 * outside a dispatch stays unbudgeted rather than getting a zero budget.
 	 */
 	async onBrowserKillEvent(_event: BrowserKillEvent, context?: HandlerContext): Promise<void> {
 		await this.#kill(handlerBudget(context));
 	}
 
 	/**
-	 * Enqueues the kill for a locally-launched browser (ARCHITECTURE.md §6.1).
+	 * Enqueues the kill for a locally-launched browser.
 	 *
 	 * `keepAlive` is honoured exactly as `BrowserSession.stop()` honours it: a non-forced stop on a
 	 * keep-alive profile leaves the browser running, which is the whole point of the flag.
 	 *
-	 * ERRATUM(CANCEL-4): "is there a browser?" is `#launched !== null` **or** a spawn in flight. The
-	 * second disjunct is the whole repair — see {@linkcode LocalBrowserWatchdog.onBrowserLaunchEvent}.
+	 * "Is there a browser?" is `#launched !== null` **or** a spawn in flight. The second disjunct
+	 * closes the spawn window — see {@linkcode LocalBrowserWatchdog.onBrowserLaunchEvent}.
 	 */
 	async onBrowserStopEvent(event: BrowserStopEvent, _context?: HandlerContext): Promise<void> {
 		if (this.#launched === null && this.#launching === null) return;
@@ -315,7 +340,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	async #kill(budget: HandlerBudget): Promise<void> {
 		const launched = this.#launched;
 		this.#launched = null;
-		// ERRATUM(CANCEL-4): invalidate any spawn in flight *without* waiting for it. The launch
+		// Invalidate any spawn in flight *without* waiting for it. The launch
 		// handler sees the generation move and reaps its own product when it lands; waiting here would
 		// put a 90 s spawn ladder inside a 30 s kill budget.
 		const superseded = this.#launching !== null;
@@ -324,16 +349,16 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 
 		// The subprocess is reaped even on the abort path: `launched.close()` is bounded by
 		// construction (it ends in SIGKILL), and an orphaned Chrome is a strictly worse outcome than a
-		// leftover directory — which `bua doctor --kill-zombies` already sweeps by prefix.
+		// leftover directory, which the next kill sweeps by prefix.
 		if (launched !== null) await this.#closeBrowser(launched, budget);
 
 		if (superseded) {
 			// Chrome is still starting up *inside* one of these directories. Removing a live profile is
 			// worse than leaving one behind, and the leftovers keep the `bua-tmp-` prefix, so the next
-			// kill (or `bua doctor --kill-zombies`) finishes the job.
+			// kill finishes the job.
 			this.logger.warn('a browser launch was still in flight at kill time; the temp profiles stay', {
 				dirs: [...this.#ownedProfileDirs],
-				hint: 'left for the next kill, or for `bua doctor --kill-zombies`',
+				hint: 'left for the next kill',
 			});
 			return;
 		}
@@ -341,7 +366,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Closes a browser whose launch a kill overtook (ERRATUM(CANCEL-4)).
+	 * Closes a browser whose launch a kill overtook.
 	 *
 	 * No CDP `Browser.close()` first and no grace window: the session this browser was being launched
 	 * for is already being torn down, nobody ever held its socket, and the point is to hold the
@@ -357,7 +382,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 		} catch (error) {
 			this.logger.warn('the superseded browser could not be closed', {
 				error,
-				hint: '`bua doctor --kill-zombies` sweeps stale bua-tmp-* directories',
+				hint: 'stale bua-tmp-* directories are safe to remove once no browser runs',
 			});
 		}
 	}
@@ -369,12 +394,12 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	 * 3. `launched.close()` — SIGTERM → {@linkcode GRACEFUL_KILL_MS} → SIGKILL (a no-op on an
 	 *    already-exited child) plus stderr-tap and retry-profile cleanup.
 	 *
-	 * ERRATUM(KILL-2): the three 5 s caps used to be *reservations* — stacked unconditionally, so a
-	 * browser slow to die spent 15 s of a 30 s budget here and left the profile sweep to run outside
-	 * its own dispatch. They are **ceilings** now, each clamped to what the budget can still pay for.
-	 * The constants themselves are untouched: ARCHITECTURE.md §6.1 fixes them and
-	 * `local_browser_test.ts` asserts them verbatim. Ordering is unchanged and deliberate — the
-	 * profile cannot be swept before the browser lets go of it, least of all on Windows.
+	 * The three 5 s caps are **ceilings**, each clamped to what the budget can still pay for, not
+	 * reservations stacked unconditionally — stacked, a browser slow to die would spend 15 s of a 30 s
+	 * budget here and leave the profile sweep to run outside its own dispatch. The constants
+	 * themselves are fixed and `local_browser_test.ts` asserts them verbatim. The ordering is
+	 * deliberate — the profile cannot be swept before the browser lets go of it, least of all on
+	 * Windows.
 	 */
 	async #closeBrowser(launched: LaunchedBrowser, budget: HandlerBudget): Promise<void> {
 		const client = this.host.cdpClient;
@@ -400,9 +425,9 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 	/**
 	 * Sweeps the temp profiles this watchdog created, within whatever budget is left.
 	 *
-	 * ERRATUM(KILL-3): a sweep the budget cannot pay for is never *started*. A directory left behind
+	 * A sweep the budget cannot pay for is never *started*. A directory left behind
 	 * keeps its `bua-tmp-` prefix and is re-queued, so the next `BrowserKillEvent` (and
-	 * `bua doctor --kill-zombies`) finishes the job — whereas a `Deno.remove` that outlives its
+	 * a manual sweep) finishes the job — whereas a `Deno.remove` that outlives its
 	 * dispatch is an escaped side effect nothing can recall.
 	 */
 	async #removeOwnedDirs(budget: HandlerBudget): Promise<void> {
@@ -417,7 +442,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 			try {
 				await remove(dir, budget.expired);
 			} catch (error) {
-				// ERRATUM(KILL-5): never fail a stop over one directory — but never swallow it either.
+				// Never fail a stop over one directory — but never swallow it either.
 				// This was a `debug`, which `silentBusLogger` discards, so a sweep that failed left a
 				// profile behind and said nothing. The leftover `bua-tmp-*` directories this produces on
 				// Windows — a handle still open on the profile when the sweep runs — were invisible until
@@ -426,7 +451,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 				this.logger.warn('temp profile dir could not be removed', {
 					dir,
 					error,
-					hint: '`bua doctor --kill-zombies` sweeps stale bua-tmp-* directories',
+					hint: 'stale bua-tmp-* directories are safe to remove once no browser runs',
 				});
 				continue;
 			}
@@ -438,19 +463,23 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 		this.#ownedProfileDirs.unshift(...deferred);
 		this.logger.warn('kill budget spent before the temp profiles were swept', {
 			dirs: deferred,
-			hint: 'left for the next kill, or for `bua doctor --kill-zombies`',
+			hint: 'left for the next kill',
 		});
 	}
 
 	// -- filesystem seams --------------------------------------------------------------------------
 
 	/**
-	 * ERRATUM(E-110): merges {@linkcode PRELOADING_OFF_PREFERENCE} into `<profileDir>/Preferences`. Creates the file
+	 * Merges {@linkcode PRELOADING_OFF_PREFERENCE} into `<profileDir>/Preferences`. Creates the file
 	 * when absent; rewrites an existing JSON object through a temp file and a rename; leaves anything else alone. A
 	 * failure is a `warn` naming no path content beyond the file name — the launch goes on, with the commit check as
 	 * the remaining containment.
+	 *
+	 * Takes the list of preferences, so `all`'s
+	 * {@linkcode WEBRTC_UDP_OFF_PREFERENCE} lands in the same write; the messages name preloading because it is always
+	 * in the list, and the WebRTC lockdown script and the resolver layer remain behind a failed write.
 	 */
-	async #disablePreloading(profileDir: string): Promise<void> {
+	async #writeContainmentPreferences(profileDir: string, preferences: readonly ContainmentPreference[]): Promise<void> {
 		const file = join(profileDir, PREFERENCES_FILENAME);
 		try {
 			let prefs: Record<string, unknown> = {};
@@ -473,13 +502,15 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 				}
 				await Deno.mkdir(profileDir, { recursive: true });
 			}
-			const { section, key, value } = PRELOADING_OFF_PREFERENCE;
-			const current = prefs[section];
-			const merged = current !== null && typeof current === 'object' && !Array.isArray(current)
-				? { ...(current as Record<string, unknown>), [key]: value }
-				: { [key]: value };
+			for (const { section, key, value } of preferences) {
+				const current = prefs[section];
+				const merged = current !== null && typeof current === 'object' && !Array.isArray(current)
+					? { ...(current as Record<string, unknown>), [key]: value }
+					: { [key]: value };
+				prefs = { ...prefs, [section]: merged };
+			}
 			const temp = `${file}.ttk-${crypto.randomUUID()}`;
-			await Deno.writeTextFile(temp, JSON.stringify({ ...prefs, [section]: merged }));
+			await Deno.writeTextFile(temp, JSON.stringify(prefs));
 			try {
 				await Deno.rename(temp, file);
 			} catch (error) {
@@ -505,7 +536,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 		} catch (error) {
 			throw new BrowserError(
 				'could not create a temp profile directory; set BrowserProfile.userDataDir or widen ' +
-					`--allow-write (SECURITY-AUTH.md §3.3): ${error instanceof Error ? error.message : String(error)}`,
+					`--allow-write: ${error instanceof Error ? error.message : String(error)}`,
 				{ cause: error },
 			);
 		}
@@ -527,7 +558,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 }
 
 // ---------------------------------------------------------------------------
-// cooperative profile removal (ERRATUM(KILL-3))
+// cooperative profile removal
 // ---------------------------------------------------------------------------
 
 /**
@@ -542,7 +573,7 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
  * small enough that "stop now" genuinely means "stop with nothing in flight".
  *
  * Stopping early leaves a partially removed `bua-tmp-*` directory, which is the documented input to
- * `bua doctor --kill-zombies` (SETUP-WIZARD.md §4.4) and to a retry, since this is idempotent.
+ * a later sweep and to a retry, since this is idempotent.
  */
 export async function removeProfileTree(path: string, expired: () => boolean = () => false): Promise<void> {
 	if (expired()) return;
@@ -590,8 +621,8 @@ async function _removeEntry(path: string): Promise<void> {
 /**
  * Reads the display environment without requiring a grant for it.
  *
- * The test and CLI permission matrices scope `--allow-env` to `BUA_*` / `BROWSER_USE_*` / `TIMEOUT_*`
- * (SECURITY-AUTH.md §3.6), which does not include `DISPLAY`; an unreadable variable must degrade to
+ * The test and CLI permission matrices scope `--allow-env` to `BUA_*` / `BROWSER_USE_*` / `TIMEOUT_*`,
+ * which does not include `DISPLAY`; an unreadable variable must degrade to
  * "no display", never throw `NotCapable`.
  */
 function _readDisplayEnv(): Record<string, string | undefined> {

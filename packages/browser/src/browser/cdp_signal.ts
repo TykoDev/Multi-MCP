@@ -1,20 +1,17 @@
 /**
  * @module
- * Signal binding for a CDP client — ERRATUM(E-52), lifted out of `watchdogs/base.ts` by
- * ERRATUM(E-62) so the watchdogs and `BrowserSession` share one implementation.
+ * Signal binding for a CDP client, shared by the watchdogs and `BrowserSession`.
  *
- * Moved **verbatim**, for the reason ERRATUM(CANCEL-0) gives: copying it into the second consumer is
- * the `isActuallyScrollable` failure mode `gate:duplicates` exists to catch, and importing it *from*
- * `watchdogs/base.ts` would make the browser layer depend on a leaf watchdog. `browser/` is where
- * both consumers can reach it without either owning it.
+ * It lives here because copying it into a second consumer is the duplication `gate:duplicates`
+ * exists to catch, and importing it *from* `watchdogs/base.ts` would make the browser layer depend
+ * on a leaf watchdog. `browser/` is where both consumers can reach it without either owning it.
  *
  * ## What this is for
  *
  * The bus gives each handler an `AbortSignal` and rejects its dispatch at `timeoutSec`, but it cannot
- * *stop* the handler: 53 of the 54 handlers audited never read the signal, so a handler that blew its
- * budget kept issuing CDP traffic at a browser the system had already given up on, and nothing
- * observed it. Filesystem escapes were caught by Deno's op sanitizer; CDP escapes are audited by
- * nothing.
+ * *stop* the handler: almost no handler reads the signal, so a handler that blows its budget would
+ * keep issuing CDP traffic at a browser the system has already given up on, and nothing would
+ * observe it. Deno's op sanitizer catches filesystem escapes; nothing audits CDP escapes.
  *
  * A call made through a bound view after the budget blows is rejected by `@tykotech/cdp`'s
  * `AbortSignal.any` composition **before it reaches the socket**, and an in-flight call settles at the
@@ -44,10 +41,10 @@ export interface CdpCallSignal {
  *
  * Implemented as a `Proxy` rather than a hand-built object for two reasons. It stays correct as
  * `@tykotech/cdp`'s domain manifest grows — a facade enumerating domains would silently omit any method
- * added later, which is the "check that cannot fire" shape this whole exercise exists to avoid. And
+ * added later, which is a check that cannot fire. And
  * `CdpClient` carries `#private` fields, so no object literal is assignable to it; a facade with a
- * narrower type would force every helper that takes a `CdpClient` to be re-typed, turning a
- * cancellation fix into a package-wide signature churn.
+ * narrower type would force every helper that takes a `CdpClient` to be re-typed — a package-wide
+ * signature churn for a cancellation concern.
  *
  * `Reflect.get(target, prop, target)` — receiver `target`, not the proxy — is load-bearing: the
  * client's getters read `#private` state, which is unreachable through any other receiver.

@@ -1,52 +1,26 @@
 /**
- * The per-session request log behind `browser_network_log` and `browser_har_export` (R4, design §2.6, D-116).
- *
- * ## Why its own buffer, not the event ring
- *
- * The ring is replayable to every `mcp:invoke` holder of a session and carries no URL with a query, no header and no
- * body (I-8). A request log needs all three, gated by `network:read` at read time, so it lives here: one bounded
- * buffer per {@linkcode SessionRecord}, in memory only, dying with the session.
- *
- * ## Redaction at mint
- *
- * What a header *name* says is a credential never enters the buffer: `Authorization`, `Proxy-Authorization`,
- * `Cookie`, `Set-Cookie`, `Sec-WebSocket-Protocol` (where a browser client carries a token, since it cannot set
- * `Authorization` on a WebSocket), and any name containing `token`, `secret`, `session`, `auth`, `key`, `csrf`,
- * `xsrf`, `cookie`, `pass` (`password`, `passcode`), `pwd`, `credential`, `signature`, `jwt`, `bearer`, `otp`,
- * `dpop`, `assertion` or `principal` is stored as `[redacted]` (review R2-3 widened the list; `cookie` as a
- * substring was already a narrowing beyond the design's list: `Cookie2`, `X-Cookie-…`). A request body (`postData`)
- * is never read. Full URLs are kept — capped — because a `network:read` holder may read them; everyone else gets
- * {@linkcode projectHeaders}' and the tool's origin+path projection, applied at read. The `path` every reader sees
- * carries no `;matrix=params` (a `;jsessionid=` is a session) and, for a `data:` URL, only its media type.
- *
- * Review R2-7: **redaction before every cut.** The server's secret redaction (`SecretStore.redact`, handed down by
- * the registry) runs on the whole URL and the whole path before they are capped, so a configured secret straddling a
- * cap cannot leave its prefix behind; the read path redacts again, as it always did.
- *
- * ## Bounds
- *
- * At most {@linkcode NETWORK_LOG_MAX_ENTRIES} entries and {@linkcode NETWORK_LOG_MAX_BYTES} of serialized entries
- * (UTF-8), oldest evicted first; `dropped` counts evictions so a reader can tell "the page was quiet" from "you
- * missed it". One entry's header block is at most {@linkcode MAX_HEADER_BLOCK_BYTES}. Always on: it is metadata,
- * and with `TTK_MAX_SESSIONS` sessions it costs at most that many times 512 KiB.
+ * The per-session request log behind `browser_network_log` and `browser_har_export`: bounded, in memory, dying with
+ * the session.
+ * Redacted at mint: credential-named headers (`Authorization`, `Cookie`, any name with token, secret, session, key,
+ * pass…) are stored as `[redacted]` and bodies are never read; full URLs reach only a `network:read` holder.
  */
 import type { CdpClient, CdpEventParams } from '@tykotech/cdp';
-// NF-2: the path cutters live in `events.ts` beside `navigationTarget`, so a navigation record and a log entry cut a
-// path the same way; `loggedPath` is re-exported here for the importers that always found it in this module.
+// The path cutters live in `events.ts` beside `navigationTarget`, so a navigation record and a log entry cut a
+// path the same way; `loggedPath` is re-exported here for the importers that read it from this module.
 import { loggedPath, navigationTarget, stripMatrixParams } from './events.ts';
 
 export { loggedPath };
 
-/** Entries a session's log retains (design §2.6). */
-export const NETWORK_LOG_MAX_ENTRIES = 500;
-/** Serialized bytes a session's log retains (design §2.6). */
-export const NETWORK_LOG_MAX_BYTES = 524_288;
-/** One entry's request plus response headers, serialized as `name` + `value` (design §2.6). */
+/** Entries a session's log retains. */
+const NETWORK_LOG_MAX_ENTRIES = 500;
+/** Serialized bytes a session's log retains. */
+const NETWORK_LOG_MAX_BYTES = 524_288;
+/** One entry's request plus response headers, serialized as `name` + `value`. */
 export const MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 /** The longest `url_full` kept; a `data:` URL can be megabytes and is cut here. */
 export const MAX_LOGGED_URL_CHARS = 4096;
 /** The longest `path` kept (a `data:` URL's "path" is its whole payload). */
-export const MAX_LOGGED_PATH_CHARS = 1024;
+const MAX_LOGGED_PATH_CHARS = 1024;
 /** The longest `error_text` / `blocked_reason` kept. */
 const MAX_LOGGED_REASON_CHARS = 256;
 /** What a redacted header value reads as. */
@@ -57,7 +31,7 @@ const SENSITIVE_HEADER_NAMES: ReadonlySet<string> = new Set([
 	'proxy-authorization',
 	'cookie',
 	'set-cookie',
-	// Review R2-3: a browser cannot set `Authorization` on a WebSocket, so a token rides in the subprotocol list.
+	// A browser cannot set `Authorization` on a WebSocket, so a token rides in the subprotocol list.
 	'sec-websocket-protocol',
 ]);
 const SENSITIVE_HEADER_PARTS: readonly string[] = [
@@ -69,8 +43,8 @@ const SENSITIVE_HEADER_PARTS: readonly string[] = [
 	'csrf',
 	'xsrf',
 	'cookie',
-	// Review R2-3 (17 of 24 credential-shaped names were kept by the list above): over-redacting a header that only
-	// looks like a credential costs a value nobody needed; under-redacting one costs the credential.
+	// The parts above alone miss most credential-shaped names: over-redacting a header that only looks like a
+	// credential costs a value nobody needed; under-redacting one costs the credential.
 	'pass',
 	'pwd',
 	'credential',
@@ -85,9 +59,9 @@ const SENSITIVE_HEADER_PARTS: readonly string[] = [
 
 /**
  * Headers whose value is a URL, or carries one, that the read projection cuts to origin+path without
- * `network:read` (F3): a relative reference in them loses its query and fragment too.
+ * `network:read`: a relative reference in them loses its query and fragment too.
  */
-export const URL_VALUED_HEADERS: ReadonlySet<string> = new Set([
+const URL_VALUED_HEADERS: ReadonlySet<string> = new Set([
 	'referer',
 	'location',
 	'content-location',
@@ -134,7 +108,7 @@ export interface NetworkEntry {
 }
 
 /** {@linkcode NetworkLog.read}'s query. */
-export interface NetworkLogQuery {
+interface NetworkLogQuery {
 	/** Entries with `seq` greater than this; `0` (or absent) is "from the oldest retained". */
 	readonly since?: number;
 	readonly limit: number;
@@ -143,13 +117,13 @@ export interface NetworkLogQuery {
 	readonly failedOnly?: boolean;
 }
 
-/** Construction options; every member defaults to the design's value. */
-export interface NetworkLogOptions {
+/** Construction options; every member defaults to the published bound. */
+interface NetworkLogOptions {
 	readonly maxEntries?: number;
 	readonly maxBytes?: number;
 	readonly now?: () => number;
 	/**
-	 * Review R2-7: the server's secret redaction (`SecretStore.redact`), applied to a URL and a path **before** they are
+	 * The server's secret redaction (`SecretStore.redact`), applied to a URL and a path **before** they are
 	 * capped at mint. The identity when the deployment configured no secrets.
 	 */
 	readonly redact?: (text: string) => string;
@@ -229,12 +203,7 @@ export class NetworkLog {
 		return off;
 	}
 
-	/**
-	 * Entries after `since`, oldest first, at most `limit`. `nextSince` is where the next page starts — the last
-	 * entry returned when the limit cut the page, else the newest `seq` scanned, so filtered-out entries are not
-	 * re-scanned. `dropped` counts the entries after `since` that were evicted before this read: they existed and
-	 * cannot be returned.
-	 */
+	/** Entries after `since`, oldest first, at most `limit`. */
 	read(query: NetworkLogQuery): { entries: NetworkEntry[]; nextSince: number; dropped: number } {
 		const since = query.since ?? 0;
 		const types = query.resourceTypes === undefined || query.resourceTypes.length === 0
@@ -309,7 +278,7 @@ export class NetworkLog {
 			started_at: isoOf(params.wallTime, this.#now),
 			method: String(params.request.method ?? ''),
 			origin: target.origin,
-			// Review R2-3 / R2-7: no matrix parameters, a `data:` URL's media type only, redacted before the cap.
+			// No matrix parameters, a `data:` URL's media type only, redacted before the cap.
 			path: this.#redact(loggedPath(url)).slice(0, MAX_LOGGED_PATH_CHARS),
 			has_query: target.has_query,
 			url_full: this.#redact(url).slice(0, MAX_LOGGED_URL_CHARS),
@@ -448,9 +417,8 @@ export function boundHeaders(
 }
 
 /**
- * A URL cut to what a caller without `network:read` may see (F3): an absolute URL to origin + path (no matrix
- * parameters — review R2-3), a `data:` URL to its media type; anything else — a relative reference — to the part
- * before its query or fragment.
+ * A URL cut to what a caller without `network:read` may see: an absolute URL to origin + path (no matrix parameters),
+ * a `data:` URL to its media type; anything else — a relative reference — to the part before its query or fragment.
  */
 export function cutUrl(raw: string): string {
 	const parsed = URL.parse(raw);
@@ -465,18 +433,16 @@ export function cutUrl(raw: string): string {
 const ABSOLUTE_URL = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>]*/g;
 
 /**
- * A `?query` or `#fragment` anywhere in a header value, up to whitespace, a quote or an angle bracket (review R2-3).
+ * A `?query` or `#fragment` anywhere in a header value, up to whitespace, a quote or an angle bracket.
  * Not up to `;` or `,`: a query may carry either, and stopping there would leave its tail (`?a=1;token=…`).
  */
 const QUERY_OR_FRAGMENT = /[?#][^\s"'<>]*/g;
 
 /**
- * One header value as a caller without `network:read` sees it (F3, design §2.6): every absolute URL anywhere in the
- * value is cut to origin + path, and — review R2-3 — every `?query` / `#fragment` reference in **every** header value
- * is cut, not only in the URL-valued ones: a relative reference with a query rides in `Reporting-Endpoints`, a CSP
- * `report-uri`, a custom `X-Redirect` as readily as in `Location`. The URL-valued headers
- * ({@linkcode URL_VALUED_HEADERS}) are then cut as a whole reference too — `Location: /cb?code=…`,
- * `Link: </x?t=…>; rel=preload`, `Refresh: 0; url=/next?s=…`.
+ * One header value as a caller without `network:read` sees it: every absolute URL anywhere in the value is cut to
+ * origin + path, and every `?query` / `#fragment` reference in **every** header value is cut, not only in the
+ * URL-valued ones: a relative reference with a query rides in `Reporting-Endpoints`, a CSP `report-uri`, a custom
+ * `X-Redirect` as readily as in `Location`.
  */
 export function cutHeaderValue(name: string, value: string): string {
 	if (value === REDACTED_HEADER) return value;
@@ -494,7 +460,7 @@ export function cutHeaderValue(name: string, value: string): string {
 }
 
 /**
- * A header map projected for a reader (design §2.6): names as minted (credentials already `[redacted]`), every
+ * A header map projected for a reader: names as minted (credentials already `[redacted]`), every
  * value through `redact` (the server's own secrets, as written), and — without full-URL permission — every URL
  * inside a value cut by {@linkcode cutHeaderValue}.
  */
@@ -533,4 +499,140 @@ export function utf8Length(text: string): number {
 		} else bytes += 3;
 	}
 	return bytes;
+}
+
+// --- HAR 1.2 from a session's {@linkcode NetworkLog} — `browser_har_export`'s builder. Built from the log (not the vendored HAR watchdog) so it inherits the log's redaction and bounds: no body, no cookie, no credential header.
+
+/** The largest HAR document `browser_har_export` returns. */
+export const HAR_MAX_BYTES = 1_048_576;
+
+/** HAR 1.2 `log.creator.name`. */
+export const HAR_CREATOR_NAME = 'tykotech-mcp';
+
+/** One HAR `{name, value}` pair. */
+export interface HarNameValue {
+	name: string;
+	value: string;
+}
+
+/** The HAR 1.2 entry this builder emits; every required member of the spec is present. */
+export interface HarEntry {
+	startedDateTime: string;
+	time: number;
+	request: {
+		method: string;
+		url: string;
+		httpVersion: string;
+		cookies: HarNameValue[];
+		headers: HarNameValue[];
+		queryString: HarNameValue[];
+		headersSize: number;
+		bodySize: number;
+	};
+	response: {
+		status: number;
+		statusText: string;
+		httpVersion: string;
+		cookies: HarNameValue[];
+		headers: HarNameValue[];
+		content: { size: number; mimeType: string };
+		redirectURL: string;
+		headersSize: number;
+		bodySize: number;
+		/** Chrome's `errorText` for a request that never got a response (a HAR custom field). */
+		_error?: string;
+	};
+	cache: Record<string, never>;
+	timings: { blocked: number; dns: number; connect: number; send: number; wait: number; receive: number; ssl: number };
+	_resourceType: string;
+}
+
+/** A HAR 1.2 document. */
+export interface HarDocument {
+	log: {
+		version: '1.2';
+		creator: { name: string; version: string };
+		entries: HarEntry[];
+	};
+}
+
+/** What the builder needs beyond the entries. */
+interface HarOptions {
+	/** The server version, for `log.creator.version`. */
+	readonly version: string;
+	/** `include_full_urls` **and** `network:read`: full `request.url`, `redirectURL` and `queryString`. */
+	readonly fullUrls: boolean;
+	/** `network:read` alone: URLs inside header values are left whole, as the network log projects them. */
+	readonly headerUrls?: boolean;
+	/** The server's secret redaction, applied to every string that leaves (`SecretStore.redact`). */
+	readonly redact?: (text: string) => string;
+}
+
+/** Builds the document. Pure: the caller chooses the entries (newest `max_entries`) and enforces the size cap. */
+export function buildHar(entries: readonly NetworkEntry[], options: HarOptions): HarDocument {
+	const redact = options.redact ?? ((text: string) => text);
+	return {
+		log: {
+			version: '1.2',
+			creator: { name: HAR_CREATOR_NAME, version: options.version },
+			entries: entries.map((entry) =>
+				harEntry(entry, options.fullUrls, options.headerUrls ?? options.fullUrls, redact)
+			),
+		},
+	};
+}
+
+function harEntry(
+	entry: NetworkEntry,
+	fullUrls: boolean,
+	headerUrls: boolean,
+	redact: (text: string) => string,
+): HarEntry {
+	const url = fullUrls ? entry.url_full : `${entry.origin}${entry.path}`;
+	const requestHeaders = projectHeaders(entry.request_headers, headerUrls, redact);
+	const responseHeaders = projectHeaders(entry.response_headers, headerUrls, redact);
+	const location = Object.entries(entry.response_headers).find(([name]) => name.toLowerCase() === 'location')?.[1];
+	const time = entry.duration_ms ?? 0;
+	const har: HarEntry = {
+		startedDateTime: entry.started_at,
+		time,
+		request: {
+			method: redact(entry.method),
+			url: redact(url),
+			httpVersion: '',
+			cookies: [],
+			headers: pairs(requestHeaders),
+			queryString: fullUrls ? queryOf(entry.url_full, redact) : [],
+			headersSize: -1,
+			bodySize: -1,
+		},
+		response: {
+			status: entry.status ?? 0,
+			statusText: '',
+			httpVersion: '',
+			cookies: [],
+			headers: pairs(responseHeaders),
+			content: { size: entry.bytes, mimeType: redact(entry.mime_type ?? 'x-unknown') },
+			redirectURL: location === undefined ? '' : redact(fullUrls ? location : cutUrl(location.trim())),
+			headersSize: -1,
+			bodySize: -1,
+		},
+		cache: {},
+		// Only the total is observed; the phases HAR makes optional are `-1` (not available), the three it requires
+		// carry the whole duration as `wait`.
+		timings: { blocked: -1, dns: -1, connect: -1, send: 0, wait: time, receive: 0, ssl: -1 },
+		_resourceType: entry.resource_type,
+	};
+	if (entry.failed) har.response._error = redact(entry.error_text ?? '');
+	return har;
+}
+
+function pairs(headers: Readonly<Record<string, string>>): HarNameValue[] {
+	return Object.entries(headers).map(([name, value]) => ({ name, value }));
+}
+
+function queryOf(url: string, redact: (text: string) => string): HarNameValue[] {
+	const parsed = URL.parse(url);
+	if (parsed === null) return [];
+	return [...parsed.searchParams].map(([name, value]) => ({ name: redact(name), value: redact(value) }));
 }

@@ -1,1112 +1,189 @@
-/* Agents (D-147, D-152): a chat. Tasks and Surfaces are two icons in the context bar that open popovers; a stage
- * opens one surface above the conversation, which sits in a centred column with the composer docked under it — its
- * controls floating above the input card. Plus the A2UI catalog and the surface builder drawer. Every colour is a
- * token; state colours come from one --tone per element. */
+/* Agents: the task list beside the conversation, the composer under it, and the A2UI surfaces. */
 
-/* --- the screen: stage, thread, composer, stacked in the flush main region --- */
-
-/* D-158: the chat and, when an administrator opens it, the settings panel on its right. */
 .ag-layout {
 	flex: 1;
 	min-height: 0;
-	display: flex;
-	gap: 12px;
-}
-.ag-chat {
-	flex: 1;
-	min-width: 0;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-.ag-side {
-	flex: 0 0 clamp(360px, 30vw, 460px);
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	border: 1px solid var(--ttk-glass-border);
-	border-radius: var(--ttk-radius-l);
-	background: var(--ttk-glass);
-	backdrop-filter: blur(14px) saturate(1.3);
-	box-shadow: var(--ttk-shadow);
-	overflow: hidden;
-	animation: ag-side-in 0.28s var(--ttk-ease) both;
-}
-.ag-side[hidden] {
-	display: none;
-}
-@keyframes ag-side-in {
-	from {
-		opacity: 0;
-		transform: translateX(16px);
-	}
-}
-.ag-side-head {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	padding: 10px 8px 10px 14px;
-	border-bottom: 1px solid var(--ttk-hairline);
-}
-.ag-side-head h2 {
-	margin: 0;
-	font-size: 14px;
-	font-weight: 700;
-}
-.ag-side-body {
-	flex: 1;
-	min-height: 0;
-	overflow-y: auto;
-	padding: 12px;
-}
-/* The System tab inside the panel: one column, whatever the viewport. */
-.ag-side .sys-grid.sys-agents {
-	grid-template-columns: minmax(0, 1fr);
-}
-/* Narrow screens: the panel lies over the chat instead of squeezing it. */
-@media (max-width: 960px) {
-	.ag-side {
-		position: fixed;
-		top: calc(var(--ttk-bar) + 8px);
-		right: 10px;
-		bottom: 10px;
-		width: min(460px, calc(100vw - 20px));
-		z-index: 20;
-	}
-}
-/* --- the task bar: which task this conversation is, and the way to its run history --- */
-
-.ag-task-bar {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	max-width: 880px;
-	min-width: 0;
-	margin: 0 auto;
-	padding: 6px 8px 6px 10px;
-	border: 1px solid var(--ttk-hairline);
-	border-radius: var(--ttk-radius);
-	background: var(--ttk-card);
-	box-shadow: var(--ttk-shadow);
-	animation: ag-drop 0.25s var(--ttk-ease) both;
-}
-.ag-task-bar[hidden] {
-	display: none;
-}
-.ag-task-title {
-	min-width: 0;
-	overflow: hidden;
-	font-size: 13px;
-	font-weight: 600;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-.ag-task-id,
-.tk-id {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	padding: 2px 7px;
-	border-radius: var(--ttk-radius-s);
-	background: var(--ttk-hairline);
-	color: var(--wa-color-text-quiet);
-	font-size: 11.5px;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-@media (max-width: 720px) {
-	.ag-task-id {
-		display: none;
-	}
+	display: grid;
+	grid-template-columns: 240px minmax(0, 1fr);
 }
 
-/* --- Agents › Tasks: the run history (tasks_view.ts) in the Resources frame --- */
-
-/* The workspace filter (from a workspace's task icon): its name, and the way back to every task. */
-.tk-filter {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin: 10px 10px 0;
-	padding: 3px 3px 3px 10px;
-	border: 1px solid color-mix(in oklab, var(--ttk-brand) 40%, transparent);
-	border-radius: var(--ttk-radius-s);
-	background: color-mix(in oklab, var(--ttk-brand) 10%, transparent);
-	font-size: 12.5px;
-}
-.tk-list-note {
-	margin: 6px 14px 0;
-	color: var(--wa-color-text-quiet);
-	font-size: 11.5px;
-}
-.tk-list-note:empty {
-	display: none;
-}
-.tk-row-mark {
-	display: inline-flex;
-	flex: 0 0 auto;
-	align-items: center;
-	gap: 6px;
-}
-.tk-row-when {
-	color: var(--wa-color-text-quiet);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-.tk-state {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 12.5px;
-	font-weight: 600;
-}
-.tk-request {
-	margin: 0;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	font-size: 13.5px;
-	line-height: 1.55;
-}
-.tk-status {
-	margin: 0;
-	color: var(--wa-color-text-quiet);
-	font-size: 13px;
-}
-.tk-artifact > summary,
-.tk-entry-detail > summary {
-	cursor: pointer;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-	font-weight: 600;
-}
-/* The run log: a rail of glyphs down the left, one row per entry, its detail folded under it. */
-.tk-timeline {
-	position: relative;
+.ag-tasks {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-.tk-timeline::before {
-	content: '';
-	position: absolute;
-	top: 12px;
-	bottom: 12px;
-	left: 11px;
-	width: 1px;
-	background: var(--ttk-hairline);
-}
-.tk-entry {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	min-width: 0;
-	padding: 4px 6px 4px 0;
-	border-radius: var(--ttk-radius-s);
-}
-.tk-entry-head {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 10px;
-	min-width: 0;
-}
-.tk-entry-glyph {
-	--tone: var(--wa-color-text-quiet);
-	position: relative;
-	width: 23px;
-	height: 23px;
-	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	border-radius: 50%;
-	background: var(--ttk-card);
-	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone) 45%, transparent);
-	color: var(--tone);
-}
-.tk-entry-glyph .icon {
-	width: 12px;
-	height: 12px;
-}
-.tk-entry-glyph.ok {
-	--tone: var(--ttk-live);
-}
-.tk-entry-glyph.failed {
-	--tone: var(--ttk-danger);
-}
-.tk-entry.model_request .tk-entry-glyph {
-	--tone: var(--ttk-brand);
-}
-.tk-entry.tool_call .tk-entry-glyph {
-	--tone: var(--ttk-agent);
-}
-.tk-entry-title {
-	font-size: 13px;
-	font-weight: 600;
-	overflow-wrap: anywhere;
-}
-.tk-entry-fact {
-	padding: 1px 7px;
-	border-radius: 999px;
-	background: var(--ttk-hairline);
-	color: var(--wa-color-text-quiet);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-.tk-entry-time {
-	color: var(--wa-color-text-quiet);
-	font-size: 11px;
-}
-.tk-entry-detail {
-	margin-left: 33px;
-	min-width: 0;
-}
-.tk-entry-detail pre {
-	max-height: 320px;
+	padding: 10px;
 	overflow: auto;
+	border-right: 1px solid var(--ttk-hairline);
 }
 
-/* --- the conversation --- */
+.ag-tasks > .ttk-btn {
+	margin-bottom: 8px;
+}
 
-/* The conversation takes the height the task bar and the composer leave, and scrolls inside it. */
-.ag-thread {
-	flex: 1 1 0;
-	min-height: 120px;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-}
-.ag-thread-inner,
-.ag-dock-inner {
-	width: 100%;
-	max-width: 880px;
-	margin: 0 auto;
-}
-.ag-thread-inner {
-	padding: 10px 6px 28px;
-}
-.ag-turns {
-	display: flex;
-	flex-direction: column;
-	gap: 26px;
-	min-width: 0;
-}
-.ag-turn {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	min-width: 0;
-	border-radius: var(--ttk-radius);
-	outline: none;
-	animation: ag-in 0.32s var(--ttk-ease) both;
-}
-.ag-turn.picked .ag-reply-main {
-	animation: ag-picked 1.4s var(--ttk-ease);
-}
-/* The operator's bubble, at the right. */
-.ag-ask {
-	display: flex;
-	justify-content: flex-end;
-	min-width: 0;
-	padding-left: 14%;
-}
-.ag-bubble {
-	min-width: 0;
-	max-width: 100%;
-	padding: 10px 15px;
-	border: 1px solid color-mix(in oklab, var(--ttk-brand) 26%, transparent);
-	border-radius: 20px 20px 6px 20px;
-	background: color-mix(in oklab, var(--ttk-brand) 15%, var(--ttk-card));
-	color: var(--wa-color-text-normal);
-}
-.ag-bubble.structured {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	border-color: var(--ttk-hairline);
-	background: var(--ttk-card);
-}
-.ag-bubble pre.code {
-	max-height: 220px;
-	font-size: 12px;
-}
-.ag-ask-text {
-	margin: 0;
-	font-size: 14px;
-	line-height: 1.55;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
-.ag-call {
+.ag-task {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	font-weight: 600;
-}
-.ag-call .icon {
-	color: var(--ttk-brand);
-}
-.ag-call code {
-	font: 600 13px var(--wa-font-family-code);
-}
-/* The agent's side: an avatar, then the speaker, state and time, then the answer. */
-.ag-reply {
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	min-width: 0;
-}
-.ag-avatar {
-	width: 32px;
-	height: 32px;
-	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	border-radius: 50%;
-	background: var(--ttk-gradient);
-	color: white;
-	box-shadow: var(--ttk-glow);
-}
-.ag-avatar .icon {
-	width: 17px;
-	height: 17px;
-}
-.ag-avatar.tool {
-	background: linear-gradient(135deg, var(--wa-color-cyan-50), var(--wa-color-blue-50));
-}
-.ag-avatar.delegation {
-	background: linear-gradient(135deg, var(--wa-color-purple-50), var(--wa-color-pink-50));
-}
-.ag-reply-main {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
+	padding: 6px 8px;
 	border-radius: var(--ttk-radius-s);
+	color: inherit;
+	text-decoration: none;
 }
-.ag-reply-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-	min-height: 30px;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-}
-.ag-speaker {
-	min-width: 0;
+
+.ag-task span:last-child {
 	overflow: hidden;
-	color: var(--wa-color-text-normal);
-	font-size: 13px;
-	font-weight: 650;
-	white-space: nowrap;
 	text-overflow: ellipsis;
-}
-.ag-when,
-.ag-usage {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
 	white-space: nowrap;
-	font-variant-numeric: tabular-nums;
-}
-.ag-usage .icon {
-	width: 12px;
-	height: 12px;
-}
-/* The reply's tools appear with the pointer or focus, and always where there is no hover. */
-.ag-reply-tools {
-	display: flex;
-	flex: 0 0 auto;
-	gap: 2px;
-	opacity: 0;
-	transition: opacity 0.18s var(--ttk-ease);
-}
-.ag-turn:hover .ag-reply-tools,
-.ag-turn:focus-within .ag-reply-tools {
-	opacity: 1;
-}
-@media (hover: none) {
-	.ag-reply-tools {
-		opacity: 1;
-	}
-}
-.ag-reply-tools button.ttk-btn.icon-only {
-	--wa-form-control-height: 26px;
-	border-radius: 8px;
-}
-.ag-reply-tools button.ttk-btn.icon-only .icon {
-	width: 14px;
-	height: 14px;
-}
-.ag-reply-body {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	min-width: 0;
-	color: var(--wa-color-text-normal);
-	font-size: 14px;
-	line-height: 1.62;
 }
 
-/* The state glyph: a ring in the state's colour; a spinner while the agent works. */
-.ag-state {
-	--tone: var(--wa-color-text-quiet);
-	width: 22px;
-	height: 22px;
-	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	border-radius: 50%;
-	background: color-mix(in oklab, var(--tone) 14%, transparent);
-	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone) 40%, transparent);
-	color: var(--tone);
-}
-.ag-state .icon {
-	width: 13px;
-	height: 13px;
-}
-.ag-state wa-spinner {
-	font-size: 13px;
-	--track-width: 2px;
-	--indicator-color: var(--tone);
-	--track-color: color-mix(in oklab, var(--tone) 18%, transparent);
-}
-.ag-state.running {
-	--tone: var(--ttk-brand);
-}
-.ag-state.input,
-.ag-state.auth {
-	--tone: var(--ttk-locked);
-	animation: ag-breathe 1.8s ease-in-out infinite;
-}
-.ag-state.done {
-	--tone: var(--ttk-live);
-}
-.ag-state.failed {
-	--tone: var(--ttk-danger);
-}
-
-/* Three dots while the agent works, and the words of its state beside them. */
-.ag-typing {
-	display: inline-flex;
-	align-self: flex-start;
-	align-items: center;
-	gap: 4px;
-	padding: 9px 14px;
-	border-radius: 16px;
-	background: color-mix(in oklab, var(--wa-color-text-normal) 6%, transparent);
-	color: var(--wa-color-text-quiet);
-	font-size: 12.5px;
-}
-.ag-typing i {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: currentColor;
-	animation: ag-dot 1.2s ease-in-out infinite;
-}
-.ag-typing i:nth-child(2) {
-	animation-delay: 0.15s;
-}
-.ag-typing i:nth-child(3) {
-	animation-delay: 0.3s;
-}
-.ag-typing-text {
-	margin-left: 6px;
-}
-/* A failure's reason, a cancellation: a quiet line in the state's colour. */
-.ag-note {
-	--tone: var(--wa-color-text-quiet);
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	padding: 8px 12px;
-	border: 1px solid color-mix(in oklab, var(--tone) 28%, transparent);
-	border-radius: var(--ttk-radius-s);
-	background: color-mix(in oklab, var(--tone) 9%, transparent);
-	font-size: 13px;
-	line-height: 1.45;
-	overflow-wrap: anywhere;
-}
-.ag-note .icon {
-	flex: 0 0 auto;
-	margin-top: 2px;
-	color: var(--tone);
-}
-.ag-note.failed {
-	--tone: var(--ttk-danger);
-}
-.ag-note.done {
-	--tone: var(--ttk-live);
-}
-.ag-note.input,
-.ag-note.auth {
-	--tone: var(--ttk-locked);
-}
-
-/* --- the answer as rich text (agent_chat.ts): Markdown drawn as elements --- */
-
-.ag-md {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-.ag-md p {
-	margin: 0;
-}
-.ag-md-h {
-	margin-top: 4px;
-	font-size: 15px;
-	font-weight: 700;
-	line-height: 1.35;
-}
-.ag-md-h.h1 {
-	font-size: 17px;
-}
-.ag-md-h.h2 {
-	font-size: 16px;
-}
-.ag-md ul,
-.ag-md ol {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	margin: 0;
-	padding-left: 1.4em;
-}
-.ag-md li {
-	margin: 0;
-}
-/* The kit draws a native quote as long-form display type; in an answer it is the answer's own type, set off by a bar. */
-.ag-md blockquote {
-	margin: 0;
-	padding: 2px 0 2px 12px;
-	border: 0;
-	border-left: 3px solid color-mix(in oklab, var(--ttk-brand) 45%, transparent);
-	color: var(--wa-color-text-quiet);
-	font-family: inherit;
-	font-size: inherit;
-}
-.ag-md hr {
-	width: 100%;
-	margin: 2px 0;
-	border: 0;
-	border-top: 1px solid var(--ttk-hairline);
-}
-.ag-md a {
-	color: var(--ttk-brand);
-	text-decoration: underline;
-	text-underline-offset: 2px;
-}
-.ag-md-code {
-	padding: 1px 5px;
-	border-radius: 5px;
-	background: color-mix(in oklab, var(--wa-color-text-normal) 8%, transparent);
-	font-family: var(--wa-font-family-code);
-	font-size: 0.88em;
-}
-.ag-md-block {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-	margin: 0;
-	overflow: hidden;
-	border: 1px solid var(--ttk-hairline);
-	border-radius: var(--ttk-radius-s);
-	background: var(--ttk-sunken);
-}
-.ag-md-lang {
-	padding: 5px 12px;
-	border-bottom: 1px solid var(--ttk-hairline);
-	color: var(--wa-color-text-quiet);
-	font: 600 11px var(--wa-font-family-code);
-}
-.ag-md-block pre.code {
-	max-height: 440px;
-	border: 0;
-	border-radius: 0;
-	white-space: pre;
-	overflow-wrap: normal;
-}
-
-/* --- an empty conversation: the welcome and its starters --- */
-
-.ag-welcome {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 10px;
-	padding: clamp(20px, 7vh, 72px) 12px 12px;
-	text-align: center;
-	animation: ag-in 0.4s var(--ttk-ease) both;
-}
-.ag-orb {
-	width: 56px;
-	height: 56px;
-	display: grid;
-	place-items: center;
-	border-radius: 18px;
-	background: var(--ttk-gradient);
-	color: white;
-	box-shadow: var(--ttk-glow);
-}
-.ag-orb .icon {
-	width: 26px;
-	height: 26px;
-}
-.ag-orb.brand {
-	width: 64px;
-	height: 66px;
-	background: none;
-	box-shadow: none;
-}
-.ag-orb-logo {
-	width: 100%;
-	height: 100%;
-	object-fit: contain;
-	filter: drop-shadow(0 6px 18px color-mix(in oklab, var(--ttk-brand) 45%, transparent));
-}
-.ag-orb.muted {
-	background: var(--ttk-sunken);
-	color: var(--wa-color-text-quiet);
-	box-shadow: inset 0 0 0 1px var(--ttk-hairline);
-}
-.ag-welcome-title {
-	margin: 6px 0 0;
-	font-size: 22px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-}
-.ag-welcome-text {
-	max-width: 520px;
-	margin: 0;
-	color: var(--wa-color-text-quiet);
-	font-size: 13.5px;
-	line-height: 1.5;
-}
-.ag-starters {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-	gap: 8px;
-	width: 100%;
-	max-width: 760px;
-	margin-top: 14px;
-}
-.ag-starter {
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	box-sizing: border-box;
-	/* The kit's native button is one line at a control height; a starter is a card of wrapped text. */
-	width: 100%;
-	height: auto;
-	min-width: 0;
-	padding: 12px 14px;
-	white-space: normal;
-	border: 1px solid var(--ttk-hairline);
-	border-radius: var(--ttk-radius);
-	background: var(--ttk-card);
-	color: var(--wa-color-text-normal);
-	font: 13px/1.45 var(--wa-font-family-body);
-	text-align: left;
-	cursor: pointer;
-	transition: transform 0.22s var(--ttk-spring), border-color 0.18s var(--ttk-ease);
-}
-.ag-starter:hover {
-	transform: translateY(-2px);
-	border-color: color-mix(in oklab, var(--ttk-brand) 40%, transparent);
-}
-.ag-starter:focus-visible {
-	outline: 2px solid var(--wa-color-focus);
-	outline-offset: 2px;
-}
-.ag-starter .icon {
-	flex: 0 0 auto;
-	margin-top: 2px;
-	color: var(--ttk-brand);
-}
-
-/* --- the composer, docked under the conversation (D-152): the controls float above the input card --- */
-
-.ag-dock {
-	flex: 0 0 auto;
-	min-width: 0;
-}
-.ag-composer {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-/* The toolbar: the kind switch, the target and the live status — no card of its own, so it reads as part of the page
- * above the input rather than inside it. */
-.ag-toolbar {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-	padding: 0 4px;
-}
-.ag-toolbar .segmented {
-	padding: 2px;
-	border-radius: 10px;
-	background: var(--ttk-glass);
-	border-color: var(--ttk-glass-border);
-	backdrop-filter: blur(12px);
-}
-.ag-toolbar .segmented button.ttk-btn {
-	--wa-form-control-height: 26px;
-	padding-inline: 10px;
-	font-size: 12px;
-	border-radius: 8px;
-}
-/* The input: one card — what to send, and the send at its end. */
-.ag-input {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: end;
-	gap: 8px;
-	min-width: 0;
-	padding: 8px 8px 8px 16px;
-	border: 1px solid var(--ttk-glass-border);
-	border-radius: 18px;
-	background: var(--ttk-card);
-	box-shadow: var(--ttk-shadow-pop);
-	transition: border-color 0.2s var(--ttk-ease), box-shadow 0.2s var(--ttk-ease);
-}
-.ag-input:focus-within {
-	border-color: color-mix(in oklab, var(--ttk-brand) 50%, transparent);
-	box-shadow: var(--ttk-shadow-pop), 0 0 0 3px color-mix(in oklab, var(--ttk-brand) 14%, transparent);
-}
-.ag-input-panes {
-	min-width: 0;
-	align-self: center;
-}
-.ag-input-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.ag-composer textarea {
-	display: block;
-	width: 100%;
-	min-width: 0;
-	min-height: 26px;
-	max-height: 220px;
-	margin: 0;
-	padding: 6px 0;
-	overflow-y: auto;
-	resize: none;
-	border: 0;
-	background: transparent;
-	box-shadow: none;
-	color: var(--wa-color-text-normal);
-	font-size: 14.5px;
-	line-height: 1.5;
-}
-.ag-composer textarea:focus,
-.ag-composer textarea:focus-visible {
-	outline: none;
-	box-shadow: none;
-}
-.ag-pane {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	min-width: 0;
-}
-.ag-pane[data-kind='tool'] {
-	max-height: 42vh;
-	padding: 6px 4px 6px 0;
-	overflow-y: auto;
-}
-.ag-pane wa-select.tc-kit {
-	width: 100%;
-	max-width: 520px;
-}
-.ag-tool-form {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	min-width: 0;
-}
-.ag-tool-form:empty {
-	display: none;
-}
-.ag-tool-desc {
-	color: var(--wa-color-text-quiet);
-	font-size: 12.5px;
-	overflow-wrap: anywhere;
-}
-wa-option.ag-tool-family::part(label) {
-	color: var(--wa-color-text-quiet);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-}
-wa-option.ag-tool-option .icon {
-	width: 14px;
-	height: 14px;
-	color: var(--ttk-brand);
-}
-.ag-peer-note {
-	max-width: 640px;
-}
-.ag-target-box {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	min-width: 0;
-}
-.ag-target-box[hidden] {
-	display: none;
-}
-/* The target: a pill with the model glyph, its list a glass menu with labelled groups. */
-.ag-target-box wa-select.tc-kit {
-	width: clamp(180px, 24vw, 280px);
-	--wa-form-control-height: 30px;
-}
-wa-select.ag-target::part(combobox) {
-	min-height: 30px;
-	padding-inline: 10px 8px;
-	border-color: var(--ttk-glass-border);
-	border-radius: 999px;
-	background: var(--ttk-glass);
-	backdrop-filter: blur(12px);
-	font-size: 12.5px;
-	font-weight: 600;
-	box-shadow: none;
-}
-wa-select.ag-target:hover::part(combobox) {
-	border-color: color-mix(in oklab, var(--ttk-brand) 45%, transparent);
-}
-wa-select.ag-target > .icon[slot='start'] {
-	width: 15px;
-	height: 15px;
-	margin-inline-end: 6px;
-	color: var(--ttk-brand);
-}
-wa-select.ag-target::part(expand-icon) {
-	color: var(--wa-color-text-quiet);
-}
-wa-select.ag-target::part(listbox) {
-	min-width: 260px;
-	padding: 6px;
-	border: 1px solid var(--ttk-glass-border);
-	border-radius: var(--ttk-radius);
-	background: var(--ttk-glass-strong);
-	backdrop-filter: blur(18px) saturate(1.3);
-	box-shadow: var(--ttk-shadow-pop);
-}
-wa-select.ag-target small.ag-target-group {
-	display: block;
-	padding: 8px 10px 4px;
-	color: var(--wa-color-text-quiet);
-	font-size: 10.5px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-}
-wa-select.ag-target wa-option {
-	border-radius: var(--ttk-radius-s);
-	font-size: 13px;
-}
-wa-select.ag-target wa-option:not([disabled]):hover {
+.ag-task:hover {
 	background: var(--ttk-row-hover);
 }
-/* BUG-5: the retry beside the Target select, present only while the providers request has failed. */
-.ag-target-retry[hidden] {
-	display: none;
-}
-.ag-status {
-	flex: 1 1 120px;
-	min-width: 0;
-	margin: 0;
-	overflow: hidden;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-	text-align: right;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-.ag-hint {
-	display: inline-flex;
-	flex: 0 0 auto;
-	align-items: center;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-}
-.ag-hint kbd {
-	height: 22px;
-}
-/* The send: a round brand button at the end of the input. */
-.ag-input-actions button.ttk-btn.icon-only[type='submit'] {
-	--wa-form-control-height: 36px;
-	border-radius: 50%;
-}
-.ag-input-actions button.ttk-btn.icon-only[type='submit'] .icon {
-	width: 16px;
-	height: 16px;
+
+.ag-task.active {
+	background: var(--ttk-selected);
 }
 
-/* --- without agent:invoke: what the scope is for, and the administrator's one step --- */
-
-.ag-scope-list {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	gap: 6px;
-	margin-top: 6px;
-}
-.ag-scope {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	padding: 4px 10px;
-	border: 1px dashed var(--ttk-hairline-strong);
-	border-radius: 999px;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-}
-.ag-scope .icon {
-	width: 13px;
-	height: 13px;
-}
-.ag-scope.held {
-	border-style: solid;
-	border-color: color-mix(in oklab, var(--ttk-live) 45%, transparent);
-	color: var(--ttk-live);
-}
-.ag-welcome-actions {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	gap: 8px;
-	margin-top: 10px;
-}
-
-/* --- permission requests --- */
-
-wa-callout.ag-permission {
-	animation: ag-pop 0.32s var(--ttk-spring) both;
-}
-wa-callout.ag-permission::part(message) {
-	min-width: 0;
-	width: 100%;
-}
-.ag-permission-body {
+.ag-chat {
+	min-height: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	min-width: 0;
-}
-.ag-permission-title {
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	font-weight: 600;
-	overflow-wrap: anywhere;
-}
-.ag-expiry {
-	display: inline-grid;
-	color: var(--ttk-locked);
-}
-.ag-decisions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
 }
 
-/* --- live events and artifacts --- */
-
-.ag-events {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	max-height: 220px;
-	margin: 0;
-	padding: 8px;
+.ag-thread {
+	flex: 1;
+	min-height: 0;
 	overflow: auto;
-	list-style: none;
-	border: 1px solid var(--ttk-hairline);
-	border-radius: var(--ttk-radius-s);
-	background: var(--ttk-sunken);
+	padding: 18px;
 }
-.ag-event {
-	display: flex;
-	align-items: flex-start;
+
+.ag-turn {
+	display: grid;
+	gap: 12px;
+	max-width: 900px;
+	margin: 0 auto;
+}
+
+.ag-bubble {
+	justify-self: end;
+	max-width: 80%;
+	padding: 10px 14px;
+	border-radius: 14px 14px 4px 14px;
+	background: var(--ttk-selected);
+	white-space: pre-wrap;
+}
+
+.ag-reply {
+	display: grid;
 	gap: 8px;
-	min-width: 0;
-	animation: ag-in 0.25s var(--ttk-ease) both;
+	padding: 12px 14px;
+	border: 1px solid var(--ttk-hairline);
+	border-radius: var(--ttk-radius);
+	background: var(--ttk-card);
 }
-.ag-event-text {
-	min-width: 0;
-	color: var(--wa-color-text-quiet);
-	font-size: 11.5px;
+
+.ag-reply-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.ag-md {
+	display: grid;
+	gap: 8px;
 	overflow-wrap: anywhere;
 }
-.ag-artifact {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
+
+.ag-md ul,
+.ag-md ol {
+	margin: 0;
+	padding-left: 22px;
 }
-.ag-artifact-head {
+
+.ag-md blockquote {
+	margin: 0;
+	padding-left: 10px;
+	border-left: 3px solid var(--ttk-hairline);
+	color: var(--ttk-quiet);
+}
+
+.ag-md figure {
+	margin: 0;
+}
+
+.ag-md-h {
+	font-weight: 650;
+}
+
+.ag-artifact summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.ag-composer {
+	display: grid;
+	gap: 8px;
+	padding: 10px 18px 14px;
+	border-top: 1px solid var(--ttk-hairline);
+}
+
+.ag-composer-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.ag-composer-bar select {
+	max-width: 360px;
+}
+
+.ag-reason {
+	color: var(--ttk-quiet);
+	font-size: 0.9em;
+}
+
+.ws-surfaces,
+.ag-surfaces {
+	display: grid;
+	gap: 14px;
+}
+
+.ws-surface {
+	display: grid;
+	gap: 10px;
+}
+
+.ws-surface-head {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-	font-weight: 600;
-	overflow-wrap: anywhere;
-}
-.ag-artifact-head .icon {
-	width: 13px;
-	height: 13px;
-	color: var(--ttk-brand);
-}
-.ag-artifact pre.code {
-	max-height: 320px;
-	font-size: 12px;
-}
-/* A folded artifact: the kit's native details, quieted to a hairline with the name and line count as its summary. */
-details.ag-artifact.folded {
-	border: 1px solid var(--ttk-hairline);
-	border-radius: var(--ttk-radius-s);
-	background: transparent;
-}
-details.ag-artifact.folded > summary {
-	padding: 8px 12px;
-	cursor: pointer;
-}
-details.ag-artifact.folded[open] > summary {
-	border-bottom: 1px solid var(--ttk-hairline);
-}
-details.ag-artifact.folded > pre.code {
-	margin: 8px;
-}
-.ag-artifact-size {
-	margin-left: auto;
-	color: var(--wa-color-text-quiet);
-	font-weight: 500;
-	font-variant-numeric: tabular-nums;
+	gap: 10px;
 }
 
-/* --- the A2UI catalog on native elements (the renderer adds classes only) --- */
+@media (max-width: 760px) {
+	.ag-layout {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+	.ag-tasks {
+		flex-direction: row;
+		max-height: 52px;
+		border-right: 0;
+		border-bottom: 1px solid var(--ttk-hairline);
+	}
+	.ag-tasks > .ttk-btn {
+		margin: 0;
+	}
+	.ag-bubble {
+		max-width: 100%;
+	}
+	.a2ui-surface,
+	.a2ui-card {
+		padding: 10px;
+	}
+}
 
-/* D-111: a surface theme sets --a2ui-* (and the kit tokens beside them) on .a2ui-surface only; nothing above it. */
 .a2ui-surface {
 	display: flex;
 	flex-direction: column;
@@ -1118,8 +195,6 @@ details.ag-artifact.folded > pre.code {
 	background: var(--ttk-sunken);
 	font-family: var(--a2ui-font, inherit);
 }
-/* RV-1: the primary colour as TEXT (the active tab label, a link-style trigger) is the ink the renderer derived for
- * this shell theme, readable on its surfaces; without a theme it is the kit's own value for that theme. */
 .wa-light .a2ui-surface {
 	--wa-color-brand-on-quiet: var(--a2ui-primary-ink-light, var(--wa-color-brand-40));
 }
@@ -1204,13 +279,10 @@ details.ag-artifact.folded > pre.code {
 .a2ui-button {
 	align-self: flex-start;
 	max-width: 100%;
-	/* RV-2: the surface theme's radius reaches the Button like every other control. */
 	border-radius: var(--a2ui-radius, 10px);
 	white-space: normal;
 	overflow-wrap: anywhere;
 }
-/* RV-3: a disabled action reads as the kit's neutral pair rather than a faded primary, whose label fell to ~1.7:1 on
- * a light primary in the light theme. The reason it is disabled is in its tooltip. */
 .a2ui-button:disabled {
 	border-color: transparent;
 	background-color: var(--wa-color-neutral-fill-normal);
@@ -1233,7 +305,6 @@ details.ag-artifact.folded > pre.code {
 	font-size: 12.5px;
 	font-weight: 550;
 	overflow-wrap: anywhere;
-	animation: ag-pop 0.3s var(--ttk-spring) both;
 }
 .a2ui-notice::before {
 	content: '';
@@ -1247,7 +318,6 @@ details.ag-artifact.folded > pre.code {
 	display: none;
 }
 
-/* Text variants (v0.9): headings are role=heading paragraphs, sized on the kit scale. */
 .a2ui-text.h1 {
 	font-size: 20px;
 	font-weight: 750;
@@ -1267,7 +337,6 @@ details.ag-artifact.folded > pre.code {
 	font-size: 12px;
 }
 
-/* Media: never wider than the surface; a share file that could not be read shows as a quiet outline. */
 .a2ui-image,
 .a2ui-video {
 	display: block;
@@ -1355,7 +424,6 @@ details.ag-artifact.folded > pre.code {
 	opacity: 0.6;
 }
 
-/* List: a column (or a wrapping row) of items with hairlines between them. */
 .a2ui-list {
 	display: flex;
 	flex-direction: column;
@@ -1373,9 +441,6 @@ details.ag-artifact.folded > pre.code {
 	padding: 6px 0;
 }
 
-/* Tabs and Modal are the kit's own; only spacing is set here. RV-6: the kit pads a top-placed panel by
- * `--wa-space-xl` above and below (~29 px each, on top of the group's own spacing); a panel here gets one step of
- * the kit's scale above its content and none below, where the surface's own gap follows. */
 .a2ui-tabs {
 	min-width: 0;
 }
@@ -1406,7 +471,6 @@ details.ag-artifact.folded > pre.code {
 	border-radius: var(--ttk-radius-s);
 }
 
-/* Slider: the native range in kit colours (the kit's own slider binds styleMap, which the page CSP refuses). */
 .a2ui-field.slider {
 	gap: 6px;
 }
@@ -1479,7 +543,6 @@ details.ag-artifact.folded > pre.code {
 	max-width: 320px;
 }
 
-/* Html: an agent's document in a sandboxed frame, framed like a card and never wider than the surface. */
 .a2ui-html {
 	display: block;
 	width: 100%;
@@ -1487,339 +550,4 @@ details.ag-artifact.folded > pre.code {
 	border-radius: var(--a2ui-radius, var(--ttk-radius-s));
 	background: var(--wa-color-surface-default, white);
 	color-scheme: light;
-}
-
-/* --- motion and narrow screens --- */
-
-@keyframes ag-in {
-	from {
-		opacity: 0;
-		transform: translateY(8px);
-	}
-}
-@keyframes ag-pop {
-	from {
-		opacity: 0;
-		transform: scale(0.94);
-	}
-}
-@keyframes ag-drop {
-	from {
-		opacity: 0;
-		transform: translateY(-6px);
-	}
-}
-@keyframes ag-breathe {
-	50% {
-		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone) 45%, transparent),
-			0 0 0 4px color-mix(in oklab, var(--tone) 18%, transparent);
-	}
-}
-
-@keyframes ag-dot {
-	0%,
-	80%,
-	100% {
-		opacity: 0.3;
-		transform: translateY(0);
-	}
-	40% {
-		opacity: 1;
-		transform: translateY(-3px);
-	}
-}
-@keyframes ag-picked {
-	0%,
-	60% {
-		background: color-mix(in oklab, var(--ttk-brand) 10%, transparent);
-		box-shadow: 0 0 0 6px color-mix(in oklab, var(--ttk-brand) 10%, transparent);
-	}
-}
-
-@media (max-width: 520px) {
-	.ag-chat {
-		gap: 8px;
-	}
-	.ag-ask {
-		padding-left: 8%;
-	}
-	.ag-reply {
-		gap: 9px;
-	}
-	.ag-avatar {
-		width: 28px;
-		height: 28px;
-	}
-	.ag-input {
-		padding: 6px 6px 6px 12px;
-		border-radius: 16px;
-	}
-	.ag-hint {
-		display: none;
-	}
-	.ag-target-box wa-select.tc-kit {
-		width: 100%;
-	}
-	.ag-target-box {
-		flex: 1 1 100%;
-		order: 5;
-	}
-	.a2ui-surface,
-	.a2ui-card {
-		padding: 10px;
-	}
-}
-
-/* --- the surface builder drawer: Template · Edit · Preview · Advanced --- */
-
-wa-drawer.ag-builder {
-	--size: min(820px, 100vw);
-	--spacing: 18px;
-}
-wa-drawer.ag-builder::part(dialog) {
-	border-left: 1px solid var(--ttk-glass-border);
-	background: var(--ttk-glass-strong);
-	backdrop-filter: blur(22px) saturate(1.3);
-	box-shadow: var(--ttk-shadow-pop);
-}
-wa-drawer.ag-builder::part(header) {
-	border-bottom: 1px solid var(--ttk-hairline);
-}
-wa-drawer.ag-builder::part(footer) {
-	border-top: 1px solid var(--ttk-hairline);
-}
-.ag-builder-title {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-}
-.ag-builder-title-glyph {
-	width: 32px;
-	height: 32px;
-	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	border-radius: 10px;
-	background: color-mix(in oklab, var(--ttk-agent) 16%, transparent);
-	color: var(--ttk-agent);
-}
-.ag-builder-title-name {
-	overflow: hidden;
-	font-size: 15px;
-	font-weight: 650;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-.ag-builder-body {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	min-width: 0;
-}
-.ag-builder-tabs {
-	min-width: 0;
-}
-.ag-builder-tabs > wa-tab-panel {
-	--padding: var(--wa-space-m) 0 0;
-}
-.ag-builder-panel {
-	min-width: 0;
-}
-.ag-builder-lead {
-	margin-bottom: 12px;
-	color: var(--wa-color-text-quiet);
-	font-size: 13px;
-}
-.ag-builder-foot {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	min-width: 0;
-}
-.ag-builder-status {
-	min-width: 0;
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-	overflow-wrap: anywhere;
-}
-
-/* Template gallery: radio tiles (the Users scope-tile pattern); the radio stays a real, focusable control. */
-.ag-templates {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
-	gap: 10px;
-}
-.ag-template {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-height: 120px;
-	padding: 14px 12px 12px;
-	border: 1px solid var(--ttk-hairline);
-	border-radius: var(--ttk-radius);
-	background: var(--ttk-sunken);
-	color: var(--wa-color-text-quiet);
-	cursor: pointer;
-	transition: transform 0.2s var(--ttk-ease), border-color 0.2s var(--ttk-ease), background 0.2s var(--ttk-ease);
-	animation: ag-drop 0.25s var(--ttk-ease) both;
-}
-.ag-template:hover {
-	transform: translateY(-2px);
-	border-color: color-mix(in oklab, var(--ttk-agent) 35%, transparent);
-	color: var(--wa-color-text-normal);
-}
-.ag-template:has(.ag-template-pick:checked) {
-	border-color: color-mix(in oklab, var(--ttk-agent) 55%, transparent);
-	background: color-mix(in oklab, var(--ttk-agent) 12%, var(--ttk-card));
-	color: var(--wa-color-text-normal);
-}
-.ag-template:has(.ag-template-pick:focus-visible) {
-	outline: 2px solid var(--wa-color-focus);
-	outline-offset: 2px;
-}
-.ag-template-pick {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: 0;
-	padding: 0;
-	overflow: hidden;
-	clip-path: inset(50%);
-	white-space: nowrap;
-	opacity: 0;
-}
-.ag-template-glyph {
-	width: 34px;
-	height: 34px;
-	display: grid;
-	place-items: center;
-	border-radius: 11px;
-	background: color-mix(in oklab, var(--ttk-agent) 16%, transparent);
-	color: var(--ttk-agent);
-}
-.ag-template-glyph .icon {
-	width: 18px;
-	height: 18px;
-}
-.ag-template-name {
-	font-size: 13.5px;
-	font-weight: 650;
-}
-.ag-template-blurb {
-	font-size: 12px;
-	line-height: 1.4;
-}
-
-/* Editor */
-.ag-editor {
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-	min-width: 0;
-}
-.ag-editor-head {
-	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
-	gap: 2px 10px;
-	align-items: center;
-}
-.ag-editor-glyph {
-	grid-row: 1 / 3;
-	width: 30px;
-	height: 30px;
-	display: grid;
-	place-items: center;
-	border-radius: 10px;
-	background: color-mix(in oklab, var(--ttk-agent) 16%, transparent);
-	color: var(--ttk-agent);
-}
-.ag-editor-name {
-	font-size: 13.5px;
-	font-weight: 650;
-}
-.ag-editor-blurb {
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-}
-.ag-builder-control {
-	width: 100%;
-}
-.ag-buttons-field {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	min-width: 0;
-}
-.ag-button-rows {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-.ag-button-rows:empty {
-	display: none;
-}
-.ag-button-row {
-	display: grid;
-	grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
-	gap: 8px;
-	align-items: center;
-}
-.ag-bound {
-	display: inline-flex;
-	min-width: 84px;
-}
-.ag-buttons-field > button.ttk-btn {
-	align-self: flex-start;
-}
-wa-details.ag-theme {
-	--spacing: 8px;
-	border-top: 1px solid var(--ttk-hairline);
-}
-wa-details.ag-theme::part(header),
-wa-details.ag-theme::part(content) {
-	padding-inline: 0;
-}
-
-/* Preview and Advanced */
-.ag-preview {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	min-width: 0;
-}
-.ag-preview-note {
-	color: var(--wa-color-text-quiet);
-	font-size: 12px;
-}
-.ag-advanced {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	min-width: 0;
-}
-.ag-raw {
-	width: 100%;
-	min-width: 0;
-	min-height: 220px;
-	margin: 0;
-	resize: vertical;
-	font-size: 12px;
-}
-.ag-advanced-bar {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-}
-
-@media (max-width: 720px) {
-	.ag-button-row {
-		grid-template-columns: minmax(0, 1fr) auto;
-	}
-	.ag-button-row > wa-input:nth-of-type(2) {
-		grid-column: 1;
-	}
 }

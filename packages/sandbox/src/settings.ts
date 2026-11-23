@@ -1,13 +1,6 @@
 /**
- * The sandbox service's configuration, read from its environment once at start-up.
- *
- * Deno's `--allow-env` is an allowlist: the default image grants `TTK_SANDBOX_TOKEN_FILE` and the two git names
- * below only, and reading any other name throws. A name outside the grant is therefore read as unset (`grantedEnv`), so the default image
- * keeps starting the bubblewrap backend without knowing the Docker backend's names exist; the opt-in overlay
- * (docker-compose.sandbox-docker.yml) grants them (D-108).
- *
- * R12 (D-131): both matrices grant the two git names, `TTK_SANDBOX_GIT_HOSTS` and `TTK_SANDBOX_GIT_REMOTES_FILE`;
- * unset, they leave clone off, and the service answers `/healthz` with `clone: false`.
+ * The service's configuration, read once at start-up. A name outside the `--allow-env` grant reads as unset
+ * (`grantedEnv`), so the default image starts the bwrap backend; the Docker overlay grants the Docker names.
  */
 import type { SandboxBackend } from './client.ts';
 import { parseGitHosts } from './clone.ts';
@@ -33,11 +26,7 @@ export interface DockerSettings extends DockerPolicy {
 	socket: string;
 }
 
-/**
- * R12 (design §2.19): where clones may come from. `hosts` admits public clones of any repository on those exact
- * names; `remotesFile` names the operator's credentialed remotes, read once at start-up (git_forwarder.ts). Both
- * empty: clone is off.
- */
+/** Where clones may come from: public `hosts`, and the credentialed remotes file. Both empty: clone is off. */
 export interface GitSettings {
 	/** `TTK_SANDBOX_GIT_HOSTS`, lower-cased. */
 	hosts: ReadonlySet<string>;
@@ -56,10 +45,7 @@ export const DOCKER_DEFAULTS = {
 	sockVolume: 'ttk-sandbox-sock',
 } as const;
 
-/**
- * An image named by a local tag or a digest: `name:tag`, `name@sha256:…` or both. A bare name would mean `latest`,
- * which says nothing about what runs.
- */
+/** `name:tag`, `name@sha256:…` or both; a bare name would mean `latest`. */
 const IMAGE =
 	/^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*(?<tag>:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(?<digest>@sha256:[0-9a-f]{64})?$/;
 /** Docker's own rule for volume names. */
@@ -70,10 +56,7 @@ function value(read: EnvReader, name: string): string | undefined {
 	return raw === undefined || raw === '' ? undefined : raw;
 }
 
-/**
- * R12: the git names. The remotes file must be the compose secret the matrices grant read access to, and nothing
- * else: a path an operator could point anywhere would turn the grant into a wider one.
- */
+/** The git names; the remotes file must be the granted compose secret, or the grant would widen. */
 export function gitSettings(read: EnvReader = (name) => grantedEnv(name)): GitSettings {
 	const hosts = parseGitHosts(value(read, 'TTK_SANDBOX_GIT_HOSTS'));
 	const remotesFile = value(read, 'TTK_SANDBOX_GIT_REMOTES_FILE') ?? null;

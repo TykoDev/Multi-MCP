@@ -3,17 +3,20 @@ import * as z from 'zod';
 import { annotationsFor, CATALOG, CATALOG_BY_NAME } from './catalog.ts';
 import { missingFeature } from './dispatch.ts';
 import { headRoutingRefusal } from './head.ts';
-import { DEFAULT_SCOPES, EXPLICIT_SCOPES } from './scopes.ts';
+import { DEFAULT_SCOPES, EXPLICIT_SCOPES, SCOPES } from './scopes.ts';
 import * as toolHandlers from './tools.ts';
 import * as agentHandlers from './agent.ts';
 import { FIELD_PRESETS } from './element_record.ts';
+import { join } from '@std/path';
+import { McpServer } from '@modelcontextprotocol/server';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+import { extensionTools } from './extension_tools.ts';
+import { LibraryStore } from './library.ts';
+import { SessionRegistry } from './registry.ts';
+import { registerCatalog } from './server.ts';
+import type { RecordingController } from './types.ts';
 
-/**
- * Every module a catalog entry may take its handler from.
- *
- * The gate is equality in both directions, so adding a handler module here
- * without wiring its exports into the catalog fails — which is the point.
- */
+/** Every module a catalog entry may take its handler from. */
 const handlers: Record<string, unknown> = { ...toolHandlers, ...agentHandlers };
 
 Deno.test('catalog: every definition maps to a distinct exported handler', () => {
@@ -29,7 +32,6 @@ Deno.test('catalog: every definition maps to a distinct exported handler', () =>
 		assert(!used.has(match[0]), `${match[0]} is wired to more than one tool`);
 		used.add(match[0]);
 	}
-	// Both directions: an exported handler nothing calls is dead wire.
 	const unusedHandlers = [...exported].filter((name) => !used.has(name));
 	assertEquals(unusedHandlers, [], `handlers exported but not in the catalog: ${unusedHandlers.join(', ')}`);
 });
@@ -42,35 +44,7 @@ Deno.test('catalog: names are unique, snake_case, and browser-prefixed', () => {
 		assert(/^[a-z][a-z0-9_]*$/.test(tool.name), `${tool.name} is not snake_case`);
 		assert(tool.name.startsWith('browser_'), `${tool.name} lacks the browser_ prefix`);
 	}
-	// 15 in the v1 specification, plus browser_extract_content (R1),
-	// browser_run_task (R2), browser_storage_state (R3), browser_record (R7) and
-	// the two session-file tools (E-33). A literal here is deliberate: growing the
-	// catalog should be a decision someone took, not something that happened.
-	// ...plus the four B1.6 perception tools: find, frames, locator candidates,
-	// verify locator; B1.7's browser_wait_for — the third view of the event ring
-	// and the only one that works on the stdio mount; and B1.12's two: a download
-	// that names the file it started, and a head request that asks a server about
-	// a URL without carrying its body back.
-	// ...plus B2.1's browser_element_at, the hit test in the browser; B2.4's three pointer tools:
-	// hover, double click and right click, each of which is browser_click's own cascade with one
-	// argument changed rather than a second click implementation; and B2.5's seven: fill, scroll_to,
-	// scroll_into_view, select_option, upload_file, drag and handle_dialog; and B2.6's three session
-	// tools: get_session, set_viewport and set_session_options; B2.7's browser_evaluate, which is
-	// the first and only holder of an EXPLICIT_SCOPES member and therefore the first catalog entry
-	// most principals will never see in tools/list at all; and B2.8's browser_fill_secret and
-	// browser_audit — the credential path and the ledger that records it was spent; and B2.9's
-	// browser_file_policy, the limits a client can read instead of guess.
-	// ...and B3.2's browser_health, the one tool an operator polls rather than a model calls.
-	// ...and R4's three inspection tools (D-116): the network log, the console log and its HAR export.
-	// ...and R9's (W7) browser_live_view and browser_live_ticket, the MCP Apps live view and its embed ticket.
-	//
-	// **The whole list by name, not a count.** A `CATALOG.length` assertion was
-	// what this test carried until B3.2, and twice in this delivery a stale count
-	// somewhere else in the tree hid a real change until a tier was run by hand:
-	// a number cannot say *which* tool arrived or left, so a rename plus an
-	// addition passes it. The literal below fails with a diff naming the tool.
 	assertEquals(CATALOG.map((tool) => tool.name).sort(), [
-		// W2 (R10/R11, design §2.3): browser_accessibility_snapshot, browser_file_link, browser_pdf, browser_performance.
 		'browser_accessibility_snapshot',
 		'browser_audit',
 		'browser_click',
@@ -112,7 +86,6 @@ Deno.test('catalog: names are unique, snake_case, and browser-prefixed', () => {
 		'browser_performance',
 		'browser_press_key',
 		'browser_record',
-		// mcp-recommendations W4 (R2, D-124): the human handoff, off unless TTK_HUMAN_HANDOFF.
 		'browser_request_human',
 		'browser_right_click',
 		'browser_run_task',
@@ -135,7 +108,6 @@ Deno.test('catalog: names are unique, snake_case, and browser-prefixed', () => {
 Deno.test('catalog: read-only tools are annotated read-only and mutating ones are not; every hint is explicit', () => {
 	for (const tool of CATALOG) {
 		const annotations = annotationsFor(tool);
-		// A7: openWorldHint is always stated — its MCP default (true) would otherwise claim the web for every tool.
 		assertEquals(typeof annotations.openWorldHint, 'boolean', `${tool.name} leaves openWorldHint to the default`);
 		if (tool.mutates) {
 			assertEquals(annotations.readOnlyHint, undefined, `${tool.name} is mutating but hints read-only`);
@@ -158,9 +130,6 @@ Deno.test('catalog: close tools are flagged destructive', () => {
 
 Deno.test('catalog: exactly the three privileged tools carry an extra scope, plus the handoff its view scope', () => {
 	const scoped = CATALOG.filter((tool) => tool.scope !== undefined).map((tool) => tool.name).sort();
-	// mcp-recommendations W4 (R2, D-124) and W7 (R9, D-134): the handoff and the two MCP Apps tools carry the view
-	// scope their live-view half needs. None is privileged: each is gated OFF by its deployment switch
-	// (`TTK_HUMAN_HANDOFF`, `TTK_MCP_APPS`) instead, which the availability tests pin.
 	assertEquals(scoped, [
 		'browser_close_all',
 		'browser_evaluate',
@@ -173,21 +142,13 @@ Deno.test('catalog: exactly the three privileged tools carry an extra scope, plu
 	assertEquals(CATALOG_BY_NAME.get('browser_live_view')?.scope, 'view:watch');
 	assertEquals(CATALOG_BY_NAME.get('browser_live_ticket')?.scope, 'view:watch');
 	assertEquals(CATALOG_BY_NAME.get('browser_close_all')?.scope, 'admin');
-	// The autonomous loop spends the caller's model and acts without a per-action
-	// confirmation, so it is gated separately from ordinary tool use — and from
-	// 0.2.0 it is gated **off** by default (SEC-01b): `task` is an EXPLICIT_SCOPES
-	// member, so no principal holds it unless a deployment named it.
 	assertEquals(CATALOG_BY_NAME.get('browser_run_task')?.scope, 'task');
-	// B2.7 / SEC-01b. The holders of an EXPLICIT_SCOPES member — which is the difference between "gated" and "gated
-	// by default off". C7 / D-098 moved `admin` there, so `browser_close_all` is gated off by default too.
 	assertEquals(CATALOG_BY_NAME.get('browser_evaluate')?.scope, 'evaluate');
 	assertEquals(
 		CATALOG.filter((tool) => tool.scope !== undefined && (EXPLICIT_SCOPES as readonly string[]).includes(tool.scope))
 			.map((tool) => tool.name).sort(),
 		['browser_close_all', 'browser_evaluate', 'browser_run_task'],
 	);
-	// And none of the privileged three is reachable on the default grant, by name; the only default-scope tools are
-	// the view-scoped handoff and MCP Apps pair, which their deployment switches withhold (R2, R9).
 	assertEquals(
 		CATALOG.filter((tool) => tool.scope !== undefined && (DEFAULT_SCOPES as readonly string[]).includes(tool.scope))
 			.map((tool) => tool.name).sort(),
@@ -201,17 +162,6 @@ Deno.test('catalog: exactly the three privileged tools carry an extra scope, plu
 
 Deno.test('catalog: every browser tool accepts an optional session_id', () => {
 	for (const tool of CATALOG) {
-		// browser_list_sessions and browser_close_all are session-independent;
-		// browser_close_session requires the id rather than defaulting it.
-		// Since SR-HEAD-REDIRECT browser_head touches no browser at all — it is a
-		// server-side request — so a session_id would be a lie about what it uses.
-		// B2.9's browser_file_policy is the same shape of exemption: the limits are a *deployment*
-		// fact, identical for every session, so accepting an id would invite a caller to believe the
-		// answer could differ per session.
-		// B3.2's browser_health joins them for the same reason browser_file_policy did, one step
-		// stronger: it reports the whole registry, so a session id would suggest a per-session
-		// answer exists. It also never resolves a session, which is what keeps a poll from
-		// launching a browser.
 		const sessionless = [
 			'browser_list_sessions',
 			'browser_close_all',
@@ -228,8 +178,6 @@ Deno.test('catalog: every browser tool accepts an optional session_id', () => {
 });
 
 Deno.test('catalog: every pointer tool requires exactly index or a full coordinate pair', () => {
-	// B2.4 shares one `POINTER_INPUT` between all four, and this is the assertion that the sharing is
-	// real rather than three copies that happen to agree today.
 	for (const name of ['browser_click', 'browser_double_click', 'browser_right_click', 'browser_hover']) {
 		const schema = CATALOG_BY_NAME.get(name)!.inputSchema;
 		assert(schema.safeParse({ index: 3 }).success, `${name}: index alone should parse`);
@@ -240,15 +188,13 @@ Deno.test('catalog: every pointer tool requires exactly index or a full coordina
 	}
 });
 
-Deno.test('catalog: B2.5 select_option takes exactly one selector, and drag takes two whole endpoints', () => {
+Deno.test('catalog: select_option takes exactly one selector, and drag takes two whole endpoints', () => {
 	const select = CATALOG_BY_NAME.get('browser_select_option')!.inputSchema;
 	assert(select.safeParse({ index: 3, value: 'b' }).success);
 	assert(select.safeParse({ index: 3, label: 'Beta' }).success);
 	assert(select.safeParse({ index: 3, index_in_list: 1 }).success);
 	assert(!select.safeParse({ index: 3 }).success, 'no selector must fail');
 	assert(!select.safeParse({ index: 3, value: 'b', label: 'Beta' }).success, 'two selectors must fail');
-	// `index_in_list: 0` is a real option position, so the refinement must count presence rather than
-	// truthiness — a falsy-valued selector that read as absent would silently select nothing.
 	assert(select.safeParse({ index: 3, index_in_list: 0 }).success, 'option 0 is a valid selector');
 
 	const drag = CATALOG_BY_NAME.get('browser_drag')!.inputSchema;
@@ -278,7 +224,7 @@ Deno.test('catalog: every schema emits JSON Schema for tools/list', () => {
 	}
 });
 
-// --- availability (R5) ------------------------------------------------------
+// --- availability -----------------------------------------------------------
 
 Deno.test('catalog: the persistence tools are unavailable without a data directory', () => {
 	const tool = CATALOG_BY_NAME.get('browser_storage_state');
@@ -292,26 +238,16 @@ Deno.test('catalog: recording is offered only where it can be encoded', () => {
 	assert(tool?.available !== undefined, 'browser_record should declare availability');
 	assertEquals(tool.available({ persistence: true, recording: false, egress: false }), false);
 	assertEquals(tool.available({ persistence: true, recording: true, egress: false }), true);
-	// It only observes, so a human holding the browser is a reason to record it.
 	assertEquals(tool.mutates, false);
 });
 
 /**
- * G-2, at its cause. Before B1.2 eight mutating tools carried
- * `available: (state) => !state.allSessionsLocked`, which meant that when
- * *every* session was human-held they were disabled — and the SDK answers a
- * disabled tool with a JSON-RPC error, which aborts the model's turn instead
- * of telling it to wait. The partial-lock case never had the defect, because
- * `SessionRegistry.assertUnlocked` answered it with a classifiable
- * `Error: human-has-control:` result. Now one mechanism answers both.
- *
- * The rule this replaces: `available` describes only what this *deployment*
- * can offer, so every predicate must be a static configuration fact and a
- * disabled tool must always name the feature it is waiting on.
+ * The SDK answers a disabled tool with a JSON-RPC error, which aborts the model's turn instead of telling it to wait,
+ * so the takeover lock must never disable a tool: `SessionRegistry.assertUnlocked` answers it with a classifiable
+ * `Error: human-has-control:` result, in the partial-lock and all-locked cases alike.
  */
-Deno.test('catalog: availability is deployment configuration only, never session state (G-2)', () => {
+Deno.test('catalog: availability is deployment configuration only, never session state', () => {
 	const scoped = CATALOG.filter((tool) => tool.available !== undefined).map((tool) => tool.name).sort();
-	// W2: browser_file_link is gated on TTK_SIGNED_LINKS (an opt-in switch, so it declares unavailableDetail).
 	assertEquals(scoped, [
 		'browser_file_link',
 		'browser_head',
@@ -322,9 +258,6 @@ Deno.test('catalog: availability is deployment configuration only, never session
 		'browser_storage_state',
 	]);
 
-	// And every one resolves to a named feature or explains itself, so `feature-unavailable` can never be emitted
-	// with a bare `is not available on this deployment`. S0 (design §2.0 item 7): a tool gated on an opt-in switch
-	// declares `unavailableDetail` naming its `TTK_*` switch instead of resolving to a feature.
 	const none = { persistence: false, recording: false, egress: false };
 	for (const tool of CATALOG) {
 		if (tool.available === undefined) continue;
@@ -335,20 +268,15 @@ Deno.test('catalog: availability is deployment configuration only, never session
 	}
 });
 
-// --- output schemas (D-A2) --------------------------------------------------
+// --- output schemas ---------------------------------------------------------
 
 /**
- * Invariant I-5. A non-object root makes `projectCallToolResult` wrap the
- * payload as `{result: …}` on the 2025 codec while the 2026 codec's
- * projection is the identity, so the wire shape would differ between the two
- * eras this server serves for the same handler — and
- * `appendTextFallbackForNonObject` would inject a text block at position 0,
- * colliding with the `Error: <code>: ` first-block convention.
- *
- * Both halves are asserted: the Zod type, and the JSON Schema actually
- * emitted, because the conversion is where a root can stop being an object.
+ * A non-object root makes `projectCallToolResult` wrap the payload as `{result: …}` on the 2025 codec while the 2026
+ * codec's projection is the identity, so the wire shape would differ between the two eras this server serves for the
+ * same handler — and `appendTextFallbackForNonObject` would inject a text block at position 0, colliding with the
+ * `Error: <code>: ` first-block convention.
  */
-Deno.test('catalog: every outputSchema has an object root (I-5)', () => {
+Deno.test('catalog: every outputSchema has an object root', () => {
 	for (const tool of CATALOG) {
 		assert(tool.outputSchema instanceof z.ZodObject, `${tool.name}'s outputSchema is not a ZodObject`);
 		const emitted = z.toJSONSchema(tool.outputSchema, { io: 'output' }) as { type?: string };
@@ -360,17 +288,13 @@ Deno.test('catalog: every tool declares an outputSchema, and it is its own', () 
 	const seen = new Map<z.ZodType, string>();
 	for (const tool of CATALOG) {
 		assert(tool.outputSchema !== undefined, `${tool.name} declares no outputSchema`);
-		// A schema shared between two tools is almost always a copy-paste in a
-		// 400-line literal rather than a deliberate reuse.
 		const other = seen.get(tool.outputSchema);
 		assertEquals(other, undefined, `${tool.name} shares an outputSchema with ${other}`);
 		seen.set(tool.outputSchema, tool.name);
 	}
 });
 
-Deno.test('catalog: browser_head needs the grant AND a routing it can follow (SR3-M2)', () => {
-	// Two static deployment facts with one owner — the predicate — so a later
-	// reader cannot restore the tool by editing whichever half is nearer to hand.
+Deno.test('catalog: browser_head needs the grant AND a routing it can follow', () => {
 	const tool = CATALOG_BY_NAME.get('browser_head');
 	assert(tool?.available !== undefined && tool.unavailableDetail !== undefined);
 	const base = { persistence: true, recording: true, egress: true, headRouting: null };
@@ -378,9 +302,6 @@ Deno.test('catalog: browser_head needs the grant AND a routing it can follow (SR
 	assertEquals(tool.available({ ...base, egress: false }), false, 'no proven outbound grant, no tool');
 	const diverging = { ...base, headRouting: headRoutingRefusal(['--proxy-server=http://p:3128']) };
 	assertEquals(tool.available(diverging), false, 'a diverging browser route withholds it');
-	// And the refusal explains itself rather than naming a feature: the generic
-	// "needs egress on this deployment" message told an operator nothing they
-	// could act on, which the runtime smoke measured.
 	const detail = tool.unavailableDetail(diverging);
 	assert(detail !== undefined);
 	assertStringIncludes(detail, '--proxy-server');
@@ -389,15 +310,10 @@ Deno.test('catalog: browser_head needs the grant AND a routing it can follow (SR
 });
 
 /**
- * R-1: `tools/list` told every client that `core` includes `locator`; D-035 had moved it out.
- * The docs and `capabilities.tykotech.fields` were correct — only the wire text was stale, and
- * nothing asserted any tool description in either direction.
- *
- * The pin derives the claim from {@linkcode FIELD_PRESETS} rather than restating it, so a preset
- * edited without the description fails here, and it reads the description off the emitted JSON
- * Schema rather than off the Zod object, because the emitted schema is what a client receives.
+ * The `fields` description is wire text every client reads, and it must agree with the presets the docs and
+ * `capabilities.tykotech.fields` describe.
  */
-Deno.test('catalog: the fields description states the presets FIELD_PRESETS actually emits (R-1)', () => {
+Deno.test('catalog: the fields description states the presets FIELD_PRESETS actually emits', () => {
 	const core = [...FIELD_PRESETS.core];
 	const fullExtras = FIELD_PRESETS.full.filter((f) => !FIELD_PRESETS.core.includes(f));
 	let checked = 0;
@@ -423,7 +339,181 @@ Deno.test('catalog: the fields description states the presets FIELD_PRESETS actu
 			`${tool.name}: the wire says full adds fields it does not, or omits ones it does`,
 		);
 	}
-	// Non-vacuity: the four perception tools take `fields`. A refactor that stops
-	// emitting the description would otherwise pass this test by checking nothing.
 	assertEquals(checked, 4, 'the fields argument reached a different number of tools than expected');
+});
+
+// --- What `tools/list` advertises as each tool's annotations is exactly the table below: the 57 browser tools, the 24 extension tools given an action here (all but the two MCP Apps stream tickets) and the 18 library tools. ---
+
+/**
+ * `R` read-only, closed world · `RO` read-only, open world · `M:<flags>` mutating, with `D` destructive,
+ * `I` idempotent and `O` open world; a missing flag is an explicit `false`.
+ */
+const TABLE: Readonly<Record<string, string>> = {
+	browser_navigate: 'M:O',
+	browser_go_back: 'M:O',
+	browser_wait_for: 'R',
+	browser_click: 'M:O',
+	browser_double_click: 'M:O',
+	browser_right_click: 'M:O',
+	browser_hover: 'M:O',
+	browser_type: 'M:O',
+	browser_press_key: 'M:O',
+	browser_fill: 'M:O',
+	browser_scroll_to: 'M:IO',
+	browser_scroll_into_view: 'M:O',
+	browser_select_option: 'M:O',
+	browser_upload_file: 'M:O',
+	browser_handle_dialog: 'M:O',
+	browser_drag: 'M:O',
+	browser_scroll: 'M:O',
+	browser_fill_secret: 'M:O',
+	browser_evaluate: 'M:O',
+	browser_run_task: 'M:O',
+	browser_get_state: 'R',
+	browser_find: 'R',
+	browser_element_at: 'R',
+	browser_get_frames: 'R',
+	browser_locator_candidates: 'R',
+	browser_verify_locator: 'R',
+	browser_get_html: 'R',
+	browser_screenshot: 'R',
+	browser_extract_content: 'R',
+	browser_get_session: 'R',
+	browser_set_viewport: 'M:I',
+	browser_set_session_options: 'M:',
+	browser_list_tabs: 'R',
+	browser_switch_tab: 'M:I',
+	browser_close_tab: 'M:DI',
+	browser_storage_state: 'M:',
+	browser_record: 'R',
+	browser_list_sessions: 'R',
+	browser_close_session: 'M:DI',
+	browser_close_all: 'M:D',
+	browser_health: 'R',
+	browser_audit: 'R',
+	browser_request_human: 'R',
+	browser_live_view: 'R',
+	browser_live_ticket: 'R',
+	browser_list_files: 'R',
+	browser_get_file: 'R',
+	browser_download: 'M:O',
+	browser_head: 'RO',
+	browser_file_policy: 'R',
+	browser_network_log: 'R',
+	browser_console_log: 'R',
+	browser_har_export: 'R',
+	browser_pdf: 'R',
+	browser_file_link: 'R',
+	browser_accessibility_snapshot: 'R',
+	browser_performance: 'R',
+	sandbox_create: 'M:',
+	sandbox_clone: 'M:O',
+	sandbox_list: 'R',
+	sandbox_read: 'R',
+	sandbox_write: 'M:I',
+	sandbox_exec: 'M:O',
+	sandbox_diff: 'R',
+	sandbox_delete: 'M:D',
+	sandbox_session_open: 'M:O',
+	sandbox_session_input: 'M:',
+	sandbox_session_read: 'R',
+	sandbox_session_close: 'M:',
+	agent_peers: 'R',
+	agent_delegate: 'M:O',
+	agent_get_task: 'R',
+	agent_cancel_task: 'M:',
+	agent_run_tool: 'M:O',
+	agent_list_tasks: 'R',
+	a2ui_publish: 'M:',
+	a2ui_delete: 'M:DI',
+	memory_save: 'M:',
+	memory_search: 'R',
+	memory_delete: 'M:DI',
+	memory_list: 'R',
+	file_list: 'R',
+	file_stat: 'R',
+	file_read: 'R',
+	file_write: 'M:I',
+	file_mkdir: 'M:I',
+	file_delete: 'M:D',
+	file_move: 'M:',
+	skill_list: 'R',
+	skill_get: 'R',
+	skill_read_file: 'R',
+	skill_put: 'M:I',
+	skill_delete: 'M:D',
+	prompt_list: 'R',
+	prompt_get: 'R',
+	prompt_put: 'M:I',
+	prompt_delete: 'M:D',
+	prompt_render: 'R',
+	browser_save_to_share: 'M:D',
+};
+
+function expected(code: string): Record<string, boolean> {
+	if (code === 'R') return { readOnlyHint: true, openWorldHint: false };
+	if (code === 'RO') return { readOnlyHint: true, openWorldHint: true };
+	const flags = code.slice('M:'.length);
+	return {
+		destructiveHint: flags.includes('D'),
+		idempotentHint: flags.includes('I'),
+		openWorldHint: flags.includes('O'),
+	};
+}
+
+const EXTENSION_NAMES = Object.keys(TABLE).filter((name) => /^(sandbox|agent|a2ui|memory)_/.test(name));
+
+Deno.test('tools/list annotations equal the hand-written table for every tool, all 99 of them', async () => {
+	const dir = join('tests/.scratch', `annotations-${crypto.randomUUID().slice(0, 8)}`);
+	await Deno.mkdir(dir, { recursive: true });
+	const library = new LibraryStore({ dataDir: dir });
+	await library.initialize();
+	const registry = new SessionRegistry({ reapIntervalMs: 0 });
+	const recorder = {
+		start: () => Promise.reject(new Error('unused')),
+		stop: () => Promise.reject(new Error('unused')),
+		status: () => null,
+		list: () => [],
+	} as RecordingController;
+	const server = new McpServer({ name: 'annotations', version: 'test' });
+	registerCatalog(server, {
+		registry,
+		version: 'test',
+		anonScopes: [...SCOPES],
+		persistence: true,
+		recorder,
+		egress: true,
+		viewUrl: (id: string) => `http://127.0.0.1/#/view/${id}`,
+		mcpApps: {
+			mode: 'control',
+			liveViewHtml: '',
+			a2uiHtml: '',
+			terminalHtml: '',
+			connectDomains: [],
+			origins: [],
+			mintTicket: () => Promise.reject(new Error('unused')),
+		},
+		signedLink: () => Promise.reject(new Error('unused')),
+		library,
+		sandboxClone: () => true,
+		extraTools: extensionTools(
+			Object.fromEntries(EXTENSION_NAMES.map((name) => [name, () => Promise.resolve({})])),
+		),
+	}, undefined);
+	const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+	const client = new Client({ name: 'annotations', version: '0' });
+	try {
+		await server.connect(serverSide);
+		await client.connect(clientSide);
+		const { tools } = await client.listTools();
+		assertEquals(tools.map((tool) => tool.name).sort(), Object.keys(TABLE).sort(), 'the list is the whole table');
+		for (const tool of tools) {
+			assertEquals(tool.annotations, expected(TABLE[tool.name]!), tool.name);
+		}
+	} finally {
+		await client.close();
+		await server.close();
+		await registry.shutdown();
+		await Deno.remove(dir, { recursive: true });
+	}
 });

@@ -1,7 +1,7 @@
 /**
- * The §6.4 grammar renderer — `SimplifiedNode` tree → the literal text the LLM reads.
+ * The grammar renderer — `SimplifiedNode` tree → the literal text the LLM reads.
  *
- * Tab-indented; depth increases only under a rendered line. Every form of the §6.4 block is produced
+ * Tab-indented; depth increases only under a rendered line. Every form of the block is produced
  * here and nowhere else, so a drift in this file is a drift in agent behaviour:
  *
  * ```
@@ -22,17 +22,12 @@
  * [End of page]
  * ```
  *
- * ERRATUM(M1-dom-serialize-2): §6.4 shows `*[idx]` and `|scroll element[idx]|` but never their
- * combination. Implemented as the single rule "`*` immediately precedes the `[idx]` token", which
- * inside a scroll marker reads `|scroll element*[1520]|`.
+ * The new-element star follows one rule, "`*` immediately precedes the `[idx]` token", which inside a
+ * scroll marker reads `|scroll element*[1520]|`.
  *
- * ERRATUM(M1-dom-serialize-3): OBSERVABILITY-TESTING-CICD §4.2 describes the suite's output as
- * `[index]<tag>text`. §6.4 is the normative grammar and renders self-closing tag lines with text as
- * separate child lines; §6.4 wins.
+ * Tag lines are self-closing, with their text as separate child lines rather than `[index]<tag>text`.
  *
- * ERRATUM(M1-dom-serialize-4, WITHDRAWN by M1-parity-10): §6.4's iframe inner-scroll summary
- * (`scroll: 0.0↑ 2.1↓ 35%`) is emitted by no golden — the reference writes the literal `(scroll)` — so
- * the summary and the shallow frame-geometry search that fed it are gone rather than left unreachable.
+ * An iframe carries the literal `(scroll)`, never a numeric inner-scroll summary: no golden emits one.
  */
 
 import type { EnhancedDomTreeNode, SimplifiedNode } from './types.ts';
@@ -47,7 +42,7 @@ const DOCUMENT_FRAGMENT_NODE = 11;
 /** Tags that carry a frame boundary. */
 const FRAME_TAGS: ReadonlySet<string> = new Set(['iframe', 'frame']);
 
-/** §6.4 — at most this many hidden-element hints are listed under an iframe. */
+/** At most this many hidden-element hints are listed under an iframe. */
 export const MAX_HIDDEN_ELEMENT_HINTS = 10;
 
 /** Trailer the reference appends to an SVG root whose content it collapsed. */
@@ -69,11 +64,9 @@ export interface RenderOptions {
  * `(0.2 pages above, 1.4 pages below)`, `(horizontal 35%)`, or both — `(0.0 pages above, 2.9 pages
  * below horizontal 0%)`. `''` when the node has nothing to say.
  *
- * ERRATUM(M1-parity-8): §6.4 reads "`X.X pages above, Y.Y pages below` **and/or** `horizontal NN%`" and
- * this used to emit the pages clause unconditionally, so a horizontal-only container announced
- * `(0.0 pages above, 0.0 pages below, horizontal 0%)` — three numbers, two of them noise. The pages
- * clause is emitted only when the box actually scrolls vertically, and the two clauses are joined by a
- * **space**, not a comma: `#bothstrip` reads `... pages below horizontal 0%` in the recorded golden.
+ * The pages clause is emitted only when the box actually scrolls vertically — a horizontal-only
+ * container announcing `(0.0 pages above, 0.0 pages below, horizontal 0%)` would be two numbers of
+ * noise — and the two clauses are joined by a **space**, not a comma: `#bothstrip` reads `... pages below horizontal 0%` in the recorded golden.
  */
 function scrollSuffix(node: EnhancedDomTreeNode, derived: SerializerDerived): string {
 	if (!derived.shouldShowScrollInfo(node)) return '';
@@ -91,8 +84,7 @@ function scrollSuffix(node: EnhancedDomTreeNode, derived: SerializerDerived): st
 /**
  * The shadow-root type advertised on a host's `|SHADOW(...)|` marker.
  *
- * ERRATUM(M1-parity-9): §6.4 names only `Open`/`Closed` wrappers, so a user-agent-only host used to
- * carry no marker at all. The reference marks them `|SHADOW(open)|` — every `<input>`, `<select>`,
+ * A user-agent-only host is marked too: the reference marks them `|SHADOW(open)|` — every `<input>`, `<select>`,
  * `<option>` and `<details>` in the corpus, 19 times on `form_attributes` alone. An author root still
  * wins when both exist, because that is the one whose content is walked.
  */
@@ -126,11 +118,9 @@ function elementLine(simplified: SimplifiedNode, options: RenderOptions): string
 	const scrollable = derived.isActuallyScrollable(node);
 	const isFrame = FRAME_TAGS.has(tag);
 
-	// ERRATUM(M1-parity-10): §6.4 gives frames `|IFRAME|<iframe src=... />` plus a
-	// `(scroll: 0.0↑ 2.1↓ 35%)` summary. The reference contradicts it on four counts and all four are
-	// reproduced (DECISION-REGISTER §9.6 (E-23) items 1 and 2): the frame is *indexed*, the marker is
+	// A frame line reproduces the recorded reference exactly: the frame is *indexed*, the marker is
 	// `|scroll element[n]` with **no closing `|`**, the summary is the literal `(scroll)` with no
-	// numbers, and `src` is not emitted. The unclosed marker is the recorded reference defect.
+	// numbers, and `src` is not emitted. The unclosed marker is a reference defect kept on purpose.
 	if (isFrame) return `${shadowMarker}|scroll element${indexToken}${tagText} (scroll)`;
 	if (scrollable) {
 		return `${shadowMarker}|scroll element${indexToken}|${tagText}${scrollSuffix(node, derived)}`;
@@ -146,7 +136,7 @@ function hasElementChild(node: EnhancedDomTreeNode): boolean {
 	return node.childrenNodes.some((child) => child.nodeType === ELEMENT_NODE);
 }
 
-/** §6.4 — the `... (N more elements below - scroll to reveal):` block. */
+/** The `... (N more elements below - scroll to reveal):` block. */
 function hiddenElementLines(node: EnhancedDomTreeNode, depth: number, limit: number): string[] {
 	if (!node.hasHiddenContent || node.hiddenElementsInfo.length === 0) return [];
 	const indent = '\t'.repeat(depth);
@@ -169,8 +159,7 @@ function renderNode(simplified: SimplifiedNode, depth: number, options: RenderOp
 	const indent = '\t'.repeat(depth);
 
 	if (node.nodeType === TEXT_NODE) {
-		// ERRATUM(M1-parity-11): §6.4 fixes neither the collapsing nor the line unit for a text node.
-		// The reference emits **one line per source line** — a `<p>` holding three newline-separated
+		// A text node renders **one line per source line** — a `<p>` holding three newline-separated
 		// words renders as three lines, not one collapsed sentence — with each line's internal
 		// whitespace still collapsed and blank lines dropped.
 		for (const line of node.nodeValue.split('\n')) {
@@ -192,7 +181,7 @@ function renderNode(simplified: SimplifiedNode, depth: number, options: RenderOp
 	lines.push(...hiddenElementLines(node, depth + 1, options.maxHiddenElementHints ?? MAX_HIDDEN_ELEMENT_HINTS));
 }
 
-/** Renders the §6.4 text for a simplified tree, prompt-layer page markers included. */
+/** Renders the text for a simplified tree, prompt-layer page markers included. */
 export function renderSimplifiedTree(root: SimplifiedNode | null, options: RenderOptions): string {
 	const lines: string[] = [];
 	if (options.pixelsAbove === 0) lines.push('[Start of page]');

@@ -2,15 +2,15 @@
  * A real, local, CDP-speaking browser **fixture** for the session/watchdog tests — plus its own
  * self-test, which is why it lives in a `_test.ts` file colocated with the code it serves.
  *
- * This is a fixture, not a mock (D-TEST1, OBSERVABILITY-TESTING-CICD.md §4.1.2): a real `Deno.serve`
+ * This is a fixture, not a mock: a real `Deno.serve`
  * listener on `127.0.0.1:0`, a real WebSocket, real CDP JSON frames, and a small but honest browser
  * model (targets, flat sessions, attach/detach, lifecycle events). Nothing in `@tykotech/browser` or
  * `@tykotech/cdp` is stubbed. `@tykotech/cdp` ships an equivalent under `src/testing/`, but its `mod.ts` is the
- * only sanctioned import surface (AGENTS.md §3 forbids deep imports across packages), so the browser
+ * only sanctioned import surface (no deep imports across packages), so the browser
  * model this package needs lives here.
  *
  * The hostname is pinned to `127.0.0.1`: `Deno.serve` defaults to `0.0.0.0`, which the test
- * permission matrix refuses (build-run erratum E-5).
+ * permission matrix refuses.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -39,7 +39,7 @@ export interface NavigatePlan {
 	readonly errorText?: string | undefined;
 	/** Lifecycle names emitted right after the reply, all carrying `loaderId`. */
 	readonly lifecycle?: readonly string[] | undefined;
-	/** Lifecycle names emitted with no `loaderId` at all (the §7.5 staleness edge). */
+	/** Lifecycle names emitted with no `loaderId` at all (the readiness staleness edge). */
 	readonly lifecycleWithoutLoader?: readonly string[] | undefined;
 }
 
@@ -162,7 +162,7 @@ export class ChromeFixture implements AsyncDisposable {
 		return null;
 	}
 
-	/** Detaches every session of a target and destroys it — the "fully removed" path of §7.3. */
+	/** Detaches every session of a target and destroys it — the "fully removed" path of target discovery. */
 	removeTarget(targetId: string): void {
 		for (const [sessionId, owner] of [...this.#sessions]) {
 			if (owner !== targetId) continue;

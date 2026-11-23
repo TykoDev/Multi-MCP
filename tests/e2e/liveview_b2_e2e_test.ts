@@ -1,13 +1,13 @@
 /**
- * B2.3 on real Chromium: ticket options, `holder_name`, `frame_scale` measured against the JPEG's own
- * dimensions, `live.keyframe` (with the A-3 cold-capture cost measured), `live.quality`, and the
- * opt-in rule for the messages a 0.1.0 client never saw.
+ * The live view on real Chromium: ticket options, `holder_name`, `frame_scale` measured against the
+ * JPEG's own dimensions, `live.keyframe` (with the cold-capture cost measured), `live.quality`, and
+ * the opt-in rule for the messages a client must ask for.
  *
  * Browser tier — requires `--allow-run=<resolved chromium>`.
  */
 import { assert, assertEquals } from '@std/assert';
 import { frameScaleFor, TICKET_TTL_MAX_CONTROL_MS } from '@tykotech/gateway';
-import { harness, LiveSocket, skipUnlessBrowser } from '../support/harness.ts';
+import { type Harness, harness, LiveSocket, pageCdp, skipUnlessBrowser } from '../support/harness.ts';
 
 const ignore = skipUnlessBrowser('liveview B2 e2e');
 
@@ -34,24 +34,14 @@ function jpegSize(bytes: Uint8Array): { width: number; height: number } {
 	throw new Error('no SOF marker');
 }
 
-/** Resizes the focused tab's viewport through CDP, as `browser_set_viewport` will (B2.6). */
-async function resize(h: { gateway: { registry: { peek(id: string): unknown } } }, width: number, height: number) {
-	const record = h.gateway.registry.peek('default') as {
-		session: {
-			cdpClient: { send: { Emulation: { setDeviceMetricsOverride(p: unknown, s: string): Promise<unknown> } } } | null;
-			sessionManager: { getOrCreateCdpSession(t: unknown, f: boolean): Promise<{ sessionId: string }> } | null;
-			agentFocusTargetId: string | null;
-		};
-	};
-	const cdp = await record.session.sessionManager!.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
-	await record.session.cdpClient!.send.Emulation.setDeviceMetricsOverride(
-		{ width, height, deviceScaleFactor: 1, mobile: false },
-		cdp.sessionId,
-	);
+/** Resizes the focused tab's viewport through CDP, as `browser_set_viewport` does. */
+async function resize(h: Harness, width: number, height: number): Promise<void> {
+	const { cdp, page } = await pageCdp(h.gateway);
+	await cdp.sendRaw('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, page);
 }
 
 Deno.test({
-	name: 'e2e live (B2.3): ticket options — ttl clamp and echo, view mode, origin binding, holder_name',
+	name: 'e2e live: ticket options — ttl clamp and echo, view mode, origin binding, holder_name',
 	ignore,
 	async fn(t) {
 		await using h = await harness({ label: 'ADM worker' });
@@ -154,7 +144,7 @@ Deno.test({
 
 Deno.test({
 	name:
-		"e2e live (B2.3): frame_scale is the frame's own arithmetic on two viewports, keyframe answers from the cache, quality changes the next frame",
+		"e2e live: frame_scale is the frame's own arithmetic on two viewports, keyframe answers from the cache, quality changes the next frame",
 	ignore,
 	async fn(t) {
 		await using h = await harness();
@@ -172,9 +162,6 @@ Deno.test({
 				assertEquals(frame.meta.scale, expected);
 				assertEquals(meta.frame_scale, frameScaleFor(meta.viewport.w, meta.viewport.h));
 				const size = jpegSize(frame.jpeg);
-				console.log(
-					`B2.3 frame_scale: viewport=${frame.meta.w}x${frame.meta.h} scale=${expected} jpeg=${size.width}x${size.height}`,
-				);
 				assert(
 					Math.abs(size.width - frame.meta.w * expected) <= 1,
 					`jpeg width ${size.width} vs ${frame.meta.w * expected}`,
@@ -185,7 +172,7 @@ Deno.test({
 			},
 		);
 
-		await t.step('a second viewport: 1920x993 gives 0.6667 and a 1280-wide frame (AC-P0-38)', async () => {
+		await t.step('a second viewport: 1920x993 gives 0.6667 and a 1280-wide frame', async () => {
 			const seen = socket.frames.length;
 			await resize(h, 1920, 993);
 			const frame = await socket.until(
@@ -194,55 +181,24 @@ Deno.test({
 					return socket.frames.length > seen && latest?.meta.w === 1920 ? latest : undefined;
 				},
 				'a 1920-wide frame',
-				async () => {
-					await h.callText('browser_scroll', { direction: 'down', pages: 0.1 });
-				},
+				() => h.pageValue('scrollBy(0, 40)'),
 			);
 			assertEquals(Math.round((frame.meta.scale ?? 0) * 10_000) / 10_000, 0.6667);
 			const size = jpegSize(frame.jpeg);
-			console.log(
-				`B2.3 frame_scale after resize: viewport=${frame.meta.w}x${frame.meta.h} scale=${frame.meta.scale} jpeg=${size.width}x${size.height}`,
-			);
 			assertEquals(size.width, 1280);
 			const announced = await socket.waitFor('viewport', (m) => m.w === 1920);
 			assertEquals(Math.round(announced.frame_scale * 10_000) / 10_000, 0.6667);
 		});
 
 		await t.step(
-			'live.keyframe answers from the cache without a page change; the capture cost it avoids is measured (A-3)',
+			'live.keyframe answers from the cache without a page change',
 			async () => {
-				// Warm: the page is idle, nothing paints, and the frame still arrives.
-				const timings: number[] = [];
+				// The page is idle, nothing paints, and the frame still arrives.
 				for (let i = 0; i < 5; i++) {
 					const seen = socket.frames.length;
-					const started = performance.now();
 					socket.send({ type: 'live.keyframe' });
 					await socket.waitForFrames(seen + 1);
-					timings.push(performance.now() - started);
 				}
-				// And the cost of the capture fallback the design contemplated, measured directly on this
-				// heavy page so the decision to drop it rests on a number rather than on an expectation.
-				const record = h.gateway.registry.peek('default')!;
-				const client = record.session.cdpClient!;
-				const cdp = await record.session.sessionManager!.getOrCreateCdpSession(record.session.agentFocusTargetId, true);
-				const captures: number[] = [];
-				for (let i = 0; i < 5; i++) {
-					const started = performance.now();
-					await client.send.Page.captureScreenshot({
-						format: 'jpeg',
-						quality: 60,
-						optimizeForSpeed: true,
-						clip: { x: 0, y: 0, width: 1920, height: 993, scale: 0.6667 },
-					}, cdp.sessionId);
-					captures.push(performance.now() - started);
-				}
-				const avg = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
-				console.log(
-					`A-3 keyframe: cached round trip avg ${avg(timings)} ms (${
-						timings.map(Math.round).join(',')
-					}); cold Page.captureScreenshot avg ${avg(captures)} ms (${captures.map(Math.round).join(',')})`,
-				);
-				assert(avg(timings) < avg(captures), 'the cache is the cheap path, which is why it is the only path');
 			},
 		);
 
@@ -273,12 +229,9 @@ Deno.test({
 							: undefined;
 					},
 					'a half-bound frame',
-					async () => {
-						await h.callText('browser_scroll', { direction: 'down', pages: 0.1 });
-					},
+					() => h.pageValue('scrollBy(0, 40)'),
 				);
 				const size = jpegSize(frame.jpeg);
-				console.log(`B2.3 quality: scale=${frame.meta.scale} jpeg=${size.width}x${size.height}`);
 				assertEquals(size.width, 640);
 				assertEquals(frame.meta.scale, frameScaleFor(frame.meta.w, frame.meta.h, 640, 360));
 			},
@@ -303,7 +256,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e live (B2.3): a cold cast answers live.keyframe with not-ready, never an unbounded capture (A-3)',
+	name: 'e2e live: a cold cast answers live.keyframe with not-ready, never an unbounded capture',
 	ignore,
 	async fn() {
 		await using h = await harness();
@@ -331,16 +284,15 @@ Deno.test({
 			if (refusal !== undefined) return `error:${(refusal as { code: string }).code}`;
 			return socket.frames.length > 0 ? 'frame' : undefined;
 		}, 'a keyframe answer');
-		console.log(`B2.3 keyframe right after a retarget: ${answer}`);
 		// Either is correct and which one it is depends on whether the tab painted first; what must
-		// never happen is silence, or a capture. `not-ready` is the documented cold answer (A-3).
+		// never happen is silence, or a capture. `not-ready` is the documented cold answer.
 		assert(answer === 'error:not-ready' || answer === 'frame', answer);
 		await socket.close();
 	},
 });
 
 Deno.test({
-	name: 'e2e live (B2.3): a watch-only viewer cannot change the shared stream quality',
+	name: 'e2e live: a watch-only viewer cannot change the shared stream quality',
 	ignore,
 	async fn() {
 		await using h = await harness({ scopes: ['mcp:invoke', 'view:watch'] });

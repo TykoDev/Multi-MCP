@@ -148,16 +148,16 @@ function buildCyclicNode(): EnhancedDomTreeNode {
 }
 
 /**
- * The DATA-MODEL.md §5.1 timeout tables, transcribed. `null` = the `—` rows, which MUST inherit
- * `DEFAULT_EVENT_TIMEOUT_SEC` rather than restate it (build-run erratum E-1).
+ * The per-event timeout budgets. `null` marks the events that MUST inherit
+ * `DEFAULT_EVENT_TIMEOUT_SEC` rather than restate it.
  */
 const TIMEOUT_TABLE: readonly (readonly [string, number | null])[] = [
-	// §5.1.1 commands (18)
+	// commands (19)
 	['NavigateToUrlEvent', 30],
 	['ClickElementEvent', 15],
 	['ClickCoordinateEvent', 15],
-	// ERRATUM(E-49). Not in the §5.1 table: the hover is this delivery's addition and takes the click
-	// pair's 15 s, because it runs the same geometry resolution and differs only in not pressing.
+	// The hover takes the click pair's 15 s, because it runs the same geometry resolution and differs
+	// only in not pressing.
 	['HoverEvent', 15],
 	['TypeTextEvent', 60],
 	['ScrollEvent', 8],
@@ -174,12 +174,12 @@ const TIMEOUT_TABLE: readonly (readonly [string, number | null])[] = [
 	['GetDropdownOptionsEvent', 15],
 	['SelectDropdownOptionEvent', 8],
 	['ScrollToTextEvent', 15],
-	// §5.1.2 lifecycle (4)
+	// lifecycle (4)
 	['BrowserStartEvent', 30],
 	['BrowserStopEvent', 45],
 	['BrowserLaunchEvent', 30],
 	['BrowserKillEvent', 30],
-	// §5.1.3 notifications (8)
+	// notifications (8)
 	['BrowserConnectedEvent', null],
 	['BrowserStoppedEvent', null],
 	['TabCreatedEvent', null],
@@ -188,20 +188,20 @@ const TIMEOUT_TABLE: readonly (readonly [string, number | null])[] = [
 	['TargetCrashedEvent', 10],
 	['NavigationStartedEvent', null],
 	['NavigationCompleteEvent', null],
-	// §5.1.4 error / reconnect (3) — the table carries no timeout column at all
+	// error / reconnect (3) — all inherit the bus default
 	['BrowserErrorEvent', null],
 	['BrowserReconnectingEvent', null],
 	['BrowserReconnectedEvent', null],
-	// §5.1.5 storage (4)
+	// storage (4)
 	['SaveStorageStateEvent', 45],
 	['LoadStorageStateEvent', 45],
 	['StorageStateSavedEvent', null],
 	['StorageStateLoadedEvent', null],
-	// §5.1.6 downloads (3)
+	// downloads (3)
 	['DownloadStartedEvent', 5],
 	['DownloadProgressEvent', 5],
 	['FileDownloadedEvent', 30],
-	// §5.1.7 misc (4)
+	// misc (4)
 	['AboutBlankDVDScreensaverShownEvent', null],
 	['DialogOpenedEvent', null],
 	['CaptchaSolverStartedEvent', 5],
@@ -209,14 +209,11 @@ const TIMEOUT_TABLE: readonly (readonly [string, number | null])[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------
-// Catalog conformance (COMPLETIONS-CRITERIA.md §3.2 M1 event-catalog row)
+// Catalog conformance
 // ---------------------------------------------------------------------------------------------
 
-// ERRATUM(E-49) moved this test's own name: the specification's 18 command events became 19 when
-// `HoverEvent` was added, so 44 became 45. The name moves with the numbers deliberately — a count
-// assertion whose title still claims the old total is a test that has stopped saying what it checks.
-Deno.test('catalog: 19 + 4 + 8 + 3 + 4 + 3 + 4 = 45 events, grouped per ARCHITECTURE.md §5', () => {
-	assertEquals(COMMAND_EVENTS.length, 19, 'E-49 added HoverEvent to the specification’s 18');
+Deno.test('catalog: 19 + 4 + 8 + 3 + 4 + 3 + 4 = 45 events, in seven groups', () => {
+	assertEquals(COMMAND_EVENTS.length, 19);
 	assertEquals(LIFECYCLE_EVENTS.length, 4);
 	assertEquals(NOTIFICATION_EVENTS.length, 8);
 	assertEquals(ERROR_EVENTS.length, 3);
@@ -227,7 +224,7 @@ Deno.test('catalog: 19 + 4 + 8 + 3 + 4 + 3 + 4 = 45 events, grouped per ARCHITEC
 	assertEquals(new Set(BROWSER_EVENTS.map((cls) => cls.eventName)).size, 45);
 });
 
-Deno.test('catalog: every class is registered globally at import time (D-BUS1)', () => {
+Deno.test('catalog: every class is registered globally at import time', () => {
 	for (const cls of BROWSER_EVENTS) {
 		assert(globalEventRegistry.has(cls), `${cls.eventName} is not registered`);
 	}
@@ -244,7 +241,7 @@ Deno.test('catalog: no event name is a substring of another (the bus registry ru
 	}
 });
 
-Deno.test('catalog: per-class timeoutSec matches DATA-MODEL.md §5.1 verbatim', () => {
+Deno.test('catalog: per-class timeoutSec matches the budget table', () => {
 	assertEquals(TIMEOUT_TABLE.length, 45, 'the transcribed table must cover the whole catalog');
 	const byName = new Map(BROWSER_EVENTS.map((cls) => [cls.eventName, cls]));
 	assertEquals([...byName.keys()].sort(), TIMEOUT_TABLE.map(([name]) => name).sort());
@@ -253,7 +250,7 @@ Deno.test('catalog: per-class timeoutSec matches DATA-MODEL.md §5.1 verbatim', 
 		const cls = byName.get(name);
 		assert(cls !== undefined, `${name} missing from the catalog`);
 		if (expected === null) {
-			// E-1: `—` rows inherit the bus default; they must NOT restate it as a literal.
+			// Inheriting events must NOT restate the bus default as a literal.
 			assertEquals(
 				Object.hasOwn(cls, 'timeoutSec'),
 				false,
@@ -267,13 +264,13 @@ Deno.test('catalog: per-class timeoutSec matches DATA-MODEL.md §5.1 verbatim', 
 	}
 });
 
-Deno.test('catalog: exactly 12 events inherit the 30 s bus default (nine `—` rows + §5.1.4)', () => {
+Deno.test('catalog: exactly 12 events inherit the 30 s bus default', () => {
 	const inherited = BROWSER_EVENTS.filter((cls) => !Object.hasOwn(cls, 'timeoutSec'));
 	assertEquals(inherited.length, 12);
 	assertEquals(DEFAULT_EVENT_TIMEOUT_SEC, 30);
 });
 
-Deno.test('catalog: TIMEOUT_<EventClassName> overrides a class default (D-BUS1)', () => {
+Deno.test('catalog: TIMEOUT_<EventClassName> overrides a class default', () => {
 	try {
 		setDefaultEnvSource((name) => (name === 'TIMEOUT_ScrollEvent' ? '21' : undefined));
 		assertEquals(new ScrollEvent({ direction: 'down', amount: 500 }).eventTimeout, 21);
@@ -308,7 +305,7 @@ Deno.test('catalog: the bus enforces the per-class budget on a real dispatch', a
 });
 
 // ---------------------------------------------------------------------------------------------
-// ElementSelectedEvent — the serialization rule (DATA-MODEL.md §5.1, R9.4)
+// ElementSelectedEvent — the serialization rule
 // ---------------------------------------------------------------------------------------------
 
 Deno.test('element events: a cyclic node survives JSON.stringify with the five refs nulled', () => {
@@ -363,7 +360,7 @@ Deno.test('element events: the copy is deep — the live IR is never mutated or 
 	assert(event.node.hiddenElementsInfo[0] !== node.hiddenElementsInfo[0]);
 });
 
-Deno.test('element events: all eight element-targeted commands share the base and its rule (six + E-49, E-50)', () => {
+Deno.test('element events: all eight element-targeted commands share the base and its rule', () => {
 	const node = buildCyclicNode();
 	const events = [
 		new ClickElementEvent({ node }),
@@ -372,7 +369,7 @@ Deno.test('element events: all eight element-targeted commands share the base an
 		new UploadFileEvent({ node, filePath: '/tmp/a.png' }),
 		new GetDropdownOptionsEvent({ node }),
 		new SelectDropdownOptionEvent({ node, text: 'Option A' }),
-		// ERRATUM(E-49) and ERRATUM(E-50): both take a node, so both must survive the cycle strip.
+		// Hover and key events take a node too, so both must survive the cycle strip.
 		new HoverEvent({ node }),
 		new SendKeysEvent({ keys: 'Enter', node }),
 	];
@@ -394,10 +391,10 @@ Deno.test('element events: ScrollEvent targets the page when node is omitted', (
 });
 
 // ---------------------------------------------------------------------------------------------
-// Field + default parity with §5.1 (spot-checked where the spec states a default)
+// Field + default parity (spot-checked where a default is defined)
 // ---------------------------------------------------------------------------------------------
 
-Deno.test('fields: command-event defaults match §5.1.1', () => {
+Deno.test('fields: command events carry their defaults', () => {
 	const navigate = new NavigateToUrlEvent({ url: FIXTURE_URL });
 	assertEquals([navigate.waitUntil, navigate.timeoutMs, navigate.newTab], ['load', null, false]);
 	assertEquals(new NavigateToUrlEvent({ url: FIXTURE_URL, waitUntil: 'commit', newTab: true }).waitUntil, 'commit');
@@ -435,7 +432,7 @@ Deno.test('fields: command-event defaults match §5.1.1', () => {
 	}
 });
 
-Deno.test('fields: lifecycle, notification and error events match §5.1.2–§5.1.4', () => {
+Deno.test('fields: lifecycle, notification and error events carry their defaults', () => {
 	const start = new BrowserStartEvent();
 	assertEquals([start.cdpUrl, start.launchOptions], [null, null]);
 	assertEquals(new BrowserStartEvent({ cdpUrl: FIXTURE_URL, launchOptions: { headless: true } }).launchOptions, {
@@ -472,7 +469,7 @@ Deno.test('fields: lifecycle, notification and error events match §5.1.2–§5.
 	);
 });
 
-Deno.test('fields: storage, download and misc events match §5.1.5–§5.1.7', () => {
+Deno.test('fields: storage, download and misc events carry their defaults', () => {
 	assertEquals(new SaveStorageStateEvent().path, null);
 	assertEquals(new LoadStorageStateEvent({ path: '/tmp/state.json' }).path, '/tmp/state.json');
 	assertEquals(new StorageStateSavedEvent({ path: '/tmp/s.json', cookiesCount: 3, originsCount: 1 }).cookiesCount, 3);

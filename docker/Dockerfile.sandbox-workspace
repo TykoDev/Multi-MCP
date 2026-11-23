@@ -1,4 +1,4 @@
-# D-108: the image of the Docker workspace backend's per-workspace containers
+# The image of the Docker workspace backend's per-workspace containers
 # (TTK_SANDBOX_WORKSPACE_IMAGE, default tykotech-sandbox-workspace:0.2.0). Opt-in, with
 # docker-compose.sandbox-docker.yml; the bubblewrap image (docker/Dockerfile.sandbox) stays the default.
 #
@@ -13,8 +13,7 @@
 # Two stages, because a workspace container's environment is the cage's BASE_ENV and nothing else: the Deno image
 # sets DENO_DIR=/deno-dir/ (read-only here; Deno's cache belongs in the workspace's home, as in a cage), and its
 # tini entrypoint would wrap `sleep infinity` under Docker's own init. Only the binary is taken from it.
-# Same Deno release and Debian (trixie) as the bubblewrap image; digests pinned (integration reconciles the Deno
-# digest with the other images').
+# Same Deno release and Debian (trixie) as the bubblewrap image, both pinned by digest.
 # Both bases are overridable like the other images' (a mirror, an air-gapped registry); the defaults are the pins.
 ARG DENO_IMAGE=denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489db4b2e7352d5e432
 ARG RUNTIME_IMAGE=debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a

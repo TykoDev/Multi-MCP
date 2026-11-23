@@ -3,13 +3,12 @@
  * `BrowserProfile` behaviour: launch-arg composition and dedup, viewport/display resolution, and
  * downloads/profile directory resolution.
  *
- * Contract owners: SPECS/DATA-MODEL.md §5.2 (the field surface — the *type* lives in
- * `packages/core/src/types.ts`; this file owns the behaviour), SPECS/ARCHITECTURE.md §6.1
- * (LocalBrowserWatchdog: "composes launch args from the profile … asserts `--user-data-dir` is
- * set"), SPECS/ROADMAP.md R8 (no portable display-size API in Deno ⇒ headless defaults to
- * 1920×1080), SPECS/SECURITY-AUTH.md §3.2 (`--allow-run` scoping stays in `@tykotech/cdp`).
+ * The field surface is the `BrowserProfile` type in `../types.ts`; this file owns the behaviour.
+ * `LocalBrowserWatchdog` composes the launch args from the profile through it and asserts that
+ * `--user-data-dir` is set. Deno has no portable display-size API, so headless defaults to
+ * 1920×1080. `--allow-run` scoping stays in `@tykotech/cdp`.
  *
- * Division of labour with `@tykotech/cdp` (frozen at M0, not re-implemented here):
+ * Division of labour with `@tykotech/cdp` (not re-implemented here):
  * - `@tykotech/cdp` owns per-OS executable discovery, the free debug port, `--remote-debugging-port`,
  *   its own small privacy/first-run default arg set, `--headless=new`, and the final `argv` order.
  * - This module owns everything derived from the *profile*: which args exist, what they contain,
@@ -30,7 +29,7 @@ import type { ProxySettings, ViewportSize, WindowPosition } from '../types.ts';
 export type TargetOs = 'windows' | 'darwin' | 'linux';
 
 /**
- * The `BrowserProfile` subset this module's behaviour reads (DATA-MODEL.md §5.2). Declared
+ * The `BrowserProfile` subset this module's behaviour reads. Declared
  * structurally rather than as `Pick<BrowserProfile, …>` so callers can resolve a partial profile in
  * a test without constructing all sixty fields; `BrowserProfile` from `../types.ts` is assignable to
  * it, and `profile_test.ts` pins that at compile time so the two cannot drift.
@@ -66,7 +65,7 @@ export type ProfileResolutionOptions = {
 	readonly os?: TargetOs | undefined;
 	/**
 	 * Environment slice for display detection. Injected rather than read from `Deno.env`: reading it
-	 * would need an `--allow-env` grant this module has no business requiring (SECURITY-AUTH.md §3).
+	 * would need an `--allow-env` grant this module has no business requiring.
 	 * An empty environment therefore reads as "no display" on Linux.
 	 */
 	readonly env?: Readonly<Record<string, string | undefined>> | undefined;
@@ -86,13 +85,13 @@ export type ResolvedBrowserProfile = {
 	readonly userDataDir: string;
 	readonly profileDirectory: string;
 	readonly downloadsPath: string;
-	/** `true` ⇒ the real browser window is the viewport and `viewport` is `null` (§5.2 invariant). */
+	/** `true` ⇒ the real browser window is the viewport and `viewport` is `null` (a display invariant). */
 	readonly noViewport: boolean;
 	readonly viewport: ViewportSize | null;
 	readonly screen: ViewportSize;
 	readonly windowSize: ViewportSize | null;
 	readonly windowPosition: WindowPosition | null;
-	/** `null` in no-viewport mode; otherwise ≥ 1 (§5.2 invariant). */
+	/** `null` in no-viewport mode; otherwise ≥ 1 (a display invariant). */
 	readonly deviceScaleFactor: number | null;
 	/** Composed, `ignoreDefaultArgs`-filtered and deduped. Always contains `--user-data-dir`. */
 	readonly args: readonly string[];
@@ -110,7 +109,7 @@ export type BrowserLaunchPlan = {
 	readonly ignoreDefaultArgs: boolean | readonly string[] | undefined;
 };
 
-/** Configuration errors that make a launch impossible. Never a string throw (AGENTS.md §3). */
+/** Configuration errors that make a launch impossible. Never a string throw. */
 export class BrowserProfileError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -123,7 +122,7 @@ export class BrowserProfileError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
- * ROADMAP.md R8: Deno exposes no portable display-size API, so headless mode gets a fixed, honest
+ * Deno exposes no portable display-size API, so headless mode gets a fixed, honest
  * default instead of a guess. Headful runs without an explicit `windowSize` inherit it as the
  * *screen* figure but do not force a window size on the user's desktop.
  */
@@ -134,13 +133,13 @@ export const DEFAULT_PROFILE_DIRECTORY = 'Default';
 /** Downloads land here when neither the profile nor the caller names a directory. */
 export const DEFAULT_DOWNLOADS_DIRNAME = 'bua-downloads';
 
-/** Args this module always emits; `ignoreDefaultArgs` cannot drop them (ARCHITECTURE.md §6.1). */
+/** Args this module always emits; `ignoreDefaultArgs` cannot drop them. */
 export const MANDATORY_ARG_NAMES: readonly string[] = ['--user-data-dir'];
 
 /** Owned by `launchBrowser` (it picks the free port) — a profile that sets it is a config error. */
 const CDP_OWNED_ARG_NAMES: readonly string[] = ['--remote-debugging-port', '--remote-debugging-pipe'];
 
-/** The `disableSecurity` / `crossOriginIframes: false` feature switches (DATA-MODEL.md §5.2). */
+/** The `disableSecurity` / `crossOriginIframes: false` feature switches. */
 const SITE_ISOLATION_FEATURES: readonly string[] = ['IsolateOrigins', 'site-per-process'];
 
 // ---------------------------------------------------------------------------
@@ -184,7 +183,7 @@ export function dedupeArgs(args: readonly string[]): string[] {
 	return result;
 }
 
-/** ARCHITECTURE.md §6.1: the launch args MUST carry a profile directory. */
+/** The launch args MUST carry a profile directory. */
 export function assertUserDataDirPresent(args: readonly string[]): void {
 	for (const arg of args) {
 		if (argKey(arg) === '--user-data-dir') return;
@@ -199,8 +198,8 @@ export function assertUserDataDirPresent(args: readonly string[]): void {
 // ---------------------------------------------------------------------------
 
 /**
- * DATA-MODEL.md §5.2 `headless: null (auto)` — "headful iff a display exists". Deno cannot ask the
- * OS for a display (R8), so: Linux is judged by `DISPLAY`/`WAYLAND_DISPLAY`, and Windows/macOS are
+ * `headless: null` (auto) means "headful iff a display exists". Deno cannot ask the
+ * OS for a display, so: Linux is judged by `DISPLAY`/`WAYLAND_DISPLAY`, and Windows/macOS are
  * assumed to have one. With no environment injected, Linux reads as headless — the safe answer for
  * a container or CI runner.
  */
@@ -221,7 +220,7 @@ type DisplayResolution = {
 };
 
 /**
- * Resolves the three §5.2 display invariants:
+ * Resolves the three display invariants:
  * `noViewport ⇒ viewport === null`; viewport mode ⇒ `deviceScaleFactor ≥ 1`; never
  * (headless ∧ noViewport).
  *
@@ -241,12 +240,12 @@ function resolveDisplay(
 	const noViewport = requestedNoViewport && !forcedViewport;
 	if (profile.noViewport === true && forcedViewport) {
 		warn(
-			'noViewport: true was overridden — headless mode, an explicit viewport, or a deviceScaleFactor forces viewport mode (DATA-MODEL.md §5.2)',
+			'noViewport: true was overridden — headless mode, an explicit viewport, or a deviceScaleFactor forces viewport mode',
 		);
 	}
 	if (requestedScale !== null && requestedScale < 1) {
 		throw new BrowserProfileError(
-			`deviceScaleFactor must be >= 1 in viewport mode, got ${requestedScale} (DATA-MODEL.md §5.2)`,
+			`deviceScaleFactor must be >= 1 in viewport mode, got ${requestedScale}`,
 		);
 	}
 	const windowSize = profile.windowSize ?? (headless ? screen : null);
@@ -304,7 +303,7 @@ function validateProfileArgs(args: readonly string[]): void {
 }
 
 /**
- * The profile-derived default args. Deliberately small and fully traceable to DATA-MODEL.md §5.2 —
+ * The profile-derived default args. Deliberately small and fully traceable to profile fields —
  * `@tykotech/cdp` contributes the first-run/telemetry suppression set, and anything else the operator
  * wants belongs in `profile.args`, where it is visible.
  */
@@ -331,8 +330,7 @@ function composeArgs(
 
 	if (profile.proxy != null) {
 		// Only the server and bypass list go on the command line: `ps` is world-readable on most
-		// systems, so proxy credentials are answered over CDP `Fetch.authRequired` instead
-		// (DATA-MODEL.md §5.2, SECURITY-AUTH.md §2.1 A1).
+		// systems, so proxy credentials are answered over CDP `Fetch.authRequired` instead.
 		args.push(`--proxy-server=${profile.proxy.server}`);
 		if (profile.proxy.bypass != null) args.push(`--proxy-bypass-list=${profile.proxy.bypass}`);
 	}
@@ -341,7 +339,7 @@ function composeArgs(
 		args.push('--disable-web-security', '--allow-running-insecure-content', '--ignore-certificate-errors');
 	}
 	// Site isolation is what puts cross-origin iframes in their own processes; turning OOPIFs off
-	// means turning it off. Default is `crossOriginIframes: true` (DECISION-REGISTER.md I-11), so
+	// means turning it off. Default is `crossOriginIframes: true`, so
 	// this arm is opt-out only.
 	if (profile.crossOriginIframes === false || profile.disableSecurity === true) {
 		args.push('--disable-site-isolation-trials');
@@ -397,7 +395,7 @@ export function resolveBrowserProfile(
 	const os = options.os ?? currentTargetOs();
 	const headless = profile.headless ?? !hasDisplay(os, options.env ?? {});
 	if (headless && profile.devtools === true) {
-		throw new BrowserProfileError('devtools: true is incompatible with headless mode (DATA-MODEL.md §5.2)');
+		throw new BrowserProfileError('devtools: true is incompatible with headless mode');
 	}
 
 	const userDataDir = resolveUserDataDir(profile, options);

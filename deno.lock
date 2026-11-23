@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@std/assert@*": "1.0.19",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/async@^1.5.1": "1.5.1",
     "jsr:@std/bytes@^1.0.6": "1.0.6",
@@ -29,10 +30,9 @@
     "jsr:@std/uuid@^1.1.2": "1.1.2",
     "npm:@awesome.me/webawesome@3.14.0": "3.14.0_@floating-ui+utils@0.2.12_@types+react@19.3.0",
     "npm:@modelcontextprotocol/client@^2.4.0": "2.4.0",
-    "npm:@modelcontextprotocol/hono@^2.0.2": "2.0.2_@modelcontextprotocol+server@2.4.0_hono@4.13.14",
+    "npm:@modelcontextprotocol/hono@^2.0.2": "2.0.2_@modelcontextprotocol+server@2.4.0_hono@4.13.19",
     "npm:@modelcontextprotocol/server@^2.4.0": "2.4.0",
-    "npm:hono@^4.13.14": "4.13.14",
-    "npm:jose@^6.2.13": "6.2.13",
+    "npm:hono@^4.13.19": "4.13.19",
     "npm:lucide-static@1.49.0": "1.49.0",
     "npm:zod@^4.6.7": "4.6.7"
   },
@@ -71,7 +71,7 @@
     "@std/expect@1.0.20": {
       "integrity": "ffc4f3c33f732417e3e9acf3d995818c89984313c37d933b9ebbb4571d2887e9",
       "dependencies": [
-        "jsr:@std/assert",
+        "jsr:@std/assert@^1.0.19",
         "jsr:@std/internal@^1.0.14",
         "jsr:@std/path@^1.1.6"
       ]
@@ -138,7 +138,7 @@
     "@std/testing@1.0.21": {
       "integrity": "a0d14b2519005242821565091127c7d6fa96ca1b330e84e9249afcd602ee764f",
       "dependencies": [
-        "jsr:@std/assert",
+        "jsr:@std/assert@^1.0.19",
         "jsr:@std/async",
         "jsr:@std/data-structures",
         "jsr:@std/fs@^1.0.24",
@@ -260,7 +260,7 @@
         "zod"
       ]
     },
-    "@modelcontextprotocol/hono@2.0.2_@modelcontextprotocol+server@2.4.0_hono@4.13.14": {
+    "@modelcontextprotocol/hono@2.0.2_@modelcontextprotocol+server@2.4.0_hono@4.13.19": {
       "integrity": "sha512-hXtSVm0S6d0EJWMVoaeAWevATQLzHrHiPuPBLxW5vM5OQJG+SFlm7D9iJT5cG3p84DDahCD4bAuqcCPdgNFAEw==",
       "dependencies": [
         "@modelcontextprotocol/server",
@@ -350,8 +350,8 @@
     "graceful-fs@4.2.11": {
       "integrity": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="
     },
-    "hono@4.13.14": {
-      "integrity": "sha512-yhRLQ21U6qa9Hsu2N7Qcbh8tE+WKEcoErjIo56LeSGiGXGp9sA7UpE86Ui9uexb61KakiGwuHMn2QdV7w6i6kQ=="
+    "hono@4.13.19": {
+      "integrity": "sha512-KmXvQAXwcAHV+muzbIwoJ23niEB5nMoDVr9WcRkU8mvjUECm/1+7v4Jgp7P7a+H6MLFrh+vXrGonGrGS+RQfkA=="
     },
     "isexe@2.0.0": {
       "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw=="
@@ -462,8 +462,7 @@
       "npm:@modelcontextprotocol/client@^2.4.0",
       "npm:@modelcontextprotocol/hono@^2.0.2",
       "npm:@modelcontextprotocol/server@^2.4.0",
-      "npm:hono@^4.13.14",
-      "npm:jose@^6.2.13",
+      "npm:hono@^4.13.19",
       "npm:lucide-static@1.49.0",
       "npm:zod@^4.6.7"
     ]

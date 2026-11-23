@@ -1,25 +1,12 @@
 /**
- * R12 (design §2.19, D-132): the credentialed clone's transport, and the operator's remotes it serves.
+ * The credentialed clone's transport. The clone step's git talks plain http to `http://127.0.0.1:3128/r` (socat to
+ * this per-run socket); the forwarder dials the remote itself (resolved, public addresses only, TLS verified for its
+ * name) and adds `Authorization` service-side, so no credential is ever in the cage, and every token is registered
+ * with `guardSecret` as it is read. Only `GET /r/info/refs?service=git-upload-pack` and `POST /r/git-upload-pack` are
+ * served (no push; 403 otherwise), with bounded heads and bodies, a header allowlist each way, and no redirect.
  *
- * With the CONNECT proxy, TLS runs end to end from the cage, so any credential would have to be inside the cage. The
- * forwarder keeps it out: the clone step's git talks plain http to `http://127.0.0.1:3128/r` (the cage's socat to this
- * per-run unix socket), and the forwarder makes its own TLS connection to the remote, adding `Authorization`
- * service-side. Nothing secret is ever in the cage's environment, files, `/proc` or output, and nothing secret is
- * logged: every token and header value is registered with `guardSecret` the moment it is read.
- *
- * What it serves, and nothing else (403 otherwise — `git-receive-pack`, so no push, and every other path):
- *
- * - `GET /r/info/refs?service=git-upload-pack` and `POST /r/git-upload-pack`, mapped onto the remote's own path;
- * - request heads up to 16 KiB and bodies up to 64 MiB (by length or chunked, re-sent chunked);
- * - `Git-Protocol`, `Content-Type`, `Content-Encoding` and `Accept` passed on; `Host`, a fixed `User-Agent`, the
- *   credential and `Connection: close` set by the forwarder;
- * - the remote is dialled at an address the forwarder resolved and checked itself (`isPublicAddress`, as the
- *   registry proxy does), then TLS is run with the remote's host name, verified and sent as SNI (M8, measured on Deno
- *   2.9.7); a redirect (3xx) is refused, never followed; the answer is streamed back with a small header allowlist.
- *
- * The remotes come from one operator file (`TTK_SANDBOX_GIT_REMOTES_FILE`, `/run/secrets/ttk_git_remotes`), read once
- * at start-up, after which the service gives up its read grant on it — the token.ts (SB-5) pattern, copied rather
- * than imported, since token.ts is kept import-free for the Linux tier.
+ * The remotes come from `TTK_SANDBOX_GIT_REMOTES_FILE`, read once at start-up, after which the read grant is revoked
+ * (token.ts's pattern, copied: token.ts stays import-free).
  */
 import { type GitOrigin, gitOrigin } from './clone.ts';
 import { LIMITS } from './limits.ts';
@@ -60,9 +47,8 @@ function base64(text: string): string {
 }
 
 /**
- * Parses the remotes file: a JSON list of `{id, url, username?, token?}`, ids unique, every URL of the shape §2.19
- * fixes for a clone URL (its host need not be on `TTK_SANDBOX_GIT_HOSTS`: a remote is operator-fixed and reached only
- * through the forwarder). Throws naming the file and the rule broken, never a value from it.
+ * Parses the remotes file: a JSON list of `{id, url, username?, token?}`, ids unique, URLs of a clone URL's shape
+ * (the host need not be on `TTK_SANDBOX_GIT_HOSTS`). Throws naming the file and the rule, never a value.
  */
 export function parseGitRemotes(text: string): ParsedRemotes {
 	const refuse = (why: string): never => {
@@ -115,13 +101,12 @@ export function parseGitRemotes(text: string): ParsedRemotes {
 }
 
 /**
- * Reads the remotes file once, gives up the grant to read it again, registers every credential with the log guard,
- * and checks the folders the service still needs are readable after the revoke (a file kept inside one of them is
- * refused, as SB-5 refuses the token there). Throws, naming the file only, on anything it cannot use.
+ * Reads the remotes file once, revokes the read grant, guards every credential from the log, and checks the kept
+ * folders are still readable (a file inside one is refused). Throws naming the file only.
  */
 export async function loadGitRemotes(path: string, keep: readonly string[]): Promise<GitRemote[]> {
 	const info = await Deno.lstat(path).catch((error) => {
-		// The matrices grant this one path (D-131); an overlay that does not cannot start with the remotes set.
+		// The matrices grant this one path; an overlay that does not cannot start with the remotes set.
 		if (error instanceof Deno.errors.NotCapable) {
 			throw new Error(`TTK_SANDBOX_GIT_REMOTES_FILE is set, but this process holds no read grant for ${path}.`);
 		}
@@ -484,9 +469,8 @@ export class GitForwarder implements ProxyHandle {
 	}
 
 	/**
-	 * A TLS connection to the remote: its name resolved here, only public addresses dialled (IPv4 first), then TLS with
-	 * the remote's host name verified and sent as SNI. A certificate that does not verify ends the attempt: another
-	 * address of the same name is not tried. Null when nothing could be reached.
+	 * A TLS connection to the remote: public addresses only (IPv4 first), its name verified and sent as SNI. A bad
+	 * certificate ends the attempt (no other address is tried). Null when nothing could be reached.
 	 */
 	async #dial(): Promise<Deno.Conn | null> {
 		const host = this.#origin.origin.host;

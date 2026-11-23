@@ -1,6 +1,5 @@
 /**
- * Navigation readiness contract tests (ARCHITECTURE.md §7.5; COMPLETIONS-CRITERIA.md §3.2
- * "Navigation readiness" row): the `commit` path, the same-document (no `loaderId`) path, the
+ * Navigation readiness contract tests: the `commit` path, the same-document (no `loaderId`) path, the
  * lifecycle poll with its loaderId staleness rules, and the **non-fatal** readiness timeout with its
  * `loadingStatus` payload and 3 s / 8 s heuristic.
  *
@@ -78,17 +77,17 @@ function record(name: string, loaderId: string | null, receivedAt: number): Life
 }
 
 // ---------------------------------------------------------------------------
-// constants (the R2 audit surface)
+// constants
 // ---------------------------------------------------------------------------
 
-Deno.test('ARCHITECTURE §7.5/§8 navigation constants are encoded verbatim', () => {
+Deno.test('the navigation constants keep their budgets', () => {
 	assertEquals(LIFECYCLE_POLL_INTERVAL_MS, 50);
 	assertEquals(READINESS_TIMEOUT_SAME_DOMAIN_MS, 3_000);
 	assertEquals(READINESS_TIMEOUT_CROSS_DOMAIN_MS, 8_000);
 	assertEquals(NAVIGATE_TRANSITION_TYPE, 'address_bar');
 });
 
-Deno.test('the acceptance table matches §7.5 step 4 exactly', () => {
+Deno.test('the acceptance table matches the readiness levels exactly', () => {
 	// networkIdle always counts; load counts for load/domcontentloaded; DOMContentLoaded for
 	// domcontentloaded only.
 	assertEquals(ACCEPTABLE_LIFECYCLE_EVENTS.networkidle, ['networkIdle']);
@@ -296,10 +295,10 @@ Deno.test('step 5: an explicit timeoutMs overrides the heuristic', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// cancellation — ERRATUM(E-62)
+// cancellation
 // ---------------------------------------------------------------------------
 
-Deno.test('E-62: an already-abandoned caller never issues Page.navigate at all', async () => {
+Deno.test('cancellation: an already-abandoned caller never issues Page.navigate at all', async () => {
 	await using h = await navHarness({ loaderId: 'L1', lifecycle: [] });
 	const before = h.fixture.requestsFor('Page.navigate').length;
 	const error = await assertRejects(() =>
@@ -315,7 +314,7 @@ Deno.test('E-62: an already-abandoned caller never issues Page.navigate at all',
 	);
 });
 
-Deno.test('E-62: the readiness wait is abandoned early and reports the time it actually waited', async () => {
+Deno.test('cancellation: the readiness wait is abandoned early and reports the time it actually waited', async () => {
 	await using h = await navHarness({ loaderId: 'L1', lifecycle: [] });
 	const controller = new AbortController();
 	const startedAt = performance.now();
@@ -348,7 +347,7 @@ Deno.test('E-62: the readiness wait is abandoned early and reports the time it a
 	assert(result.waitedMs < READINESS_TIMEOUT_CROSS_DOMAIN_MS);
 });
 
-Deno.test('E-62: a signal aborting after Page.navigate is on the wire does not fail the navigation', async () => {
+Deno.test('cancellation: a signal aborting after Page.navigate is on the wire does not fail the navigation', async () => {
 	await using h = await navHarness({ loaderId: 'L1', lifecycle: ['load'] });
 	const controller = new AbortController();
 	// Aborts one microtask in — the navigate command has been composed and sent, and the lifecycle

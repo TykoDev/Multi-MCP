@@ -1,34 +1,6 @@
 /**
- * The accessibility snapshot's pure half (R11, design §2.8, D-120): raw `Accessibility.AXNode`s in, a bounded,
- * value-free tree and its outline out.
- *
- * **Values never leave, and "the value" is more than the `value` field.** Measured on the recorded captures
- * (`packages/browser/fixtures/dom/{live_value_vs_attribute,react_controlled_inputs,form_attributes}`): Chromium
- * exposes what was typed into a text field three times — as the node's `value`, as a `StaticText` child of the
- * field's inner editor (`textbox › generic › StaticText "live-typed-value"`), and, where the page names the field
- * after its content, inside its `name`. A spin button's number and a date field's segments arrive the same way. So
- * four rules, all applied here and nowhere else:
- *
- * 1. `value` is never read into the output, for any node.
- * 2. A **value-bearing control** — an editable role, a node the AX tree marks `editable`, or a password field
- *    (`isPasswordField`, E-29, decided by the caller from the DOM) — has its `name` and `description` replaced by
- *    `''` when either contains the control's current value (compared here, in-process; the value itself is never
- *    returned), and loses its `valuenow`/`valuetext` properties.
- * 3. Inside a value-bearing control only its **structural** descendants survive (a `<select>`'s popup and options,
- *    a menu): the inner editor, its text runs and every other descendant are dropped with their subtrees, because
- *    they are the control's rendering of its value.
- * 4. Every string that does leave passes the caller's `redact` (`SecretStore.redact`), so a configured secret
- *    typed anywhere on the page reaches no field of the result.
- * 5. Review R2-4: **another node's name is not a way around rule 2.** Chromium computes a control's accessible name
- *    from a field's value through `aria-labelledby` or a wrapping label (measured: `button "typed-Q-VALUE"`,
- *    `checkbox "Send to typed-EM-VALUE"`), and a password field's masked value — `•` per character — through the same
- *    relations, which hands out the password's length. So a first pass collects every value-bearing node's current
- *    value (whitespace-collapsed, never returned), and **any** node's `name` or `description` that contains one is
- *    replaced by `''`; while the page has a password field, so is any that carries a run of masking bullets. A value
- *    of one or two characters blanks only a name that *is* it: containment at that length would blank most of the
- *    tree for a single typed letter and hide nothing (the `SecretStore.redact` floor, for the same reason).
- *
- * Everything here is bounded by the input it is given; the caller bounds the input by `max_nodes`.
+ * The accessibility snapshot's pure half: raw `Accessibility.AXNode`s in, a bounded, value-free tree and its outline
+ * out.
  */
 import { decodeAxTree, type EnhancedAxNode } from '@tykotech/browser';
 import type { CdpResult } from '@tykotech/cdp';
@@ -36,15 +8,15 @@ import type { CdpResult } from '@tykotech/cdp';
 /** One `Accessibility.AXNode` as `getFullAXTree` / `getPartialAXTree` deliver it. */
 export type RawAxNode = CdpResult['Accessibility.getFullAXTree']['nodes'][number];
 
-/** `max_nodes` when the caller names none, and its ceiling (design §2.3). */
+/** `max_nodes` when the caller names none, and its ceiling. */
 export const AX_MAX_NODES_DEFAULT = 1000;
 export const AX_MAX_NODES_MAX = 5000;
 
 /**
- * Roles whose node carries what a person typed or chose (design §2.8), plus Chromium's own roles for the date and
+ * Roles whose node carries what a person typed or chose, plus Chromium's own roles for the date and
  * time inputs, whose segments are their value.
  */
-export const VALUE_ROLES: ReadonlySet<string> = new Set([
+const VALUE_ROLES: ReadonlySet<string> = new Set([
 	'textbox',
 	'searchbox',
 	'combobox',
@@ -70,10 +42,10 @@ const STRUCTURAL_IN_CONTROL: ReadonlySet<string> = new Set([
 	'treeitem',
 ]);
 
-/** Review R2-4: a value shorter than this blanks only a name equal to it; at or above it, any name containing it. */
+/** A value shorter than this blanks only a name equal to it; at or above it, any name containing it. */
 export const AX_VALUE_CONTAIN_MIN = 3;
 
-/** Review R2-4: a run of the characters Chromium masks a password with (two or more), or a name made only of them. */
+/** A run of the characters Chromium masks a password with (two or more), or a name made only of them. */
 const MASK_RUN = /[\u2022\u25CF]{2,}/;
 const MASK_ONLY = /^[\u2022\u25CF]+$/;
 
@@ -107,7 +79,7 @@ const OUTLINE_PROPERTIES: readonly string[] = [
 	'valuenow',
 ];
 
-/** One node of the emitted tree (`AxOut`, design §2.3). */
+/** One node of the emitted tree (`AxOut`). */
 export interface AxOut {
 	role: string;
 	name: string;
@@ -119,20 +91,20 @@ export interface AxOut {
 }
 
 /** What {@linkcode buildAxTree} needs besides the nodes. */
-export interface AxTreeOptions {
+interface AxTreeOptions {
 	/** Skip ignored nodes, unnamed containers and text runs, hoisting their children (default true). */
 	readonly interestingOnly: boolean;
 	readonly maxNodes: number;
 	/** `backendNodeId` → `browser_get_state` index, from the table the session holds. */
 	readonly indexByBackendId?: ReadonlyMap<number, number>;
-	/** Backend ids of password fields (E-29), decided from the DOM by the caller. */
+	/** Backend ids of password fields, decided from the DOM by the caller. */
 	readonly passwordBackendIds?: ReadonlySet<number>;
 	/** `SecretStore.redact`, or the identity. */
 	readonly redact?: (text: string) => string;
 }
 
 /** The snapshot: the tree (truncated to `maxNodes` in document order), its size, and the outline. */
-export interface AxTree {
+interface AxTree {
 	readonly tree: AxOut;
 	readonly nodesTotal: number;
 	readonly truncated: boolean;
@@ -152,13 +124,7 @@ function hasEditableProperty(node: EnhancedAxNode): boolean {
 	return editable !== undefined && editable !== null && editable !== false && editable !== '';
 }
 
-/**
- * Builds the bounded, value-free tree from raw AX nodes.
- *
- * The root is the first node whose parent is not in the set (`RootWebArea` for a full tree, the element itself for
- * a partial one). A child id the set does not hold is skipped, and a node is visited once whatever its id list
- * claims, so a malformed or partial tree cannot loop or throw.
- */
+/** Builds the bounded, value-free tree from raw AX nodes. */
 export function buildAxTree(nodes: readonly RawAxNode[], options: AxTreeOptions): AxTree {
 	const redact = options.redact ?? ((text: string) => text);
 	const decoded = decodeAxTree(nodes);
@@ -172,7 +138,7 @@ export function buildAxTree(nodes: readonly RawAxNode[], options: AxTreeOptions)
 	const isBearing = (node: RawAxNode, ax: EnhancedAxNode): boolean =>
 		VALUE_ROLES.has(ax.role ?? 'none') || isPassword(node) || hasEditableProperty(ax);
 
-	// Rule 5's first pass (review R2-4): every value-bearing node's current value, longest first, and whether the page
+	// Rule 5's first pass: every value-bearing node's current value, longest first, and whether the page
 	// has a password field. Kept in this scope only; nothing derived from it is returned but a blanked string.
 	const typed = new Set<string>();
 	let passwordPresent = false;

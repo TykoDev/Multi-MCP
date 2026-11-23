@@ -194,7 +194,7 @@ Deno.test('bus: the handler context signal aborts when the timeout fires', async
 	assertInstanceOf(reason, EventTimeoutError);
 });
 
-Deno.test('bus: a timed-out handler still running holds back the next handler (E-56)', async () => {
+Deno.test('bus: a timed-out handler still running holds back the next handler', async () => {
 	using time = new FakeTime();
 	const { logger, warns } = recordingLogger();
 	const bus = makeBus({ logger });
@@ -232,7 +232,7 @@ Deno.test('bus: a timed-out handler still running holds back the next handler (E
 	assertEquals(warns, [], 'a handler that unwinds inside the grace period is not an abandonment');
 });
 
-Deno.test('bus: a handler that ignores its abort is abandoned after the grace period (E-56)', async () => {
+Deno.test('bus: a handler that ignores its abort is abandoned after the grace period', async () => {
 	using time = new FakeTime();
 	const { logger, warns } = recordingLogger();
 	const bus = makeBus({ logger, abandonGraceMs: 1_000 });
@@ -259,7 +259,7 @@ Deno.test('bus: a handler that ignores its abort is abandoned after the grace pe
 	assertEquals(outcomes.map((outcome) => outcome.status), ['rejected', 'fulfilled']);
 });
 
-Deno.test('bus: abandonGraceMs <= 0 restores the pre-E-56 behaviour', async () => {
+Deno.test('bus: abandonGraceMs <= 0 starts the next handler when the timed-out one settles', async () => {
 	using time = new FakeTime();
 	const bus = makeBus({ abandonGraceMs: 0 });
 	const order: string[] = [];

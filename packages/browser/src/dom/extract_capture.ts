@@ -1,13 +1,12 @@
 /**
  * CDP capture — everything the three-tree merge needs, pulled off the wire into a plain-JSON record.
  *
- * Contract: SPECS/ARCHITECTURE.md §6.7 (DOMWatchdog budget: ≤2 s pending-network probe with a 0.3 s
- * stability pause, 20 s combined build budget), §7.3 (SessionManager owns targets/sessions — this
- * module *consumes* sessions), SPECS/DATA-MODEL.md §6.1–§6.2.
+ * Budgets: a ≤2 s pending-network probe with a 0.3 s stability pause, inside the DOMWatchdog's 20 s
+ * combined build budget. SessionManager owns targets and sessions; this module only *consumes* them.
  *
  * The output type {@linkcode DomCapture} is deliberately JSON-shaped: it is what the fixture corpus
- * under `packages/core/fixtures/dom/` stores, which makes the whole merge testable without a browser
- * (a recorded CDP payload is data, not a mock — D-TEST1).
+ * under `packages/browser/fixtures/dom/` stores, which makes the whole merge testable without a browser
+ * (a recorded CDP payload is data, not a mock).
  */
 
 import type { CdpClient, CdpResult, SessionId } from '@tykotech/cdp';
@@ -18,19 +17,19 @@ import { type CapturedSnapshot, SNAPSHOT_COMPUTED_STYLES } from './extract_snaps
 export type CapturedDomNode = CdpResult['DOM.getDocument']['root'];
 
 // ---------------------------------------------------------------------------
-// budget constants (ARCHITECTURE §6.7, §8) — asserted verbatim by extract_test.ts
+// budget constants — asserted verbatim by extract_test.ts
 // ---------------------------------------------------------------------------
 
-/** DOM build + screenshot share this ceiling (ARCHITECTURE §6.7). */
+/** DOM build + screenshot share this ceiling. */
 export const DOM_BUILD_BUDGET_MS = 20_000;
 
-/** Pending-network probe cap (ARCHITECTURE §6.7). */
+/** Pending-network probe cap. */
 export const NETWORK_PROBE_MAX_MS = 2_000;
 
-/** Quiet period the probe requires before declaring the network stable (ARCHITECTURE §6.7). */
+/** Quiet period the probe requires before declaring the network stable. */
 export const NETWORK_STABILITY_MS = 300;
 
-/** `Runtime.getEventListeners` census caps (DATA-MODEL §6.1). */
+/** Event-listener census caps. */
 export const LISTENER_CENSUS_MAX_ELEMENTS = 10_000;
 export const LISTENER_CENSUS_MAX_LISTENERS = 100;
 
@@ -104,13 +103,13 @@ export interface DomCapture {
 	readonly sessions: readonly CapturedSession[];
 	readonly warnings: readonly string[];
 	/**
-	 * ERRATUM(E-40). True when the walk stopped at `maxSessions` and deeper OOPIFs were skipped.
-	 * Optional because recorded fixtures predate it; absent reads as `false`.
+	 * True when the walk stopped at `maxSessions` and deeper OOPIFs were skipped.
+	 * Optional because recorded fixtures do not carry it; absent reads as `false`.
 	 */
 	readonly truncated?: boolean;
 }
 
-/** A target/session pair as SessionManager hands them out (ARCHITECTURE §7.3). */
+/** A target/session pair as SessionManager hands them out. */
 export interface DomTargetSession {
 	readonly targetId: string;
 	readonly sessionId: string;
@@ -122,7 +121,7 @@ export interface DomTargetSession {
  * SessionManager seam: given the `frameId` of an out-of-process iframe, return the session serving
  * it, or `null` when there is none (frame not attached, or attachment is not this caller's business).
  *
- * Extraction never attaches targets itself in production — that is SessionManager's job (§7.3).
+ * Extraction never attaches targets itself in production — that is SessionManager's job.
  * {@linkcode createAttachingChildSessionResolver} exists for callers that have no SessionManager yet
  * (the integration tier, the fixture recorder).
  */
@@ -153,7 +152,7 @@ export const MAX_CAPTURE_SESSIONS = 32;
  * Per session the four reads (`DOM.getDocument`, `DOMSnapshot.captureSnapshot`,
  * `Accessibility.getFullAXTree`, `Page.getLayoutMetrics` + the DPR probe) are issued concurrently:
  * they are independent, and serializing them would spend four round trips of the 20 s budget for no
- * reason (ARCHITECTURE §8 — parallelism is I/O concurrency).
+ * reason (parallelism here is I/O concurrency).
  */
 export async function captureDom(options: CaptureDomOptions): Promise<DomCapture> {
 	const { client, root } = options;
@@ -170,7 +169,7 @@ export async function captureDom(options: CaptureDomOptions): Promise<DomCapture
 		if (seen.has(next.sessionId)) continue;
 		if (sessions.length >= maxSessions) {
 			warnings.push(`capture stopped at maxSessions=${maxSessions}; deeper OOPIFs were skipped`);
-			// ERRATUM(E-40): a structural flag beside the warning, because the warning is never merged
+			// A structural flag beside the warning, because the warning is never merged
 			// into `browserErrors` and the wire needs a boolean it can publish as `capture_truncated`.
 			truncated = true;
 			break;
@@ -229,11 +228,11 @@ async function captureSession(
 		),
 	]);
 
-	// ERRATUM(M1-parity-17): `Accessibility.getFullAXTree` with no `frameId` returns **only** this
-	// session's main frame, so every same-origin iframe `DOM.getDocument(pierce: true)` inlined arrived
-	// with no accessible name, role or property at all — measurable as `role=null name=null` on every
-	// row of `iframe_inner_scroll` and a missing `expanded=false` on `iframe_nested`'s nested `<select>`.
-	// One extra call per pierced frame closes it; the ids share this session's `backendNodeId` space, so
+	// `Accessibility.getFullAXTree` with no `frameId` returns **only** this session's main frame, so
+	// every same-origin iframe `DOM.getDocument(pierce: true)` inlined would arrive with no accessible
+	// name, role or property at all (`role=null name=null` on every row of `iframe_inner_scroll`, no
+	// `expanded=false` on `iframe_nested`'s nested `<select>`). One extra call per pierced frame
+	// covers them; the ids share this session's `backendNodeId` space, so
 	// the node lists concatenate.
 	const axNodes = [...ax.nodes];
 	for (const frameId of findSameOriginFrameIds(document.root)) {
@@ -334,14 +333,13 @@ export function isFrameElement(nodeName: string): boolean {
 /**
  * The census expression.
  *
- * ERRATUM(M1-dom-extract-10): DATA-MODEL §6.1 calls this a "Runtime `getEventListeners` census", but
- * no such CDP command exists. `getEventListeners` is the DevTools **command-line API**, reachable only
- * under `includeCommandLineAPI: true` (CDP's real command is `DOMDebugger.getEventListeners`, and
- * `DOMDebugger` is not one of the 14 domains D-CDP2 admits). It reports listeners registered on the
+ * There is no `Runtime.getEventListeners` CDP command. `getEventListeners` is the DevTools
+ * **command-line API**, reachable only under `includeCommandLineAPI: true` (CDP's real command is
+ * `DOMDebugger.getEventListeners`, and `DOMDebugger` is not one of the typed domains). It reports listeners registered on the
  * node itself, so delegated handlers on an ancestor are — correctly — not attributed to the child, and
  * inline `onclick` is probed separately because the helper does not report it either.
  *
- * Both caps of DATA-MODEL §6.1 are enforced inside the page: the element budget is shared across
+ * Both census caps are enforced inside the page: the element budget is shared across
  * frames, and at most {@linkcode LISTENER_CENSUS_MAX_LISTENERS} listener records are examined per
  * element. Returning indices rather than object handles keeps the whole census to one round trip.
  */
@@ -455,7 +453,7 @@ export function parseListenerCensus(json: string): ListenerCensus | null {
 }
 
 // ---------------------------------------------------------------------------
-// pending-network probe (ARCHITECTURE §6.7)
+// pending-network probe
 // ---------------------------------------------------------------------------
 
 /** Outcome of {@linkcode waitForNetworkStability}. */
@@ -562,8 +560,8 @@ export interface AttachingChildSessionResolver {
 /**
  * Attach OOPIF targets directly, for callers with no SessionManager.
  *
- * Production code MUST pass SessionManager's resolver instead (ARCHITECTURE §7.3: `getOrCreateCdpSession`
- * is the only sanctioned accessor). This exists so the integration tier and the fixture recorder can
+ * Production code MUST pass SessionManager's resolver instead (`getOrCreateCdpSession` is the only
+ * sanctioned accessor). This exists so the integration tier and the fixture recorder can
  * drive a bare `CdpClient` without reimplementing session pooling.
  */
 export function createAttachingChildSessionResolver(client: CdpClient): AttachingChildSessionResolver {

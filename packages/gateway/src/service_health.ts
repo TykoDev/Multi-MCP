@@ -1,29 +1,18 @@
-/**
- * D-082: the configured private services, watched while the server runs.
- *
- * Before D-082 the sandbox and the ACP runner were probed once at start-up: a service that was down at boot never
- * got its tools, and one that died later kept them, answering every call with a failure that looked like a bug.
- * Now each configured service is probed every `intervalMs`; its tools follow its health (`ToolAvailability.services`)
- * and every change is logged and announced, so clients re-list.
- *
- * A probe is the service's own health check, bounded by its own timeout (5 s); two probes of one service never
- * overlap.
- */
+/** The configured private services, watched while the server runs. */
 import type { Logger } from './logger.ts';
 
-export type ServiceName = 'sandbox' | 'agents';
-export type ServiceStates = { readonly sandbox?: boolean; readonly agents?: boolean };
+export type ServiceName = 'sandbox';
+export type ServiceStates = { readonly sandbox?: boolean };
 
-export const SERVICE_PROBE_INTERVAL_MS = 30_000;
+const SERVICE_PROBE_INTERVAL_MS = 30_000;
 
 const LABELS: Record<ServiceName, string> = {
 	sandbox: 'coding sandbox',
-	agents: 'ACP runner',
 };
 
 export class ServiceHealth {
 	readonly #probes: Partial<Record<ServiceName, () => Promise<boolean>>>;
-	readonly #states: { sandbox?: boolean; agents?: boolean } = {};
+	readonly #states: { sandbox?: boolean } = {};
 	readonly #listeners = new Set<(states: ServiceStates) => void>();
 	readonly #logger: Logger | undefined;
 	readonly #intervalMs: number;
@@ -91,23 +80,4 @@ export class ServiceHealth {
 			this.#probing = false;
 		}
 	}
-}
-
-/**
- * The ACP runner's health check: `GET /healthz` with a 5 s budget and no redirects. It replaced the one-shot start-up
- * probe `readyExpansion`, which was removed once nothing called it (D-082, D-107).
- */
-export function bridgeProbe(url: URL | string, request: typeof fetch = fetch): () => Promise<boolean> {
-	return async () => {
-		try {
-			const response = await request(new URL('/healthz', url), {
-				redirect: 'error',
-				signal: AbortSignal.timeout(5000),
-			});
-			await response.body?.cancel();
-			return response.ok;
-		} catch {
-			return false;
-		}
-	};
 }

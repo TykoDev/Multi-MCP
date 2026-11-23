@@ -1,6 +1,6 @@
 /**
  * @module
- * `AboutBlankWatchdog` — the "never zero tabs" guarantee (ARCHITECTURE.md §6.3).
+ * `AboutBlankWatchdog` — the "never zero tabs" guarantee.
  *
  * > guarantees the browser never reaches zero tabs: on `TabClosedEvent` with no page targets
  * > remaining, opens a new `about:blank` tab.
@@ -10,36 +10,30 @@
  * nowhere to navigate. This watchdog is the cheap invariant that makes the rest of the layer able to
  * assume a tab exists.
  *
- * ## The cosmetic screensaver is DROPPED (○, D-SCOPE1)
+ * ## No cosmetic screensaver
  *
- * §6.3's second sentence ("also injects the animated 'agent is starting' screensaver into about:blank
- * tabs") is marked ○ MAY be dropped, and DECISION-REGISTER.md §3 D-SCOPE1 names the "DVD-screensaver
- * tab animation" as a port-optional cosmetic that MAY go without a parity violation. It is dropped
- * whole, not half-built: this watchdog does not handle `TabCreatedEvent`, injects no script, and
- * never emits `AboutBlankDVDScreensaverShownEvent` (the event class stays defined in the 44-event
- * catalog, per ARCHITECTURE.md §5). ERRATUM(M1-watchdogs-rest-3) records the drop.
+ * The animated "agent is starting" screensaver for about:blank tabs is an optional cosmetic and is
+ * not built: this watchdog does not handle `TabCreatedEvent`, injects no script, and never emits
+ * `AboutBlankDVDScreensaverShownEvent` (the event class stays defined in the event catalog).
  *
  * ## Why it also watches the stop events
  *
- * DATA-MODEL.md §5.1.2 lists AboutBlank among `BrowserStopEvent`'s handlers and §5.1.3 lists it
- * among `BrowserStoppedEvent`'s consumers, without saying what it does with either. It disarms: a
- * teardown that closes the last tab must not race a fresh `about:blank` into a browser that is on its
- * way out. The disarm is scoped to the `SessionManager` instance that was live at stop time, so a
- * later `reset()`/reconnect — which builds a new manager — re-arms automatically rather than leaving
- * the invariant silently switched off (ERRATUM(M1-watchdogs-rest-4)).
+ * AboutBlank handles `BrowserStopEvent` and consumes `BrowserStoppedEvent` to disarm: a teardown
+ * that closes the last tab must not race a fresh `about:blank` into a browser that is on its way out.
+ * The disarm is scoped to the `SessionManager` instance that was live at stop time, so a later
+ * `reset()`/reconnect — which builds a new manager — re-arms automatically rather than leaving the
+ * invariant silently switched off.
  *
  * ## Why the decision is taken behind a round-trip barrier
  *
- * ERRATUM(M1-hardening-3): §6.3 states the trigger ("on `TabClosedEvent` with no page targets
- * remaining") without saying *when* "remaining" is measured. Measured at handler entry it is a
- * check-then-act on a value another producer is concurrently changing: real Chrome opens its own
- * replacement tab when the last one closes, and whether its `Target.targetCreated` had been
- * processed by the time this handler ran was luck. Losing that race put two tabs in a browser the
- * spec asks to have one. The observation is now taken *after* a CDP round trip: one socket, ordered
- * frames, and `SessionManager`'s `Target.targetCreated` listener writes its map synchronously, so
- * everything Chrome sent before it answered has been recorded by the time the barrier resolves. What
- * remains outside the barrier — a replacement Chrome had not yet sent — is not a race this watchdog
- * can lose, because at that instant the browser really did have zero tabs.
+ * "No page targets remaining" is measured *after* a CDP round trip, not at handler entry. At handler
+ * entry it would be a check-then-act on a value another producer is concurrently changing: real Chrome
+ * opens its own replacement tab when the last one closes, and whether its `Target.targetCreated` has
+ * been processed by then is luck; losing that race puts two tabs in a browser that should have one.
+ * Behind the barrier — one socket, ordered frames, and `SessionManager`'s `Target.targetCreated`
+ * listener writes its map synchronously — everything Chrome sent before it answered has been recorded.
+ * What remains outside the barrier — a replacement Chrome has not yet sent — is not a race this
+ * watchdog can lose, because at that instant the browser really does have zero tabs.
  */
 
 import { delay } from '@std/async';
@@ -53,19 +47,19 @@ import { BaseWatchdog, type WatchdogHost } from './base.ts';
 // constants
 // ---------------------------------------------------------------------------
 
-/** The URL a rescued browser parks on. Always allowed by the domain policy (SECURITY-AUTH §4.2 §1). */
+/** The URL a rescued browser parks on. Always allowed by the domain policy. */
 export const ABOUT_BLANK_URL = 'about:blank';
 
 /**
  * How long the rescue waits for the created target to appear in the `SessionManager` maps.
  *
- * Derived, not invented: `TabClosedEvent` carries a **3 s** per-handler budget (DATA-MODEL.md
- * §5.1.3), and this wait runs inside that handler alongside one `Target.createTarget` round trip.
+ * Derived, not invented: `TabClosedEvent` carries a **3 s** per-handler budget, and this wait runs
+ * inside that handler alongside one `Target.createTarget` round trip.
  * 1 s leaves the round trip two thirds of the budget.
  *
  * The wait exists because `SessionManager`'s detach-driven focus recovery runs immediately *after*
  * `TabClosedEvent` and creates its own `about:blank` when it sees no page target — returning before
- * Chrome's `Target.targetCreated` lands would produce two tabs where the spec asks for one.
+ * Chrome's `Target.targetCreated` lands would produce two tabs where there should be one.
  */
 export const ABOUT_BLANK_TAB_REGISTER_WAIT_MS = 1_000;
 
@@ -123,7 +117,7 @@ export class AboutBlankWatchdog extends BaseWatchdog {
 		await this.ensurePageTarget();
 	}
 
-	/** Disarm before the socket goes: a teardown must not spawn tabs (E-16 handler-set reading). */
+	/** Disarm before the socket goes: a teardown must not spawn tabs. */
 	onBrowserStopEvent(_event: BrowserStopEvent, _context?: HandlerContext): void {
 		this.#stoppedManager = this.host.sessionManager;
 	}
@@ -161,7 +155,7 @@ export class AboutBlankWatchdog extends BaseWatchdog {
 	/**
 	 * The barrier of the module note, then the decision, then the tab.
 	 *
-	 * DELIBERATELY UNCANCELLABLE — bare `manager.client`, not a signal-bound view (ERRATUM(E-62)).
+	 * DELIBERATELY UNCANCELLABLE — bare `manager.client`, not a signal-bound view.
 	 * Two independent reasons, either sufficient:
 	 *
 	 * 1. This watchdog *is* a guarantee — "the browser never reaches zero tabs". A guarantee that

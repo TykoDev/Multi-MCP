@@ -1,6 +1,6 @@
 /**
- * R4 (sessions as MCP resources) and R5 (a tool list that changes with the
- * server's state), against a real browser.
+ * Sessions as MCP resources, and a tool list that follows the server's state,
+ * against a real browser.
  *
  * Both are claims about what a *client* sees, so both are checked through the
  * SDK client: `resources/list`, `resources/read`, `tools/list`. The bytes a
@@ -15,11 +15,16 @@ import { harness, skipUnlessBrowser } from '../support/harness.ts';
 const ignore = skipUnlessBrowser('resources e2e');
 
 /**
- * The resources that describe the deployment rather than a session: `ttk://capabilities`, and — since D-150 turned MCP
- * Apps on by default wherever the embed build exists, which the browser tier always builds first — the two `ui://`
+ * The resources that describe the deployment rather than a session: `ttk://capabilities`, and — because MCP Apps are on
+ * by default wherever the embed build exists, which the browser tier always builds first — the three `ui://`
  * documents. Present before any browser exists, and after the last one closes.
  */
-const DEPLOYMENT_URIS = [CAPABILITIES_URI, 'ui://tykotech/a2ui-surface', 'ui://tykotech/live-view'].sort();
+const DEPLOYMENT_URIS = [
+	CAPABILITIES_URI,
+	'ui://tykotech/a2ui-surface',
+	'ui://tykotech/live-view',
+	'ui://tykotech/terminal',
+].sort();
 
 /** The session resources in a listing, sorted — everything but the deployment-scoped ones. */
 function sessionUris(resources: ReadonlyArray<{ uri: string }>): string[] {
@@ -32,14 +37,14 @@ function deploymentUris(resources: ReadonlyArray<{ uri: string }>): string[] {
 }
 
 Deno.test({
-	name: 'e2e R4: a live session is readable as a resource',
+	name: 'e2e resources: a live session is readable as a resource',
 	ignore,
 	async fn(t) {
 		await using h = await harness();
 
 		await t.step('no sessions means no session resources', async () => {
 			const listed = await h.client.listResources({});
-			// B3.1: `ttk://capabilities` is always listed — it describes the connection,
+			// `ttk://capabilities` is always listed — it describes the connection,
 			// not a session, so it is present before any browser exists and stays after
 			// the last one closes. The claim here is about SESSION resources, so it is
 			// stated that way rather than as "the list is empty".
@@ -131,7 +136,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: 'e2e R5: the tool list follows the takeover lock',
+	name: 'e2e resources: the tool list follows the takeover lock',
 	ignore,
 	async fn(t) {
 		await using h = await harness();
@@ -149,16 +154,15 @@ Deno.test({
 		const socket = await h.live();
 		const meta = await socket.ready();
 
-		await t.step('while a human holds the only session, the list does not move (G-2)', async () => {
+		await t.step('while a human holds the only session, the list does not move', async () => {
 			socket.send({ type: 'control.take' });
 			await socket.waitFor('lock', (message) => message.lock?.holder === meta.viewerId);
 
-			// Before B1.2 these were withdrawn from `tools/list` while every
-			// session was held. The lock is per session and the list is per
-			// connection, so withdrawing them was a lie about every other session —
-			// and in the all-held case it turned a classifiable
-			// `Error: human-has-control:` result into a JSON-RPC protocol error,
-			// which aborts the model's turn instead of telling it to wait.
+			// These stay in `tools/list` while every session is held. The lock is
+			// per session and the list is per connection, so withdrawing them would
+			// be a lie about every other session — and in the all-held case it would
+			// turn a classifiable `Error: human-has-control:` result into a JSON-RPC
+			// protocol error, which aborts the model's turn instead of telling it to wait.
 			const names = await namesNow();
 			for (const name of ['browser_click', 'browser_type', 'browser_scroll', 'browser_press_key']) {
 				assert(names.includes(name), `${name} must stay listed and refuse at call time`);
@@ -171,8 +175,7 @@ Deno.test({
 		});
 
 		await t.step('a held session refuses a mutating tool with a readable code, not a protocol error', async () => {
-			// The all-locked case, which is the half G-2 got wrong: it now answers
-			// exactly as the partial-lock case always did.
+			// The all-locked case answers exactly as the partial-lock case does.
 			const refused = await h.client.callTool({ name: 'browser_click', arguments: { index: 0 } }) as {
 				isError?: boolean;
 				content?: Array<{ text?: string }>;

@@ -2,9 +2,9 @@
  * @module
  * Scrolling and scroll-to-text.
  *
- * Contract owner: SPECS/ARCHITECTURE.md §6.10 — "scroll (page gesture / element wheel / iframe JS)"
- * and "scroll-to-text (`DOM.performSearch` + fallback)". `ScrollEvent` carries `direction`, an
- * `amount` in pixels, and a `node` that is `null` for the page (SPECS/DATA-MODEL.md §5.1.1).
+ * Scroll is a page gesture, an element wheel or iframe script; scroll-to-text is `DOM.performSearch`
+ * plus a fallback. `ScrollEvent` carries `direction`, an `amount` in pixels, and a `node` that is
+ * `null` for the page.
  *
  * Every path is **wheel first, script second**. A synthesized wheel is a real input event: it fires
  * `wheel`, it is cancellable, it drives CSS scroll-snap, it moves whichever scroll container is under
@@ -26,8 +26,7 @@ export const SCROLL_TO_TEXT_MAX_CANDIDATES = 10;
 /**
  * Frames the settle probe waits for a wheel's animation to finish before reading the offset.
  *
- * ERRATUM(M1-watchdogs-action-12): §6.10 describes the scroll paths but not that Chrome scrolls a
- * synthesized wheel **asynchronously and with animation**. Reading the offset in the same turn the
+ * Chrome scrolls a synthesized wheel **asynchronously and with animation**. Reading the offset in the same turn the
  * wheel was dispatched in reports a partial or zero delta, so the wheel looks like it failed and the
  * script fallback fires — which then fights the still-running animation and lands the page somewhere
  * neither asked for. Every path therefore settles first: poll `requestAnimationFrame` until the
@@ -36,7 +35,7 @@ export const SCROLL_TO_TEXT_MAX_CANDIDATES = 10;
  */
 export const SCROLL_SETTLE_MAX_FRAMES = 60;
 
-/** Which mechanism actually moved the content — the audit surface for the three §6.10 paths. */
+/** Which mechanism actually moved the content — the audit surface for the three scroll paths. */
 export type ScrollStrategy =
 	| 'pageGesture'
 	| 'pageScript'
@@ -343,8 +342,7 @@ const TEXT_WALKER_FUNCTION = `(function (needle, direction) {
  * `DOM.performSearch` → pick a candidate honouring `direction` → `DOM.scrollIntoViewIfNeeded`, then
  * the text walker when the search found nothing usable.
  *
- * ERRATUM(M1-watchdogs-action-8): §5.1.1 gives `ScrollToTextEvent` an optional `direction` without
- * saying what it does. It **orders candidates relative to the current scroll offset** — `'down'`
+ * `ScrollToTextEvent`'s optional `direction` **orders candidates relative to the current scroll offset** — `'down'`
  * takes the first match below the fold, `'up'` the last match above it — which is the only reading
  * under which "find the next occurrence in this direction" behaves like a reader's expectation.
  * `'left'`/`'right'` carry no vertical ordering and fall through to document order.

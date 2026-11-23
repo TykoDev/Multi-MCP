@@ -1,43 +1,12 @@
-/**
- * Per-frame isolated JavaScript worlds, for the reads page script must not be able to answer (A1, A2).
- *
- * Two questions this server asks a page are authorization-relevant and are answered by DOM getters: which
- * element a pseudo-element belongs to (`CSSPseudoElement.prototype.element`, the hit test) and which element
- * has focus (`Document.prototype.activeElement`, the secret pin). In the page's **main** world both are
- * ordinary configurable accessors, so a page can make them lie. Measured on real Chromium (W1 probe,
- * 2026-10-04): with `CSSPseudoElement.prototype.element` redefined in the main world, the main-world read named
- * the element the page chose for three different pseudo-elements, while the same read from a
- * `Page.createIsolatedWorld` context named the true element every time. An isolated world shares the DOM and
- * nothing else — its prototypes are its own — so it is where these reads happen.
- *
- * **A context id names a context only inside one renderer process.** CDP numbers execution contexts per
- * process and documents that `contextId` "may be reused across processes". A page target's CDP session and its
- * main-frame id both survive a cross-site navigation, so an id remembered for (session, frame) can name, after
- * one, whichever context of the NEW process holds that number — measured on Chromium 154 through this server
- * (`tests/e2e/secret_focus_e2e_test.ts`, review R3-2): a cached world's id resolved, without any error, to a
- * lying page's main world, the focus walk followed the lie into another site's frame, and a secret pinned to
- * that site was typed into the lying page. ERRATUM(E-93): D-096's "one world per (session, frame), cached,
- * recreated once if stale" assumed a stale id fails; it does not. Two consequences, one per caller:
- *
- * - **The secret pin never reuses a world** ({@linkcode inFreshIsolatedWorld}): one `Page.createIsolatedWorld`
- *   per read, so the id is at most one round trip old when it is used.
- * - **The hit test keeps a cache, but every cached world is branded** ({@linkcode inIsolatedWorld}): at
- *   creation a random property name holding a random value is defined on the new world's global, and every read
- *   verifies the brand in the SAME evaluation as the read itself (`brandGuard`). A main world never saw the
- *   pair, so it cannot answer for it; a mismatch drops the entry and the read is retried once against a fresh,
- *   freshly branded world. Keying the cache on the frame's loader id instead would add a frame-tree round trip
- *   to every read and still leave the window between that read and the evaluation.
- *
- * What remains is the round trip between `Page.createIsolatedWorld` answering and the first use of its id (for
- * a branded world, the branding call): a cross-process navigation landing exactly inside it. That is the same
- * window every element-targeted action has between resolving and dispatching.
- */
+/** Per-frame isolated JavaScript worlds, for the reads page script must not be able to answer. */
 import type { BrowserSession } from '@tykotech/browser';
-import type { SessionId } from '@tykotech/cdp';
+import type { SessionId, TargetId } from '@tykotech/cdp';
 import type { SessionRecord } from './registry.ts';
+import { ToolError } from './errors.ts';
+import type { FrameContext } from './page_eval.ts';
 
 /** The world's name, visible in DevTools; one name for every frame. */
-export const ISOLATED_WORLD_NAME = 'ttk-isolated';
+const ISOLATED_WORLD_NAME = 'ttk-isolated';
 
 /** Cached contexts per record before the cache is dropped and rebuilt — a bound, not a tuning knob. */
 const MAX_CACHED_WORLDS = 64;
@@ -45,11 +14,11 @@ const MAX_CACHED_WORLDS = 64;
 /** The connected CDP client a record's session holds. */
 type Client = NonNullable<BrowserSession['cdpClient']>;
 
-/** The message a {@linkcode brandGuard} throws, so a mismatch is told apart from any other failed read. */
-export const WORLD_MISMATCH = 'ttk-isolated-world-mismatch';
+/** The message a {@linkcode BRAND_GUARD} throws, so a mismatch is told apart from any other failed read. */
+const WORLD_MISMATCH = 'ttk-isolated-world-mismatch';
 
 /** The unguessable pair a cached world carries on its global (see the module comment). */
-export interface WorldBrand {
+interface WorldBrand {
 	/** A property name on the world's global; random per world. */
 	readonly key: string;
 	/** Its value; random per world. */
@@ -57,7 +26,7 @@ export interface WorldBrand {
 }
 
 /** A cached world: the id to evaluate in, and the brand that proves the id still names it. */
-export interface BrandedWorld {
+interface BrandedWorld {
 	readonly contextId: number;
 	readonly brand: WorldBrand;
 }
@@ -137,14 +106,7 @@ async function brandedWorld(client: Client, sessionId: SessionId, frameId: strin
 	return { contextId, brand };
 }
 
-/**
- * Runs `read` against the cached, branded isolated world of `frameId`, created on first use.
- *
- * `read` must verify the brand inside its own evaluation ({@linkcode BRAND_GUARD} with
- * {@linkcode brandArguments}) and throw {@linkcode StaleWorldError} on a mismatch, and it must be safe to run
- * twice: any failure against a cached world — gone, or not the world it was — drops the entry and re-runs
- * `read` once against a fresh one. A failure against a fresh world is the caller's to classify.
- */
+/** Runs `read` against the cached, branded isolated world of `frameId`, created on first use. */
 export async function inIsolatedWorld<T>(
 	record: SessionRecord,
 	client: Client,
@@ -172,4 +134,148 @@ export async function inIsolatedWorld<T>(
 	if (cache.size >= MAX_CACHED_WORLDS) cache.clear();
 	cache.set(key, world);
 	return await read(world);
+}
+
+// --- The frame that holds keyboard focus, read live from the browser. --------------------------------------------
+
+/** Frame boundaries the walk descends at most; a deeper nesting is refused rather than cut short. */
+const FOCUS_MAX_DESCENT = 8;
+
+/** Object group for the handles the walk allocates, released per document. */
+const FOCUS_OBJECT_GROUP = 'ttk-focus';
+
+/** Elements that own a nested browsing context when they have one. */
+const FRAME_OWNER_NAMES: ReadonlySet<string> = new Set(['IFRAME', 'FRAME', 'OBJECT', 'EMBED', 'FENCEDFRAME', 'PORTAL']);
+
+/** Evaluated in the isolated world: the document's active element, followed into open shadow roots. */
+const ACTIVE_ELEMENT_EXPRESSION = '(() => { let el = document.activeElement; ' +
+	'while (el !== null && el.shadowRoot !== null && el.shadowRoot.activeElement !== null) ' +
+	'el = el.shadowRoot.activeElement; return el; })()';
+
+/** `DOM.Node` as `DOM.describeNode` returns it (the cdp barrel does not export the type by name). */
+type DomNode = Awaited<ReturnType<Client['send']['DOM']['describeNode']>>['node'];
+
+/** The connected session pieces, or a `browser-unavailable` refusal. */
+function connected(session: BrowserSession) {
+	const client = session.cdpClient;
+	const manager = session.sessionManager;
+	const focus = session.agentFocusTargetId;
+	if (client === null || manager === null || focus === null) {
+		throw new ToolError('browser-unavailable', 'the session is not connected');
+	}
+	return { client, manager, focus };
+}
+
+/** True when the browser describes `node` as owning a frame: it reports the frame's id or its document. */
+function ownsFrame(node: DomNode): boolean {
+	return node.frameId !== undefined || node.contentDocument !== undefined;
+}
+
+/** True when a described subtree holds a frame owner anywhere, closed shadow roots included. */
+function holdsFrame(node: DomNode): boolean {
+	if (ownsFrame(node) || FRAME_OWNER_NAMES.has(node.nodeName)) return true;
+	for (const child of [...(node.children ?? []), ...(node.shadowRoots ?? [])]) {
+		if (holdsFrame(child)) return true;
+	}
+	return false;
+}
+
+/** The refusal for focus the walk can see is in a frame, but cannot follow into it. */
+function unenterable(what: string): ToolError {
+	return new ToolError(
+		'navigation-blocked',
+		`focus is inside ${what}, so the frame a secret would be typed into cannot be determined; pass index to ` +
+			'name the field',
+	);
+}
+
+/** The frame owner focus went into from this document, or `null` when focus stops here. */
+async function focusedOwner(
+	client: Client,
+	sessionId: SessionId,
+	frameId: string,
+): Promise<{ frameId: string; inProcess: boolean } | null> {
+	return await inFreshIsolatedWorld(client, sessionId, frameId, async (contextId) => {
+		try {
+			const active = await client.send.Runtime.evaluate(
+				{ expression: ACTIVE_ELEMENT_EXPRESSION, contextId, objectGroup: FOCUS_OBJECT_GROUP, silent: true },
+				sessionId,
+			);
+			const objectId = active.result.objectId;
+			if (active.exceptionDetails !== undefined) throw new Error('the active element could not be read');
+			if (objectId === undefined) return null;
+			const described = await client.send.DOM.describeNode({ objectId, depth: 1, pierce: true }, sessionId);
+			const node = described.node;
+			if (node.frameId !== undefined) {
+				return { frameId: node.frameId, inProcess: node.contentDocument !== undefined };
+			}
+			if (ownsFrame(node) || FRAME_OWNER_NAMES.has(node.nodeName)) {
+				// A frame owner the browser names no frame for (a document without an id, an `<object>` or `<embed>`
+				// whose content is not a frame this server can see).
+				throw unenterable(`a <${node.nodeName.toLowerCase()}> whose frame the browser does not name`);
+			}
+			if ((node.shadowRoots ?? []).some((root) => root.shadowRootType === 'closed')) {
+				const deep = await client.send.DOM.describeNode({ objectId, depth: -1, pierce: true }, sessionId);
+				if (holdsFrame(deep.node)) {
+					throw new ToolError(
+						'navigation-blocked',
+						'focus is on an element whose closed shadow root holds a frame, so the frame a secret would be ' +
+							'typed into cannot be determined; pass index to name the field',
+					);
+				}
+			}
+			return null;
+		} finally {
+			await client.send.Runtime.releaseObjectGroup({ objectGroup: FOCUS_OBJECT_GROUP }, sessionId).catch(() => {});
+		}
+	});
+}
+
+/**
+ * The frame that has keyboard focus in the session's focused tab, as a {@linkcode FrameContext} whose
+ * `sessionId` is the session that hosts the frame — so `liveFrameUrl` reads its URL from the right tree.
+ */
+export async function focusedFrame(record: SessionRecord): Promise<FrameContext> {
+	const { client, manager, focus } = connected(record.session);
+	let descended = false;
+	try {
+		const page = await manager.getOrCreateCdpSession(focus, true);
+		let sessionId = page.sessionId;
+		const { frameTree } = await client.send.Page.getFrameTree({}, sessionId);
+		let frameId = frameTree.frame.id;
+		let isOopif = false;
+		for (let depth = 0; depth <= FOCUS_MAX_DESCENT; depth++) {
+			const owner = await focusedOwner(client, sessionId, frameId);
+			if (owner === null) {
+				const isTop = depth === 0;
+				return { frameId, sessionId, isOopif, named: true, isTop, isSessionDocument: isTop || isOopif };
+			}
+			descended = true;
+			if (!owner.inProcess) {
+				// Out of process: the frame is its own target, and Chrome uses the frame id as the target id. A
+				// frame that cannot be attached to is one whose document cannot be read — refused, never the outer.
+				try {
+					sessionId = (await manager.getOrCreateCdpSession(owner.frameId as TargetId, false)).sessionId;
+				} catch {
+					throw unenterable('an out-of-process frame this server cannot attach to');
+				}
+				isOopif = true;
+			} else {
+				isOopif = false;
+			}
+			frameId = owner.frameId;
+		}
+	} catch (cause) {
+		if (cause instanceof ToolError) throw cause;
+		const detail = cause instanceof Error ? cause.message : String(cause);
+		// Past the top document every failure is about a frame focus went into: its document could not be read,
+		// so the frame cannot be named — refused as such, not reported as a browser fault the caller might retry
+		// around by typing anyway.
+		if (descended) throw unenterable(`a frame whose document could not be read (${detail})`);
+		throw new ToolError('browser-unavailable', `the focused frame could not be read: ${detail}`);
+	}
+	throw new ToolError(
+		'navigation-blocked',
+		`focus is nested more than ${FOCUS_MAX_DESCENT} frames deep; pass index to name the field`,
+	);
 }

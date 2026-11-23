@@ -1,10 +1,6 @@
 /**
- * R1 (D-121, AC13, AC14): background tool tasks over MCP — `agent_run_tool` and `agent_list_tasks` on the
- * owner-isolated `AgentRuntime` that A2A already uses.
- *
- * Two levels: the composed services driven through the same executor the dispatcher uses (fast, every refusal), and
- * the gateway's own `/mcp` mount with two real API keys (the bearer gate, the stamped owner and GW-1 re-authorization
- * on the path). No browser is launched: the task's tool is `browser_list_sessions`, which reads the registry only.
+ * Background tool tasks over MCP — `agent_run_tool` and `agent_list_tasks` on the owner-isolated `AgentRuntime` that
+ * A2A already uses.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import type { AgentTask } from '@tykotech/agents';
@@ -22,8 +18,9 @@ import {
 import { createGatewayApp } from './app.ts';
 import { generateApiKey, VerifierChain } from './auth.ts';
 import { loadConfig } from './config.ts';
-import { createExpansionServices, type ExpansionServices, NOT_TASKABLE } from './expansion.ts';
+import { createExpansionServices, type ExpansionServices } from './expansion.ts';
 import { createLogger } from './logger.ts';
+import { NOT_TASKABLE } from './taskable.ts';
 
 const SCOPES: ReadonlySet<Scope> = new Set(['mcp:invoke', 'agent:invoke']);
 const ALICE = 'api-key:alice';
@@ -32,22 +29,17 @@ const BOB = 'api-key:bob';
 interface Harness {
 	registry: SessionRegistry;
 	services: ExpansionServices;
-	recorded: string[];
 	call(owner: string, name: string, args: Record<string, unknown>, scopes?: ReadonlySet<Scope>): Promise<ToolResult>;
 	[Symbol.asyncDispose](): Promise<void>;
 }
 
 function harness(launch?: () => Promise<BrowserSession>, extra: Partial<McpDeps> = {}): Harness {
 	const registry = new SessionRegistry({ reapIntervalMs: 0, ...(launch === undefined ? {} : { launch }) });
-	const recorded: string[] = [];
 	const core = { registry, version: 'tool-tasks', ...extra };
-	const services = createExpansionServices(loadConfig({}).expansion, core, undefined, undefined, undefined, {
-		onToolTask: (id) => recorded.push(id),
-	});
+	const services = createExpansionServices(loadConfig({}).expansion, core, undefined, undefined, {});
 	return {
 		registry,
 		services,
-		recorded,
 		call: (owner, name, args, scopes = SCOPES) =>
 			createToolExecutor({ ...core, extraTools: services.tools }, owner, scopes)(name, args),
 		async [Symbol.asyncDispose]() {
@@ -78,12 +70,11 @@ async function finished(services: ExpansionServices, owner: string, id: string):
 	return services.runtime.get(owner, id);
 }
 
-Deno.test('AC13: agent_run_tool answers with a task at once; agent_get_task later carries the tool result', async () => {
+Deno.test('tool tasks: agent_run_tool answers with a task at once; agent_get_task later carries the tool result', async () => {
 	await using h = harness();
 	const run = resultOf(await h.call(ALICE, 'agent_run_tool', { tool: 'browser_list_sessions', arguments: {} }));
 	const task = run.task as AgentTask;
 	assert(['TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING'].includes(task.status.state), task.status.state);
-	assertEquals(h.recorded, [task.id], 'the task id is reported for cluster routing');
 	await finished(h.services, ALICE, task.id);
 
 	const got = resultOf(await h.call(ALICE, 'agent_get_task', { task_id: task.id })).task as AgentTask;
@@ -118,7 +109,7 @@ Deno.test("agent_get_task / agent_cancel_task: an unknown id and a finished task
 	);
 });
 
-Deno.test('AC13: agent_list_tasks lists only the caller, newest first, without history, filtered and bounded', async () => {
+Deno.test('tool tasks: agent_list_tasks lists only the caller, newest first, without history, filtered and bounded', async () => {
 	let open!: () => void;
 	const gate = new Promise<void>((resolve) => open = resolve);
 	await using h = harness(async () => {
@@ -130,7 +121,7 @@ Deno.test('AC13: agent_list_tasks lists only the caller, newest first, without h
 		const task = resultOf(await h.call(ALICE, 'agent_run_tool', { tool: 'browser_list_sessions' })).task as AgentTask;
 		await finished(h.services, ALICE, task.id);
 		ids.push(task.id);
-		// Creation order is kept at millisecond grain (ties fall back to the id, AG-14): keep the three apart.
+		// Creation order is kept at millisecond grain (ties fall back to the id): keep the three apart.
 		await new Promise((resolve) => setTimeout(resolve, 5));
 	}
 	await h.call(BOB, 'agent_run_tool', { tool: 'browser_list_sessions' });
@@ -157,7 +148,7 @@ Deno.test('AC13: agent_list_tasks lists only the caller, newest first, without h
 	assertEquals(after.tasks, []);
 });
 
-Deno.test('AC14: sampling tools, agent_run_tool, the confirmation set and the human/live tools are refused', async () => {
+Deno.test('tool tasks: sampling tools, agent_run_tool, the confirmation set and the human/live tools are refused', async () => {
 	await using h = harness();
 	const expected = [
 		'browser_run_task',
@@ -169,7 +160,7 @@ Deno.test('AC14: sampling tools, agent_run_tool, the confirmation set and the hu
 		// The MCP Apps stream tickets belong to the embed at the other end of this call, like the live-view ticket.
 		'sandbox_session_ticket',
 		'a2ui_surface_ticket',
-		// Review R1-5 / R2-5: a signed URL is a bearer credential for its life, and a task keeps its result at rest.
+		// A signed URL is a bearer credential for its life, and a task keeps its result at rest.
 		'browser_file_link',
 		...CONFIRM_TOOL_NAMES,
 	];
@@ -179,7 +170,6 @@ Deno.test('AC14: sampling tools, agent_run_tool, the confirmation set and the hu
 		assertEquals(text, `Error: invalid-arguments: call ${tool} directly; it cannot run as a background task`);
 	}
 	assertEquals(h.services.runtime.list(ALICE), [], 'no refused call created a task');
-	assertEquals(h.recorded, []);
 });
 
 /** An MCP Apps deployment whose mint records what it was asked and always succeeds. */
@@ -211,7 +201,7 @@ function structured(tool: string, args: Record<string, unknown> = {}) {
 	return { messageId: crypto.randomUUID(), role: 'ROLE_USER', parts: [{ data: { tool, arguments: args } }] };
 }
 
-Deno.test('R1-3: a structured task naming a tool outside the taskable set fails at the gateway, before the tool runs', async () => {
+Deno.test('tool tasks: a structured task naming a tool outside the taskable set fails at the gateway, before the tool runs', async () => {
 	const asked: EmbedTicketInput[] = [];
 	await using h = harness(undefined, { mcpApps: appsStub(asked) });
 	const scopes = new Set(['mcp:invoke', 'agent:invoke', 'view:watch', 'view:control', 'admin']);
@@ -233,30 +223,15 @@ Deno.test('R1-3: a structured task naming a tool outside the taskable set fails 
 	}
 	assertEquals(asked, [], 'no ticket was minted for a task');
 	// The extended card lists exactly what a task can run, so it advertises none of them.
-	const offered = h.services.invocableTools!(scopes).map((tool) => tool.name);
+	const offered = h.services.invocableTools(scopes).map((tool) => tool.name);
 	for (const tool of NOT_TASKABLE) assert(!offered.includes(tool), `the card advertises ${tool}`);
 	assert(offered.includes('browser_list_sessions'), 'the card still lists taskable tools');
 });
 
-Deno.test('R3-5: a task created over A2A or REST is recorded for cluster routing, not only one created over MCP', async () => {
-	await using h = harness();
-	// A2A `message:send`, its HTTP+JSON binding and the REST task route all create through `runtime.submit`.
-	const messageId = crypto.randomUUID();
-	const send = () => h.services.runtime.submit(ALICE, SCOPES, { ...structured('browser_list_sessions'), messageId });
-	const viaA2a = send();
-	assertEquals(h.recorded, [viaA2a.id], 'recorded at creation, whichever entrance created it');
-	await finished(h.services, ALICE, viaA2a.id);
-	// A retry of the same message answers with the task it started and records nothing new.
-	assertEquals(send().id, viaA2a.id);
-	assertEquals(h.recorded, [viaA2a.id]);
-	const viaMcp = resultOf(await h.call(ALICE, 'agent_run_tool', { tool: 'browser_list_sessions' })).task as AgentTask;
-	assertEquals(h.recorded, [viaA2a.id, viaMcp.id], 'an MCP task is recorded once, not twice');
-	await finished(h.services, ALICE, viaMcp.id);
-});
-
-Deno.test('R1-3: a tool executor never mints an embed ticket keyed on the owner string', async () => {
-	// The executor's context knows only the realm-qualified owner (`api-key:alice`): a ticket minted there was issued to
-	// that string, missing the per-token origin overlay (keyed `alice`) and opening a second per-principal bucket.
+Deno.test('tool tasks: a tool executor never mints an embed ticket keyed on the owner string', async () => {
+	// The executor's context knows only the realm-qualified owner (`api-key:alice`): a ticket minted there would be
+	// issued to that string, missing the per-token origin overlay (keyed `alice`) and opening a second per-principal
+	// bucket.
 	const asked: EmbedTicketInput[] = [];
 	await using h = harness(undefined, { mcpApps: appsStub(asked) });
 	const text = errorOf(
@@ -266,7 +241,7 @@ Deno.test('R1-3: a tool executor never mints an embed ticket keyed on the owner 
 	assertEquals(asked, []);
 });
 
-Deno.test('R1: an unknown tool, a malformed name and a tool outside the grant are refused before any task', async () => {
+Deno.test('tool tasks: an unknown tool, a malformed name and a tool outside the grant are refused before any task', async () => {
 	await using h = harness();
 	assertEquals(
 		errorOf(await h.call(ALICE, 'agent_run_tool', { tool: 'browser_teleport' })),
@@ -281,7 +256,7 @@ Deno.test('R1: an unknown tool, a malformed name and a tool outside the grant ar
 		'Error: invalid-arguments:',
 		'the input is strict',
 	);
-	// The message names the tool the caller gave, never the grant it lacks (CONNECTORS §1.5).
+	// The message names the tool the caller gave, never the grant it lacks.
 	assertEquals(
 		errorOf(await h.call(ALICE, 'agent_run_tool', { tool: 'browser_evaluate', arguments: { expression: '1' } })),
 		'Error: scope-required: this credential cannot call browser_evaluate',
@@ -322,7 +297,7 @@ async function mcpTool(
 	return (JSON.parse(line) as { result: Record<string, unknown> }).result;
 }
 
-Deno.test('AC13: over /mcp, a task runs under its own key and another key neither lists nor reads it', async () => {
+Deno.test('tool tasks: over /mcp, a task runs under its own key and another key neither lists nor reads it', async () => {
 	const alice = await generateApiKey('alice', ['mcp:invoke', 'agent:invoke']);
 	const bob = await generateApiKey('bob', ['mcp:invoke', 'agent:invoke']);
 	const config = loadConfig({ TTK_API_KEYS: JSON.stringify([alice.record, bob.record]) });
@@ -343,7 +318,7 @@ Deno.test('AC13: over /mcp, a task runs under its own key and another key neithe
 			state = (got.structuredContent?.result?.task as AgentTask).status.state;
 			if (state !== 'TASK_STATE_COMPLETED') await new Promise((resolve) => setTimeout(resolve, 10));
 		}
-		assertEquals(state, 'TASK_STATE_COMPLETED', 'GW-1 re-authorized the task against its own key and it ran');
+		assertEquals(state, 'TASK_STATE_COMPLETED', 'the task is re-authorized against its own key and runs');
 		const mine = await mcpTool(gateway.app, alice.key, 'agent_list_tasks', {});
 		assertEquals((mine.structuredContent?.result?.tasks as AgentTask[]).map((task) => task.id), [id]);
 		const theirs = await mcpTool(gateway.app, bob.key, 'agent_list_tasks', {});

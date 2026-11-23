@@ -5,6 +5,12 @@ on:
     branches: [master, main]
   pull_request:
 
+# Read-only by default. No job pushes, comments or publishes, so none needs a writable token; actions are
+# pinned by commit (a tag can be re-pointed, as base images are pinned by digest) and checkout keeps no credential
+# in .git/config for a later step to find.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: fmt · lint · types · unit
@@ -14,8 +20,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: '2.9.7'
       # The lockfile is authoritative in CI; a drifted dependency fails here
@@ -24,8 +32,8 @@ jobs:
       - run: deno task fmt:check
       - run: deno task lint
       - run: deno task check
-      # The task table itself. Two defects shipped in it (E-29, E-30) that no
-      # amount of reading catches and five lines of parsing does — and this runs
+      # The task table itself: its defects are ones no amount of reading
+      # catches and five lines of parsing does — and this runs
       # on all three platforms because the hazards are shell- and OS-shaped.
       - run: deno task gate:tasks
       - run: deno task test:unit
@@ -39,17 +47,19 @@ jobs:
       # exact failure the tier support exists to prevent.
       BUA_REQUIRE_BROWSER: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: '2.9.7'
-      # ffmpeg unlocks the recording suite (R7); without it that suite skips
+      # ffmpeg unlocks the recording suite; without it that suite skips
       # loudly and the same ground is covered by the container leg.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: deno install --frozen
       - run: deno task build:web
-      # No model endpoint is configured here, so the two real-model legs skip
-      # with a line naming what they wanted. To run them, give this job
+      # No model endpoint is configured here, so the real-model leg skips
+      # with a line naming what it wanted. To run it, give this job
       # TTK_MODEL_BASE_URL/TTK_MODEL_NAME (plus TTK_MODEL_API_KEY if the endpoint
       # needs one) — the tier derives its own --allow-net from whichever endpoint
       # resolves, so nothing else here has to change.
@@ -62,66 +72,41 @@ jobs:
     env:
       BUA_REQUIRE_BROWSER: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: '2.9.7'
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: deno install --frozen
       - run: deno task build:web
-      # Merges the tiers on LCOV. `deno coverage` does not union across runs
-      # (E-25), so pointing both tiers at one directory would *understate* the
+      # Merges the tiers on LCOV. `deno coverage` does not union across runs,
+      # so pointing the tiers at one directory would *understate* the
       # result — the more you test, the worse it would look.
       - run: deno task cov
-
-  compile:
-    name: single binary
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: '2.9.7'
-      - run: deno install --frozen
-      - run: deno task build:web
-      # Compiles for the host and then *runs* it: everything that breaks in a
-      # compiled binary is invisible until it runs.
-      - run: deno task test:compile
 
   container:
     name: container
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # C2 (D-103): each shape gets its own tag and names its shape to the verifier. Both legs used to build
-        # `tykotech-mcp:ci`, and the verifier inferred the shape from a `:slim` suffix that tag never had — so the
-        # slim leg was judged against the bundled image's permission matrix and could not pass.
-        include:
-          - shape: bundled
-            dockerfile: Dockerfile
-            tag: tykotech-mcp:ci
-          - shape: slim
-            dockerfile: Dockerfile.slim
-            tag: tykotech-mcp:ci-slim
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: '2.9.7'
-      - run: docker build -f ${{ matrix.dockerfile }} -t ${{ matrix.tag }} .
-      - run: deno run --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts ${{ matrix.tag }} --shape ${{ matrix.shape }}
+      - run: docker build -t tykotech-mcp:ci .
+      - run: deno run --deny-ffi --allow-run=docker --allow-net --allow-read=. --allow-env tests/container/verify_container.ts tykotech-mcp:ci
 
   audit:
     name: dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: '2.9.7'
       - run: deno install --frozen

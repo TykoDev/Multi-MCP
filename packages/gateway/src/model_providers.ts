@@ -1,19 +1,4 @@
-/**
- * D-143 (model-providers-ui): the operator's model providers file, `TTK_MODEL_PROVIDERS_FILE`.
- *
- * The file is the only place a model endpoint can be named (design §2.1, §3.2): no request, no tool and no UI
- * supplies one, so every rule here is an operator-side contract rather than a request filter. It is read the way
- * every `*_FILE` secret is read — through the reader `resolveSecrets` uses (`secretReader`), threaded by argument,
- * never `Deno.env` — and the one secret it carries (`api_key`, inline or from `api_key_file`) stays on
- * {@linkcode ModelProviderSettings} and reaches the provider client by argument only. No refusal ever carries a value:
- * each names a fixed phrase, the entry number and the field (`SPECS/SECURITY-AUTH.md` §7, D-123 R1-1).
- *
- * `base_url` is judged by the C2 predicate (design C2 as rewritten in r3, gate F21–F23): the host is classified from
- * parsed bytes with the head walk's own `parseIpv4`/`parseIpv6`, so an IPv4-mapped IPv6 literal and a non-canonical
- * IPv4 spelling fold exactly as `head.ts` folds them, and `isForbiddenIpv4`/`isForbiddenIpv6` serve as the
- * "not public" guard. Loopback, private and link-local are then told apart by a small range table; every forbidden
- * range the table does not name (CGNAT, `0/8`, multicast, benchmarking, `::`) falls to "public", the refused direction.
- */
+/** The operator's model providers file, `TTK_MODEL_PROVIDERS_FILE`. */
 
 import * as z from 'zod';
 import { isAbsolute } from '@std/path';
@@ -21,31 +6,28 @@ import { isForbiddenIpv4, isForbiddenIpv6, parseIpv4, parseIpv6 } from '@tykotec
 import { serviceUrl } from './expansion_config.ts';
 import { normalizeSecret, SecretError, secretReader } from './secrets.ts';
 
-/** The variable, declared once; `scripts/check_tasks.ts` rule T6 carries a copy pinned equal to this. */
+/** The variable, declared once; `scripts/check_tasks.ts` carries a copy pinned equal to this. */
 export const MODEL_PROVIDERS_ENV = 'TTK_MODEL_PROVIDERS_FILE';
 
 /** The file's size cap, the peer-file precedent (`secrets.ts`). */
 export const MODEL_PROVIDERS_FILE_MAX_BYTES = 128 * 1024;
 
 /** The longest key accepted, in characters after `normalizeSecret`. */
-export const MODEL_KEY_MAX_CHARS = 512;
+const MODEL_KEY_MAX_CHARS = 512;
 
 /**
- * BUG-9: the key placeholder the SPA's config composer writes into a drafted file (`KEY_PLACEHOLDER` in
- * `packages/web/src/config_composer.ts`) for the operator to replace on disk. Exactly sixteen characters — long enough
- * to be redacted as if real — so a forgotten one would otherwise be admitted silently and sent as a bearer token.
- * Refused here by a fixed phrase; `tests/unit/placeholder_key_test.ts` pins the two literals equal.
+ * The placeholder a drafted providers file carries for the operator to replace. Sixteen characters — long enough to be
+ * redacted as if real — so a forgotten one would otherwise be admitted silently and sent as a bearer token.
  */
 export const PLACEHOLDER_KEY = 'REPLACE_WITH_KEY';
 
 /**
- * §3.12 (gate F12): the loop redacts a key from emitted text only from this length, the runtime's delegation-token
- * threshold; a shorter key is admitted with one warning, because redacting a 4-character key would blank ordinary
- * prose.
+ * The loop redacts a key from emitted text only from this length (`REDACTION_MIN_LENGTH` in `@tykotech/agents`); a
+ * shorter key is admitted with one warning, because redacting a 4-character key would blank ordinary prose.
  */
 export const MODEL_KEY_REDACTION_MIN_CHARS = 16;
 
-/** The per-provider bounds and defaults (backend §2.1). */
+/** The per-provider bounds and defaults. */
 export const MODEL_PROVIDER_BOUNDS = {
 	maxSteps: { default: 24, min: 1, max: 64 },
 	maxOutputTokens: { default: 4096, min: 256, max: 32_768 },
@@ -53,25 +35,30 @@ export const MODEL_PROVIDER_BOUNDS = {
 } as const;
 
 /**
- * Header names an operator may not set: the ones the client owns (`authorization`, `x-api-key`), the ones a proxy
- * or a browser would treat as a credential, and any name that merely looks like one. A credential belongs in
- * `api_key`, where it is redacted and never rendered; refusing the shape keeps the one secret in the one place.
+ * Header names an operator may not set: the ones the client owns (`authorization`, `x-api-key`), the ones a proxy or a
+ * browser would treat as a credential, and any name that merely looks like one.
  */
 export const REFUSED_HEADER_NAMES: readonly string[] = ['authorization', 'x-api-key', 'proxy-authorization', 'cookie'];
 const REFUSED_HEADER_SUFFIXES: readonly string[] = ['-key', '-token', '-secret'];
 
-/** A provider id. D-154: shared with the database's provider table, whose sealed keys are named by it. */
+/**
+ * Header names that would re-address the request. The host the key is bound to and the grant proof queries is
+ * `base_url`'s; a `host` header sent beside it lets a virtual-hosting front end route the keyed call to another origin.
+ */
+const ROUTING_HEADER_NAMES: readonly string[] = ['host'];
+
+/** A provider id, shared with the database's provider table, whose sealed keys are named by it. */
 export const ID_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 /** A model name. */
-export const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const HEADER_NAME_PATTERN = /^[a-z0-9-]+$/;
 
-/** One provider as the file resolves it (backend §2.1). `apiKey` is the only secret and never leaves this type. */
+/** One provider as the file resolves it. `apiKey` is the only secret and never leaves this type. */
 export interface ModelProviderSettings {
 	readonly id: string;
 	readonly kind: 'openai' | 'anthropic';
 	readonly label: string;
-	/** `serviceUrl` rules plus the C2 scheme predicate; trailing slash stripped. */
+	/** `serviceUrl` rules plus the `base_url` scheme predicate; trailing slash stripped. */
 	readonly baseUrl: string;
 	/** `hostname[:port]`, never userinfo — the `--allow-net` spelling the grant proof queries. */
 	readonly host: string;
@@ -79,37 +66,37 @@ export interface ModelProviderSettings {
 	readonly defaultModel: string;
 	readonly apiKey: string | null;
 	/**
-	 * Where the key came from — all `doctor` may say about it, since the key itself is never rendered. D-154: `stored`
-	 * is a key opened from the database's vault.
+	 * Where the key came from — all `doctor` may say about it, since the key itself is never rendered. `stored` is a
+	 * key opened from the database's vault.
 	 */
 	readonly keySource: 'file' | 'inline' | 'stored' | 'none';
 	readonly headers: Readonly<Record<string, string>>;
 	/**
-	 * C2: `http:` admitted to a private literal or a DNS name only with this flag — a key included, which then travels
-	 * in plaintext; never to a public or link-local literal.
+	 * `http:` admitted to a private literal or a DNS name only with this flag — a key included, which then travels in
+	 * plaintext; never to a public or link-local literal.
 	 */
 	readonly allowHttp: boolean;
-	/** §3.12 (gate F16): which output-token parameter the OpenAI wire takes; `max_tokens` by default. */
+	/** Which output-token parameter the OpenAI wire takes; `max_tokens` by default. */
 	readonly maxTokensParam: 'max_tokens' | 'max_completion_tokens';
 	readonly maxSteps: number;
 	readonly maxOutputTokens: number;
 	readonly tokenBudget: number;
 }
 
-/** The file, resolved. `default` is a member id, or `null` when several providers name none (§3.10, gate F19). */
+/** The file, resolved. `default` is a member id, or `null` when several providers name none. */
 export interface ModelProvidersConfig {
 	readonly default: string | null;
 	readonly providers: readonly ModelProviderSettings[];
 	/**
-	 * The trimmed path this was read from — the seed source the control plane names (D-154); never written. Absent on
-	 * a configuration built in memory or read from the database.
+	 * The trimmed path this was read from — the seed source the control plane names; never written. Absent on a
+	 * configuration built in memory or read from the database.
 	 */
 	readonly file?: string;
 }
 
 /**
- * One provider as `GET /api/v1/agent/providers` and the diagnostics show it (§3.3): no key, no base URL path, no
- * header. `host` and `reason` are emitted only to a caller holding `model:invoke` (gate F9); the route strips them.
+ * One provider as `GET /api/v1/agent/providers` and the diagnostics show it: no key, no base URL path, no header.
+ * `host` and `reason` are emitted only to a caller holding `model:invoke`; the route strips them.
  */
 export interface ProviderView {
 	readonly id: string;
@@ -126,8 +113,8 @@ export interface LoadModelProvidersOptions {
 	/** The reader `resolveSecrets` uses (`secretReader`); injected so tests need no filesystem. */
 	readonly readFile?: (path: string) => Promise<string>;
 	/**
-	 * Receives one line per admitted `allow_http` provider and per key shorter than
-	 * {@linkcode MODEL_KEY_REDACTION_MIN_CHARS}, only once the whole file has been admitted. Never a key.
+	 * Receives one line per admitted `allow_http` provider and per key shorter than {@linkcode
+	 * MODEL_KEY_REDACTION_MIN_CHARS}, only once the whole file has been admitted. Never a key.
 	 */
 	readonly warn?: (message: string) => void;
 }
@@ -161,7 +148,7 @@ const FileSchema = z.object({
 	providers: z.array(ProviderSchema).min(1).max(16),
 }).strict();
 
-/** A zod issue as a fixed phrase: the code, never the input. D-154: shared with the control plane's body check. */
+/** A zod issue as a fixed phrase: the code, never the input. Shared with the control plane's body check. */
 export function phraseOf(issue: z.core.$ZodIssue): string {
 	switch (issue.code) {
 		case 'invalid_type':
@@ -182,8 +169,8 @@ export function phraseOf(issue: z.core.$ZodIssue): string {
 }
 
 /**
- * `entry N, field a.b[2]` from an issue path; the entry is 1-based, counting the `providers` array as written. D-153:
- * shared with the control plane's body check, whose `providers` array is numbered the same way.
+ * `entry N, field a.b[2]` from an issue path; the entry is 1-based, counting the `providers` array as written. Shared
+ * with the control plane's body check, whose `providers` array is numbered the same way.
  */
 export function locate(path: readonly PropertyKey[]): string {
 	const [root, index, ...rest] = path;
@@ -196,9 +183,9 @@ export function locate(path: readonly PropertyKey[]): string {
 	return `field ${path.length === 0 ? '(file)' : path.map(String).join('.')}`;
 }
 
-// --- host classification (C2, gate F23) ----------------------------------------------------------------------------
+// --- host classification ---------------------------------------------------------------------------------------
 
-/** What the C2 predicate needs to tell apart; `named` is any non-literal DNS name. */
+/** What the `base_url` predicate needs to tell apart; `named` is any non-literal DNS name. */
 export type HostClass = 'loopback' | 'private' | 'link-local' | 'public' | 'named';
 
 function classifyIpv4(address: number): HostClass {
@@ -209,7 +196,8 @@ function classifyIpv4(address: number): HostClass {
 	if (a === 127) return 'loopback';
 	if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return 'private';
 	if (a === 169 && b === 254) return 'link-local';
-	// CGNAT 100.64/10, 0/8, 192.0.0/24, 198.18/15 benchmarking, ≥224: forbidden by the walk, unnamed by C2 → refused.
+	// CGNAT 100.64/10, 0/8, 192.0.0/24, 198.18/15 benchmarking, ≥224: forbidden by the walk, unnamed by the table →
+	// refused.
 	return 'public';
 }
 
@@ -225,7 +213,7 @@ function classifyIpv6(bytes: Uint8Array): HostClass {
 	if (allZeroUpTo(8) && b(8) === 0xff && b(9) === 0xff && b(10) === 0 && b(11) === 0) return classifyIpv4(embedded());
 	if (b(0) === 0xfe && (b(1) & 0xc0) === 0x80) return 'link-local'; // fe80::/10
 	if ((b(0) & 0xfe) === 0xfc) return 'private'; // fc00::/7
-	// `::`, 6to4 and NAT64 embeddings, multicast: forbidden by the walk, unnamed by C2 → refused.
+	// `::`, 6to4 and NAT64 embeddings, multicast: forbidden by the walk, unnamed by the table → refused.
 	return 'public';
 }
 
@@ -245,7 +233,7 @@ export function classifyHost(hostname: string): HostClass {
 }
 
 /**
- * The C2 predicate over a parsed `base_url`. Returns the refusal phrase, or `null` when admitted, and which field the
+ * The predicate over a parsed `base_url`. Returns the refusal phrase, or `null` when admitted, and which field the
  * refusal names: branches (i)–(iv) are the URL's, branch (v) is the flag's.
  */
 export function judgeBaseUrl(
@@ -263,10 +251,8 @@ export function judgeBaseUrl(
 		// (ii) admits loopback without a flag; (iii) admits private literals and names only with it.
 		if (cls !== 'loopback' && !allowHttp) return { field: 'base_url', phrase: 'plaintext HTTP needs allow_http' };
 	}
-	// (v), an owner decision and a deliberate relaxation: the flag and a key together are admitted for a loopback,
-	// private or named host, so the key may cross the network in plaintext to a host the operator named; the startup
-	// warning says so. Over http (iv) and the link-local rule have already refused every other host, so only an https
-	// public literal reaches this: the flag admits no plaintext there, and with a key it is refused as before.
+	// (v), a deliberate relaxation: the flag and a key together are admitted for a loopback, private or named host, so
+	// the key may cross the network in plaintext to a host the operator named; the startup warning says so.
 	if (allowHttp && hasKey && cls === 'public') {
 		return { field: 'allow_http', phrase: 'allow_http with a key needs a loopback, private or named host' };
 	}
@@ -283,10 +269,8 @@ function detailOf(cause: unknown, path: string): string {
 }
 
 /**
- * Reads and resolves `TTK_MODEL_PROVIDERS_FILE`. Unset → `null` (the feature is absent, as `secrets.ts` treats an
- * unset `*_FILE`). Every refusal is a {@linkcode SecretError} naming the variable, the file and a fixed phrase with the
- * entry and field at fault — never a key, a URL or any other value from the file. Warnings reach `options.warn` only
- * after the whole file is admitted, so a refused file leaves no half-report behind.
+ * Reads and resolves `TTK_MODEL_PROVIDERS_FILE`. Unset → `null` (the feature is absent, as `secrets.ts` treats an unset
+ * `*_FILE`).
  */
 export async function loadModelProviders(
 	env: Readonly<Record<string, string | undefined>>,
@@ -294,7 +278,7 @@ export async function loadModelProviders(
 ): Promise<ModelProvidersConfig | null> {
 	const path = env[MODEL_PROVIDERS_ENV]?.trim();
 	if (path === undefined || path === '') return null;
-	// CR-5: the one secret reader (`secrets.ts`), injected or the runtime's — never a second default of its own.
+	// The one secret reader (`secrets.ts`), injected or the runtime's — never a second default of its own.
 	const read = secretReader(options.readFile);
 	const refuse = (detail: string): SecretError => new SecretError(MODEL_PROVIDERS_ENV, path, detail);
 
@@ -307,9 +291,8 @@ export async function loadModelProviders(
 	if (new TextEncoder().encode(raw).byteLength > MODEL_PROVIDERS_FILE_MAX_BYTES) {
 		throw refuse('the file is larger than 128 KiB');
 	}
-	// BUG-4: this file is operator-authored JSON, and an editor on Windows saves it with CRLF; `normalizeSecret` would
-	// read the `\r` it leaves after the final line as trailing whitespace. Folded here, for this file only — a key
-	// file is a single-line secret and keeps `secrets.ts`'s rule unchanged.
+	// This file is operator-authored JSON, and an editor on Windows saves it with CRLF; `normalizeSecret` would read
+	// the `\r` it leaves after the final line as trailing whitespace.
 	let json: unknown;
 	try {
 		json = JSON.parse(normalizeSecret(raw.replaceAll('\r\n', '\n'), MODEL_PROVIDERS_ENV, path));
@@ -322,10 +305,8 @@ export async function loadModelProviders(
 }
 
 /**
- * D-154: the file's rules applied to a document already in memory — the providers file once read, or the rows of the
- * database's provider table with their keys opened from the vault (inline `api_key`). Every refusal is `refuse`'s
- * error with a fixed phrase naming the entry and field, never a value; warnings reach `options.warn` only once the
- * whole document is admitted.
+ * The file's rules applied to a document already in memory — the providers file once read, or the rows of the
+ * database's provider table with their keys opened from the vault (inline `api_key`).
  */
 export async function parseModelProviders<E extends Error>(
 	json: unknown,
@@ -375,7 +356,7 @@ export async function parseModelProviders<E extends Error>(
 		}
 		if (apiKey !== null) {
 			if (apiKey === '') throw fail(keyField, 'the key is empty');
-			// BUG-9: the composer's placeholder, never a key; the phrase is fixed and the value is never echoed.
+			// The drafted-file placeholder, never a key; the phrase is fixed and the value is never echoed.
 			if (apiKey === PLACEHOLDER_KEY) throw fail(keyField, 'the key is the composer placeholder');
 			if (apiKey.length > MODEL_KEY_MAX_CHARS) {
 				throw fail(keyField, `the key is longer than ${MODEL_KEY_MAX_CHARS} characters`);
@@ -397,12 +378,13 @@ export async function parseModelProviders<E extends Error>(
 			if (REFUSED_HEADER_NAMES.includes(name) || REFUSED_HEADER_SUFFIXES.some((suffix) => name.endsWith(suffix))) {
 				throw fail(field, 'a credential header is refused; use api_key');
 			}
+			if (ROUTING_HEADER_NAMES.includes(name)) throw fail(field, 'a routing header is refused; the host is base_url');
 			if (value.length > 256) throw fail(field, 'the value is longer than 256 characters');
 			if (/[\r\n]/.test(value)) throw fail(field, 'the value contains a line break');
 			headers[name] = value;
 		}
 
-		// The URL: the shared service rules, then the C2 predicate.
+		// The URL: the shared service rules, then the `base_url` predicate.
 		let baseUrl: string;
 		try {
 			baseUrl = serviceUrl(entry.base_url);
@@ -443,7 +425,7 @@ export async function parseModelProviders<E extends Error>(
 		});
 	}
 
-	// §3.10 (gate F19): a sole provider is the default; several without one leave `null`.
+	// A sole provider is the default; several without one leave `null`.
 	let fallback: string | null;
 	if (parsed.data.default !== undefined) {
 		if (!ids.has(parsed.data.default)) throw refuse('default names no listed provider, field default');

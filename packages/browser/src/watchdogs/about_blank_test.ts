@@ -1,13 +1,13 @@
 /**
- * `AboutBlankWatchdog` contract (ARCHITECTURE.md §6.3; COMPLETIONS-CRITERIA.md §3.2 watchdog row 3:
- * "never zero tabs: last-tab close spawns about:blank; screensaver injection is ○ droppable").
+ * `AboutBlankWatchdog` contract: never zero tabs — a last-tab close spawns about:blank; the optional
+ * screensaver injection is not built.
  *
  * Real bus, real `CdpClient`, real `SessionManager`, real CDP frames over `ChromeFixture` — the whole
  * `targetDestroyed → TabClosedEvent → rescue` chain runs for real, because the interesting failure
  * (racing SessionManager's own focus recovery into a *second* tab) only exists when both run.
  *
- * The dropped screensaver is pinned here too: a ○ feature that is dropped must be dropped visibly,
- * not left as an untested half.
+ * The absent screensaver is pinned here too: an optional feature that is left out must be visibly
+ * absent, not left as an untested half.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -114,7 +114,7 @@ Deno.test('about-blank: the ○ screensaver is dropped whole — no TabCreatedEv
 	h.fixture.addPage('about:blank');
 	await h.settle();
 
-	assertEquals(shown, [], 'ARCHITECTURE.md §6.3 marks the animation ○; it is dropped, not half-built');
+	assertEquals(shown, [], 'the optional animation is left out, not half-built');
 	assertEquals(h.sent('Runtime.evaluate').length, 0, 'nothing is injected into a blank tab');
 	assertEquals(h.sent('Page.addScriptToEvaluateOnNewDocument').length, 0);
 });
@@ -166,8 +166,7 @@ Deno.test('about-blank: a replacement that lands during the rescue does not beco
 	let barriers = 0;
 	// Chrome's own replacement tab, produced *at* the barrier — the one instant a check taken at
 	// handler entry could not have seen it. One socket and ordered frames mean the `targetCreated`
-	// this emits is recorded before the reply resolves the rescue's await
-	// (ERRATUM(M1-hardening-3)).
+	// this emits is recorded before the reply resolves the rescue's await.
 	h.fixture.script('Browser.getVersion', (request, self) => {
 		if (barriers++ === 0) self.addPage(ABOUT_BLANK_URL);
 		self.reply(request.id, { product: 'Chrome/fixture' });
@@ -246,5 +245,5 @@ Deno.test('about-blank: the registration wait fits inside the 3 s TabClosedEvent
 	assertEquals(ABOUT_BLANK_TAB_REGISTER_WAIT_MS, 1_000);
 	assertEquals(ABOUT_BLANK_TAB_POLL_INTERVAL_MS, 20);
 	assertEquals(ABOUT_BLANK_URL, 'about:blank');
-	assert(ABOUT_BLANK_TAB_REGISTER_WAIT_MS < 3_000, 'DATA-MODEL.md §5.1.3 gives TabClosedEvent 3 s');
+	assert(ABOUT_BLANK_TAB_REGISTER_WAIT_MS < 3_000, 'TabClosedEvent has a 3 s budget');
 });

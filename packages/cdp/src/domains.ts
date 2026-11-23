@@ -1,9 +1,8 @@
 /**
- * The typed CDP domain surface: exactly the D-CDP2 domain set, and nothing else.
+ * The typed CDP domain surface: exactly the domains the system uses, and nothing else.
  *
- * Contract: SPECS/DECISION-REGISTER.md D-CDP2, SPECS/ARCHITECTURE.md §7.2,
- * SPECS/COMPLETIONS-CRITERIA.md §3.1 ("typed wrappers for all 14 D-CDP2 domains (+ optional vendor
- * `BrowserUse`)").
+ * Fourteen core domains, `Overlay` (three highlight commands plus its lifecycle pair), and the
+ * optional vendor `BrowserUse`.
  *
  * Shape: three flat maps keyed by the dotted CDP method/event name — {@linkcode CdpParams},
  * {@linkcode CdpResult}, {@linkcode CdpEventParams} — from which {@linkcode CdpSend} is derived
@@ -11,8 +10,8 @@
  * that file's `*_METHODS` manifest; the two are cross-checked at type level (see
  * {@linkcode CdpManifestMethodName}) so they cannot drift.
  *
- * Full-protocol codegen is deliberately out of scope (D-CDP2: "maintenance surface for methods
- * never called"); hand-written types are sanctioned by ARCHITECTURE §7.2 at this stage.
+ * Full-protocol codegen is deliberately out of scope: it would be maintenance surface for methods
+ * never called, so the types are hand-written.
  */
 
 import {
@@ -82,7 +81,7 @@ export * from './domains/system_info.ts';
 export * from './domains/target.ts';
 
 /**
- * The 14 domains of D-CDP2, `Overlay` (E-46, three highlight commands only), and the optional vendor
+ * The 14 core domains, `Overlay` (highlight commands and their lifecycle pair), and the optional vendor
  * `BrowserUse`.
  *
  * Ordering is alphabetical so the list reads as an audit checklist.
@@ -98,7 +97,7 @@ export const CDP_DOMAINS = [
 	'Fetch',
 	'Input',
 	'Network',
-	// ERRATUM(E-46): the server-drawn highlight (B2.2). See `domains/overlay.ts` for what is deliberately not typed.
+	// The server-drawn highlight. See `domains/overlay.ts` for what is deliberately not typed.
 	'Overlay',
 	'Page',
 	'Runtime',
@@ -218,7 +217,7 @@ export type CdpSendFunction<M extends CdpMethodName> = Record<never, never> exte
 /**
  * `client.send.Domain.method(params?, sessionId?, opts?)`.
  *
- * `sessionId` is the flat-session routing key (ARCHITECTURE §7.1); omit it for browser-level calls.
+ * `sessionId` is the flat-session routing key; omit it for browser-level calls.
  * `BrowserUse` is present but empty — the vendor domain contributes events only; use
  * `CdpClient.sendRaw()` for vendor commands.
  */

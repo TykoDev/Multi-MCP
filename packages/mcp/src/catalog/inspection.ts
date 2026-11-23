@@ -1,15 +1,7 @@
-/**
- * Inspection tools (R4, design §2.6, D-116): the session's request log, its console, and a HAR export of the log.
- *
- * All three are read-only and closed-world — they read what the browser already did and never touch the page — so
- * they stay usable while a human holds the session, and they never launch a browser. Their output schemas live
- * beside them rather than in `schemas.ts` (design §2.3). Full URLs, URLs inside header values and response bodies
- * need `network:read` at call time; the tools themselves need only `mcp:invoke`, because the metadata is the same
- * class of fact `browser_get_state` already gives every holder of the session.
- */
+/** Inspection tools: the session's request log, its console, and a HAR export of the log. */
 import * as z from 'zod';
 import * as handlers from '../tools.ts';
-import { CONSOLE_LEVELS } from '../page_console.ts';
+import { CONSOLE_LEVELS } from '../page_producers.ts';
 import { def, sessionId, type ToolDefinition } from './shared.ts';
 
 /** One request as `browser_network_log` emits it: the log entry, projected for the caller. */
@@ -40,7 +32,7 @@ const NetworkEntryOut = z.object({
 	headers_truncated: z.boolean().optional(),
 });
 
-/** The design's `NetworkEntryOut` (§2.3) and the two other inspection outputs, beside their definitions. */
+/** The network log entry's shape and the two other inspection outputs, beside their definitions. */
 export const INSPECTION_OUTPUT = {
 	browser_network_log: z.object({
 		session_id: z.string(),

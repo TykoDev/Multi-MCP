@@ -7,7 +7,7 @@ import { type WorkspaceService } from './workspaces.ts';
 
 const OPERATIONS = new Set<SandboxOperation>([
 	'create',
-	// R12 (design §2.19): a workspace from a git remote; refused unless the service was given git hosts or remotes.
+	// A workspace from a git remote; refused unless the service was given git hosts or remotes.
 	'clone',
 	'list',
 	'read',
@@ -29,7 +29,7 @@ const encoder = new TextEncoder();
 
 function json(status: number, data: unknown): Response {
 	const text = JSON.stringify(data);
-	// SB-6: nothing longer than the client accepts is sent; diffs are cut to fit before they get here
+	// Nothing longer than the client accepts is sent; diffs are cut to fit before they get here
 	// (fitDiff), so this only stops what no operation should produce.
 	if (text.length * 3 > LIMITS.responseBytes && encoder.encode(text).length > LIMITS.responseBytes) {
 		return json(500, { error: 'too_large' });

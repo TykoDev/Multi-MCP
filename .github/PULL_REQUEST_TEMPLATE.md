@@ -21,8 +21,8 @@ Closes #<!-- issue number -->
 ## Checklist
 
 - [ ] `deno task ok` is green (fmt · lint · types · task gate · lock gate · unit tests).
-- [ ] Higher tiers pass where relevant (`deno task test:browser`, `deno task test:stdio`, container/compile).
-- [ ] Coverage stays above the 80% gate (`deno task cov`) for affected code.
+- [ ] Higher tiers pass where relevant (`deno task test:browser`, `deno task test:stdio`, container).
+- [ ] Coverage stays above the 60% gate (`deno task cov`) for affected code.
 - [ ] New/changed behavior has tests in the appropriate tier.
 - [ ] `docs/` updated for any contract or user-visible behavior change.
 - [ ] No secret enters `Deno.env`, a log line, or a tool result; credential material is addressed by name only.

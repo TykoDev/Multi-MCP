@@ -1,8 +1,8 @@
 /**
  * `Accessibility.getFullAXTree` decoding — the semantics third of the merge.
  *
- * Contract: SPECS/DATA-MODEL.md §6.2 (`EnhancedAxNode`, "unknown property names are dropped at merge
- * time"), §6.5 (which AX property names the serializer may emit).
+ * Unknown AX property names are dropped at merge time; the known set includes every name the
+ * serializer may emit.
  */
 
 import type { CdpResult } from '@tykotech/cdp';
@@ -15,11 +15,9 @@ export type CapturedAxNode = CdpResult['Accessibility.getFullAXTree']['nodes'][n
 type CapturedAxValue = NonNullable<CapturedAxNode['role']>;
 
 /**
- * AX property names that survive the merge (DATA-MODEL §6.2 "unknown property names dropped").
+ * AX property names that survive the merge; unknown names are dropped.
  *
- * ERRATUM(M1-dom-extract-4): §6.2 never enumerates "known". The list below is
- * `§6.5`'s emission whitelist (`checked … live`) — the only normative list of AX property names in
- * the spec set — **plus** the scalar state properties Chrome emits that a serializer needs to reason
+ * The list below is the serializer's emission whitelist (`checked … live`) **plus** the scalar state properties Chrome emits that a serializer needs to reason
  * about interactivity (`focusable`, `editable`, `settable`, `readonly`, `multiline`, `hidden`,
  * `hiddenRoot`, `modal`, `autocomplete`, `orientation`, `roledescription`, `url`, `atomic`,
  * `relevant`, `root`, `focused`). Relation-valued names (`controls`, `describedby`, `flowto`,
@@ -27,11 +25,11 @@ type CapturedAxValue = NonNullable<CapturedAxNode['role']>;
  * node list, which the seam's `string | boolean | null` cannot represent without inventing an
  * encoding.
  *
- * Spelling is **CDP's**, not §6.5's: CDP emits `hasPopup`, §6.5 spells the emitted attribute
- * `haspopup`. The IR keeps the wire spelling; case-folding for emission belongs to the serializer.
+ * Spelling is **CDP's**, not the serializer's: CDP emits `hasPopup`, the serializer spells the
+ * emitted attribute `haspopup`. The IR keeps the wire spelling; case-folding for emission belongs to the serializer.
  */
 export const KNOWN_AX_PROPERTIES: ReadonlySet<string> = new Set([
-	// §6.5 emission whitelist
+	// serializer emission whitelist
 	'checked',
 	'selected',
 	'expanded',
@@ -112,7 +110,7 @@ export function axPropertyValue(value: CapturedAxValue | undefined): string | bo
  * When several AX nodes claim the same `backendDOMNodeId` (Chrome does this for nodes that are both
  * ignored and exposed under a different role) the **first non-ignored** one wins; an ignored node is
  * only kept when nothing better turns up. Losing the exposed node would silently strip the accessible
- * name, which is exactly the kind of invisible drift R1 is about.
+ * name, which is exactly the kind of invisible drift serialization parity guards against.
  */
 export function decodeAxTree(nodes: readonly CapturedAxNode[]): DecodedAxTree {
 	const byBackendNodeId = new Map<number, EnhancedAxNode>();

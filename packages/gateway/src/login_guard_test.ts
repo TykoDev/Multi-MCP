@@ -1,6 +1,4 @@
-/**
- * D-078: the sign-in route's guard, body cap, equal timing and audit trail.
- */
+/** The sign-in route's guard, body cap, equal timing and audit trail. */
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
 import { SessionRegistry } from '@tykotech/mcp';
@@ -73,7 +71,7 @@ Deno.test('cappedJson: counts the bytes that arrive, whatever the declared lengt
 	assertEquals(await cappedJson(new Request(ORIGIN, { method: 'POST', body: 'nope' }), PUBLIC_BODY_BYTES), null);
 });
 
-Deno.test('login route: throttled with Retry-After, capped, problem+json, equal timing, audited (D-078)', async () => {
+Deno.test('login route: throttled with Retry-After, capped, problem+json, equal timing, audited', async () => {
 	const dir = join('tests/.scratch', `guard-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
 	const { record, password } = await generateAdminUser('root');
@@ -122,19 +120,27 @@ Deno.test('login route: throttled with Retry-After, capped, problem+json, equal 
 		}
 		assertEquals(unknown.json.detail, wrong.json.detail);
 
-		// Equal timing: an unknown name now pays for the hash a real one does (it used to answer at once).
+		// Equal timing: an unknown name pays for the hash a real one does, so the delay does not reveal which names
+		// exist.
 		const time = async (username: string) => {
 			const started = performance.now();
 			assertEquals(await users.verify(username, 'not the password'), null);
 			return performance.now() - started;
 		};
 		await time('root');
-		const real = [await time('root'), await time('root'), await time('root')].sort((a, b) => a - b)[1]!;
-		const ghost = [await time('ghost'), await time('ghost'), await time('ghost')].sort((a, b) => a - b)[1]!;
+		// Interleaved, so a load spike on a busy host lands on both sides rather than skewing one; medians of five.
+		const reals: number[] = [];
+		const ghosts: number[] = [];
+		for (let i = 0; i < 5; i++) {
+			reals.push(await time('root'));
+			ghosts.push(await time('ghost'));
+		}
+		const real = reals.sort((a, b) => a - b)[2]!;
+		const ghost = ghosts.sort((a, b) => a - b)[2]!;
 		assert(ghost > real * 0.5 && ghost < real * 2, `unknown ${ghost.toFixed(1)} ms vs real ${real.toFixed(1)} ms`);
 
-		// Three more failures spend the source's free five (the 413 counted for nothing); the sixth starts the
-		// backoff, and the next attempt, even with the right password, is answered 429 without checking anything.
+		// Three more failures spend the source's free five (the 413 counted for nothing); the sixth starts the backoff,
+		// and the next attempt, even with the right password, is answered 429 without checking anything.
 		await login({ username: 'root', password: 'wrong 1' });
 		await login({ apiKey: 'ttk_wrong' });
 		assertEquals((await login({ username: 'root', password: 'wrong 2' })).response.status, 401);
@@ -159,7 +165,7 @@ Deno.test('login route: throttled with Retry-After, capped, problem+json, equal 
 	}
 });
 
-Deno.test('account changes each leave one audit line naming actor and target (D-078)', async () => {
+Deno.test('account changes each leave one audit line naming actor and target', async () => {
 	const dir = join('tests/.scratch', `audit-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
 	const { record, password } = await generateAdminUser('root');

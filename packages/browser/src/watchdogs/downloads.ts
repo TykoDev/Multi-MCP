@@ -1,13 +1,12 @@
 /**
  * @module
- * `DownloadsWatchdog` — the downloads pipeline (ARCHITECTURE.md §6.8, DATA-MODEL.md §5.1.6,
- * SECURITY-AUTH.md §8.3).
+ * `DownloadsWatchdog` — the downloads pipeline.
  *
  * Responsibilities, in the order they happen:
  *
  * 1. `Browser.setDownloadBehavior` with the profile's downloads dir and `eventsEnabled: true` (the
  *    flag without which `downloadWillBegin`/`downloadProgress` never fire at all). A local browser
- *    gets `allowAndName`, so Chromium writes every file under its **download guid** (E-33);
+ *    gets `allowAndName`, so Chromium writes every file under its **download guid**;
  * 2. `Browser.downloadWillBegin` → install the record **synchronously**, sanitize the
  *    attacker-influenced `suggestedFilename` into a display name → `DownloadStartedEvent`;
  * 3. `Browser.downloadProgress` → `DownloadProgressEvent`, transfer-limit enforcement, and on
@@ -18,18 +17,17 @@
  *    download detection — {@linkcode DownloadsWatchdog.addDownloadListener} and the convenience
  *    {@linkcode DownloadsWatchdog.armDownloadWatch} built on it.
  *
- * ## ERRATUM(E-33): the file on disk is named by guid, never by the suggested filename
+ * ## The file on disk is named by guid, never by the suggested filename
  *
- * The original pipeline used `behavior: 'allow'` and then *predicted* the name Chromium would write:
- * sanitize, ` (n)`-disambiguate against a directory listing, and hope. Measured against real Chrome
- * (Windows, 2026-09-05): the second `report.txt` of a session was recorded as `report (1).txt` while
- * Chromium overwrote `report.txt` in place — the first record then pointed at the *second* payload,
- * and the second record pointed at a file that did not exist. `allowAndName` removes the guess:
- * the storage name is the guid Chromium itself announced, the sanitized human name is metadata, and
- * a record can only be published once the file at `<dir>/<guid>` has been realpath'ed, contained and
- * stat'ed as a regular file. The same change removed the directory listing that used to sit between
- * `downloadWillBegin` and the record being installed, which is the gap a tiny download's
- * `completed` progress could fall into.
+ * Under `behavior: 'allow'` the name Chromium writes can only be *predicted* (sanitize,
+ * ` (n)`-disambiguate against a directory listing, and hope), and the prediction is wrong: measured
+ * against real Chrome on Windows, Chromium overwrites a session's second `report.txt` in place while
+ * the prediction says `report (1).txt`, so one record points at the other's payload and the other at
+ * a file that does not exist. `allowAndName` removes the guess: the storage name is the guid Chromium
+ * itself announced, the sanitized human name is metadata, and a record is published only once the
+ * file at `<dir>/<guid>` has been realpath'ed, contained and stat'ed as a regular file. No directory
+ * listing sits between `downloadWillBegin` and the record being installed, so a tiny download's
+ * `completed` progress has no gap to fall into.
  *
  * ## Two rules that are security contracts, not conveniences
  *
@@ -40,8 +38,7 @@
  * - **Remote browsers never touch the local filesystem.** When the session is attached to a browser
  *   this process does not own (`host.isLocal === false`), the download lives on the remote host: no
  *   directory is created, no file is stat'ed, no path is realpath'ed, nothing is removed. The
- *   reported path is *synthesized* from the sanitized name and `fileSize` is `0` (ARCHITECTURE.md
- *   §6.8). A remote browser that could make us write locally would be a sandbox escape with extra
+ *   reported path is *synthesized* from the sanitized name and `fileSize` is `0`. A remote browser that could make us write locally would be a sandbox escape with extra
  *   steps.
  *
  * ## Why the callback channel is synchronous
@@ -71,19 +68,18 @@ import { isContainedIn, sanitizeFilename, uniqueFilename } from '../security/con
 import { BaseWatchdog, type WatchdogHost } from './base.ts';
 
 // ---------------------------------------------------------------------------
-// constants (ARCHITECTURE.md §6.8, §6.10, §8 — load-bearing, DECISION-REGISTER rule §2.5)
+// constants (load-bearing: changing one needs real-browser evidence)
 // ---------------------------------------------------------------------------
 
 /**
- * Grace period a click waits for `downloadWillBegin` before concluding nothing was downloaded
- * (ARCHITECTURE.md §6.10 / §8 "0.5 s/30 s download start/complete").
+ * Grace period a click waits for `downloadWillBegin` before concluding nothing was downloaded.
  *
  * Exported here rather than in `default_action.ts` because this watchdog owns the download clock;
  * the click path consumes it through {@linkcode DownloadsWatchdog.armDownloadWatch}.
  */
 export const DOWNLOAD_START_GRACE_MS = 500;
 
-/** How long a click waits for a started download to finish (ARCHITECTURE.md §6.10, §8). */
+/** How long a click waits for a started download to finish. */
 export const DOWNLOAD_COMPLETION_TIMEOUT_MS = 30_000;
 
 /**
@@ -106,7 +102,7 @@ export const AUTO_DOWNLOAD_MIME_TYPES: readonly string[] = ['application/pdf', '
 export const AMBIGUOUS_DOWNLOAD_MIME_TYPE = 'application/octet-stream';
 
 // ---------------------------------------------------------------------------
-// transfer limits (E-33; fixed initial values, DECISION-REGISTER rule §2.5)
+// transfer limits (fixed values)
 // ---------------------------------------------------------------------------
 
 /** Downloads one session may track, in-flight and finished together. */
@@ -122,7 +118,7 @@ export const MAX_SESSION_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 export const DOWNLOAD_TRANSFER_DEADLINE_MS = 5 * 60_000;
 
 /**
- * ERRATUM(E-54). Attempts to remove a cancelled download's partial, and the wait between them.
+ * Attempts to remove a cancelled download's partial, and the wait between them.
  *
  * A cancellation is asynchronous inside Chromium, so for a moment the browser still holds the
  * `.crdownload` handle — harmless on POSIX, a `PermissionDenied` on Windows. Five attempts over
@@ -159,12 +155,12 @@ export interface DownloadRecord {
 	readonly suggestedFilename: string;
 	/**
 	 * The sanitized, ` (n)`-disambiguated **display** name. Metadata only: the file on disk is named
-	 * by {@linkcode DownloadRecord.guid} (E-33).
+	 * by {@linkcode DownloadRecord.guid}.
 	 */
 	readonly fileName: string;
 	/** Absolute path, `<downloadsDir>/<guid>`. Synthesized (never written) for remote browsers. */
 	readonly path: string;
-	/** Bytes on disk once complete; always `0` for remote browsers (ARCHITECTURE.md §6.8). */
+	/** Bytes on disk once complete; always `0` for remote browsers. */
 	readonly fileSize: number;
 	readonly receivedBytes: number;
 	readonly totalBytes: number;
@@ -199,7 +195,7 @@ export interface DownloadSignal {
 }
 
 /**
- * The synchronous direct-callback channel (ARCHITECTURE.md §6.8).
+ * The synchronous direct-callback channel.
  *
  * Invoked from the CDP event listener before any bus dispatch. A listener MUST NOT throw and MUST
  * NOT block: it is on the transport's read path. Throwing is caught and logged, never propagated.
@@ -255,7 +251,7 @@ export const DEFAULT_DOWNLOAD_LIMITS: DownloadLimits = {
 
 /**
  * Injection seams. Every default is the real implementation; they exist because the tier-1 matrix
- * grants `--allow-write` only for `tests/.scratch` (OBSERVABILITY-TESTING-CICD.md §4.6) and because
+ * grants `--allow-write` only for `tests/.scratch` and because
  * the remote-browser contract is precisely "these functions are never called".
  */
 export interface DownloadsWatchdogOptions {
@@ -310,7 +306,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 
 	#downloadsDir: string | null = null;
 	#armed = false;
-	/** The sniffer's own unsubscribe (ERRATUM(E-77)), kept apart so it can be armed after connect. */
+	/** The sniffer's own unsubscribe, kept apart so it can be armed after connect. */
 	#snifferOff: (() => void) | null = null;
 
 	constructor(host: WatchdogHost, options: DownloadsWatchdogOptions = {}) {
@@ -327,7 +323,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 		return this.#downloadsDir;
 	}
 
-	/** `true` when the browser is remote: nothing here may touch the local filesystem (§6.8). */
+	/** `true` when the browser is remote: nothing here may touch the local filesystem. */
 	get isRemoteBrowser(): boolean {
 		return !this.host.isLocal;
 	}
@@ -351,7 +347,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	 * Absolute paths of completed downloads, in completion order.
 	 *
 	 * This is the session's CDP-tracked `downloadedFiles` list that the `upload_file` authorization
-	 * chain consults as its second link (SECURITY-AUTH.md §8.2). Every entry is a real, validated
+	 * chain consults as its second link. Every entry is a real, validated
 	 * `<downloadsDir>/<guid>` path.
 	 */
 	get downloadedFiles(): readonly string[] {
@@ -372,7 +368,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * Arms a one-shot watch for a click-triggered download (ARCHITECTURE.md §6.10).
+	 * Arms a one-shot watch for a click-triggered download.
 	 *
 	 * Arm it *before* dispatching the click, `await` its `result` after, and always `dispose()` —
 	 * `using watch = downloads.armDownloadWatch()` does that for you.
@@ -449,11 +445,9 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	 * `deny`, or with the behaviour {@linkcode onBrowserConnectedEvent} would have chosen for an accepting
 	 * profile (`allowAndName` into the downloads directory locally, `allow` for a remote browser).
 	 *
-	 * ERRATUM(E-77). The donor read `profile.acceptDownloads` once, at connect, and offered no way to change
-	 * it afterwards — so `browser_set_session_options {accept_downloads}` could only answer `unsupported`, and
-	 * re-issuing the CDP command from outside this class would have moved the browser without moving the
-	 * profile this watchdog (and its PDF sniffer) reads. The change goes through here so the two stay one
-	 * fact: the profile is updated **only after** the browser accepted the new behaviour, and on a
+	 * This is what `browser_set_session_options {accept_downloads}` drives. Re-issuing the CDP command
+	 * from outside this class would move the browser without moving the profile this watchdog (and its
+	 * PDF sniffer) reads, so the change goes through here and the two stay one fact: the profile is updated **only after** the browser accepted the new behaviour, and on a
 	 * reconnect `onBrowserConnectedEvent` re-applies whatever was last set.
 	 *
 	 * @returns `true` when the browser now has the requested behaviour; `false` when this watchdog is not
@@ -520,7 +514,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 		}
 
 		// A remote browser writes on its own host: handing it a path from *our* filesystem is exactly
-		// the confusion §6.8 forbids, so it gets `allow` with no `downloadPath` at all.
+		// the confusion to avoid, so it gets `allow` with no `downloadPath` at all.
 		if (this.isRemoteBrowser) {
 			await this.#safe(
 				'Browser.setDownloadBehavior(remote)',
@@ -532,7 +526,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 		const dir = this.#downloadsDir;
 		if (dir === null) return;
 		await this.#ensureDir(dir);
-		// E-33: `allowAndName` makes Chromium write `<dir>/<guid>`, so the path this watchdog records
+		// `allowAndName` makes Chromium write `<dir>/<guid>`, so the path this watchdog records
 		// is the path Chromium uses, by construction rather than by prediction.
 		await this.#safe('Browser.setDownloadBehavior', () =>
 			this.cdpFor(context).send.Browser.setDownloadBehavior({
@@ -551,7 +545,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The PDF-viewer navigation case (ARCHITECTURE.md §6.8): Chrome *renders* a PDF instead of
+	 * The PDF-viewer navigation case: Chrome *renders* a PDF instead of
 	 * downloading it, so a navigation that lands on one is auto-downloaded in-page.
 	 */
 	async onNavigationCompleteEvent(event: NavigationCompleteEvent, context?: HandlerContext): Promise<void> {
@@ -562,8 +556,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * The `BrowserStateRequestEvent` side handler (DATA-MODEL.md §5.1.1 "+ DownloadsWatchdog side
-	 * handler").
+	 * The `BrowserStateRequestEvent` side handler.
 	 *
 	 * Lets a download that started moments ago settle so it appears in `downloadedFiles` before the
 	 * agent sees the state. Returns `undefined` — DOMWatchdog owns the result — and never throws:
@@ -605,7 +598,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 
 	/**
 	 * The PDF/attachment sniffer, armed only while auto-download is on. Idempotent, and separate from the
-	 * download listeners since ERRATUM(E-77): {@linkcode setAcceptDownloads} can turn downloads on after
+	 * download listeners because {@linkcode setAcceptDownloads} can turn downloads on after
 	 * connect, and the sniffer has to follow.
 	 */
 	#registerSniffer(): void {
@@ -634,7 +627,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	 *
 	 * Everything up to the first `await` is synchronous on purpose: the record must be in the map
 	 * before this listener yields, or a `downloadProgress` for a tiny file — which Chromium can emit
-	 * immediately after — finds an unknown guid and the download is never tracked (E-33).
+	 * immediately after — finds an unknown guid and the download is never tracked.
 	 */
 	async #handleWillBegin(params: { guid: string; url: string; suggestedFilename: string }): Promise<void> {
 		const autoDownload = this.#autoDownloaded.has(params.url);
@@ -662,7 +655,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 		// so a listing tells them apart.
 		const taken = new Set([...this.#downloads.values()].map((record) => record.fileName));
 		const fileName = uniqueFilename(sanitized, (candidate) => taken.has(candidate)) ?? sanitized;
-		// Remote: a synthesized path for reporting, never written (§6.8). Local: the guid path Chromium
+		// Remote: a synthesized path for reporting, never written. Local: the guid path Chromium
 		// writes under `allowAndName`.
 		const path = this.isRemoteBrowser ? join(dir, fileName) : join(dir, params.guid);
 
@@ -751,7 +744,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	 * The containment check exists even though `<dir>/<guid>` cannot leave `dir` by construction,
 	 * because between `downloadWillBegin` and here the *browser* wrote the file — and a symlink
 	 * planted at the destination is exactly the case `Deno.realPath` exists to catch
-	 * (SECURITY-AUTH.md §8.3). A zero-byte regular file is a valid download; a missing file, a
+	 * A zero-byte regular file is a valid download; a missing file, a
 	 * directory or a device is not.
 	 */
 	async #complete(record: DownloadRecord): Promise<void> {
@@ -761,7 +754,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 		let error: string | null = null;
 
 		if (this.isRemoteBrowser) {
-			// §6.8: the path is synthesized and the size is 0. No stat, no realpath, no local write.
+			// Remote: the path is synthesized and the size is 0. No stat, no realpath, no local write.
 			this.logger.debug('remote download: path synthesized, local filesystem untouched', {
 				fileName: record.fileName,
 			});
@@ -940,7 +933,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
 		await this.#safe('Browser.cancelDownload', () => this.cdp.send.Browser.cancelDownload({ guid }));
 	}
 
-	// -- auto-download (ARCHITECTURE.md §6.8) ------------------------------------------------------
+	// -- auto-download ------------------------------------------------------------------------------
 
 	#autoDownloadEnabled(): boolean {
 		return this.profile.acceptDownloads && this.profile.autoDownloadPdfs;
@@ -1079,27 +1072,21 @@ export class DownloadsWatchdog extends BaseWatchdog {
 	}
 
 	/**
-	 * ERRATUM(E-54). **A cancelled download's partial could survive its own cleanup on Windows.**
+	 * Removes a cancelled download's partial, retrying while Windows still holds it.
 	 *
 	 * `#abort` cancels through CDP and then removes the partial, but the cancellation is asynchronous
 	 * inside Chromium: for a moment after `Browser.cancelDownload` returns, the browser process still
 	 * holds the `.crdownload` handle. On a POSIX host that is harmless — the unlink succeeds and the
 	 * file goes when the last handle closes — but on Windows `Deno.remove` fails with
-	 * `PermissionDenied`, which this method rethrew, `#removePartials` logged at debug, and nothing
-	 * retried. The partial then sat in the session's download directory until the session was reaped,
-	 * against E-33's stated contract that a cancelled transfer leaves nothing behind.
-	 *
-	 * Found on the browser tier by `tests/e2e/files_e2e_test.ts` ("an export over the per-file limit is
-	 * cancelled in the browser, leaving nothing behind"), which failed twice and then passed — the
-	 * signature of a race rather than of a leak, and the reason a bounded retry is the fix rather than
-	 * a longer single wait.
+	 * `PermissionDenied`. Without a retry the partial would sit in the session's download directory
+	 * until the session is reaped, against the contract that a cancelled transfer leaves nothing
+	 * behind. It is a race, not a leak, so a bounded retry answers it rather than a longer single wait.
 	 *
 	 * Bounded on purpose: {@linkcode PARTIAL_REMOVE_ATTEMPTS} attempts spaced
-	 * {@linkcode PARTIAL_REMOVE_RETRY_MS} apart, after which the failure is reported to the caller
-	 * exactly as before. A cleanup that retried indefinitely would turn a leaked file into a stuck
-	 * cancellation, which is worse. The retry applies only to the real `Deno.remove` path: an injected
-	 * `removeFile` keeps its exact previous semantics, so a test that supplies a failing remover still
-	 * observes one call.
+	 * {@linkcode PARTIAL_REMOVE_RETRY_MS} apart, after which the failure is reported to the caller.
+	 * A cleanup that retried indefinitely would turn a leaked file into a stuck cancellation, which is
+	 * worse. The retry applies only to the real `Deno.remove` path: an injected `removeFile` is called
+	 * exactly once, so a test that supplies a failing remover observes one call.
 	 */
 	async #removeFile(path: string): Promise<void> {
 		const remove = this.#options.removeFile;
@@ -1144,11 +1131,11 @@ export function looksLikePdfUrl(url: string): boolean {
  * download-ish MIME type on a URL that is not already being handled. Header names are matched
  * case-insensitively — CDP passes them through exactly as the server wrote them.
  *
- * ERRATUM(E-33). An attachment that arrived as a **navigation** (`resourceType: 'Document'`) is
- * already Chromium's download: the browser never renders it, it routes it straight to the download
- * pipeline and announces it through `downloadWillBegin`. Re-triggering it in page produced a second
- * download of the same URL for every clicked attachment — measured as five records for three clicks,
- * three of them pointing at files that did not exist. The sniffer therefore leaves Document
+ * An attachment that arrived as a **navigation** (`resourceType: 'Document'`) is already Chromium's
+ * download: the browser never renders it, it routes it straight to the download pipeline and
+ * announces it through `downloadWillBegin`. Re-triggering it in page would produce a second download
+ * of the same URL for every clicked attachment (measured: five records for three clicks, three of them
+ * pointing at files that did not exist). The sniffer therefore leaves Document
  * attachments to Chromium and keeps its job for the cases the browser does *not* download on its own:
  * an inline PDF the viewer would render, and attachments a page fetched for itself.
  */
@@ -1190,10 +1177,10 @@ export function autoDownloadExpression(url: string): string {
 }
 
 /**
- * ERRATUM(E-54). Removes a file, retrying a bounded number of times when the host refuses.
+ * Removes a file, retrying a bounded number of times when the host refuses.
  *
  * Exported as a function rather than left inside the watchdog because the watchdog's own filesystem
- * seam is injected by every unit test — an injected remover keeps its exact previous semantics, so
+ * seam is injected by every unit test — an injected remover is called once, without retries, so
  * the retry would otherwise be reachable only from a real Windows race. Here it can be driven
  * directly with a remover that fails a stated number of times.
  *

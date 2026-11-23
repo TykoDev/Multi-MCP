@@ -377,7 +377,7 @@ cageTest('removing a run clears its state and leaves its checkout removable', as
 		assert.ok(await sandbox.diskUsage(RUN) > 0);
 		assert.deepEqual(await sandbox.remove(RUN), { removed: true });
 		await assert.rejects(Deno.stat(`${workDir}/.sandbox/${RUN}`));
-		// What the API does at the end of a run now works.
+		// What the API does at the end of a run works on what is left.
 		await Deno.remove(`${workDir}/${RUN}`, { recursive: true });
 		assert.deepEqual(await sandbox.remove(RUN), { removed: false });
 	} finally {
@@ -413,6 +413,32 @@ cageTest('a command without a checkout, or in a folder that is not there, is ref
 	}
 });
 
+/**
+ * A minimal TLS ClientHello naming `name` (SNI), as the octal escapes a POSIX `printf` understands: the proxy forwards
+ * a tunnel's bytes only after a ClientHello whose server name is the host the CONNECT asked for, and the cage's
+ * `/bin/sh` printf has no `\x` escapes.
+ */
+function clientHelloPrintf(name: string): string {
+	const u16 = (n: number): number[] => [(n >> 8) & 0xff, n & 0xff];
+	const host = [...new TextEncoder().encode(name)];
+	const sni = [0, ...u16(host.length), ...host];
+	const extensions = [
+		...u16(0x002b),
+		...u16(3),
+		2,
+		0x03,
+		0x04,
+		...u16(0),
+		...u16(sni.length + 2),
+		...u16(sni.length),
+		...sni,
+	];
+	const body = [3, 3, ...Array(32).fill(7), 0, ...u16(2), 0x13, 0x01, 1, 0, ...u16(extensions.length), ...extensions];
+	const handshake = [1, 0, ...u16(body.length), ...body];
+	const record = [0x16, 3, 1, ...u16(handshake.length), ...handshake];
+	return record.map((byte) => `\\${byte.toString(8).padStart(3, '0')}`).join('');
+}
+
 cageTest('the registry proxy opens tunnels to registries and refuses the rest', async () => {
 	// A stand-in registry: whatever registry.npmjs.org resolves to, the tunnel ends here.
 	const upstream = Deno.listen({ hostname: '127.0.0.1', port: 0 });
@@ -432,7 +458,9 @@ cageTest('the registry proxy opens tunnels to registries and refuses the rest', 
 		const r = await sandbox.exec(exec({
 			network: 'registries',
 			command: 'echo $HTTPS_PROXY; ' +
-				"printf 'CONNECT registry.npmjs.org:443 HTTP/1.1\\r\\n\\r\\n' | socat -t 2 - TCP:127.0.0.1:3128; " +
+				// The CONNECT, then a ClientHello naming the same host: only then does the proxy forward.
+				`{ printf 'CONNECT registry.npmjs.org:443 HTTP/1.1\\r\\n\\r\\n'; sleep 0.3; ` +
+				`printf '${clientHelloPrintf('registry.npmjs.org')}'; sleep 1; } | socat -t 2 - TCP:127.0.0.1:3128; ` +
 				"printf 'CONNECT example.com:443 HTTP/1.1\\r\\n\\r\\n' | socat -t 2 - TCP:127.0.0.1:3128 | head -1; " +
 				"printf 'CONNECT 169.254.169.254:443 HTTP/1.1\\r\\n\\r\\n' | socat -t 2 - TCP:127.0.0.1:3128 | head -1",
 		}));
@@ -453,7 +481,7 @@ cageTest('the registry proxy opens tunnels to registries and refuses the rest', 
 });
 
 /**
- * SB-1 at a small scale: the real work volume (statfs of the test's tmpfs), lifted far above the
+ * The disk budget at a small scale: the real work volume (statfs of the test's tmpfs), lifted far above the
  * free-space floor so only the budget can stop a command, and a budget of a few MiB.
  */
 const realDisk: Partial<SandboxDeps> = { freeBytes: async (path) => 100 * GiB + await freeBytes(path) };
@@ -467,7 +495,7 @@ const small = (budget: number): Partial<SandboxLimits> => ({
 const lockedWriter = 'mkdir -p h && chmod 300 h && i=0; while [ $i -lt 300 ]; do ' +
 	'head -c 1048576 /dev/zero >> h/f || exit 9; i=$((i + 1)); sleep 0.02; done; echo finished';
 
-cageTest('SB-1: a directory a command locked (chmod 000) still counts toward the budget', async () => {
+cageTest('a directory a command locked (chmod 000) still counts toward the budget', async () => {
 	const { sandbox, cleanup } = await setup(realDisk, small(64 * MiB));
 	try {
 		const r = await sandbox.exec(exec({
@@ -482,7 +510,7 @@ cageTest('SB-1: a directory a command locked (chmod 000) still counts toward the
 	}
 });
 
-cageTest('SB-1: the chmod-000 attack is stopped while it runs; the run may then only clean up (SB-7)', async () => {
+cageTest('the chmod-000 attack is stopped while it runs; the run may then only clean up', async () => {
 	const { sandbox, workDir, cleanup } = await setup(realDisk, small(32 * MiB));
 	try {
 		const attack = await sandbox.exec(exec({ command: lockedWriter, timeoutMs: 60_000 }));
@@ -521,10 +549,10 @@ cageTest('SB-1: the chmod-000 attack is stopped while it runs; the run may then 
 	}
 });
 
-cageTest('SB-1: with another cage running, the locked directory is measured (du) while the command runs', async () => {
+cageTest('with another cage running, the locked directory is measured (du) while the command runs', async () => {
 	const { sandbox, workDir, cleanup } = await setup(realDisk, small(32 * MiB));
 	try {
-		// A second cage on the volume: the attack can no longer be charged with all of the volume's
+		// A second cage on the volume: the attack cannot be charged with all of the volume's
 		// loss, so only du, reading the directory it locked, can stop it.
 		await Deno.mkdir(`${workDir}/${OTHER}`);
 		const other = sandbox.exec(exec({ runId: OTHER, command: 'sleep 4; echo slept' }));
@@ -541,7 +569,7 @@ cageTest('SB-1: with another cage running, the locked directory is measured (du)
 	}
 });
 
-cageTest("SB-1: a diff whose scratch objects outgrow the run's budget is stopped", async () => {
+cageTest("a diff whose scratch objects outgrow the run's budget is stopped", async () => {
 	const { sandbox, workDir, cleanup } = await setup(realDisk, small(16 * MiB));
 	try {
 		// Incompressible, so git's staged blob is as large as the file.
@@ -560,7 +588,7 @@ cageTest("SB-1: a diff whose scratch objects outgrow the run's budget is stopped
 	}
 });
 
-// --- D-076: live sessions ---------------------------------------------------------------------------
+// --- live sessions ---------------------------------------------------------------------------------
 
 cageTest('a live session runs a shell that answers line by line, beside file reads, until it is closed', async () => {
 	const { sandbox, cleanup, logged } = await setup();
@@ -608,8 +636,7 @@ cageTest('a live session runs a shell that answers line by line, beside file rea
 			closed = (await sandbox.sessionRead('owner', again.session_id, 0, 1_000)).ended;
 		}
 		assert.ok(closed, 'close ended the session');
-		// Its teardown (a measuring cage) finishes after the end is reported; the test waits for it too, or the
-		// cage outlives the test and the op sanitizer reports it.
+		// Teardown finishes after the end is reported; wait for it, or it outlives the test and the sanitizer reports it.
 		const endings = () => logged.filter((event) => event === 'session.ended').length;
 		for (let i = 0; i < 50 && endings() < 2; i += 1) await new Promise((r) => setTimeout(r, 100));
 		assert.equal(endings(), 2);
@@ -642,7 +669,7 @@ async function closeAndWait(sandbox: Sandbox, sessionId: string, logged: string[
 	}
 }
 
-// --- D-077: file operations beside a live session ----------------------------------------------------
+// --- file operations beside a live session -----------------------------------------------------------
 
 cageTest('caged file operations never leave the checkout while a session swaps directories for links', async () => {
 	const { sandbox, workDir, cleanup, logged } = await setup();
@@ -700,7 +727,7 @@ cageTest('caged file operations never leave the checkout while a session swaps d
 		const sibling = (await Array.fromAsync(Deno.readDir(`${workDir}/${OTHER}`))).map((e) => e.name);
 		assert.deepEqual(sibling, ['secret.txt'], `the sibling workspace was written: ${sibling.join(', ')}`);
 		console.log(
-			`D-077 race: the service saw sub -> sibling ${escapes} times; ${wrote} caged writes landed in the checkout, ${refused} operations refused, sibling untouched`,
+			`race: the service saw sub -> sibling ${escapes} times; ${wrote} caged writes landed in the checkout, ${refused} operations refused, sibling untouched`,
 		);
 		assert.ok(escapes > 0, 'the race never exposed a link; the test proved nothing');
 		assert.ok(wrote + refused > 0);
@@ -755,7 +782,7 @@ cageTest('caged file operations answer like the fast path: write, read, list, re
 	}
 });
 
-// --- R12: workspaces from a git remote (design §2.19, AC32, AC34) ----------------------------------------------
+// --- workspaces from a git remote -------------------------------------------------------------------------------
 
 const GIT_HOST = 'git.example.test';
 const GIT_TOKEN = 'ghp_cage_tier_token_0123456789abcdef';
@@ -900,7 +927,7 @@ async function filesUnder(dir: string): Promise<{ path: string; bytes: Uint8Arra
 }
 
 cageTest(
-	'R12: a credentialed clone runs git in a cage through the forwarder; the credential never enters the cage',
+	'a credentialed clone runs git in a cage through the forwarder; the credential never enters the cage',
 	async () => {
 		const remote = await gitRemote();
 		const workDir = await Deno.makeTempDir({ dir: Deno.env.get('TTK_SANDBOX_TEST_DIR') });
@@ -974,8 +1001,8 @@ cageTest(
 			assert.match(said, /no-hooks/);
 			assert.ok(said.includes(FIXTURE_COMMIT), said);
 			assert.ok(!said.includes(GIT_TOKEN) && !said.includes(btoa(`x-access-token:${GIT_TOKEN}`)), said);
-			// R3-1: a live session opened after the clone mounts `.git` read-only as well (the race let one open before
-			// `.git` existed, and keep it writable for its lifetime).
+			// A live session opened after the clone mounts `.git` read-only as well: one that could open before `.git`
+			// exists would keep it writable for its lifetime.
 			const opened = await service.call('alice', 'session_open', { workspace_id: id });
 			const session_id = opened.session_id as string;
 			await service.call('alice', 'session_input', {
@@ -1025,7 +1052,7 @@ cageTest(
 );
 
 cageTest(
-	"R12: a public clone's step reaches the git hosts only, through the proxy; an unlisted host is refused",
+	"a public clone's step reaches the git hosts only, through the proxy; an unlisted host is refused",
 	async () => {
 		// The stand-in remote: the proxy's tunnel for GIT_HOST ends there. The cage does not trust its throwaway CA, so a
 		// clone through the tunnel fails at TLS, which is the point: TLS runs end to end from the cage, never at the proxy.

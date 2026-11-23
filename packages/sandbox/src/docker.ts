@@ -1,48 +1,21 @@
 /**
- * D-108 (design §2.13, G9): the Docker workspace backend. Opt-in (`TTK_SANDBOX_BACKEND=docker`, the
- * docker-compose.sandbox-docker.yml overlay); the bubblewrap backend (sandbox.ts) stays the default and the reference
- * for what every operation means: the same paths, LIMITS, results and errors.
+ * The opt-in Docker workspace backend; bwrap (sandbox.ts) is the reference for every operation's paths, LIMITS,
+ * results and errors, and `SandboxBase` there holds what the two share. One long-lived container per workspace
+ * (docker_spec.ts has its body), started on demand and stopped after LIMITS.containerIdleMs idle. Every piece of work
+ * is an exec through the wrapper, which gives it a session of its own: a kill exec ends that process group (the API
+ * cannot kill an exec), and a cleanup exec after each command kills what it left behind; starts and cleanups are
+ * serialized per container.
  *
- * One long-lived container per workspace (docker_spec.ts has its body), created with the workspace, started on
- * demand, stopped after LIMITS.containerIdleMs with nothing running, removed with the workspace. Each command, live
- * session and housekeeping script (du, the diff, a caged file operation) is an exec into it, started through the
- * wrapper that gives the work a session of its own:
- *
- * - a time limit, a cancelled request or the disk watchdog kills that session's process group by a second exec
- *   (an exec cannot be killed through the API);
- * - N3: after every command, and when a session ends, a cleanup exec kills every process in the container but
- *   Docker's init, `sleep infinity` and the work of execs still running — what a cage's pid namespace took with it;
- * - starts and cleanups are serialized per container, so a cleanup never meets a half-started exec.
- *
- * Mounts are named-volume subpaths the daemon resolves. The service holds the same two volumes: the code volume at
- * its work folder (/work), the socket volume at its socket folder. A registries-mode exec gets the registry proxy's
- * socket in its workspace's socket folder, seen in the container as /run/harbour/proxy.sock, for as long as it runs
- * (N3): the container has no network interface, and socat inside it turns the socket into 127.0.0.1:3128, as in a
- * cage. One registries-mode exec per workspace at a time: the forwarder's port is the container's.
- *
- * ERRATUM(E-87): where the design asks for bwrap's semantics, these differ, all inside one workspace and one owner:
- * a command and an open session share the container's processes, loopback and `/tmp` (the create body's 256 MiB
- * tmpfs, not on the volume and so not in the disk budget, and not emptied between commands); one registries-mode
- * exec runs per workspace at a time (409 `run_busy`); a session's background process that made a session of its own
- * is killed when a command ends; no `ulimit -p` (without a user namespace it would count every uid-1993 process on
- * the host; `PidsLimit` bounds the container instead); the diff stages in the workspace's home, on the volume, where
- * bwrap's /tmp is; and disk use is measured by the service itself, not by du in a cage (below).
- *
- * SB-1 (review R2-2): a measurement inside the container ran in the same pid namespace as the workspace's own
- * processes, which could make a directory unreadable between the measurer's repair and du (du then skipped it, and its
- * exit status was ignored). So the service measures its own view of the volume (/work/<id> and the home), with the
- * container paused (`POST /containers/{id}/pause`, E-91) so nothing of the workspace runs meanwhile, giving locked
- * directories their owner's read and search back first, and following no link (disk.ts `treeUsage`). A measurement
- * that fails is taken as over budget: the command may only clean up (SB-7), a watched one is stopped.
- *
- * Deployments (review R2-5): containers are named `ttk-sandbox-<deployment>-<id>` and labelled with the deployment,
- * {@linkcode deploymentId} of the code volume, and reconciliation touches this deployment's containers only. Two
- * deployments must not share a code volume: they would share every workspace, owner record and container.
+ * Differences from bwrap, all within one workspace: commands and a session share processes, loopback and `/tmp`;
+ * one registries-mode exec at a time (the forwarder's port is the container's); `PidsLimit` instead of `ulimit -p`.
+ * Disk use is measured by the service on its own view of the volume with the container paused, never inside it: a
+ * process in the same pid namespace could hide a directory from du. A failed measurement counts as over budget.
+ * Containers are named and labelled per deployment ({@linkcode deploymentId} of the code volume).
  */
 import { BASE_ENV, CAGE_HOME, type CageResult, PROXY_SOCKET, proxyEnv, WORKSPACE } from './cage.ts';
-import { CAGED_FILE_BYTES, type CagedFileOp, cagedResult, cagedScript, EXIT } from './caged_files.ts';
-import { type DiffResult, diffScript, fitDiff, parseDiff } from './diff.ts';
-import { DiskWatches, treeUsage, type TreeUsageOptions } from './disk.ts';
+import { CAGED_OUTPUT_BYTES, type CagedFileOp, cagedResult, cagedScript } from './caged_files.ts';
+import { diffScript } from './diff.ts';
+import { treeUsage, type TreeUsageOptions } from './disk.ts';
 import {
 	BodyRefused,
 	CHECK_OWNER,
@@ -71,30 +44,31 @@ import {
 	WRAPPER,
 } from './docker_spec.ts';
 import { type ContainerInfo, type Engine, EngineError, type ExecStream } from './engine.ts';
-import { Gate, GateError, Runs } from './gate.ts';
 import { LIMITS } from './limits.ts';
-import { OutputCapture } from './output.ts';
-import { type OpenEgress, type ProxyDeps, type ProxyHandle, RegistryProxy } from './proxy.ts';
-import { type ExecRequest, RequestError, RUN_ID } from './request.ts';
+import { collect, OutputCapture } from './output.ts';
+import { type OpenEgress, type ProxyHandle, RegistryProxy } from './proxy.ts';
+import { type ExecRequest, RUN_ID } from './request.ts';
 import {
 	ApiError,
 	checkCwd,
+	describe,
+	type DiffWork,
 	type DiskQuota,
 	type ExecResult,
 	gitDirectory,
 	isDirectory,
-	mb,
+	overBudget,
+	removeTree,
+	type RunOptions,
+	SandboxBase,
+	type SandboxDeps,
 	type SandboxLimits,
+	sessionOverBudget,
+	type SessionShell,
 } from './sandbox.ts';
-import { type SessionRead, SessionState } from './sessions.ts';
-
-/** A registry proxy as the backend uses it; `RegistryProxy` in production (proxy.ts, shared with the clone step). */
-export type { ProxyHandle };
 
 export interface DockerSandboxConfig {
-	/** The code volume, as this service holds it (/work). */
 	workDir: string;
-	/** The socket volume, as this service holds it. */
 	sockDir: string;
 	policy: DockerPolicy;
 	limits?: Partial<SandboxLimits>;
@@ -102,15 +76,11 @@ export interface DockerSandboxConfig {
 	checkTimeoutMs?: number;
 }
 
-export interface DockerSandboxDeps {
+export interface DockerSandboxDeps extends SandboxDeps {
 	engine: Engine;
-	log(level: 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown>): void;
-	proxy: ProxyDeps;
-	/** Bytes free on the filesystem holding `path`. */
-	freeBytes(path: string): Promise<number>;
 	/** Opens the registry proxy on a unix socket; RegistryProxy.open unless a test names another. */
 	openProxy?(path: string, runId: string): ProxyHandle;
-	/** Measures folders as the service sees them (R2-2); disk.ts `treeUsage` unless a test names another. */
+	/** Measures folders as the service sees them; disk.ts `treeUsage` unless a test names another. */
 	measure?(paths: readonly string[], options: TreeUsageOptions): Promise<number>;
 }
 
@@ -143,7 +113,6 @@ class Box {
 	git = false;
 	running = false;
 	lastActive = Date.now();
-	/** Execs in flight, of any kind. */
 	active = 0;
 	/** A registries-mode exec holds the proxy socket. */
 	proxy = false;
@@ -151,7 +120,7 @@ class Box {
 	readonly live = new Map<number, { pid: number; sid: number }>();
 	/** Create, start, stop and remove. */
 	readonly lifecycle = new Mutex();
-	/** Exec starts, kills and cleanups (N3). */
+	/** Exec starts, kills and cleanups. */
 	readonly starting = new Mutex();
 
 	constructor(readonly runId: string) {}
@@ -200,72 +169,31 @@ interface Work {
 	body: string;
 	/** `$1…` for the body: a request's command line, never part of a script. */
 	args?: string[];
-	/** Added to BASE_ENV. */
 	env?: Record<string, string>;
 	workdir?: string;
 	/** Written to the work's standard input, which is then closed. */
 	stdin?: Uint8Array | null;
-	/** A live session's input. */
 	input?: SessionInput;
 	proxy?: boolean;
 	noGrowth?: boolean;
 }
 
-interface RunOptions {
-	timeoutMs: number;
-	signal?: AbortSignal;
-	onOutput(chunk: Uint8Array): boolean | void;
-	watchdog?: { everyMs: number; check(): Promise<string | null> };
-}
-
-export class DockerSandbox {
-	/** D-108: which backend this is, as `/healthz` reports it. */
-	readonly kind = 'docker' as const;
-	readonly gate = new Gate();
-	readonly chores = new Gate(LIMITS.choreRunning, LIMITS.choreWaiting, LIMITS.choreTimeoutMs);
-	readonly runs = new Runs();
-	/** Live sessions, counted apart from commands (D-076). */
-	readonly sessionGate = new Gate(LIMITS.sessionsRunning, 0, 0);
-	readonly limits: SandboxLimits;
-	readonly #watches: DiskWatches;
+export class DockerSandbox extends SandboxBase<DockerSandboxConfig, DockerSandboxDeps> {
+	override readonly kind = 'docker' as const;
 	readonly #boxes = new Map<string, Box>();
 	/** Workspace → owner hash, for the container's labels: from the owner records, and from `assign` on create. */
 	readonly #owners = new Map<string, string>();
-	readonly #sessions = new Map<string, SessionState>();
-	readonly #sessionsByRun = new Map<string, SessionState>();
-	readonly #sessionStops = new Map<string, (why: string) => void>();
-	readonly #sessionInputs = new Map<string, SessionInput>();
-	#probe: { at: number; error: string | null } | null = null;
-	#probing: Promise<string | null> | null = null;
 	#idle: ReturnType<typeof setInterval> | undefined;
 	#sweeping = false;
-	/** R2-5: this deployment's id, from the code volume's name; set by `start`. */
+	/** This deployment's id, from the code volume's name; set by `start`. */
 	#deployment: string | null = null;
-	/** R2-6: the image id the configured tag pointed at when the service started (its check container's). */
+	/** The image id the configured tag pointed at when the service started (its check container's). */
 	#imageId: string | null = null;
 	#execs = 0;
 
-	constructor(readonly config: DockerSandboxConfig, readonly deps: DockerSandboxDeps) {
-		this.limits = {
-			diskBudgetBytes: LIMITS.diskBudgetBytes,
-			diskPollMs: LIMITS.diskPollMs,
-			diskNoiseBytes: LIMITS.diskNoiseBytes,
-			diskTriggerBytes: LIMITS.diskTriggerBytes,
-			...config.limits,
-		};
-		this.#watches = new DiskWatches({
-			free: () => this.deps.freeBytes(this.config.workDir),
-			minFreeBytes: LIMITS.minFreeBytes,
-			noiseBytes: this.limits.diskNoiseBytes,
-			triggerBytes: this.limits.diskTriggerBytes,
-		});
-	}
-
 	/**
-	 * Start-up: the daemon answers at API 1.45 or later, both named volumes exist, and a container of the workspace
-	 * image sees the configured code volume as the one this service holds at its work folder (R2-5); then idle
-	 * containers are stopped every minute. Throws, naming what is missing, so a misconfigured service never reports
-	 * healthy (main.ts exits, and Docker's restart policy tries again).
+	 * Start-up: API 1.45+, both volumes exist, and the code volume is proven to be the service's own. Throws naming
+	 * what is missing, so a misconfigured service never reports healthy.
 	 */
 	async start(): Promise<void> {
 		const engine = this.deps.engine;
@@ -300,11 +228,8 @@ export class DockerSandbox {
 	}
 
 	/**
-	 * Startup reconciliation, with every workspace's owner from its record: a container of this deployment (the
-	 * sandbox label, this deployment's code volume, and its deployment label — R2-5) whose workspace has no record, or
-	 * another owner, is removed; so is one from before deployments were labelled, which no name of this service would
-	 * find again; a running (or paused) one is stopped, since no session survives a restart. Containers of another
-	 * deployment on the same daemon are left as they are.
+	 * Startup reconciliation of this deployment's containers: one without a deployment label, a workspace record or
+	 * the recorded owner is removed; a running one is stopped (no session survives a restart). Others are left alone.
 	 */
 	async reconcile(owners: ReadonlyMap<string, string>): Promise<void> {
 		for (const [id, owner] of owners) this.#owners.set(id, owner);
@@ -335,7 +260,6 @@ export class DockerSandbox {
 		this.deps.log('info', 'docker.reconciled', { removed, stopped });
 	}
 
-	/** Records a new workspace's owner before its first command (create). */
 	assign(runId: string, owner: string): void {
 		this.#owners.set(runId, owner);
 	}
@@ -344,41 +268,28 @@ export class DockerSandbox {
 
 	exec(req: ExecRequest, signal?: AbortSignal, quota?: DiskQuota): Promise<ExecResult> {
 		return this.runs.hold(req.runId, signal, async (held) => {
-			const checkout = this.#checkout(req.runId);
-			if (!(await isDirectory(checkout))) {
-				throw new ApiError(404, 'no_workspace', 'This run has no checkout in the sandbox.');
-			}
+			const { checkout } = await this.locate(req.runId);
 			await checkCwd(checkout, req.cwd);
 			const release = await this.gate.enter(held);
 			try {
 				const box = await this.#ready(req.runId);
 				if (req.network !== 'none' && box.proxy) throw proxyBusy();
-				await this.#checkFreeSpace();
-				const { limit, ceiling } = quota ?? this.#defaultQuota();
-				const before = await this.#measureBefore(box, limit, held);
-				// SB-7, as bwrap: over the budget a command may only clean up; past the ceiling nothing runs, and the
-				// container is stopped so nothing left in it keeps writing.
-				const cleanupOnly = before > limit;
-				if (cleanupOnly && before > ceiling) {
-					await this.#stop(box).catch(() => {});
-					throw new ApiError(
-						507,
-						'over_budget',
-						`This run's files take ${mb(before)} MB, too far over its ${
-							mb(Math.max(0, limit))
-						} MB budget to run anything. Remove the workspace.`,
-					);
-				}
+				const measure = (signal?: AbortSignal) => this.#measure(box, this.#runDirs(box.runId), signal);
+				// As with bwrap; past the ceiling the container is also stopped so nothing left in it keeps writing.
+				const disk = await this.watchRun(
+					quota,
+					(limit) => this.#measureBefore(box, limit, held),
+					measure,
+					async (before, limit) => {
+						await this.#stop(box).catch(() => {});
+						return overBudget(before, limit);
+					},
+				);
 				const capture = new OutputCapture();
-				const watch = await this.#watches.start({
-					before,
-					limit: cleanupOnly ? before : limit,
-					measure: (stop) => this.#measure(box, this.#runDirs(box.runId), stop),
-				});
 				let proxy: ProxyHandle | null = null;
 				let result: CageResult;
 				try {
-					// R12: a clone's step (`git`) brings its own egress: the git-host proxy or the forwarder.
+					// A clone's step (`git`) brings its own egress: the git-host proxy or the forwarder.
 					if (req.network === 'git' && req.egress === undefined) {
 						throw new ApiError(500, 'internal', 'A clone step has no egress.');
 					}
@@ -392,345 +303,121 @@ export class DockerSandbox {
 						workdir: req.cwd ? `${WORKSPACE}/${req.cwd}` : WORKSPACE,
 						stdin: req.stdin === null ? null : encoder.encode(req.stdin),
 						proxy: proxy !== null,
-						noGrowth: cleanupOnly,
+						noGrowth: disk.cleanupOnly,
 					}, {
 						timeoutMs: req.timeoutMs,
 						signal: held,
 						onOutput: (chunk) => capture.push(chunk),
-						watchdog: { everyMs: this.limits.diskPollMs, check: () => watch.check() },
+						watchdog: { everyMs: this.limits.diskPollMs, check: () => disk.watch.check() },
 					});
 				} finally {
-					await watch.end();
-					await this.#closeProxy(box, proxy);
-					await this.#cleanup(box);
+					// The cleanup runs even when an earlier step of the teardown throws, so nothing the command
+					// left behind outlives it; that step's error still ends the call.
+					try {
+						await disk.watch.end();
+						await this.#closeProxy(box, proxy);
+					} finally {
+						await this.#cleanup(box);
+					}
 				}
-				if (!result.started) {
-					this.deps.log('error', 'cage.failed', { runId: req.runId, diagnostics: result.diagnostics });
-					throw new ApiError(
-						503,
-						'cage_failed',
-						`The sandbox could not start a command: ${result.diagnostics || 'no reason given'}`,
-					);
-				}
-				// SB-10: not cancelled with the request; when it cannot be measured, the worst is assumed.
-				const after = await this.#measure(box, this.#runDirs(box.runId)).catch(() => Math.max(before, limit));
+				if (!result.started) throw this.notStarted(req.runId, result, 'a command');
+				// Not cancelled with the request; when it cannot be measured, the worst is assumed.
+				const after = await measure().catch(() => Math.max(disk.before, disk.limit));
 				await this.#settle(box);
-				const out = capture.result();
-				const reply: ExecResult = {
-					exitCode: result.exitCode,
-					timedOut: result.killed === 'timeout',
-					killed: result.killed,
-					durationMs: result.durationMs,
-					...out,
-					diskBytes: after,
-					diskBudgetBytes: Math.max(0, limit),
-					overBudget: after > limit,
-					cleanupOnly,
-					reachedHosts: [...(proxy?.reached ?? [])],
-					refusedHosts: [...(proxy?.refused ?? [])],
-				};
-				this.deps.log('info', 'exec.done', {
-					runId: req.runId,
-					backend: 'docker',
-					network: req.network,
-					exitCode: reply.exitCode,
-					killed: reply.killed,
-					diskStop: watch.verdict,
-					durationMs: reply.durationMs,
-					outputBytes: reply.outputBytes,
-					diskBytes: reply.diskBytes,
-					cleanupOnly,
-					refusedHosts: reply.refusedHosts,
-				});
-				return reply;
+				return this.reply(req, result, capture.result(), after, disk, proxy);
 			} finally {
 				release();
 			}
 		});
 	}
 
-	// --- live sessions (D-076) -------------------------------------------------------------------------------
+	// --- live sessions, diff, files, disk, removal, health ---------------------------------------------------
 
-	sessionOf(runId: string): SessionState | null {
-		return this.#sessionsByRun.get(runId) ?? null;
+	/**
+	 * Whether a file operation must run inside the container ({@linkcode fileOp}). The service's own check-then-open
+	 * is safe only while nothing of the workspace runs to swap a folder for a link, so it is used only when this
+	 * process knows the container is not running; a workspace untouched since start-up counts as running.
+	 */
+	cagesFiles(runId: string): boolean {
+		const box = this.#boxes.get(runId);
+		if (box === undefined) return true;
+		return box.running || box.active > 0;
 	}
 
-	#session(owner: string, sessionId: string): SessionState {
-		const session = this.#sessions.get(sessionId);
-		if (session === undefined || session.owner !== owner) throw new ApiError(404, 'no_session', 'No such session.');
-		return session;
-	}
-
-	/** A shell exec reading its standard input, ended as bwrap's session cage is (close, idle, lifetime, disk...). */
-	async openSession(
-		owner: string,
+	/** A shell exec reading its standard input; the cleanup exec ends what it left behind. */
+	protected override async startShell(
 		req: { runId: string; network: 'none' | 'registries' },
-		quota?: DiskQuota,
-	): Promise<{ session_id: string; created_at: string }> {
-		this.#pruneEnded();
-		if (this.#sessionsByRun.has(req.runId)) {
-			throw new ApiError(409, 'session_open', 'This workspace already has an open session.');
-		}
-		if (!(await isDirectory(this.#checkout(req.runId)))) {
-			throw new ApiError(404, 'no_workspace', 'This run has no checkout in the sandbox.');
-		}
-		const release = await this.sessionGate.enter();
-		const session = new SessionState(req.runId, owner);
-		this.#sessions.set(session.id, session);
-		this.#sessionsByRun.set(req.runId, session);
+		quota: DiskQuota | undefined,
+	): Promise<SessionShell> {
+		const box = await this.#ready(req.runId);
+		if (req.network === 'registries' && box.proxy) throw proxyBusy();
+		const measure = (signal?: AbortSignal) => this.#measure(box, this.#runDirs(box.runId), signal);
+		const { cleanupOnly, watch } = await this.watchRun(
+			quota,
+			(limit) => this.#measureBefore(box, limit),
+			measure,
+			sessionOverBudget,
+		);
+		let proxy: ProxyHandle | null = null;
 		try {
-			const box = await this.#ready(req.runId);
-			if (req.network === 'registries' && box.proxy) throw proxyBusy();
-			await this.#checkFreeSpace();
-			const { limit, ceiling } = quota ?? this.#defaultQuota();
-			const before = await this.#measureBefore(box, limit);
-			if (before > ceiling) {
-				throw new ApiError(507, 'over_budget', 'This run is too far over its disk budget to open a session.');
-			}
-			const watch = await this.#watches.start({
-				before,
-				limit: before > limit ? before : limit,
-				measure: (stop) => this.#measure(box, this.#runDirs(box.runId), stop),
-			});
-			let proxy: ProxyHandle | null = null;
-			try {
-				if (req.network === 'registries') proxy = await this.#openProxy(box);
-			} catch (error) {
-				await watch.end();
-				throw error;
-			}
-			const controller = new AbortController();
-			let stopReason = '';
-			this.#sessionStops.set(session.id, (why) => {
-				stopReason = why;
-				controller.abort();
-			});
-			const input = new SessionInput();
-			this.#sessionInputs.set(session.id, input);
-			const idle = setInterval(() => {
-				if (session.idleMs > LIMITS.sessionIdleMs) this.#sessionStops.get(session.id)?.('idle');
-				else if (session.ageMs > LIMITS.sessionLifetimeMs) this.#sessionStops.get(session.id)?.('lifetime');
-			}, 5_000);
-			void this.#run(box, {
-				body: SESSION_BODY,
-				env: proxy ? proxyEnv() : {},
-				input,
-				proxy: proxy !== null,
-				noGrowth: before > limit,
-			}, {
-				timeoutMs: LIMITS.sessionLifetimeMs + 60_000,
-				signal: controller.signal,
-				onOutput: (chunk) => session.push(chunk),
-				watchdog: { everyMs: this.limits.diskPollMs, check: () => watch.check() },
-			}).then(
-				(result) => {
-					if (!result.started) {
-						session.push(encoder.encode(`the sandbox could not start a shell: ${result.diagnostics}\n`));
-						session.end(null, 'cage_failed');
-					} else session.end(result.exitCode, result.killed === 'cancelled' ? stopReason || 'closed' : result.killed);
-				},
-				() => session.end(null, 'internal'),
-			).finally(async () => {
-				clearInterval(idle);
-				this.#sessionStops.delete(session.id);
-				this.#sessionsByRun.delete(req.runId);
-				this.#sessionInputs.delete(session.id);
-				input.close();
-				release();
-				await watch.end();
-				await this.#closeProxy(box, proxy);
-				await this.#cleanup(box);
-				this.deps.log('info', 'session.ended', { runId: req.runId, sessionId: session.id });
-				session.lastActivity = Date.now();
-			});
-			this.deps.log('info', 'session.opened', { runId: req.runId, sessionId: session.id, network: req.network });
-			return { session_id: session.id, created_at: new Date(session.createdAt).toISOString() };
-		} catch (cause) {
-			this.#sessions.delete(session.id);
-			this.#sessionsByRun.delete(req.runId);
-			release();
-			throw cause;
-		}
-	}
-
-	sessionInput(owner: string, sessionId: string, data: string): Promise<{ accepted: true }> {
-		const session = this.#session(owner, sessionId);
-		if (session.ended) throw new ApiError(409, 'session_ended', 'The session has ended.');
-		const bytes = encoder.encode(data);
-		if (bytes.length > LIMITS.sessionInputBytes) throw new RequestError('data', 'is over 16 KiB');
-		if (!session.countInput(bytes.length, LIMITS.sessionInputBytes * 256)) {
-			this.#sessionStops.get(sessionId)?.('input_limit');
-			throw new ApiError(409, 'session_ended', 'The session took too much input and was closed.');
-		}
-		const input = this.#sessionInputs.get(sessionId);
-		if (input === undefined || !input.push(bytes)) throw new ApiError(409, 'session_ended', 'The session has ended.');
-		return Promise.resolve({ accepted: true });
-	}
-
-	async sessionRead(owner: string, sessionId: string, after: number, waitMs: number): Promise<SessionRead> {
-		this.#pruneEnded();
-		const session = this.#session(owner, sessionId);
-		session.lastActivity = Date.now();
-		return await session.read(after, waitMs);
-	}
-
-	sessionClose(owner: string, sessionId: string): { closed: true } {
-		const session = this.#session(owner, sessionId);
-		this.#sessionStops.get(sessionId)?.('closed');
-		this.#sessionInputs.get(sessionId)?.close();
-		this.#sessionInputs.delete(sessionId);
-		if (session.ended) this.#sessions.delete(sessionId);
-		return { closed: true };
-	}
-
-	#pruneEnded(): void {
-		const now = Date.now();
-		for (const [id, session] of this.#sessions) {
-			if (session.ended && now - session.lastActivity > 60_000) this.#sessions.delete(id);
-		}
-	}
-
-	#closeSessionsOf(runId: string): void {
-		const session = this.#sessionsByRun.get(runId);
-		if (session === undefined) return;
-		this.#sessionStops.get(session.id)?.('removed');
-		this.#sessionInputs.get(session.id)?.close();
-		this.#sessionInputs.delete(session.id);
-	}
-
-	// --- diff, files, disk, removal, health ------------------------------------------------------------------
-
-	diff(runId: string, signal?: AbortSignal): Promise<DiffResult> {
-		return this.runs.hold(runId, signal, async (held) => {
-			const checkout = this.#checkout(runId);
-			if (!(await isDirectory(checkout))) {
-				throw new ApiError(404, 'no_workspace', 'This run has no checkout in the sandbox.');
-			}
-			if (!(await gitDirectory(checkout))) {
-				throw new ApiError(409, 'no_repository', "This run's checkout has no .git directory.");
-			}
-			const release = await this.gate.enter(held);
-			try {
-				const box = await this.#ready(runId);
-				await this.#checkFreeSpace();
-				let attempt = await this.#diffOnce(box, held);
-				if (attempt.failed && /permission denied/i.test(attempt.said)) {
-					await this.#run(box, { body: REPAIR_BODY }, {
-						timeoutMs: LIMITS.choreTimeoutMs,
-						signal: held,
-						onOutput: () => {},
-					});
-					held.throwIfAborted();
-					attempt = await this.#diffOnce(box, held);
-				}
-				if (attempt.failed) throw new ApiError(500, 'diff_failed', `git could not diff the checkout: ${attempt.said}`);
-				return fitDiff(attempt.result!, LIMITS.responseBytes);
-			} finally {
-				release();
-			}
-		});
-	}
-
-	async #diffOnce(box: Box, signal: AbortSignal) {
-		const limit = LIMITS.patchBytes * 2;
-		const chunks: Uint8Array[] = [];
-		let size = 0;
-		// SB-1: the staged blobs may take one budget's worth on top of the run's files, and go after the diff.
-		const watch = await this.#watches.start({
-			before: 0,
-			limit: this.limits.diskBudgetBytes,
-			// The scratch as the service holds it: the container's DOCKER_DIFF_SCRATCH, under the home.
-			measure: (stop) =>
-				this.#measure(box, [this.#home(box.runId) + DOCKER_DIFF_SCRATCH.slice(CAGE_HOME.length)], stop),
-		});
-		let result: CageResult;
-		try {
-			result = await this.#run(box, {
-				body: `trap 'rm -rf ${DOCKER_DIFF_SCRATCH}' EXIT\n${diffScript(DOCKER_DIFF_SCRATCH)}`,
-			}, {
-				timeoutMs: LIMITS.diffTimeoutMs,
-				signal,
-				onOutput: (chunk) => {
-					if (size >= limit) return false;
-					chunks.push(chunk);
-					size += chunk.length;
-					return size < limit;
-				},
-				watchdog: { everyMs: this.limits.diskPollMs, check: () => watch.check() },
-			});
-		} finally {
+			if (req.network === 'registries') proxy = await this.#openProxy(box);
+		} catch (error) {
 			await watch.end();
+			throw error;
 		}
-		const bytes = join(chunks, size);
-		if (!result.started) {
-			throw new ApiError(
-				503,
-				'cage_failed',
-				`The sandbox could not start a cage: ${result.diagnostics || 'no reason given'}`,
-			);
-		}
-		if (result.killed === 'disk') {
-			throw watch.verdict === 'floor'
-				? new ApiError(507, 'disk_full', 'The server ran low on disk during the diff.')
-				: new ApiError(507, 'over_budget', "The diff needed more scratch space than the run's budget allows.");
-		}
-		if (result.killed === 'timeout' || result.killed === 'cancelled') {
-			throw new ApiError(504, 'diff_timeout', 'The diff took too long and was stopped.');
-		}
-		const cut = result.killed === 'output';
-		if (!cut && result.exitCode !== 0) {
-			const said = decoder.decode(bytes.subarray(Math.max(0, bytes.length - 2000)));
-			return { failed: true, said: said.trim() || `exit ${result.exitCode}`, result: null };
-		}
-		return { failed: false, said: '', result: parseDiff(bytes, !cut) };
+		const input = new SessionInput();
+		const env = proxy ? proxyEnv() : {};
+		return {
+			input,
+			watch,
+			noun: 'shell',
+			run: (options) =>
+				this.#run(box, { body: SESSION_BODY, env, input, proxy: proxy !== null, noGrowth: cleanupOnly }, options),
+			closeProxy: () => this.#closeProxy(box, proxy),
+			cleanup: () => this.#cleanup(box),
+		};
 	}
 
-	/** D-077: a file operation for a workspace with a live session, run inside its container (caged_files.ts). */
+	protected override async diffWork(runId: string): Promise<DiffWork> {
+		const box = await this.#ready(runId);
+		return {
+			run: (options) =>
+				this.#run(
+					box,
+					{ body: `trap 'rm -rf ${DOCKER_DIFF_SCRATCH}' EXIT\n${diffScript(DOCKER_DIFF_SCRATCH)}` },
+					options,
+				),
+			// The scratch as the service holds it: the container's DOCKER_DIFF_SCRATCH, under the home.
+			scratch: (signal) =>
+				this.#measure(box, [this.paths(runId).home + DOCKER_DIFF_SCRATCH.slice(CAGE_HOME.length)], signal),
+			repair: async (signal) => {
+				await this.#run(box, { body: REPAIR_BODY }, { timeoutMs: LIMITS.choreTimeoutMs, signal, onOutput: () => {} });
+				signal.throwIfAborted();
+			},
+		};
+	}
+
+	/** A file operation for a workspace with a live session, run inside its container (caged_files.ts). */
 	fileOp(runId: string, op: CagedFileOp, signal?: AbortSignal): Promise<Record<string, unknown>> {
 		return this.runs.hold(runId, signal, async (held) => {
-			if (!(await isDirectory(this.#checkout(runId)))) {
-				throw new ApiError(404, 'no_workspace', 'This run has no checkout in the sandbox.');
-			}
+			await this.locate(runId);
 			const release = await this.chores.enter(held);
 			try {
 				const box = await this.#ready(runId);
-				const chunks: Uint8Array[] = [];
-				let size = 0;
-				const limit = CAGED_FILE_BYTES + 64 * 1024;
+				const out = collect(CAGED_OUTPUT_BYTES);
 				const result = await this.#run(box, {
 					body: cagedScript(op.kind),
 					env: { TTK_PATH: op.path },
 					stdin: op.kind === 'write' ? encoder.encode(op.content) : null,
-				}, {
-					timeoutMs: LIMITS.choreTimeoutMs,
-					signal: held,
-					onOutput: (chunk) => {
-						if (size >= limit) return false;
-						chunks.push(chunk);
-						size += chunk.length;
-						return size < limit;
-					},
-				});
-				if (!result.started) {
-					throw new ApiError(
-						503,
-						'cage_failed',
-						`The sandbox could not start a cage: ${result.diagnostics || 'no reason given'}`,
-					);
-				}
-				if (result.killed === 'cancelled') held.throwIfAborted();
-				if (result.killed === 'timeout') throw new ApiError(504, 'file_timeout', 'The file operation took too long.');
-				return cagedResult(op, result.killed === 'output' ? EXIT.tooLarge : result.exitCode, join(chunks, size));
+				}, { timeoutMs: LIMITS.choreTimeoutMs, signal: held, onOutput: out.push });
+				return cagedResult(op, result, out.bytes(), held);
 			} finally {
 				release();
 			}
 		});
 	}
 
-	/**
-	 * Bytes the workspace's files take (checkout and home), measured by the service with the container paused if it
-	 * runs (R2-2); for callers without a slot. Needs no container: one that is stopped has nothing running in it.
-	 */
+	/** Bytes the workspace's files take (checkout and home), for callers without a slot. */
 	async diskUsage(runId: string, signal?: AbortSignal): Promise<number> {
 		const release = await this.chores.enter(signal);
 		try {
@@ -741,73 +428,45 @@ export class DockerSandbox {
 	}
 
 	/**
-	 * Removes the workspace's container (a session in it ends with it) and its state, and gives the owner write
-	 * access back throughout its checkout, so the workspace service's own removal of it cannot fail on a folder a
-	 * command made read-only. Nothing runs in the workspace any more by then, so the walk follows no link.
+	 * Removes the container and the workspace's state, and gives the owner write access back throughout the checkout
+	 * so the service's own removal cannot fail on a folder a command made read-only.
 	 */
-	remove(runId: string): Promise<{ removed: boolean }> {
-		return this.runs.removing(runId, async () => {
-			this.#closeSessionsOf(runId);
-			const box = this.#boxes.get(runId) ?? new Box(runId);
-			await box.lifecycle.run(async () => {
-				try {
-					const id = box.id ??
-						(await this.deps.engine.inspectContainer(containerName(this.#scope, runId)))?.id ?? null;
-					if (id) await this.deps.engine.removeContainer(id);
-				} catch (error) {
-					throw this.#engineFailure(error, runId, 'remove');
-				}
-				box.id = null;
-				box.running = false;
-			});
-			this.#boxes.delete(runId);
-			await restoreAccess(this.#checkout(runId));
-			const removed = await removeTree(`${this.config.workDir}/.sandbox/${runId}`);
-			await removeTree(`${this.config.sockDir}/${runId}`);
-			this.#owners.delete(runId);
-			this.deps.log('info', 'run.removed', { runId, removed, backend: 'docker' });
-			return { removed };
-		});
-	}
-
-	/** The daemon answers and both volumes exist; cached for half a minute, one probe at a time (SB-3). */
-	async health(): Promise<{ ok: boolean; error: string | null }> {
-		if (this.#probe && Date.now() - this.#probe.at < 30_000) {
-			return { ok: this.#probe.error === null, error: this.#probe.error };
-		}
-		this.#probing ??= this.#runProbe().finally(() => this.#probing = null);
-		const error = await this.#probing;
-		return { ok: error === null, error };
-	}
-
-	async #runProbe(): Promise<string | null> {
-		let error: string | null = null;
-		try {
-			await this.deps.engine.ping();
-			for (const name of [this.config.policy.volume, this.config.policy.sockVolume]) {
-				if (!(await this.deps.engine.volumeExists(name))) error ??= `the Docker volume ${name} is gone`;
+	protected override async removeRun(runId: string): Promise<boolean> {
+		const box = this.#boxes.get(runId) ?? new Box(runId);
+		await box.lifecycle.run(async () => {
+			try {
+				const id = box.id ?? (await this.deps.engine.inspectContainer(containerName(this.#scope, runId)))?.id ?? null;
+				if (id) await this.deps.engine.removeContainer(id);
+			} catch (error) {
+				throw this.#engineFailure(error, runId, 'remove');
 			}
-		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			box.id = null;
+			box.running = false;
+		});
+		this.#boxes.delete(runId);
+		const paths = this.paths(runId);
+		await restoreAccess(paths.checkout);
+		const removed = await removeTree(paths.state, restoreAccess);
+		await removeTree(`${this.config.sockDir}/${runId}`, restoreAccess);
+		this.#owners.delete(runId);
+		return removed;
+	}
+
+	/** The daemon answers and both volumes exist. */
+	protected override async probe(): Promise<string | null> {
+		await this.deps.engine.ping();
+		for (const name of [this.config.policy.volume, this.config.policy.sockVolume]) {
+			if (!(await this.deps.engine.volumeExists(name))) return `the Docker volume ${name} is gone`;
 		}
-		this.#probe = { at: Date.now(), error };
-		return error;
+		return null;
 	}
 
 	// --- containers -------------------------------------------------------------------------------------------
 
-	#checkout(runId: string): string {
-		return `${this.config.workDir}/${runId}`;
-	}
-
-	/** The workspace's home, as the service holds it (the container's /home/sandbox). */
-	#home(runId: string): string {
-		return `${this.config.workDir}/.sandbox/${runId}/home`;
-	}
-
-	/** What the disk budget counts (SB-1): the checkout, its .git included, and the home. */
+	/** What the disk budget counts: the checkout, its .git included, and the home. */
 	#runDirs(runId: string): string[] {
-		return [this.#checkout(runId), this.#home(runId)];
+		const paths = this.paths(runId);
+		return [paths.checkout, paths.home];
 	}
 
 	#box(runId: string): Box {
@@ -827,31 +486,19 @@ export class DockerSandbox {
 	}
 
 	/**
-	 * Makes sure the container exists with the mounts the checkout needs now, and (with `start`) runs. A container
-	 * found by name after a restart is kept only when it is what this service would create — the same body, by its
-	 * hash label, from the same image, not left paused (R2-6); otherwise it is replaced, which loses nothing, since a
-	 * workspace's files are on the volume. Every folder a subpath names must exist first, and be a real directory.
+	 * Makes sure the container exists with the mounts the checkout needs now, and (with `start`) runs. One found by
+	 * name is kept only when it is exactly what this service would create; otherwise it is replaced (files live on
+	 * the volume). Every folder a subpath names must exist first as a real directory.
 	 */
 	async #ensure(box: Box, start: boolean): Promise<void> {
 		const runId = box.runId;
-		const checkout = this.#checkout(runId);
-		if (!(await isDirectory(checkout))) {
-			throw new ApiError(404, 'no_workspace', 'This run has no checkout in the sandbox.');
-		}
-		const git = (await gitDirectory(checkout)) !== null;
+		const paths = await this.locate(runId);
+		const git = (await gitDirectory(paths.checkout)) !== null;
 		const owner = this.#owners.get(runId);
 		if (owner === undefined) throw new ApiError(503, 'cage_failed', 'The workspace has no owner on record.');
-		for (const dir of [`${this.config.workDir}/.sandbox/${runId}/home`, `${this.config.sockDir}/${runId}`]) {
-			await Deno.mkdir(dir, { recursive: true, mode: 0o700 });
-		}
-		for (
-			const dir of [
-				`${this.config.workDir}/.sandbox`,
-				`${this.config.workDir}/.sandbox/${runId}`,
-				`${this.config.workDir}/.sandbox/${runId}/home`,
-				`${this.config.sockDir}/${runId}`,
-			]
-		) {
+		const sock = `${this.config.sockDir}/${runId}`;
+		for (const dir of [paths.home, sock]) await Deno.mkdir(dir, { recursive: true, mode: 0o700 });
+		for (const dir of [`${this.config.workDir}/.sandbox`, paths.state, paths.home, sock]) {
 			if (!(await isDirectory(dir))) throw new ApiError(409, 'bad_checkout', 'Unsafe workspace directory.');
 		}
 		const deployment = this.#scope;
@@ -891,12 +538,9 @@ export class DockerSandbox {
 		box.lastActive = Date.now();
 	}
 
-	/**
-	 * After provisioning: once the checkout has its `.git`, the container is replaced by one that mounts it
-	 * read-only (and is started on demand), exactly as a cage mounts it from then on.
-	 */
+	/** After provisioning: the container is replaced by one that mounts the checkout's `.git` read-only. */
 	async #settle(box: Box): Promise<void> {
-		if (box.git || (await gitDirectory(this.#checkout(box.runId))) === null) return;
+		if (box.git || (await gitDirectory(this.paths(box.runId).checkout)) === null) return;
 		await box.lifecycle.run(async () => {
 			if (box.active > 0 || box.git) return;
 			if (box.id !== null) {
@@ -920,16 +564,13 @@ export class DockerSandbox {
 		});
 	}
 
-	/**
-	 * Stops containers that ran nothing for LIMITS.containerIdleMs (as of `now`); the next operation starts them
-	 * again. Run every minute from `start`.
-	 */
+	/** Stops containers that ran nothing for LIMITS.containerIdleMs; the next operation starts them again. */
 	async stopIdle(now = Date.now()): Promise<void> {
 		if (this.#sweeping) return;
 		this.#sweeping = true;
 		try {
 			for (const box of [...this.#boxes.values()]) {
-				if (!box.running || box.active > 0 || this.#sessionsByRun.has(box.runId)) continue;
+				if (!box.running || box.active > 0 || this.sessionOf(box.runId) !== null) continue;
 				if (now - box.lastActive < LIMITS.containerIdleMs) continue;
 				await box.lifecycle.run(async () => {
 					if (box.id === null || !box.running || box.active > 0) return;
@@ -946,36 +587,25 @@ export class DockerSandbox {
 	}
 
 	/**
-	 * Start-up (R2-3, R2-5): the configured code volume is the one this service holds at its work folder, or the
-	 * service does not start. Compose names volumes per project unless the overlay names them (N4), and a mismatch
-	 * would otherwise show up as workspaces without their files.
-	 *
-	 * The proof is a nonce the service writes and a container of the workspace image reads back — a container of its
-	 * own, for a fresh id no workspace has, whose folders the service has just created (each `mkdir` fails if the name
-	 * exists). So the write never goes through a path any workspace can reach: the file is created with `createNew`
-	 * (O_CREAT|O_EXCL, which follows no link and opens no FIFO) in a folder only this service knows. Bounded as a
-	 * whole by `checkTimeoutMs`; it fails, never hangs, and nothing a workspace does can stall it. The check container
-	 * and its folders are removed whatever happens (one a crash leaves has no owner record, so reconciliation removes
-	 * it). The check also learns the image id the configured tag points at (R2-6).
+	 * Proves the configured code volume is the one this service holds at /work, or the service does not start: a
+	 * nonce written with `createNew` into folders just created for a fresh id, read back by a check container of the
+	 * workspace image. Bounded by `checkTimeoutMs`; everything it made is removed. Also learns the image id.
 	 */
 	async #checkVolume(deployment: string): Promise<void> {
 		const runId = crypto.randomUUID();
 		const box = new Box(runId);
 		const engine = this.deps.engine;
-		const folders = [`${this.config.workDir}/${runId}`, `${this.config.workDir}/.sandbox/${runId}`];
+		const paths = this.paths(runId);
+		const folders = [paths.checkout, paths.state];
 		const sockFolder = `${this.config.sockDir}/${runId}`;
 		const deadline = AbortSignal.timeout(this.config.checkTimeoutMs ?? LIMITS.choreTimeoutMs);
 		let seen = '';
 		let result: CageResult | null = null;
 		try {
 			await Deno.mkdir(`${this.config.workDir}/.sandbox`, { recursive: true, mode: 0o700 });
-			for (const dir of [...folders, `${folders[1]}/home`, sockFolder]) await Deno.mkdir(dir, { mode: 0o700 });
+			for (const dir of [...folders, paths.home, sockFolder]) await Deno.mkdir(dir, { mode: 0o700 });
 			const nonce = crypto.randomUUID();
-			const file = await Deno.open(`${this.#home(runId)}/${VOLUME_CHECK_FILE}`, {
-				write: true,
-				createNew: true,
-				mode: 0o600,
-			});
+			const file = await Deno.open(`${paths.home}/${VOLUME_CHECK_FILE}`, { write: true, createNew: true, mode: 0o600 });
 			try {
 				await file.write(encoder.encode(nonce));
 			} finally {
@@ -1016,16 +646,13 @@ export class DockerSandbox {
 			);
 		} finally {
 			if (box.id !== null) await engine.removeContainer(box.id).catch(() => {});
-			for (const dir of [...folders, sockFolder]) await removeTree(dir).catch(() => {});
+			for (const dir of [...folders, sockFolder]) await removeTree(dir, restoreAccess).catch(() => {});
 		}
 	}
 
 	// --- execs ------------------------------------------------------------------------------------------------
 
-	/**
-	 * Runs one piece of work in the container through the wrapper, and answers as `runCage` does: whether it
-	 * started, its exit status (null when the sandbox stopped it), why it was stopped, and what the wrapper said.
-	 */
+	/** Runs one piece of work in the container through the wrapper, answering as `runCage` does. */
 	async #run(box: Box, work: Work, run: RunOptions): Promise<CageResult> {
 		const began = performance.now();
 		const attach = work.input !== undefined || (work.stdin !== undefined && work.stdin !== null);
@@ -1200,10 +827,7 @@ export class DockerSandbox {
 		return null;
 	}
 
-	/**
-	 * A kill or cleanup exec, run straight (no wrapper) under the start lock, so it neither races an exec's start
-	 * nor meets another cleanup. `args` is read inside the lock: a cleanup's keep list is the execs live then.
-	 */
+	/** A kill or cleanup exec, run straight under the start lock; `args` is read inside it (the live execs then). */
 	async #direct(box: Box, script: string, args: () => string[]): Promise<{ code: number | null; output: string }> {
 		return await box.starting.run(async () => {
 			if (box.id === null || !box.running) return { code: null, output: '' };
@@ -1232,8 +856,8 @@ export class DockerSandbox {
 	}
 
 	/**
-	 * N3: after a command or a session, nothing it started survives it. The cleanup spares the execs still running
-	 * (their wrappers and their sessions); when it cannot run, the container is stopped instead, which spares nothing.
+	 * After a command or a session, nothing it started survives it: the cleanup spares only the execs still running,
+	 * and when it cannot prove nothing else is left the container is stopped instead.
 	 */
 	async #cleanup(box: Box): Promise<void> {
 		if (box.id === null || !box.running) return;
@@ -1247,15 +871,13 @@ export class DockerSandbox {
 			if (killed > 0) this.deps.log('info', 'docker.cleanup', { runId: box.runId, killed });
 		} catch (error) {
 			this.deps.log('warn', 'docker.cleanup_failed', { runId: box.runId, error: describe(error) });
-			await this.#stop(box).catch(() => {});
+			await this.#stop(box).catch((stopError) =>
+				this.deps.log('error', 'docker.stop_failed', { runId: box.runId, error: describe(stopError) })
+			);
 		}
 	}
 
-	/**
-	 * SB-1 (R2-2): bytes `paths` take, as this service sees them on the volume, with nothing of the workspace running:
-	 * a running container is paused for the walk and unpaused after it. Held under the start lock, so no exec, kill or
-	 * cleanup is started into the frozen container meanwhile (they wait their turn). Throws when it cannot measure.
-	 */
+	/** Bytes `paths` take, walked with the container paused, under the start lock. Throws when it cannot measure. */
 	async #measure(box: Box, paths: readonly string[], signal?: AbortSignal): Promise<number> {
 		return await box.starting.run(async () => {
 			signal?.throwIfAborted();
@@ -1276,10 +898,7 @@ export class DockerSandbox {
 		});
 	}
 
-	/**
-	 * R2-2: a measurement that fails is taken as "over budget": just past `limit`, so the command may only clean up
-	 * (SB-7) and its watch allows it no growth. Logged; a cancelled request still ends the call.
-	 */
+	/** A measurement that fails is taken as just past `limit`: the command may only clean up. */
 	async #measureBefore(box: Box, limit: number, signal?: AbortSignal): Promise<number> {
 		try {
 			return await this.#measure(box, this.#runDirs(box.runId), signal);
@@ -1290,10 +909,7 @@ export class DockerSandbox {
 		}
 	}
 
-	/**
-	 * Pauses the container when it runs, and says which one it paused. One that is not running has nothing of the
-	 * workspace in it (every exec starts under the lock the caller holds), so it is measured as it is.
-	 */
+	/** Pauses the container when it runs, and says which one it paused. */
 	async #freeze(box: Box): Promise<string | null> {
 		const id = box.id;
 		if (id === null || !box.running) return null;
@@ -1329,10 +945,7 @@ export class DockerSandbox {
 		}
 	}
 
-	/**
-	 * The registry proxy on the workspace's socket folder, seen in the container as PROXY_SOCKET (N3) — or, for a clone's
-	 * step (R12), the egress the workspace service built for it, on the same socket.
-	 */
+	/** The registry proxy (or a clone step's own egress) on the socket the container sees as PROXY_SOCKET. */
 	async #openProxy(box: Box, egress?: OpenEgress): Promise<ProxyHandle> {
 		if (box.proxy) throw proxyBusy();
 		box.proxy = true;
@@ -1361,27 +974,7 @@ export class DockerSandbox {
 		return `${this.config.sockDir}/${runId}/${PROXY_SOCKET.slice(HARBOUR_DIR.length + 1)}`;
 	}
 
-	#defaultQuota(): DiskQuota {
-		return { limit: this.limits.diskBudgetBytes, ceiling: 2 * this.limits.diskBudgetBytes };
-	}
-
-	async #checkFreeSpace(): Promise<void> {
-		const free = await this.deps.freeBytes(this.config.workDir);
-		if (free < LIMITS.minFreeBytes) {
-			throw new ApiError(
-				507,
-				'disk_full',
-				`The server has ${mb(free)} MB of disk left; the sandbox needs ${
-					mb(LIMITS.minFreeBytes)
-				} MB free to run anything.`,
-			);
-		}
-	}
-
-	/**
-	 * What a client may hear of an Engine failure: a refused body is `invalid_request` and an Engine error is
-	 * `cage_failed`; the daemon's own words are only logged.
-	 */
+	/** What a client may hear of an Engine failure; the daemon's own words are only logged. */
 	#engineFailure(error: unknown, runId: string, step: string): unknown {
 		if (error instanceof BodyRefused) {
 			this.deps.log('error', 'docker.body_refused', { runId, step, field: error.field });
@@ -1398,31 +991,15 @@ export class DockerSandbox {
 const proxyBusy = (): ApiError =>
 	new ApiError(409, 'run_busy', "This workspace's registry proxy is in use by its other command or session.");
 
-function describe(error: unknown): string {
-	if (error instanceof GateError || error instanceof ApiError) return error.code;
-	return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-}
-
 /** Why the start-up check could not run, for the service's own log and exit (never a client). */
 function describeStartup(error: unknown): string {
 	if (error instanceof DOMException && error.name === 'TimeoutError') return 'it did not finish in time';
 	return error instanceof Error ? error.message : String(error);
 }
 
-function join(chunks: Uint8Array[], size: number): Uint8Array {
-	const bytes = new Uint8Array(size);
-	let at = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, at);
-		at += chunk.length;
-	}
-	return bytes;
-}
-
 /**
- * Whether a container found by name is the one this service would create for `target`: every label — the body's
- * hash among them, so any field of the body that changed since (R2-6) — the image by tag and, once start-up has
- * resolved the tag, by id, not left paused, and the named invariants and mounts compared once more on their own.
+ * Whether a container found by name is the one this service would create for `target`: every label (the body's
+ * hash among them), the image by tag and id, not paused, and the invariants and mounts compared once more.
  */
 function matches(found: ContainerInfo, target: CreateFor, imageId: string | null): boolean {
 	const expected = containerBody(target);
@@ -1456,20 +1033,3 @@ async function restoreAccess(path: string): Promise<void> {
 		if (entry.isDirectory && !entry.isSymlink) await restoreAccess(`${path}/${entry.name}`);
 	}
 }
-
-/** Removes a folder, restoring access first when a command locked part of it; false when there was none. */
-async function removeTree(path: string): Promise<boolean> {
-	try {
-		await Deno.remove(path, { recursive: true });
-		return true;
-	} catch (error) {
-		if (error instanceof Deno.errors.NotFound) return false;
-		if (!(error instanceof Deno.errors.PermissionDenied)) throw error;
-	}
-	await restoreAccess(path);
-	await Deno.remove(path, { recursive: true });
-	return true;
-}
-
-// Re-exported for the tests that read the container's own paths.
-export { CAGE_HOME };

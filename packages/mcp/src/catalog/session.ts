@@ -1,11 +1,11 @@
-/** Session tools: tabs, session lifecycle, persistent storage state (R3) and recording (R7). */
+/** Session tools: tabs, session lifecycle, persistent storage state and recording. */
 import * as z from 'zod';
 import * as handlers from '../tools.ts';
 import { OUTPUT } from '../schemas.ts';
-import { def, sessionId, type ToolDefinition } from './shared.ts';
+import { def, sessionId, type ToolAvailability, type ToolDefinition } from './shared.ts';
 
 export const SESSION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
-	// --- session introspection and options (B2.6) ----------------------------
+	// --- session introspection and options -----------------------------------
 	def({
 		name: 'browser_get_session',
 		title: 'Session details',
@@ -102,7 +102,7 @@ export const SESSION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		handler: handlers.browserCloseTab,
 	}),
 
-	// --- persistent state (R3) ----------------------------------------------
+	// --- persistent state ---------------------------------------------------
 	def({
 		name: 'browser_storage_state',
 		title: 'Save or load storage state',
@@ -120,7 +120,7 @@ export const SESSION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		handler: handlers.browserStorageState,
 	}),
 
-	// --- recording (R7) -------------------------------------------------------
+	// --- recording ------------------------------------------------------------
 	def({
 		name: 'browser_record',
 		title: 'Record the session',
@@ -168,11 +168,7 @@ export const SESSION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		outputSchema: OUTPUT.browser_close_all,
 		handler: handlers.browserCloseAll,
 	}),
-	// --- B3.2: the operational read surface -----------------------------------
-	//
-	// No catalog `scope` beyond the `mcp:invoke` every tool needs, and no `available` predicate: a
-	// health check that a deployment could disable is one an operator cannot rely on. What differs
-	// per principal is the `capabilities` block it carries, which is filtered by its own builder.
+	// --- the operational read surface -----------------------------------------
 	def({
 		name: 'browser_health',
 		title: 'Server health',
@@ -185,11 +181,7 @@ export const SESSION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		outputSchema: OUTPUT.browser_health,
 		handler: handlers.browserHealth,
 	}),
-	// --- B2.8: the audit ledger's only reader ---------------------------------
-	//
-	// No catalog `scope`, deliberately: the tool is useful to an `mcp:invoke` principal and to an
-	// `admin` one, and only its rows differ (SEC-08). The filter is in the handler, which is where a
-	// narrowing belongs when the alternative is taking the affordance away entirely.
+	// --- the audit ledger's only reader ---------------------------------------
 	def({
 		name: 'browser_audit',
 		title: 'Read the session audit ledger',
@@ -208,5 +200,118 @@ export const SESSION_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
 		mutates: false,
 		outputSchema: OUTPUT.browser_audit,
 		handler: handlers.browserAudit,
+	}),
+];
+
+// --- Human handoff: `browser_request_human`, the one tool that asks a person to look at a session through the live view.
+
+/** What `browser_request_human` returns on success (object-rooted, every key declared). */
+export const HANDOFF_OUTPUT = {
+	browser_request_human: z.object({
+		session_id: z.string(),
+		/** The live view of this session in the control plane: `<public>/#/view/<id>`, no ticket, no credential. */
+		live_view_url: z.string(),
+		/** `elicitation`: the client showed the URL to its human (URL-mode elicitation); `link`: it is returned here. */
+		delivery: z.enum(['elicitation', 'link']),
+		outcome: z.enum(['accepted', 'link-returned']),
+		/** Whether a human holds the takeover lock as this result is built. */
+		human_has_control: z.boolean(),
+		/** The element table's token after the handoff: re-read when the human may have changed the page. */
+		state_token: z.string().nullable(),
+	}),
+} as const;
+
+export const HANDOFF_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
+	def({
+		name: 'browser_request_human',
+		title: 'Ask a human to take over',
+		description: 'Ask a person to look at this browser session — to solve a CAPTCHA, sign in, or decide something ' +
+			'you should not. A client that can open URLs for its user is asked to show them the session’s live view and ' +
+			'this call returns once they are done (outcome accepted); any other client gets the live view URL back to ' +
+			'show the user itself (outcome link-returned). The URL carries no credential: the person signs in to the ' +
+			'control plane and can take control there. Read the page again afterwards with the state_token returned. ' +
+			'Never creates a session. Off unless the operator enabled TTK_HUMAN_HANDOFF.',
+		inputSchema: z.object({
+			session_id: sessionId,
+			reason: z.string().min(1).max(500).describe('What you need the person to do, shown to them as written.'),
+		}),
+		mutates: false,
+		scope: 'view:control',
+		available: (state) => state.handoff === true,
+		unavailableDetail: (state) =>
+			state.handoff === true
+				? undefined
+				: 'browser_request_human is off on this deployment; the operator enables it with TTK_HUMAN_HANDOFF=true',
+		outputSchema: HANDOFF_OUTPUT.browser_request_human,
+		handler: handlers.browserRequestHuman,
+	}),
+];
+
+// --- MCP Apps tools: the live view an Apps host embeds, and the ticket its embed spends to open the socket. ------
+
+/** The refusal both tools give while the operator has not turned MCP Apps on (a switch, so no `feature` extra). */
+function appsOff(name: string): (state: ToolAvailability) => string | undefined {
+	return () => `${name} needs MCP Apps, which is off on this deployment; set TTK_MCP_APPS=watch or control`;
+}
+
+/** The success shapes, by tool. Exported so the schema tests read the same table. */
+export const APPS_OUTPUT = {
+	browser_live_view: z.object({
+		session_id: z.string(),
+		/** The focused tab's origin, or `null` while it shows a page with none (`about:blank`). Never a path. */
+		origin: z.string().nullable(),
+		title: z.string(),
+		viewers: z.number().int().min(0),
+		human_has_control: z.boolean(),
+		/** True when this deployment and this credential could take control from the embed. */
+		control_available: z.boolean(),
+	}),
+	browser_live_ticket: z.object({
+		ticket: z.string(),
+		ws_url: z.string(),
+		session_id: z.string(),
+		mode: z.enum(['watch', 'control']),
+		/** Seconds until the ticket expires. */
+		expires_in: z.number().int().min(0),
+		/** The origin the socket must present at upgrade; an embed ticket is always bound. */
+		origin_bound: z.string(),
+		control_plane_url: z.string(),
+	}),
+} as const;
+
+export const APPS_TOOLS: readonly ToolDefinition<z.ZodType>[] = [
+	def({
+		name: 'browser_live_view',
+		title: 'Show the live view',
+		description: 'Show a browser session live inside an MCP Apps host. Returns the session’s origin, title, ' +
+			'viewer count and whether a human holds control; the host renders the embedded live view, which ' +
+			'connects only when the user presses Watch. Never creates a session.',
+		inputSchema: z.object({ session_id: sessionId }),
+		mutates: false,
+		scope: 'view:watch',
+		available: (state) => state.mcpApps === true,
+		unavailableDetail: appsOff('browser_live_view'),
+		outputSchema: APPS_OUTPUT.browser_live_view,
+		handler: handlers.browserLiveView,
+	}),
+	def({
+		name: 'browser_live_ticket',
+		title: 'Mint an embed ticket',
+		description: 'For the embedded live view: mints a single-use live-view ticket that lives 30 seconds and ' +
+			'redeems only from origin, the embed’s own origin, which must be one this deployment admits for MCP ' +
+			'Apps. Hosts keep this tool from the model.',
+		inputSchema: z.object({
+			session_id: sessionId,
+			mode: z.enum(['watch', 'control']).optional().describe(
+				'watch (default) views only; control lets the user take the browser, and needs TTK_MCP_APPS=control.',
+			),
+			origin: z.string().max(256).describe('The embed’s origin, scheme://host[:port], as its socket will send it.'),
+		}),
+		mutates: false,
+		scope: 'view:watch',
+		available: (state) => state.mcpApps === true,
+		unavailableDetail: appsOff('browser_live_ticket'),
+		outputSchema: APPS_OUTPUT.browser_live_ticket,
+		handler: handlers.browserLiveTicket,
 	}),
 ];

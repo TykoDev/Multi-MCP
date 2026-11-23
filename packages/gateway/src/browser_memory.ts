@@ -1,26 +1,14 @@
 /**
  * Memory the operator can act on (Sessions › Sessions, `GET /api/v1/system/usage`): each browser session's Chromium
  * memory, the gateway's heap against its limit, and the container's configured limit.
- *
- * A browser's memory is Chromium's own account of it: one `Tracing.requestMemoryDump` over the session's existing CDP
- * connection (a `memory-infra` trace holding nothing but the dump), whose `process_totals` give each of its processes'
- * **private footprint** — the figure Chrome's task manager shows, shared pages not counted twice. No file is read and no
- * permission is needed: Deno refuses `/proc` and `/sys` to anything short of `--allow-all`, which this server never
- * holds. A dump takes about half a second, so each session's figure is kept for {@linkcode BROWSER_MEMORY_TTL_MS} and a
- * request never waits longer than {@linkcode BROWSER_MEMORY_WAIT_MS} for a fresh one; a browser that is already tracing
- * or does not answer reads as not measured.
- *
- * The container's limit cannot be read without `/sys` either, so it is configuration: `TTK_MEMORY_LIMIT`, which the
- * Compose file fills from the same `TTK_GATEWAY_MEMORY` it gives `mem_limit`. Its use is estimated as the gateway's
- * resident memory plus every browser's footprint — the container holds nothing else.
  */
-// deno-lint-ignore no-external-import -- node: builtin (V8's own heap statistics: Deno exposes no heap limit), not a dependency; D-160
+// deno-lint-ignore no-external-import -- node: builtin (V8's own heap statistics: Deno exposes no heap limit), not a dependency
 import { getHeapStatistics } from 'node:v8';
 
 /** How long one session's measured figure is reused. */
-export const BROWSER_MEMORY_TTL_MS = 15_000;
+const BROWSER_MEMORY_TTL_MS = 15_000;
 /** How long a request waits for a fresh dump before it answers with the last figure (or none). */
-export const BROWSER_MEMORY_WAIT_MS = 3_000;
+const BROWSER_MEMORY_WAIT_MS = 3_000;
 
 /** One browser's memory: the summed private footprint of its processes. */
 export interface BrowserMemory {
@@ -32,6 +20,8 @@ export interface BrowserMemory {
 export interface DumpClient {
 	sendRaw<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
 	on(event: never, listener: never): () => void;
+	/** Settles when the connection closes: a browser that goes away mid-dump never reports `tracingComplete`. */
+	readonly closed?: Promise<unknown>;
 }
 
 /** The memory a `memory-infra` trace's events report: the last dump per process, summed. `null` with none. */
@@ -58,8 +48,8 @@ export function footprintOf(events: readonly unknown[]): BrowserMemory | null {
 }
 
 /**
- * One memory dump of the browser behind `client`: start a trace of the memory-infra category alone, request a dump,
- * end it and read the events it reported. `null` when the browser refuses (already tracing) or answers nothing usable.
+ * One memory dump of the browser behind `client`: start a trace of the memory-infra category alone, request a dump, end
+ * it and read the events it reported. `null` when the browser refuses (already tracing) or answers nothing usable.
  */
 export async function dumpBrowser(client: DumpClient, timeoutMs = 10_000): Promise<BrowserMemory | null> {
 	const events: unknown[] = [];
@@ -97,9 +87,11 @@ export async function dumpBrowser(client: DumpClient, timeoutMs = 10_000): Promi
 		} finally {
 			await client.sendRaw('Tracing.end').catch(() => {});
 		}
+		// Ends at once when the browser closes, so a session or gateway closing mid-dump leaves no timer behind.
 		const finished = await Promise.race([
 			completed.then(() => true),
 			new Promise<boolean>((resolve) => timer = setTimeout(() => resolve(false), timeoutMs)),
+			...(client.closed === undefined ? [] : [client.closed.then(() => false, () => false)]),
 		]);
 		return finished ? footprintOf(events) : null;
 	} catch {

@@ -1,76 +1,31 @@
-/**
- * Sessions as MCP resources (SPECS/ROADMAP.md R4).
- *
- * A tool call is a *request*: the model has to decide to look. A resource is
- * something a client can attach to a conversation, re-read, and subscribe to —
- * which is the right shape for "what is on the screen right now". Declaring the
- * live pages as resources means a host can put the current screenshot in front
- * of its user without the model spending a turn asking for it.
- *
- * Three per session, addressed by a template so a new session needs no
- * registration:
- *
- * - `ttk://session/{id}/state`      — the JSON `browser_get_state` returns
- * - `ttk://session/{id}/screenshot` — a PNG of the focused tab
- * - `ttk://session/{id}/page`       — the serialized page text alone
- *
- * Reads are live: the resource is not a cache of the last tool call, it builds
- * a fresh observation. A stale screenshot is worse than none, because a human
- * looking at it has no way to tell.
- */
-import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
-import type { ReadResourceResult } from '@modelcontextprotocol/server';
+/** Sessions as MCP resources. */
+import { McpServer, type ReadResourceResult, ResourceTemplate } from '@modelcontextprotocol/server';
 import { encodeBase64 } from '@std/encoding/base64';
 import type { TykotechCapabilities } from './capabilities.ts';
-import { sessionCompleters } from './completions.ts';
 import { observationPayload, observe } from './observe.ts';
 import type { SessionAccess, SessionRegistry } from './registry.ts';
 import type { Scope } from './scopes.ts';
+import { redactDeep, type SecretStore } from './secrets.ts';
+import { type LibraryStore, walkShare } from './library.ts';
 
 /** URI scheme for everything this server exposes as a resource. */
 export const RESOURCE_SCHEME = 'ttk';
 
-/**
- * The discovery resource (B3.1, §8 location 2): `ttk://capabilities`.
- *
- * A fixed URI rather than a template, because there is exactly one of it per connection and its
- * content is already narrowed to the connecting principal. It carries the same object the
- * `initialize` result's `capabilities.tykotech` carries — one builder, two read points — so a client
- * that reconnects rarely can re-read it instead, and a client on a transport that hides the
- * `initialize` result can read it at all.
- */
+/** The discovery resource: `ttk://capabilities`. */
 export const CAPABILITIES_URI = `${RESOURCE_SCHEME}://capabilities`;
 
 /** The three per-session resource kinds. */
-export const RESOURCE_KINDS = ['state', 'screenshot', 'page'] as const;
-export type ResourceKind = (typeof RESOURCE_KINDS)[number];
+const RESOURCE_KINDS = ['state', 'screenshot', 'page'] as const;
+type ResourceKind = (typeof RESOURCE_KINDS)[number];
 
 /** The URI for one session resource. */
 export function resourceUri(sessionId: string, kind: ResourceKind): string {
 	return `${RESOURCE_SCHEME}://session/${encodeURIComponent(sessionId)}/${kind}`;
 }
 
-/**
- * The URI of one downloaded file (E-33): `ttk://session/{sessionId}/files/{fileId}`.
- *
- * A distinct template rather than a fourth `kind`, so a file id can never be mistaken for a
- * resource kind and the two templates cannot match each other's URIs (`{kind}` stops at `/`).
- */
+/** The URI of one downloaded file: `ttk://session/{sessionId}/files/{fileId}`. */
 export function fileResourceUri(sessionId: string, fileId: string): string {
 	return `${RESOURCE_SCHEME}://session/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(fileId)}`;
-}
-
-const FILE_URI = new RegExp(`^${RESOURCE_SCHEME}://session/([^/]+)/files/([^/]+)$`);
-
-/** Parses a file resource URI, or returns `null` for anything else. The gateway routes on this. */
-export function parseFileResourceUri(uri: string): { sessionId: string; fileId: string } | null {
-	const match = FILE_URI.exec(uri);
-	if (match === null) return null;
-	try {
-		return { sessionId: decodeURIComponent(match[1] ?? ''), fileId: decodeURIComponent(match[2] ?? '') };
-	} catch {
-		return null;
-	}
 }
 
 /** Every resource URI a session has, in the order they are listed. */
@@ -96,43 +51,16 @@ const TITLES: Record<ResourceKind, { title: string; description: string; mimeTyp
 	},
 };
 
-/**
- * Registers the session resource template on a server instance.
- *
- * The `list` callback enumerates the sessions that exist *now*, so
- * `resources/list` is an honest picture of the browser rather than a static
- * declaration.
- *
- * **Scoped, and the scope set is a required argument rather than an option.**
- * These resources carry the same page content the tools do — the element tree,
- * the serialized text, a PNG of the screen, and any downloaded file — so they
- * take `mcp:invoke`, exactly as the tool catalog and `SPECS/API-CONTRACT.md`
- * route 14 do: watching a browser is not permission to carry off its documents.
- * Until B1.5 this function took no scopes at all and was called outside the
- * catalog's scope loop, so a `view:watch`-only credential — or an OAuth token
- * whose scope claim matched nothing, which yields an empty set — could read
- * the whole observation through `resources/read`. A principal without the scope
- * gets no registration, so the resources are absent from `resources/list` and a
- * read is unknown rather than refused, which is the same answer the tool
- * catalog gives.
- *
- * **`access` narrows both templates to the caller's sessions** (R8, D-128): in `owner` mode a list carries only the
- * sessions the caller may reach and a read of another owner's URI is unknown, exactly as the tools answer. The same
- * access is closed over by the templates' completers (R13, D-129), because a completer is handed no caller.
- */
+/** Registers the session resource template on a server instance. */
 export function registerResources(
 	server: McpServer,
 	registry: SessionRegistry,
 	scopes: ReadonlySet<Scope>,
 	capabilities?: TykotechCapabilities,
 	access?: SessionAccess,
+	secrets?: SecretStore,
 ): void {
-	// B3.1: registered before the `mcp:invoke` gate, deliberately. The block is
-	// already scope-filtered by its builder, and a `view:watch` credential that
-	// cannot read a page is still entitled to learn which live-view features the
-	// deployment offers it — which is the entire point of a discovery surface.
-	// It carries no page content, so the reason the session resources are gated
-	// does not apply to it.
+	// Registered before the `mcp:invoke` gate, deliberately.
 	if (capabilities !== undefined) {
 		server.registerResource(
 			'tykotech-capabilities',
@@ -180,10 +108,8 @@ export function registerResources(
 				throw new Error(`unknown resource kind ${kind}; expected one of ${RESOURCE_KINDS.join(', ')}`);
 			}
 
-			// `peek`, not `resolve`: reading a resource must never *create* a
-			// browser. A client listing resources it holds should not be able to
-			// launch Chromium by refreshing a stale URI. `peekFor` (D-128): another
-			// owner's session reads as absent in `owner` mode.
+			// `peek`, not `resolve`: reading a resource must never *create* a browser. A client listing resources it
+			// holds should not be able to launch Chromium by refreshing a stale URI.
 			const record = registry.peekFor(sessionId, access);
 			if (record === undefined) throw new Error(`no session with id ${sessionId}`);
 
@@ -196,23 +122,21 @@ export function registerResources(
 					contents: [{ uri: uri.href, mimeType: 'image/png', blob: observation.screenshot }],
 				};
 			}
+			// The same page content the tools return, so the same exit redaction (secret rule 2, `redactDeep`).
 			if (kind === 'page') {
-				return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: observation.page }] };
+				return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: redactDeep(observation.page, secrets) }] };
 			}
 			return {
 				contents: [{
 					uri: uri.href,
 					mimeType: 'application/json',
-					text: JSON.stringify(observationPayload(observation), null, 2),
+					text: JSON.stringify(redactDeep(observationPayload(observation), secrets), null, 2),
 				}],
 			};
 		},
 	);
 
-	// E-33: downloaded files. The list enumerates only files that can actually be
-	// read — pending and failed downloads are the listing tool's business — and
-	// the read shares the tool's bounded, re-validated read, so a host following
-	// a resource link and a model calling browser_get_file get identical bytes.
+	// Downloaded files.
 	server.registerResource(
 		'browser-session-file',
 		new ResourceTemplate(`${RESOURCE_SCHEME}://session/{sessionId}/files/{fileId}`, {
@@ -245,4 +169,170 @@ export function registerResources(
 			return { contents: [{ uri: uri.href, mimeType: info.mime_type, blob: encodeBase64(bytes) }] };
 		},
 	);
+}
+
+// --- Resource change notifications for a long-lived server instance — a stateful 2025 transport session or a stdio connection.
+
+/** Subscriptions one connection may hold; past it a subscribe is refused rather than growing without bound. */
+const MAX_RESOURCE_SUBSCRIPTIONS = 256;
+const MAX_URI_CHARS = 1024;
+
+export interface ResourceWatch {
+	/** URIs this connection subscribed to (2025 era), for tests and diagnostics. */
+	readonly subscriptions: ReadonlySet<string>;
+	/** Stops listening to the registry. */
+	close(): void;
+}
+
+/** Wires `registry` changes to `server`'s notifications. */
+export function watchResourceChanges(
+	server: McpServer,
+	registry:
+		& Pick<SessionRegistry, 'watch'>
+		& Partial<Pick<SessionRegistry, 'ownership' | 'peek' | 'canAccess' | 'visibleTo'>>,
+	era: 'legacy' | 'modern',
+	access?: SessionAccess,
+): ResourceWatch {
+	const subscriptions = new Set<string>();
+	const owned = registry.ownership === 'owner';
+	/** `owner` mode: the sessions this connection may know exist, so their removal is announced and no other's is. */
+	const known = new Set<string>(owned ? (registry.visibleTo?.(access) ?? []).map((record) => record.id) : []);
+	const reaches = (sessionId: string): boolean => {
+		if (!owned) return true;
+		const record = registry.peek?.(sessionId);
+		const ok = record !== undefined && registry.canAccess?.(record, access) === true;
+		if (ok) known.add(sessionId);
+		return ok;
+	};
+	if (era === 'legacy') {
+		server.server.registerCapabilities({ resources: { subscribe: true, listChanged: true } });
+		server.server.setRequestHandler('resources/subscribe', (request) => {
+			const uri = request.params.uri;
+			if (typeof uri !== 'string' || uri.length === 0 || uri.length > MAX_URI_CHARS) {
+				throw new Error('a resource URI of at most 1024 characters is required');
+			}
+			if (!subscriptions.has(uri) && subscriptions.size >= MAX_RESOURCE_SUBSCRIPTIONS) {
+				throw new Error(`at most ${MAX_RESOURCE_SUBSCRIPTIONS} resource subscriptions per connection`);
+			}
+			subscriptions.add(uri);
+			return {};
+		});
+		server.server.setRequestHandler('resources/unsubscribe', (request) => {
+			subscriptions.delete(request.params.uri);
+			return {};
+		});
+	} else {
+		server.server.registerCapabilities({ resources: { listChanged: true } });
+	}
+
+	const listChanged = (): void => void server.sendResourceListChanged();
+	const updated = (uri: string): void => {
+		if (era === 'legacy' && !subscriptions.has(uri)) return;
+		void server.server.sendResourceUpdated({ uri }).catch(() => {});
+	};
+	const unwatch = registry.watch((change) => {
+		// A connection that is not open yet, or has gone, drops the notification; nothing is queued.
+		if (!server.isConnected()) return;
+		switch (change.kind) {
+			case 'session-added':
+			case 'files-changed':
+				if (reaches(change.sessionId)) listChanged();
+				break;
+			case 'session-removed':
+				if (!owned || known.delete(change.sessionId)) listChanged();
+				break;
+			case 'page-changed':
+				if (!reaches(change.sessionId)) break;
+				for (const uri of resourceUris(change.sessionId)) updated(uri);
+				break;
+		}
+	});
+	return { subscriptions, close: unwatch };
+}
+
+// --- `completion/complete` for the resource templates. -----------------------------------------------------------
+
+/** The most values one completion returns; the SDK truncates at the same number. */
+export const MAX_COMPLETIONS = 100;
+
+/** The SDK's `CompleteResourceTemplateCallback`, the shape every completer here implements. */
+type Completer = (
+	value: string,
+	context?: { arguments?: Record<string, string> },
+) => string[] | Promise<string[]>;
+
+/** Up to {@linkcode MAX_COMPLETIONS} of `values` that start with `prefix`, in their own order, without duplicates. */
+export function completeByPrefix(values: Iterable<string>, prefix: string): string[] {
+	const out: string[] = [];
+	const seen = new Set<string>();
+	for (const value of values) {
+		if (!value.startsWith(prefix) || seen.has(value)) continue;
+		seen.add(value);
+		out.push(value);
+		if (out.length >= MAX_COMPLETIONS) break;
+	}
+	return out;
+}
+
+/** A template variable as the client typed it: percent-decoded when it decodes, verbatim otherwise. */
+function decoded(value: string | undefined): string | undefined {
+	if (value === undefined) return undefined;
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
+}
+
+/** The completers of the two session templates (`{sessionId}/{kind}`, `{sessionId}/files/{fileId}`). */
+interface SessionCompleters {
+	readonly sessionId: Completer;
+	readonly kind: Completer;
+	readonly fileId: Completer;
+}
+
+/** Completers over the sessions `access` may reach (`shared` mode: all of them). */
+function sessionCompleters(
+	registry: Pick<SessionRegistry, 'visibleTo' | 'peekFor'>,
+	access: SessionAccess | undefined,
+	kinds: readonly string[],
+): SessionCompleters {
+	return {
+		sessionId: (value) => completeByPrefix(registry.visibleTo(access).map((record) => record.id), value),
+		kind: (value) => completeByPrefix(kinds, value),
+		fileId: (value, context) => {
+			// `peekFor`, never `resolve`: completing a file id must not launch a browser. An omitted session is the
+			// caller's default, as everywhere else.
+			const record = registry.peekFor(decoded(context?.arguments?.sessionId), access);
+			if (record === undefined) return [];
+			return completeByPrefix(
+				record.files.list().filter((file) => file.available).map((file) => file.file_id),
+				value,
+			);
+		},
+	};
+}
+
+/** The completers of the two library templates (`ttk://share/{+path}`, `ttk://skill/{name}`). */
+interface LibraryCompleters {
+	readonly path: Completer;
+	readonly name: Completer;
+}
+
+/**
+ * Completers over the library — shared storage, so the only gate is the `files:read` registration already applies.
+ */
+export function libraryCompleters(store: LibraryStore): LibraryCompleters {
+	return {
+		path: async (value) => {
+			try {
+				const entries = await walkShare(store);
+				return completeByPrefix(entries.map((entry) => entry.path), value);
+			} catch {
+				// A share that cannot be read completes to nothing; `resources/list` reports the fault.
+				return [];
+			}
+		},
+		name: (value) => completeByPrefix(store.cached().skills.map((skill) => skill.name), value),
+	};
 }

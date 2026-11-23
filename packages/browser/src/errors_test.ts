@@ -52,7 +52,7 @@ Deno.test('errors: CdpDisconnectedError defaults its message and scopes to a tar
 	assertEquals(scoped.message, 'target session died');
 });
 
-Deno.test('errors: InterruptedError stays outside the BrowserError taxonomy (AGENT-RUNTIME §4)', () => {
+Deno.test('errors: InterruptedError stays outside the BrowserError taxonomy', () => {
 	const error = new InterruptedError();
 	assertInstanceOf(error, Error);
 	assert(!(error instanceof BrowserError), 'the error funnel must not treat an interrupt as a failure');

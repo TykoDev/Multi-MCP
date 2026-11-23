@@ -1,20 +1,11 @@
 /// <reference lib="deno.ns" />
 /**
- * `agent_chat.ts` (D-147): a task read as one chat turn — its request, its answer, the artifacts the answer does not
+ * `agent_chat.ts`: a task read as one chat turn — its request, its answer, the artifacts the answer does not
  * already say, its title — the turn order, and the rich-text renderer, which draws a model's Markdown without ever
  * turning a string of it into markup.
  */
 import { assert, assertEquals } from '@std/assert';
-import {
-	answerOf,
-	type ChatTask,
-	extraArtifacts,
-	orderTurns,
-	requestOf,
-	richText,
-	statusLineOf,
-	titleOf,
-} from './agent_chat.ts';
+import { answerOf, type ChatTask, extraArtifacts, requestOf, richText, statusLineOf, titleOf } from './agent_chat.ts';
 import { all, byTag, fake, withDocument } from './test_document.ts';
 
 function task(patch: Partial<ChatTask> = {}): ChatTask {
@@ -47,12 +38,12 @@ Deno.test('agent_chat: the answer is the agent’s messages in the history, else
 	const spoken = task({
 		history: [
 			{ parts: [{ text: 'Hi' }] },
-			{ role: 'ROLE_USER', parts: [{ data: { optionId: 'allow' } }] },
+			{ role: 'ROLE_USER', parts: [{ text: 'Are you there?' }] },
 			{ role: 'ROLE_AGENT', parts: [{ text: 'Hello there.' }] },
 		],
 		artifacts: [{ name: 'agent-response', parts: [{ text: 'Hello there.' }] }],
 	});
-	assertEquals(answerOf(spoken), 'Hello there.', 'a permission decision is not the answer');
+	assertEquals(answerOf(spoken), 'Hello there.', 'a user turn is not the answer');
 	assertEquals(extraArtifacts(spoken), [], 'the agent-response artifact says what the answer says');
 	const artifactOnly = task({ artifacts: [{ name: 'agent-response', parts: [{ text: 'From the artifact.' }] }] });
 	assertEquals(answerOf(artifactOnly), 'From the artifact.');
@@ -79,16 +70,6 @@ Deno.test('agent_chat: the status line is the status message’s words; titles a
 		'sandbox_list',
 	);
 	assertEquals(titleOf(task({ history: [], metadata: { kind: 'delegation' } })), 'Delegation');
-});
-
-Deno.test('agent_chat: turns read oldest first by creation, then by update, ties by id', () => {
-	const a = task({ id: 'a', created_at: '2026-10-07T09:00:00.000Z' });
-	const b = task({ id: 'b', created_at: '2026-10-07T08:00:00.000Z' });
-	const c = task({ id: 'c', created_at: '2026-10-07T08:00:00.000Z' });
-	assertEquals(orderTurns([a, c, b]).map((turn) => turn.id), ['b', 'c', 'a']);
-	// An older gateway sends no creation time: the last update orders them.
-	const d = task({ id: 'd', status: { state: 'TASK_STATE_COMPLETED', timestamp: '2026-10-07T07:00:00.000Z' } });
-	assertEquals(orderTurns([a, d]).map((turn) => turn.id), ['d', 'a']);
 });
 
 Deno.test('agent_chat: rich text draws fences, headings, lists, quotes and inline marks as elements, never markup', () => {

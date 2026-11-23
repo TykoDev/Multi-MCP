@@ -35,7 +35,7 @@ const TARGET: CreateFor = await createFor(BASE);
 const clone = <T>(value: T): T => structuredClone(value);
 type Body = Record<string, unknown> & { HostConfig: Record<string, unknown> };
 
-/** The exact body of design §2.13, spelled out rather than rebuilt, so a change to it shows up here. */
+/** The exact hardened body, spelled out rather than rebuilt, so a change to it shows up here. */
 const EXPECTED = {
 	Image: 'tykotech-sandbox-workspace:0.2.0',
 	User: '1993:1993',
@@ -73,7 +73,7 @@ const EXPECTED = {
 				VolumeOptions: { NoCopy: true as const, Subpath: `.sandbox/${RUN}/home` },
 			},
 			{
-				// R2-1: read-only; the workspace only connects to the proxy's socket here.
+				// Read-only; the workspace only connects to the proxy's socket here.
 				Type: 'volume' as const,
 				Source: 'ttk-sandbox-sock',
 				Target: '/run/harbour',
@@ -95,7 +95,7 @@ const EXPECTED = {
 	},
 };
 
-Deno.test('AC6 docker body: the create body is exactly the hardened one, and passes its own check', async () => {
+Deno.test('docker body: the create body is exactly the hardened one, and passes its own check', async () => {
 	assertEquals(containerBody(TARGET), EXPECTED);
 	assertEquals(checkCreateBody(clone(EXPECTED), TARGET), EXPECTED);
 	// The provisioning container, before `git init`, mounts no .git; the rest is the same.
@@ -118,7 +118,7 @@ Deno.test('AC6 docker body: the create body is exactly the hardened one, and pas
 	);
 });
 
-Deno.test('R2-1 docker body: only the workspace and its home are writable; the socket folder is read-only', () => {
+Deno.test('docker body: only the workspace and its home are writable; the socket folder is read-only', () => {
 	const sockets = containerBody(TARGET).HostConfig.Mounts.filter((m) => m.Target === '/run/harbour');
 	assertEquals(sockets.map((m) => m.ReadOnly), [true]);
 	assertEquals(
@@ -134,7 +134,7 @@ Deno.test('R2-1 docker body: only the workspace and its home are writable; the s
 	assertThrows(() => checkCreateBody(absent, TARGET), BodyRefused, 'may write only the workspace and its home');
 });
 
-Deno.test('R2-5 docker body: containers are named and labelled by deployment, derived from the code volume', async () => {
+Deno.test('docker body: containers are named and labelled by deployment, derived from the code volume', async () => {
 	assert(/^[0-9a-f]{16}$/.test(DEPLOYMENT));
 	assertEquals(await deploymentId('ttk-code'), DEPLOYMENT);
 	assertNotEquals(await deploymentId('staging_ttk-code'), DEPLOYMENT);
@@ -152,7 +152,7 @@ Deno.test('R2-5 docker body: containers are named and labelled by deployment, de
 	);
 });
 
-Deno.test('R2-6 docker body: the body carries the hash of everything else in it', async () => {
+Deno.test('docker body: the body carries the hash of everything else in it', async () => {
 	assert(/^[0-9a-f]{64}$/.test(TARGET.bodyHash));
 	assertEquals(EXPECTED.Labels['eu.tykotech.body'], TARGET.bodyHash);
 	// Stable, whatever order a body's keys were built in.
@@ -173,7 +173,7 @@ Deno.test('R2-6 docker body: the body carries the hash of everything else in it'
 	assertThrows(() => checkCreateBody(stale, TARGET), BodyRefused, 'Labels differs');
 });
 
-Deno.test('AC6 docker body: every forbidden field is refused, at the top and in HostConfig, whatever its value', () => {
+Deno.test('docker body: every forbidden field is refused, at the top and in HostConfig, whatever its value', () => {
 	assertEquals(FORBIDDEN_FIELDS.length, 16);
 	for (const field of FORBIDDEN_FIELDS) {
 		for (const value of [true, [], {}, 'host', 'private', 1]) {
@@ -187,7 +187,7 @@ Deno.test('AC6 docker body: every forbidden field is refused, at the top and in 
 	}
 });
 
-Deno.test('AC6 docker body: a field outside the allowlist is refused', () => {
+Deno.test('docker body: a field outside the allowlist is refused', () => {
 	for (const field of ['Entrypoint', 'Volumes', 'ExposedPorts', 'Hostname', 'Tty', 'OpenStdin', 'NetworkingConfig']) {
 		const body = clone(EXPECTED) as Body;
 		body[field] = field === 'Entrypoint' ? ['/bin/sh'] : {};
@@ -200,7 +200,7 @@ Deno.test('AC6 docker body: a field outside the allowlist is refused', () => {
 	}
 });
 
-Deno.test('AC6 docker body: every fixed value, changed, is refused', () => {
+Deno.test('docker body: every fixed value, changed, is refused', () => {
 	const changes: Array<[string, (b: Body) => void]> = [
 		['Image', (b) => b.Image = 'tykotech-sandbox-workspace:latest'],
 		['User', (b) => b.User = '0:0'],
@@ -279,7 +279,7 @@ function command(over: Partial<{ env: Record<string, string>; workdir: string; s
 	});
 }
 
-Deno.test('AC6 docker exec: the exec body holds the fixed fields only, and passes its check', () => {
+Deno.test('docker exec: the exec body holds the fixed fields only, and passes its check', () => {
 	const body = command({ env: { FOO: 'bar', CI: '0' }, workdir: '/workspace/src/app', stdin: true });
 	assertEquals(Object.keys(body).sort(), [
 		'AttachStderr',
@@ -320,7 +320,7 @@ Deno.test('AC6 docker exec: the exec body holds the fixed fields only, and passe
 	);
 });
 
-Deno.test('AC6 docker exec: anything else is refused before it is sent', () => {
+Deno.test('docker exec: anything else is refused before it is sent', () => {
 	const cases: Array<[string, (b: Record<string, unknown>) => void]> = [
 		['Privileged', (b) => b.Privileged = true],
 		['Tty', (b) => b.Tty = true],
@@ -369,9 +369,16 @@ Deno.test('docker scripts: the work gets a session of its own; no per-uid proces
 	assert(inner.endsWith('exec /bin/sh -c "$1"'));
 	assert(!innerScript(COMMAND_BODY, { stdin: true }).includes('exec </dev/null'));
 	assertStringIncludes(WRAPPER, 'setsid /bin/sh -c "$s" harbour-sandbox "$@"');
-	// N3: the cleanup spares PID 1's own session and the live execs, and starts nothing it could kill.
+	// The cleanup spares PID 1's own session and the live execs, and starts nothing it could kill.
 	assertStringIncludes(CLEANUP_SCRIPT, '</proc/1/stat');
 	// Arithmetic `$((…))` is a builtin; command substitution `$(…)` or backticks would fork.
 	assert(!/\$\((?!\()|`/.test(CLEANUP_SCRIPT), 'no command substitution');
+	// Done only after two passes in a row found no candidate at all (not merely killed none); otherwise exit 3,
+	// and without PID 1's stat exit 2, so the service stops the container. A failed kill still counts a candidate.
+	assertStringIncludes(CLEANUP_SCRIPT, '[ "$quiet" -ge 2 ]');
+	assert(CLEANUP_SCRIPT.endsWith('echo "$n"\nexit 3'), 'no proof of an empty container fails the cleanup');
+	assertStringIncludes(CLEANUP_SCRIPT, '</proc/1/stat || exit 2');
+	assertStringIncludes(CLEANUP_SCRIPT, '    c=$((c + 1))\n    kill -KILL "$p"');
+	assert(!CLEANUP_SCRIPT.includes('[ "$k" -eq 0 ] && break'), 'a pass whose kills all failed proves nothing');
 	assertEquals(KILL_SCRIPT.split('\n')[0], 'kill -KILL "-$1" 2>/dev/null');
 });

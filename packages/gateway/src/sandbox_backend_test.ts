@@ -1,6 +1,6 @@
 /**
- * D-108: the coding sandbox's backend, as the sandbox's `/healthz` says it, in the admin diagnostics
- * (`config.sandboxBackend`) and in `capabilities.tykotech.sandbox` through the gateway's own MCP mount.
+ * The coding sandbox's backend, as the sandbox's `/healthz` says it, in the admin diagnostics (`config.sandboxBackend`)
+ * and in `capabilities.tykotech.sandbox` through the gateway's own MCP mount.
  */
 import { assertEquals } from '@std/assert';
 import { SessionRegistry } from '@tykotech/mcp';
@@ -68,19 +68,19 @@ async function gatewayWith(health: Record<string, unknown> | null) {
 	return { gateway, diagnostics, capabilities, coder: coder.key, watcher: watcher.key };
 }
 
-Deno.test('D-108 gateway: diagnostics and capabilities name the sandbox backend its /healthz reported', async () => {
+Deno.test('sandbox backend: diagnostics and capabilities name the sandbox backend its /healthz reported', async () => {
 	const g = await gatewayWith({ ok: true, backend: 'docker' });
 	try {
 		assertEquals((await g.diagnostics()).sandboxBackend, 'docker');
 		assertEquals((await g.capabilities(g.coder)).sandbox, { backend: 'docker' });
-		// SEC-16: a caller who cannot run commands is not told how they would run.
+		// A caller who cannot run commands is not told how they would run.
 		assertEquals((await g.capabilities(g.watcher)).sandbox, undefined);
 	} finally {
 		await g.gateway.close();
 	}
 });
 
-Deno.test('D-108 gateway: no sandbox, or one that never said, reports no backend', async () => {
+Deno.test('sandbox backend: no sandbox, or one that never said, reports no backend', async () => {
 	for (const health of [null, { ok: true }]) {
 		const g = await gatewayWith(health);
 		try {

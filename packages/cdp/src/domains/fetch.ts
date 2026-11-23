@@ -2,7 +2,7 @@
  * CDP `Fetch` domain — request interception and proxy auth.
  *
  * `Fetch.enable({handleAuthRequests: true})` is how proxy credentials are armed on attach
- * (SPECS/ARCHITECTURE.md §7.3, SPECS/DATA-MODEL.md §5.2 `ProxySettings`). `authRequired` is
+ * (from the profile's `ProxySettings`). `authRequired` is
  * answered with `continueWithAuth`; every other paused request is passed through with
  * `continueRequest`.
  */

@@ -1,12 +1,9 @@
 /**
- * Test support for the Docker backend (D-108, AC6): an in-memory byte pipe standing in for the daemon's unix socket,
- * and a fake Docker Engine that speaks HTTP/1.1 over it. It records every call with its body, keeps containers and
- * execs, and plays each exec the way a workspace container would: the wrapper's ready line, the work's output and
- * exit status, kills by process group, and the N3 cleanup of processes a command left behind.
- *
- * Not exported from mod.ts; only the package's tests import it.
+ * Test support: a fake Docker Engine speaking HTTP/1.1 over an in-memory pipe. It records every call, keeps
+ * containers and execs, and plays each exec as a workspace container would (ready line, output, exit status, kills
+ * by process group, cleanup). Only the package's tests import it.
  */
-import { CLEANUP_SCRIPT, COMMAND_BODY, KILL_SCRIPT, READY_LINE, SESSION_BODY, WRAPPER } from './docker_spec.ts';
+import { CLEANUP_SCRIPT, COMMAND_BODY, KILL_SCRIPT, SESSION_BODY, WRAPPER } from './docker_spec.ts';
 import type { EngineConn, EngineDial } from './engine.ts';
 
 const encoder = new TextEncoder();
@@ -90,12 +87,15 @@ export interface FakeContainer {
 	name: string;
 	body: Record<string, unknown>;
 	running: boolean;
-	/** Frozen by `pause` (R2-2): no exec can be created in it until `unpause`. */
+	/** Frozen by `pause`: no exec can be created in it until `unpause`. */
 	paused: boolean;
 	/** The image id it was created from: what its tag pointed at then. */
 	imageId: string;
-	/** Processes a command left behind, by pid and session: what N3's cleanup must kill. */
-	strays: Array<{ pid: number; sid: number }>;
+	/**
+	 * Processes a command left behind, by pid and session: what the cleanup must kill. One that `survives` plays a
+	 * process the cleanup cannot prove gone (it forks away between the scan and the kill), so the cleanup exits 3.
+	 */
+	strays: Array<{ pid: number; sid: number; survives?: boolean }>;
 }
 
 /** An exec as a test's player sees it. */
@@ -121,6 +121,8 @@ export interface Play {
 	hang?: boolean;
 	/** Leave a process behind, in a session of its own, for the cleanup to find. */
 	stray?: boolean;
+	/** Leave one behind that the cleanup cannot prove gone; only stopping the container ends it. */
+	hopper?: boolean;
 }
 
 export type Player = (exec: FakeExecView) => Play | Promise<Play>;
@@ -171,6 +173,8 @@ export class FakeEngine {
 	pingStatus = 200;
 	/** Answers `unpause` with this status instead of 204 (and leaves the container paused). */
 	unpauseStatus = 204;
+	/** When set, a cleanup exec waits for it before it scans, so a test can look at the service meanwhile. */
+	cleanupHold: Promise<void> | null = null;
 	/** The image id each tag points at now; a tag not named here points at `sha256:` + its own hex. */
 	readonly images = new Map<string, string>();
 	readonly workDir: string;
@@ -449,15 +453,17 @@ export class FakeEngine {
 			return 0;
 		}
 		if (cmd[2] === CLEANUP_SCRIPT) {
+			if (this.cleanupHold !== null) await this.cleanupHold;
 			const keepPids = cmd[4] ?? '';
 			const keepSids = cmd[5] ?? '';
 			const keep = new Set(keepSids.split(' ').filter(Boolean).map(Number));
 			const before = exec.container.strays.length;
-			exec.container.strays = exec.container.strays.filter((stray) => keep.has(stray.sid));
+			exec.container.strays = exec.container.strays.filter((stray) => keep.has(stray.sid) || stray.survives);
 			const killed = before - exec.container.strays.length;
 			this.cleanups.push({ runId, keepPids, keepSids, killed });
 			await out(1, `${killed}\n`);
-			return 0;
+			// The script exits 3 when its passes never confirm that nothing outside the spared set is left.
+			return exec.container.strays.some((stray) => !keep.has(stray.sid)) ? 3 : 0;
 		}
 		if (cmd[2] !== WRAPPER) return 127;
 		await out(2, `harbour-cage-ready ${exec.pid} ${exec.sid}\n`);
@@ -509,6 +515,7 @@ export class FakeEngine {
 		}
 		const play = await this.player(view);
 		if (play.stray) exec.container.strays.push({ pid: this.#pid++, sid: this.#pid++ });
+		if (play.hopper) exec.container.strays.push({ pid: this.#pid++, sid: this.#pid++, survives: true });
 		if (play.output) await out(1, play.output);
 		if (play.hang) {
 			await exec.killed;
@@ -540,10 +547,3 @@ export class FakeEngine {
 		return killed ? 137 : 0;
 	}
 }
-
-/** The ready line the fake wrapper prints, for tests that build one by hand. */
-export const readyLine = (pid: number, sid: number): string => {
-	const line = `harbour-cage-ready ${pid} ${sid}`;
-	if (!READY_LINE.test(line)) throw new Error('READY_LINE changed');
-	return line;
-};

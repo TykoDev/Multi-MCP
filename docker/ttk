@@ -1,5 +1,5 @@
 #!/bin/sh
-# D-154: maintenance commands inside the bundled image, run with a narrower matrix than the server's CMD — no network,
+# Maintenance commands inside the bundled image, run with a narrower matrix than the server's CMD — no network,
 # no subprocess, no FFI; read the app, the data volume and the mounted secrets; write only the data volume.
 #
 #   docker compose run --rm --no-deps tykotech-mcp ttk seed --force     # re-copy the providers file and secrets
@@ -9,5 +9,5 @@
 exec deno run --cached-only --deny-ffi --deny-net --deny-run \
 	--allow-read=/app,/data,/run/secrets,/home/deno,/usr/bin/chromium,/usr/bin/ffmpeg \
 	--allow-write=/data \
-	--allow-env=TTK_*,DENO_DIR,DENO_NO_PROMPT,HOME,TMPDIR,PATH,OTEL_DENO,OTEL_DENO_VSOCK,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,OTEL_EXPORTER_OTLP_LOGS_ENDPOINT \
+	--allow-env=TTK_*,DENO_DIR,DENO_NO_PROMPT,HOME,TMPDIR,PATH \
 	/app/packages/cli/mod.ts "$@"

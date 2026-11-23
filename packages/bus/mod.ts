@@ -1,9 +1,9 @@
 /**
  * @module
- * `@tykotech/bus` — the typed async event bus (D-BUS1; ARCHITECTURE.md §4).
+ * `@tykotech/bus` — the typed async event bus.
  *
  * Leaf infrastructure: it depends on nothing but the runtime and `@std`, and knows nothing about
- * browsers, CDP, or agents. Everything browser-shaped (the 44-event catalog, the 14 watchdogs, the
+ * browsers, CDP, or agents. Everything browser-shaped (the event catalog, the watchdogs, the
  * CDP connection policy) is built on top of this package in `@tykotech/browser`.
  *
  * ```ts

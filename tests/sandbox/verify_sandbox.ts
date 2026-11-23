@@ -37,7 +37,7 @@ const scratch = await Deno.makeTempDir({ dir: 'tests/.scratch', prefix: 'sandbox
 const secretPath = resolve(`${scratch}/token`);
 const token = crypto.randomUUID() + crypto.randomUUID();
 await Deno.writeTextFile(secretPath, token);
-// R12 (D-131): the image's CMD grants the git names and the remotes secret; the service reads the file once.
+// The image's CMD grants the git names and the remotes secret; the service reads the file once.
 const gitToken = `ghp_${crypto.randomUUID().replaceAll('-', '')}`;
 const remotesPath = resolve(`${scratch}/ttk_git_remotes`);
 await Deno.writeTextFile(
@@ -79,7 +79,7 @@ try {
 			'--allow-run=/usr/bin/bwrap,/usr/bin/deno',
 			'--allow-read=/work,/tmp/ttk-sandbox',
 			'--allow-write=/work,/tmp/ttk-sandbox',
-			// D-066: dynamic Unix proxy sockets need net grants; Docker disables non-loopback connectivity.
+			// Dynamic Unix proxy sockets need net grants; Docker disables non-loopback connectivity.
 			'--allow-net',
 			'--allow-env=TTK_SANDBOX_TEST_DIR,SANDBOX_TOKEN',
 			'--allow-sys=statfs',
@@ -116,7 +116,7 @@ try {
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 	assert(await client.ready(), 'Sandbox did not become ready');
-	// R12: the image's own CMD lets the service read both git names and the remotes secret; /healthz says it clones,
+	// The image's own CMD lets the service read both git names and the remotes secret; /healthz says it clones,
 	// the listing names the hosts and remote ids only, a URL off the list is refused before any network, and no log
 	// line holds the remote's credential.
 	assertEquals(client.clone, true);
@@ -188,7 +188,7 @@ try {
 	await client.call('alice', 'remove', { workspace_id });
 	assertEquals((await client.call('alice', 'list', {})).workspaces, []);
 	console.log(
-		'PASS sandbox private HTTP, ownership across restart, wrong-owner denial, seeded files, exec, diff, HTTP cancellation, symlink refusal, removal; R12 clone grants (git names, remotes secret read once, no credential logged, off-list URL refused)',
+		'PASS sandbox private HTTP, ownership across restart, wrong-owner denial, seeded files, exec, diff, HTTP cancellation, symlink refusal, removal; clone grants (git names, remotes secret read once, no credential logged, off-list URL refused)',
 	);
 } catch (error) {
 	console.error(await command(['logs', '--tail', '30', name]).catch(() => 'Test container logs unavailable'));

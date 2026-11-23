@@ -1,37 +1,28 @@
 /**
- * SPA entry point and hash router (the bundle entry, emitted as `dist/app.js`).
+ * SPA entry point and hash router (bundled as `dist/app.js`).
  *
- * Routes: `#/connect`, `#/sessions`, `#/view/:sessionId`,
- * `#/resources[/:uri | /:group[/:rest]]` (`resources_route.ts` tells the two
- * apart), `#/workspaces[/:id]`, `#/agents[/chat/:task]`, `#/agents/tasks[/:task]`, `#/users`,
- * `#/system[/mcp|/agents|/config]`; `#/library[/:tab]` redirects to
- * `#/resources/:tab` and `#/tools[/:name]` to `#/resources/tools[/:name]` (D-152). Sessions, the viewer and
- * the workspaces are the three tabs of the Sessions section (D-147), each still
- * its own route. Every route but connect requires a sign-in; the sign-in cookie
- * is checked with the server at load (B4, D-097), so a reload lands where it
- * was, and a session the server refuses lands on connect.
- *
- * The component kit (D-089) is defined before the first render, so no screen
- * ever paints an undefined custom element. Connect, Sessions and the viewer are
- * in the entry; every other screen is a lazy chunk (D-069, D-090).
+ * Routes: `#/connect`, `#/sessions`, `#/view/:sessionId`, `#/workspaces[/:id]`, `#/resources[/:path]`,
+ * `#/agents[/chat/:task | /surfaces]`, `#/users`, `#/system[/agents | /config]`. Every route but connect needs a
+ * sign-in; the cookie is checked with the server at load, so a reload lands where it was. Connect, Sessions and the
+ * Live View are in the entry; every other screen is a lazy chunk with its stylesheet.
  */
-// First, before any chunk builds a schema: Zod's `new Function` probe is a CSP report under the page policy (K-5).
+// First, before any chunk builds a schema: Zod's `new Function` probe is a CSP report under the page policy.
 import './jitless.ts';
-import { agentRoute } from './agent_tabs.ts';
 import { isSignedIn, loadUser, onUnauthorized, restoreSession } from './api.ts';
+import { connectView } from './connect_view.ts';
 import { leaveScreen, signOut } from './lifecycle.ts';
-import { installPalette } from './palette.ts';
-import { initTheme } from './theme.ts';
+import { sessionsView } from './sessions_view.ts';
 import { withSheets } from './styles.ts';
-import { installTooltips, messageOf, toast } from './ui.ts';
-import { connectView, sessionsView, viewerView } from './views.ts';
+import { initTheme } from './theme.ts';
+import { messageOf, toast } from './ui.ts';
+import { viewerView } from './viewer_view.ts';
 
 function navigate(route: string): void {
 	if (location.hash === route) render();
 	else location.hash = route;
 }
 
-/** The decoded remainder of `hash` after `prefix`, or `undefined` when empty. */
+/** The decoded remainder of `hash` after `prefix`, or `undefined` when empty or malformed. */
 function param(hash: string, prefix: string): string | undefined {
 	const rest = hash.slice(prefix.length);
 	if (rest === '') return undefined;
@@ -45,96 +36,55 @@ function param(hash: string, prefix: string): string | undefined {
 /** Bumped by every render, so a lazy screen that arrives after a newer navigation is dropped, not painted. */
 let renderSeq = 0;
 
-/** Renders a lazily loaded screen unless the route moved on while its chunk was loading. */
 function lazy<M>(load: () => Promise<M>, show: (module: M) => void): void {
 	const ticket = renderSeq;
-	// After a reload only the token is known; a screen that reads the scopes needs the user first.
+	// After a reload only the cookie is known; a screen that reads the scopes needs the user first.
 	Promise.all([load(), loadUser()]).then(([module]) => {
 		if (ticket === renderSeq) show(module);
 	}).catch((cause) => {
-		// A chunk that cannot load (a redeploy replaced it, the network dropped) leaves the previous screen torn down;
-		// say so rather than leave it silently inert. A reload fetches the current bundle.
+		// A chunk that cannot load (a redeploy replaced it) leaves the old screen torn down: say so.
 		if (ticket === renderSeq) toast(`This screen could not load: ${messageOf(cause)}. Reload the page.`, 'error');
 	});
 }
 
+function under(hash: string, base: string): boolean {
+	return hash === base || hash.startsWith(`${base}/`);
+}
+
 function render(): void {
 	renderSeq += 1;
-	// Whatever triggered this render — a hash change or a click on the current
-	// route — the screen being replaced stops its work first (G-1).
+	// Whatever triggered this render — a hash change or a click on the current route — the old screen stops first.
 	leaveScreen();
 	const hash = location.hash || '#/connect';
-
 	if (!isSignedIn() && hash !== '#/connect') {
 		navigate('#/connect');
 		return;
 	}
-
-	if (hash.startsWith('#/view/')) {
-		viewerView(param(hash, '#/view/') ?? 'default', navigate);
-		return;
-	}
-	if (hash === '#/sessions') {
-		sessionsView(navigate);
-		return;
-	}
-	// D-152: the Tools console is absorbed by Resources — every tool is a leaf of the one tree, beside the resources of
-	// the server it belongs to. The old route still answers, without a history entry; the name passes through as it is.
-	if (hash === '#/tools' || hash.startsWith('#/tools/')) {
-		const name = hash.slice('#/tools/'.length);
-		location.replace('#/resources/tools' + (name === '' ? '' : `/${name}`));
-		return;
-	}
-	if (hash === '#/resources' || hash.startsWith('#/resources/')) {
-		lazy(
-			() => withSheets(import('./resources_view.ts'), 'resources'),
-			({ resourcesView }) => resourcesView(navigate, param(hash, '#/resources/')),
-		);
-		return;
-	}
-	// The Agents section's two tabs (`agent_tabs.ts`): the chat of one task, and the Tasks list with run histories.
-	const agents = agentRoute(hash);
-	if (agents !== null) {
-		if (agents.tab === 'tasks') {
-			lazy(
-				() => withSheets(import('./tasks_view.ts'), 'tasks'),
-				({ tasksView }) => tasksView(navigate, agents.taskId, agents.workspace),
-			);
-		} else {lazy(() =>
-				withSheets(import('./agent_view.ts'), 'agents'), ({ agentView }) =>
-				agentView(navigate, agents.taskId));}
-		return;
-	}
-	if (hash === '#/users') {
-		lazy(() => withSheets(import('./users_view.ts'), 'users'), ({ usersView }) => usersView(navigate));
-		return;
-	}
-	// The Library screen is absorbed by Resources: its tabs are the Files, Skills and Prompts groups of the one tree.
-	// `replace` rewrites the fragment without a history entry, so Back does not bounce through the old route; the
-	// hashchange it raises renders the Resources route. The tab is passed through undecoded: it is already a fragment.
-	if (hash === '#/library' || hash.startsWith('#/library/')) {
-		const tab = hash.slice('#/library/'.length);
-		location.replace('#/resources/' + (tab || 'files'));
-		return;
-	}
-	// The workspace screen is a lazy chunk (D-069): it carries editors and a terminal that most visits never open,
-	// and the entry budget is what keeps the connect screen light.
-	if (hash === '#/workspaces' || hash.startsWith('#/workspaces/')) {
+	if (hash.startsWith('#/view/')) viewerView(param(hash, '#/view/') ?? 'default', navigate);
+	else if (hash === '#/sessions') sessionsView(navigate);
+	else if (under(hash, '#/workspaces')) {
 		lazy(
 			() => withSheets(import('./workspaces_view.ts'), 'workspaces'),
 			({ workspacesView }) => workspacesView(navigate, param(hash, '#/workspaces/')),
 		);
-		return;
-	}
-	// D-149: the System screen's three tabs are routes of their own (`#/system`, `#/system/mcp`, `#/system/config`).
-	if (hash === '#/system' || hash.startsWith('#/system/')) {
+	} else if (under(hash, '#/resources')) {
+		lazy(
+			() => withSheets(import('./resources_view.ts'), 'resources'),
+			({ resourcesView }) => resourcesView(navigate, param(hash, '#/resources/') ?? ''),
+		);
+	} else if (under(hash, '#/agents')) {
+		lazy(
+			() => withSheets(import('./agent_view.ts'), 'agents'),
+			({ agentView }) => agentView(navigate, hash),
+		);
+	} else if (hash === '#/users') {
+		lazy(() => withSheets(import('./users_view.ts'), 'users'), ({ usersView }) => usersView(navigate));
+	} else if (under(hash, '#/system')) {
 		lazy(
 			() => withSheets(import('./system_view.ts'), 'system'),
 			({ systemView }) => systemView(navigate, param(hash, '#/system/')),
 		);
-		return;
-	}
-	connectView(navigate);
+	} else connectView(navigate);
 }
 
 // A session the server no longer honours ends here: credential-bound caches go, and the connect screen explains.
@@ -143,16 +93,7 @@ onUnauthorized(() => {
 	navigate('#/connect');
 });
 initTheme();
-installTooltips();
-installPalette(navigate);
-// Dynamic so the kit is its own chunks, fetched in parallel, and the entry stays within its budget (D-090). The
-// sign-in cookie is checked alongside (B4): the first render already knows whether this browser is signed in.
-await Promise.all([
-	restoreSession(),
-	import('./kit.ts'),
-	import('./kit_overlay.ts'),
-	import('./kit_forms.ts'),
-	import('./kit_more.ts'),
-]);
+// The kit is its own chunks, fetched in parallel with the sign-in check, so the entry stays within its budget.
+await Promise.all([restoreSession(), import('./kit.ts'), import('./kit_overlay.ts'), import('./kit_forms.ts')]);
 globalThis.addEventListener('hashchange', render);
 render();

@@ -1,10 +1,9 @@
 /**
- * Capture-side units: the `getEventListeners` census payload and the pending-network probe
- * (ARCHITECTURE §6.7).
+ * Capture-side units: the `getEventListeners` census payload and the pending-network probe.
  *
  * The probe is exercised against a **real** `CdpClient` over a **real** loopback WebSocket served by
  * `Deno.serve` + `Deno.upgradeWebSocket`. Nothing is mocked: the fixture server pushes genuine CDP
- * event frames, which is exactly what a browser does (D-TEST1 — fixtures are real servers).
+ * event frames, which is exactly what a browser does (fixtures are real servers).
  *
  * `FakeTime` is deliberately not used here. The probe's timers are entangled with live socket I/O, and
  * a faked clock stops the runtime turning the frames over, which would test the harness rather than the

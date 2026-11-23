@@ -1,9 +1,9 @@
 /**
  * CDP `Browser` domain — version handshake, permissions, downloads, window bounds.
  *
- * Feeds PermissionsWatchdog (`grantPermissions` on connect — SPECS/ARCHITECTURE.md §6.5) and the
- * DownloadsWatchdog pipeline (`setDownloadBehavior` + `downloadWillBegin`/`downloadProgress` — §6.8,
- * mapping onto `DownloadStartedEvent`/`DownloadProgressEvent` in SPECS/DATA-MODEL.md §5.1.6).
+ * Feeds PermissionsWatchdog (`grantPermissions` on connect) and the
+ * DownloadsWatchdog pipeline (`setDownloadBehavior` + `downloadWillBegin`/`downloadProgress`,
+ * mapping onto `DownloadStartedEvent`/`DownloadProgressEvent`).
  */
 
 import type { BrowserContextId, EmptyResult, NoParams, Rect, TargetId, WindowId } from './common.ts';
@@ -52,7 +52,7 @@ export type DownloadState = 'inProgress' | 'completed' | 'canceled';
 
 export interface BrowserParams {
 	/**
-	 * ERRATUM(E-33). Added to the typed surface for the download transfer limits (ARCHITECTURE.md §6.8):
+	 * Typed for the download transfer limits:
 	 * a download that outgrows its per-file or per-session budget, or outlives its transfer deadline,
 	 * is cancelled by guid rather than left to fill the disk. Experimental in the protocol; the
 	 * watchdog treats a failure as "the browser kept going" and still refuses to publish the file.

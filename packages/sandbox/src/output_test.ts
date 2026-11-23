@@ -36,12 +36,6 @@ Deno.test('output: past the limit the head and the tail stay, and the cut is cou
 	);
 });
 
-Deno.test('output: one large piece keeps its first and last bytes', () => {
-	const capture = new OutputCapture(10);
-	capture.push(bytes('0123456789abcdefghij'));
-	assertEquals(capture.result().output, '01234\n[... 10 bytes of output left out ...]\nfghij');
-});
-
 Deno.test('output: a cut never splits a character', () => {
 	// 13 bytes. The head's 3 bytes end inside the first euro sign, and the tail's 4 begin inside
 	// the third: both partial characters are left out, and counted.

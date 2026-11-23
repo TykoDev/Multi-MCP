@@ -1,7 +1,7 @@
 /**
- * A5 (D-100, AC12): `TTK_MAX_BODY_KB` is enforced on `/api/v1/*` and `/a2a` bodies — by the declared length and by
- * the counted stream — while the share upload keeps its 64 MiB, sign-in keeps its 16 KiB, and `/mcp` gets the 4 MiB
- * the project believed the SDK applied (E-83).
+ * `TTK_MAX_BODY_KB` is enforced on `/api/v1/*` and `/a2a` bodies — by the declared length and by the counted stream —
+ * while the share upload keeps its 64 MiB, sign-in keeps its 16 KiB, and `/mcp` gets a 4 MiB cap of its own (the SDK
+ * applies none).
  */
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
@@ -55,23 +55,27 @@ function jsonOf(bytes: number): string {
 	return JSON.stringify({ path: 'p', pad: 'x'.repeat(Math.max(0, bytes - 24)) });
 }
 
-Deno.test('A5: bodyCapOf names the cap for every route class', () => {
+Deno.test('bodyCapOf names the cap for every route class', () => {
 	const max = 256 * KIB;
 	assertEquals(bodyCapOf('POST', '/api/v1/users', max), max);
 	assertEquals(bodyCapOf('PATCH', '/api/v1/users/a', max), max);
 	assertEquals(bodyCapOf('post', '/a2a', max), max, 'methods compare case-insensitively');
 	assertEquals(bodyCapOf('POST', '/a2a/v1/message:send', max), max, 'the A2A HTTP+JSON binding too');
-	assertEquals(bodyCapOf('POST', '/api/v1/auth/login', max), LOGIN_BODY_BYTES, 'sign-in keeps D-078');
+	assertEquals(bodyCapOf('POST', '/api/v1/auth/login', max), LOGIN_BODY_BYTES, 'sign-in keeps its 16 KiB');
 	assertEquals(bodyCapOf('PUT', '/api/v1/share/file', max), null, 'the upload route streams under its own cap');
 	assertEquals(bodyCapOf('POST', '/api/v1/share/mkdir', max), max, 'only the upload itself is exempt');
-	assertEquals(bodyCapOf('POST', '/mcp', max), MCP_BODY_BYTES, '/mcp is bounded by E-83, not by TTK_MAX_BODY_KB');
+	assertEquals(
+		bodyCapOf('POST', '/mcp', max),
+		MCP_BODY_BYTES,
+		'/mcp is bounded by its own cap, not by TTK_MAX_BODY_KB',
+	);
 	assertEquals(bodyCapOf('GET', '/api/v1/share', max), null);
 	assertEquals(bodyCapOf('HEAD', '/api/v1/share', max), null);
 	assertEquals(bodyCapOf('POST', '/assets/app.js', max), null, 'outside the capped prefixes nothing changes');
 	assertEquals(bodyCapOf('POST', '/a2ax', max), null, 'a prefix match, not a substring match');
 });
 
-Deno.test('R1-1: a JSON-typed body is capped on every path and method, the share upload included', () => {
+Deno.test('a JSON-typed body is capped on every path and method, the share upload included', () => {
 	const max = 256 * KIB;
 	const json = 'application/json';
 	// The adapter parses any `application/json` body, on any path, before authentication: so the cap follows the
@@ -118,7 +122,7 @@ Deno.test('R1-1: a JSON-typed body is capped on every path and method, the share
 	assertEquals(bodyCapOf('POST', '/api/v1/users', max, 'text/plain'), max);
 });
 
-Deno.test('A5: readCappedBody refuses by declared length without reading, and by count otherwise', async () => {
+Deno.test('readCappedBody refuses by declared length without reading, and by count otherwise', async () => {
 	let pulled = false;
 	const lying = new Request(`${ORIGIN}/x`, {
 		method: 'POST',
@@ -140,7 +144,7 @@ Deno.test('A5: readCappedBody refuses by declared length without reading, and by
 	assertEquals(await readCappedBody(new Request(`${ORIGIN}/x`, { method: 'POST' }), KIB), null);
 });
 
-Deno.test('A5: a passed body reaches the handler intact, with method, headers and URL preserved', async () => {
+Deno.test('a passed body reaches the handler intact, with method, headers and URL preserved', async () => {
 	const original = new Request(`${ORIGIN}/api/v1/x?y=1`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', 'x-test': 'kept' },
@@ -154,7 +158,7 @@ Deno.test('A5: a passed body reaches the handler intact, with method, headers an
 	assertEquals((await capped.request.arrayBuffer()).byteLength, 300);
 });
 
-Deno.test('A5 (AC12): the gateway answers 413 over TTK_MAX_BODY_KB and leaves the routes with their own caps alone', async () => {
+Deno.test('the gateway answers 413 over TTK_MAX_BODY_KB and leaves the routes with their own caps alone', async () => {
 	const dir = join('tests/.scratch', `bodycap-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
 	const writer = await generateApiKey('writer', ['mcp:invoke', 'files:read', 'files:write', 'agent:invoke']);
@@ -240,7 +244,7 @@ Deno.test('A5 (AC12): the gateway answers 413 over TTK_MAX_BODY_KB and leaves th
 		// ... and past 16 KiB it is refused before the adapter's JSON parse could buffer it.
 		assertEquals((await send('POST', '/api/v1/auth/login', streamed(LOGIN_BODY_BYTES + 1), {}, null)).status, 413);
 
-		// `/mcp` is not bound by TTK_MAX_BODY_KB (a 4 KiB call is answered by MCP) but by E-83's 4 MiB.
+		// `/mcp` is not bound by TTK_MAX_BODY_KB (a 4 KiB call is answered by MCP) but by its own 4 MiB.
 		const call = JSON.stringify({
 			jsonrpc: '2.0',
 			id: 1,
@@ -267,7 +271,7 @@ Deno.test('A5 (AC12): the gateway answers 413 over TTK_MAX_BODY_KB and leaves th
 	}
 });
 
-Deno.test('R1-1: an anonymous JSON body is refused at the cap on every path, before the adapter can buffer it', async () => {
+Deno.test('an anonymous JSON body is refused at the cap on every path, before the adapter can buffer it', async () => {
 	const dir = join('tests/.scratch', `bodycap-json-${crypto.randomUUID().slice(0, 8)}`);
 	await Deno.mkdir(dir, { recursive: true });
 	const writer = await generateApiKey('writer', ['mcp:invoke', 'files:read', 'files:write']);
@@ -295,7 +299,7 @@ Deno.test('R1-1: an anonymous JSON body is refused at the cap on every path, bef
 			['POST', '/', 413],
 			['POST', '/healthz', 413],
 			['POST', '/mcp/', 413],
-			// A non-canonical path is refused before its body is looked at (R1-5); either way nothing is buffered.
+			// A non-canonical path is refused before its body is looked at; either way nothing is buffered.
 			['POST', '//api/v1/x', 400],
 			['POST', '/.well-known/x', 413],
 			['POST', '/live/x', 413],

@@ -1,11 +1,4 @@
-/**
- * Review R1-2 (D-135): the MCP Apps embeds are never served as pages of this origin, however their name is spelled.
- *
- * The guard judged the path as the client sent it while `serveDir` percent-decodes it, so `/assets/%65mbed_live.html`
- * and `/assets/embed%5flive.html` passed the guard and were served as the embed — a document of this origin with no
- * framing header and an unsubstituted CSP. The front's canonical-path check (E-89) does not refuse them: neither is a
- * dot segment nor an encoded slash. A case-folded spelling reaches the same file on a case-insensitive filesystem.
- */
+/** The MCP Apps embeds are never served as pages of this origin, however their name is spelled. */
 import { assertEquals } from '@std/assert';
 import { join } from '@std/path';
 import { Hono } from 'hono';
@@ -25,7 +18,7 @@ async function webRoot(): Promise<string> {
 	return root;
 }
 
-Deno.test('R1-2: an embed is a 404 under every spelling of its name; the bundle is still served', async () => {
+Deno.test('static: an embed is a 404 under every spelling of its name; the bundle is still served', async () => {
 	const root = await webRoot();
 	try {
 		const app = new Hono<{ Variables: AppVariables }>();

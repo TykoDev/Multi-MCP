@@ -1,6 +1,6 @@
 {
 	"name": "scroll_containers",
-	"pins": "§6.4 |scroll element[idx]| (interactive) vs bare |scroll element| (not interactive), the '(X.X pages above, Y.Y pages below)' suffix, and a horizontal-only container carrying ONLY '(horizontal NN%)'",
+	"pins": "|scroll element[idx]| (interactive) vs bare |scroll element| (not interactive), the '(X.X pages above, Y.Y pages below)' suffix, and a horizontal-only container carrying ONLY '(horizontal NN%)'",
 	"tree": {
 		"tag": "HTML",
 		"children": [

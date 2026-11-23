@@ -1,8 +1,8 @@
 /**
  * CDP `Storage` domain — browser-wide cookie jar + per-origin data clearing.
  *
- * StorageStateWatchdog (SPECS/ARCHITECTURE.md §6.9) uses this for the cookie half of the
- * Playwright-format storage state in SPECS/DATA-MODEL.md §5.2; the localStorage half is `DOMStorage`.
+ * StorageStateWatchdog uses this for the cookie half of the
+ * Playwright-format storage state; the localStorage half is `DOMStorage`.
  */
 
 import type { BrowserContextId, Cookie, CookieParam, EmptyResult, FrameId } from './common.ts';
@@ -44,7 +44,7 @@ export interface StorageResults {
 	'Storage.setCookies': EmptyResult;
 }
 
-/** `Storage` emits several quota/interest-group events; none are consumed by BUA (D-CDP2). */
+/** `Storage` emits several quota/interest-group events; none are consumed, so none are typed. */
 export type StorageEvents = Record<never, never>;
 
 export const STORAGE_METHODS = [

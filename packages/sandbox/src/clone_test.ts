@@ -1,5 +1,5 @@
 /**
- * R12 (design §2.19, AC31): what a clone may ask for is refused before any network, and the one script it runs is
+ * What a clone may ask for is refused before any network, and the one script it runs is
  * fixed — no caller text in it, every hardening flag present, the values only through the environment.
  */
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
@@ -22,7 +22,7 @@ import { RequestError } from './request.ts';
 
 const HOSTS = new Set(['github.com', 'git.example.test']);
 
-Deno.test('R12 clone: a URL is https on 443 to a listed host, with a plain path, or it is refused before any network', () => {
+Deno.test('clone: a URL is https on 443 to a listed host, with a plain path, or it is refused before any network', () => {
 	assertEquals(parseCloneUrl('https://github.com/acme/app.git', HOSTS), {
 		url: 'https://github.com/acme/app.git',
 		host: 'github.com',
@@ -70,7 +70,7 @@ Deno.test('R12 clone: a URL is https on 443 to a listed host, with a plain path,
 	assert('refused' in gitOrigin('https://gitlab.example.org:8443/team/repo.git'));
 });
 
-Deno.test('R12 clone: refs, depth and the time limit are bounded; a ref can never be an option', () => {
+Deno.test('clone: refs, depth and the time limit are bounded; a ref can never be an option', () => {
 	assertEquals(parseGitRef(undefined), null);
 	for (const ref of ['main', 'release/2.0', 'v1.2.3', 'feature_x-y', 'a'.repeat(200)]) {
 		assertEquals(parseGitRef(ref), ref);
@@ -116,7 +116,7 @@ Deno.test('R12 clone: refs, depth and the time limit are bounded; a ref can neve
 	}
 });
 
-Deno.test('R12 clone: TTK_SANDBOX_GIT_HOSTS holds exact host names only', () => {
+Deno.test('clone: TTK_SANDBOX_GIT_HOSTS holds exact host names only', () => {
 	assertEquals(parseGitHosts(undefined), new Set());
 	assertEquals(parseGitHosts(' github.com ,GITLAB.COM'), new Set(['github.com', 'gitlab.com']));
 	for (const host of ['github.com', 'a.b.c.example', 'xn--bcher-kva.example']) assert(isGitHostName(host), host);
@@ -128,7 +128,7 @@ Deno.test('R12 clone: TTK_SANDBOX_GIT_HOSTS holds exact host names only', () => 
 	assertThrows(() => parseGitHosts(Array.from({ length: 65 }, (_, i) => `h${i}.example`).join(',')), Error, '64');
 });
 
-Deno.test('R12 clone: the script is fixed, hardened, and carries no caller text', () => {
+Deno.test('clone: the script is fixed, hardened, and carries no caller text', () => {
 	const hostile = {
 		url: 'https://github.com/acme/app.git',
 		ref: 'main',
@@ -175,7 +175,7 @@ Deno.test('R12 clone: the script is fixed, hardened, and carries no caller text'
 	assertEquals(FORWARD_URL, 'http://127.0.0.1:3128/r');
 });
 
-Deno.test('R12 clone: the environment names no configuration, no prompt, no askpass, and the checked values', () => {
+Deno.test('clone: the environment names no configuration, no prompt, no askpass, and the checked values', () => {
 	assertEquals(cloneEnv({ url: 'https://github.com/a/b', ref: null, depth: 1 }), {
 		GIT_CONFIG_NOSYSTEM: '1',
 		GIT_CONFIG_GLOBAL: '/dev/null',
@@ -188,7 +188,7 @@ Deno.test('R12 clone: the environment names no configuration, no prompt, no askp
 	assertEquals(cloneEnv({ url: 'https://github.com/a/b', ref: 'v1', depth: 3 }).TTK_GIT_REF, 'v1');
 });
 
-Deno.test("R12 clone: the outcome is read from the script's own last lines, never from remote text", () => {
+Deno.test("clone: the outcome is read from the script's own last lines, never from remote text", () => {
 	const sha = 'a'.repeat(40);
 	assertEquals(cloneOutcome(`ttk-clone-commit ${sha}\nttk-clone-ref main\n`), { commit: sha, ref: 'main' });
 	assertEquals(cloneOutcome(`ttk-clone-commit ${'b'.repeat(64)}\nttk-clone-ref v1.0\n`)?.commit, 'b'.repeat(64));

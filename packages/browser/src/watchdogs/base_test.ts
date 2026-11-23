@@ -1,7 +1,7 @@
 /**
- * `BaseWatchdog` contract tests (ARCHITECTURE.md §4.5–§4.7, §6; AGENTS.md §3 watchdog checklist).
+ * `BaseWatchdog` contract tests.
  *
- * This is the seam the remaining 13 watchdogs inherit, so the tests pin the properties they will all
+ * This is the seam the 13 other watchdogs inherit, so the tests pin the properties they all
  * depend on: `on<EventName>` auto-registration, the `LISTENS_TO`/`EMITS` assertion, detach hygiene,
  * typed accessors that fail loudly instead of handing back `null`, and the fact that handlers run
  * through the bus-level circuit breaker without the watchdog doing anything.
@@ -124,7 +124,7 @@ Deno.test('attach subscribes every on<EventName> method; detach removes them all
 	}
 });
 
-Deno.test('attaching twice throws (D-BUS1: duplicate registration is an error)', async () => {
+Deno.test('attaching twice throws: duplicate registration is an error', async () => {
 	const bus = new EventBus({ name: 'wd', logger: silentBusLogger });
 	const watchdog = new CountingWatchdog(testHost(bus));
 	try {
@@ -216,7 +216,7 @@ Deno.test('watchdog handlers run through the bus circuit breaker without opting 
 });
 
 // ---------------------------------------------------------------------------
-// cdpFor(context) — the E-52 cancellation facade
+// cdpFor(context) — the cancellation facade
 // ---------------------------------------------------------------------------
 
 /** Exposes the protected accessors so the facade can be exercised without a real dispatch. */
@@ -236,7 +236,7 @@ function handlerContext(signal: AbortSignal, timeoutSec = 5): HandlerContext {
 	return { signal, handlerName: 'CdpProbeWatchdog.probe', timeoutSec };
 }
 
-Deno.test('cdpFor: a CDP call issued after the budget blows never reaches the wire (E-52)', async () => {
+Deno.test('cdpFor: a CDP call issued after the budget blows never reaches the wire', async () => {
 	await using fixture = await ChromeFixture.start();
 	const client = await CdpClient.connect(fixture.wsUrl);
 	const bus = new EventBus({ name: 'wd', logger: silentBusLogger });
@@ -333,11 +333,11 @@ Deno.test('cdpFor: the bound view forwards the rest of the client and composes a
 	}
 });
 
-Deno.test('cdpFor: a handler that overruns its bus budget stops talking to CDP (E-52 end to end)', async () => {
+Deno.test('cdpFor: a handler that overruns its bus budget stops talking to CDP, end to end', async () => {
 	await using fixture = await ChromeFixture.start();
 	fixture.script('Browser.getVersion', () => {});
 	const client = await CdpClient.connect(fixture.wsUrl);
-	// A 50 ms budget for TabCreatedEvent, read through the bus's injected env getter (D-CFG1).
+	// A 50 ms budget for TabCreatedEvent, read through the bus's injected env getter.
 	const bus = new EventBus({
 		name: 'wd',
 		logger: silentBusLogger,
@@ -352,7 +352,7 @@ Deno.test('cdpFor: a handler that overruns its bus budget stops talking to CDP (
 			const cdp = this.cdpFor(context);
 			// Blows the budget: the fixture never answers this one.
 			await cdp.send.Browser.getVersion().catch(() => seen.push('first:aborted'));
-			// The escaping step. Before the facade this reached the wire regardless.
+			// The escaping step: without the facade it would reach the wire regardless.
 			await cdp.send.Browser.getWindowForTarget().catch(() => seen.push('second:aborted'));
 		}
 	}
@@ -366,7 +366,7 @@ Deno.test('cdpFor: a handler that overruns its bus budget stops talking to CDP (
 		assertEquals(
 			fixture.requestsFor('Browser.getWindowForTarget').length,
 			0,
-			'E-52: the post-budget CDP call must never reach the browser',
+			'the post-budget CDP call must never reach the browser',
 		);
 	} finally {
 		watchdog.detach();
@@ -384,7 +384,7 @@ async function until(predicate: () => boolean, timeoutMs = 5_000): Promise<void>
 	}
 }
 
-Deno.test('a throwing handler surfaces through eventResult without aborting its siblings (E-3)', async () => {
+Deno.test('a throwing handler surfaces through eventResult without aborting its siblings', async () => {
 	const bus = new EventBus({ name: 'wd', logger: silentBusLogger });
 	class ThrowingWatchdog extends BaseWatchdog {
 		static override readonly LISTENS_TO = [TabCreatedEvent];
@@ -401,7 +401,7 @@ Deno.test('a throwing handler surfaces through eventResult without aborting its 
 		}, { wrap: null });
 		const handle = bus.dispatch(new TabCreatedEvent({ targetId: 'T1', url: 'about:blank' }));
 		await assertRejects(() => handle.eventResult({ raiseIfAny: true }), WatchdogError, 'nope');
-		assertEquals(siblingRan, true, 'E-3: a throwing handler does NOT abort its siblings');
+		assertEquals(siblingRan, true, 'a throwing handler does NOT abort its siblings');
 	} finally {
 		watchdog.detach();
 		await bus.stop();

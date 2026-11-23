@@ -1,12 +1,10 @@
 /**
- * Reconnect + `ConnectionPolicy` contract tests (ARCHITECTURE.md §7.4, §4.6;
- * COMPLETIONS-CRITERIA.md §3.2 auto-reconnect row).
+ * Reconnect + `ConnectionPolicy` contract tests.
  *
- * This is the R2 timing surface, so every number is driven by `FakeTime` rather than by sleeping:
+ * This is a timing surface, so every number is driven by `FakeTime` rather than by sleeping:
  * the ladder's clock is `setTimeout`/`Date.now`, both of which `FakeTime` owns. The `connect` hook is
  * a constructor parameter of the controller — an injected seam, not a mocked transport; the real
- * socket-drop → reconnect path is covered end to end in `session_test.ts` and in
- * `tests/integration/session_lifecycle_test.ts`.
+ * socket-drop → reconnect path is covered end to end in `session_test.ts`.
  */
 
 import { assert, assertEquals, assertInstanceOf } from '@std/assert';
@@ -36,22 +34,22 @@ import {
 } from './reconnect.ts';
 
 // ---------------------------------------------------------------------------
-// constants (the R2 audit surface)
+// constants
 // ---------------------------------------------------------------------------
 
-Deno.test('ARCHITECTURE §7.4/§8 reconnect constants are encoded verbatim', () => {
+Deno.test('the reconnect constants keep their budgets', () => {
 	assertEquals(CONNECT_TIMEOUT_MS, 15_000);
 	assertEquals(RECONNECT_MAX_ATTEMPTS, 3);
 	assertEquals(RECONNECT_BACKOFF_MS, [1_000, 2_000, 4_000]);
 	assertEquals(RECONNECT_WAIT_TIMEOUT_MS, 54_000);
-	// §7.4 derives 54 s from "3 attempts × 15 s cap + backoff"; the worst case must fit inside it.
+	// The 54 s wait derives from "3 attempts × 15 s cap + backoff"; the worst case must fit inside it.
 	const worstCase = RECONNECT_BACKOFF_MS.reduce((sum, ms) => sum + ms, 0) +
 		RECONNECT_MAX_ATTEMPTS * CONNECT_TIMEOUT_MS;
 	assertEquals(worstCase, 52_000);
 	assert(worstCase <= RECONNECT_WAIT_TIMEOUT_MS);
 });
 
-Deno.test('the lifecycle list is exactly the eight events of §4.6', () => {
+Deno.test('the lifecycle list is exactly the eight browser lifecycle events', () => {
 	assertEquals([...LIFECYCLE_EVENT_NAMES].sort(), [
 		'BrowserErrorEvent',
 		'BrowserKillEvent',

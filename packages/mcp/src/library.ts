@@ -1,16 +1,4 @@
-/**
- * The library: a file share, skills and prompts kept on the data volume (D-075).
- *
- * Three roots under `<TTK_DATA_DIR>`: `share/` holds any files an operator or a model puts there, `skills/<name>/`
- * holds a SKILL.md with its supporting files, `prompts/<name>.json` holds a template with named arguments. One
- * store serves the MCP tools, the MCP resources and prompts, the gateway's REST routes and the stdio mount, so the
- * path rules are enforced in exactly one place.
- *
- * **Every path is relative, normalised and walked segment by segment with `lstat`.** A symbolic link anywhere on
- * the path is refused, so a link planted through the share (or on the volume by anything else) cannot turn a
- * read of `share/x` into a read of `/etc/passwd`. Absolute paths, `..`, control characters, backslashes, over-long
- * names and over-deep trees are refused before anything touches the disk.
- */
+/** The library: a file share, skills and prompts kept on the data volume. */
 import { join } from '@std/path';
 
 export const LIBRARY_LIMITS = {
@@ -29,11 +17,11 @@ export const LIBRARY_LIMITS = {
 	resourceListEntries: 500,
 } as const;
 
-export const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 /** How long the prompt and skill listing cache is trusted before it is re-read from the volume. */
-export const CACHE_TTL_MS = 15_000;
+const CACHE_TTL_MS = 15_000;
 
-export type LibraryErrorCode =
+type LibraryErrorCode =
 	| 'invalid-path'
 	| 'invalid-name'
 	| 'invalid-argument'
@@ -61,7 +49,7 @@ export interface Entry {
 	readonly modified_at: string | null;
 }
 
-export interface SkillSummary {
+interface SkillSummary {
 	readonly name: string;
 	readonly description: string;
 	readonly files: readonly string[];
@@ -73,7 +61,7 @@ export interface Skill extends SkillSummary {
 	readonly instructions: string;
 }
 
-export interface PromptArgument {
+interface PromptArgument {
 	readonly name: string;
 	readonly description?: string;
 	readonly required?: boolean;
@@ -91,10 +79,7 @@ export interface Prompt {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
-/**
- * Normalises a share-relative path: `''` is the root. Throws for anything that is not a plain relative path made of
- * ordinary segments.
- */
+/** Normalises a share-relative path: `''` is the root. */
 export function safeRelative(raw: unknown): string {
 	if (typeof raw !== 'string') throw new LibraryError('invalid-path', 'path must be a string');
 	// A leading "./" and trailing slashes are tolerated; nothing else is rewritten.
@@ -148,7 +133,7 @@ export function isText(bytes: Uint8Array): boolean {
 }
 
 /** Splits a SKILL.md into its frontmatter map and body; a file without frontmatter has an empty map. */
-export function parseFrontmatter(text: string): { fields: Record<string, string>; body: string } {
+function parseFrontmatter(text: string): { fields: Record<string, string>; body: string } {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
 	if (match === null) return { fields: {}, body: text };
 	const fields: Record<string, string> = {};
@@ -179,8 +164,14 @@ export function renderTemplate(prompt: Prompt, values: Record<string, unknown>):
 	});
 }
 
-export interface LibraryStoreOptions {
+interface LibraryStoreOptions {
 	readonly dataDir: string;
+}
+
+/** A disk budget the share's writes are held to. */
+interface ShareWriteBudget {
+	/** Throws when `bytes` more would pass the budget; with `reserve`, counts them as written from now on. */
+	admit(bytes: number, reserve: boolean): Promise<void>;
 }
 
 export class LibraryStore {
@@ -194,14 +185,16 @@ export class LibraryStore {
 		this.prompts = join(options.dataDir, 'prompts');
 	}
 
-	/**
-	 * What `prompts/list` is built from. Registration on a server instance is synchronous, so the listing comes
-	 * from a cache this process keeps current: filled at startup, refreshed after every mutation made through this
-	 * store, and re-read from disk when it is older than `CACHE_TTL_MS` (another process, or an operator's editor,
-	 * may have written the volume).
-	 */
+	/** What `prompts/list` is built from. */
 	#promptCache: { at: number; prompts: Prompt[]; skills: SkillSummary[] } | null = null;
 	#refreshing: Promise<void> | null = null;
+	/** The share's disk budget; `null` (the default) holds writes to the per-call limits alone. */
+	#budget: ShareWriteBudget | null = null;
+
+	/** Holds every write that adds bytes to the share to `budget`; `null` lifts it. */
+	setWriteBudget(budget: ShareWriteBudget | null): void {
+		this.#budget = budget;
+	}
 
 	/** Creates the three roots; harmless when they exist. Fills the prompt and skill cache. */
 	async initialize(): Promise<void> {
@@ -234,11 +227,7 @@ export class LibraryStore {
 
 	// --- path resolution ------------------------------------------------------------------------------------
 
-	/**
-	 * Resolves a relative path under `root`, refusing a symbolic link at any segment. `mustExist` false allows the
-	 * last segment to be absent (for a write); every parent must still exist and be a directory, unless
-	 * `createParents` asks for them.
-	 */
+	/** Resolves a relative path under `root`, refusing a symbolic link at any segment. */
 	async #resolve(
 		root: string,
 		relative: string,
@@ -316,9 +305,7 @@ export class LibraryStore {
 
 	/**
 	 * Every text file under the share folder `path`, keyed by its path relative to that folder — what a sandbox
-	 * workspace is seeded from (`sandbox_create { from_share }`, E-6). Bounded before anything is read twice: at most
-	 * `maxFiles` files and `maxBytes` in all; a binary file, a link (skipped by `list`), or a folder with more is
-	 * refused rather than seeded in part. `.git` folders are skipped, as the sandbox refuses them anyway.
+	 * workspace is seeded from (`sandbox_create { from_share }`).
 	 */
 	async collectText(
 		path: unknown,
@@ -404,21 +391,28 @@ export class LibraryStore {
 		if (bytes.length > maxBytes) throw new LibraryError('too-large', `content is over ${maxBytes} bytes`);
 		const { absolute, info } = await this.#resolve(this.share, relative, { createParents: true });
 		if (info !== null && !info.isFile) throw new LibraryError('not-a-file', `${relative} is a directory`);
+		// The whole content counts, even over an existing file: conservative, and the next walk corrects it.
+		await this.#budget?.admit(bytes.length, true);
 		await this.#writeAtomically(absolute, bytes);
 		return await this.stat(relative);
 	}
 
 	/** Where a streaming upload should land, with the temporary name the caller writes to; `commit` renames. */
-	async uploadTarget(path: unknown): Promise<{ path: string; temporary: string; commit(): Promise<Entry> }> {
+	async uploadTarget(
+		path: unknown,
+		expectedBytes = 0,
+	): Promise<{ path: string; temporary: string; commit(): Promise<Entry> }> {
 		const relative = safeRelative(path);
 		if (relative === '') throw new LibraryError('invalid-path', 'a file path is required');
 		const { absolute, info } = await this.#resolve(this.share, relative, { createParents: true });
 		if (info !== null && !info.isFile) throw new LibraryError('not-a-file', `${relative} is a directory`);
+		await this.#budget?.admit(expectedBytes, false);
 		const temporary = `${absolute}.${crypto.randomUUID()}.tmp`;
 		return {
 			path: relative,
 			temporary,
 			commit: async (): Promise<Entry> => {
+				if (this.#budget !== null) await this.#budget.admit((await Deno.lstat(temporary)).size, true);
 				await Deno.rename(temporary, absolute);
 				return await this.stat(relative);
 			},
@@ -529,8 +523,7 @@ export class LibraryStore {
 	}
 
 	/**
-	 * Creates or updates a skill from `files`, which must include `SKILL.md` whose frontmatter `name` equals
-	 * `name`. Existing files not named are kept; pass `replace` to remove them first.
+	 * Creates or updates a skill from `files`, which must include `SKILL.md` whose frontmatter `name` equals `name`.
 	 */
 	async putSkill(rawName: unknown, files: unknown, replace = false): Promise<Skill> {
 		const name = checkName(rawName);
@@ -682,7 +675,8 @@ export class LibraryStore {
 }
 
 /** Lists share files recursively for `resources/list`, bounded. */
-export async function walkShare(store: LibraryStore, limit = LIBRARY_LIMITS.resourceListEntries): Promise<Entry[]> {
+export async function walkShare(store: LibraryStore): Promise<Entry[]> {
+	const limit = LIBRARY_LIMITS.resourceListEntries;
 	const out: Entry[] = [];
 	const queue: string[] = [''];
 	while (queue.length > 0 && out.length < limit) {

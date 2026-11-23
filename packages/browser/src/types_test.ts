@@ -20,27 +20,27 @@ import {
 } from './types.ts';
 
 // ---------------------------------------------------------------------------------------------
-// §5.2 — BrowserProfile field surface and defaults
+// BrowserProfile field surface and defaults
 // ---------------------------------------------------------------------------------------------
 
-Deno.test('profile: crossOriginIframes defaults to true (gate ruling I-11)', () => {
+Deno.test('profile: crossOriginIframes defaults to true', () => {
 	assertEquals(DEFAULT_BROWSER_PROFILE.crossOriginIframes, true);
 	assertEquals(createBrowserProfile().crossOriginIframes, true);
 	assertEquals(createBrowserProfile({ crossOriginIframes: false }).crossOriginIframes, false);
 });
 
-Deno.test('profile: the §5.2 field surface is complete and every field has a defined default', () => {
+Deno.test('profile: the field surface is complete and every field has a defined default', () => {
 	const profile = defaultBrowserProfile();
 	const keys = Object.keys(profile);
 	// 5 connection + 14 launch + 7 display + 9 security/domains + 1 proxy + 3 storage/downloads
-	// + 4 timing + 15 observation/recording. ERRATUM(E-114) added `requestScope` to security/domains.
+	// + 4 timing + 15 observation/recording.
 	assertEquals(keys.length, 58);
 	for (const key of keys) {
 		assert((profile as unknown as Record<string, unknown>)[key] !== undefined, `${key} has an undefined default`);
 	}
 });
 
-Deno.test('profile: defaults match DATA-MODEL.md §5.2 verbatim', () => {
+Deno.test('profile: every field carries its documented default', () => {
 	const p = defaultBrowserProfile();
 
 	// connection
@@ -65,14 +65,14 @@ Deno.test('profile: defaults match DATA-MODEL.md §5.2 verbatim', () => {
 	// security / domains
 	assertEquals([p.allowedDomains, p.prohibitedDomains], [null, null]);
 	assertEquals([p.blockIpAddresses, p.disableSecurity], [false, false]);
-	// ERRATUM(E-114): the document veto's scope; `all` is opt-in (D-138).
+	// The document veto's scope; `all` is opt-in.
 	assertEquals(p.requestScope, 'documents');
 	assertEquals(p.permissions, ['clipboardReadWrite', 'notifications']);
 	assertEquals([p.maxIframes, p.maxIframeDepth], [100, 5]);
 	// proxy + storage / downloads
 	assertEquals([p.proxy, p.storageState], [null, null]);
 	assertEquals([p.acceptDownloads, p.autoDownloadPdfs], [true, true]);
-	// timing (load-bearing; register rule §2.5)
+	// timing (load-bearing)
 	assertEquals(
 		[p.minimumWaitPageLoadTime, p.waitForNetworkIdlePageLoadTime, p.waitBetweenActions, p.keepAlive],
 		[0.25, 0.5, 0.1, null],
@@ -129,7 +129,7 @@ Deno.test('profile: resolveIsLocal infers from cdpUrl + useCloud, and an explici
 });
 
 // ---------------------------------------------------------------------------------------------
-// §5.4 — TabInfo and 4-char tab ids
+// TabInfo and 4-char tab ids
 // ---------------------------------------------------------------------------------------------
 
 Deno.test('tabs: tabId is the last 4 characters of targetId', () => {
@@ -158,10 +158,10 @@ Deno.test('tabs: a colliding suffix is ambiguous and fails closed to null', () =
 });
 
 // ---------------------------------------------------------------------------------------------
-// §5.3 / §5.1.7 — state and captcha shapes
+// State and captcha shapes
 // ---------------------------------------------------------------------------------------------
 
-Deno.test('state: BrowserStateSummary composes the §5.3 shape including the fallback state', () => {
+Deno.test('state: BrowserStateSummary composes its full shape including the fallback state', () => {
 	const domState: SerializedDomState = { root: null, selectorMap: new Map() };
 	const pageInfo: PageInfo = {
 		viewportWidth: 1280,
@@ -199,7 +199,7 @@ Deno.test('state: BrowserStateSummary composes the §5.3 shape including the fal
 		captureTruncated: false,
 	};
 	assertEquals(summary.tabs[0]?.tabId, 'BEEF');
-	assertEquals(summary.domState.selectorMap.size, 0, 'the fallback state carries an empty selectorMap (R6.4)');
+	assertEquals(summary.domState.selectorMap.size, 0, 'the fallback state carries an empty selectorMap');
 
 	const storage: StorageState = {
 		cookies: [{
@@ -217,7 +217,7 @@ Deno.test('state: BrowserStateSummary composes the §5.3 shape including the fal
 	assertEquals(storage.cookies.length, 1);
 });
 
-Deno.test('captcha: CaptchaWaitResult carries the §5.1.7 outcome vocabulary', () => {
+Deno.test('captcha: CaptchaWaitResult carries the outcome vocabulary', () => {
 	const skipped: CaptchaWaitResult = { waited: false, result: 'unknown' };
 	const solved: CaptchaWaitResult = {
 		waited: true,

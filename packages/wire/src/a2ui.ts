@@ -1,46 +1,37 @@
 /**
- * Browser-safe A2UI v0.9: the basic catalog, the TykoTech `Html` extension, surface themes, and the confinement
- * rules every one of them passes before it is stored or rendered (D-067, D-111).
- *
- * D-111 widened the D-067 subset (Column, Row, Text, Card, Divider, Button, TextField, CheckBox) to the whole v0.9
- * basic catalog. What did not widen is the trust model: nothing here names a network location the browser would
- * fetch on its own. Media is inline (`data:` with a fixed MIME allowlist) or a path in this server's own file share
- * (`ttk://share/<path>`), which the SPA reads through its authenticated API; `Html` is never markup in the control
- * plane's DOM, only a document served by its own route under a `sandbox` CSP into an `<iframe sandbox>`.
+ * Browser-safe A2UI v0.9: the basic catalog, the TykoTech `Html` extension, surface themes and their confinement
+ * rules. Nothing here names a network location the browser would fetch on its own: media is inline `data:` of a fixed
+ * MIME allowlist or a `ttk://share/<path>` the SPA reads through its authenticated API, and `Html` is only ever a
+ * document served by its own route under a `sandbox` CSP into an `<iframe sandbox>`.
  */
 import * as z from 'zod';
 
 export const A2UI_CATALOG_ID = 'https://tykotech.eu/a2ui/catalog/v0.9';
 export const A2UI_MAX_BYTES = 256 * 1024;
-/** Largest inline (`data:`) media URL, in characters — a base64 URL is ASCII, so characters are bytes. */
+/** Largest inline (`data:`) media URL; base64 is ASCII, so characters are bytes. */
 export const A2UI_MEDIA_MAX_BYTES = 256 * 1024;
 /** Largest `Html` document, in UTF-8 bytes. */
-export const A2UI_HTML_MAX_BYTES = 128 * 1024;
-/** The one non-inline media location: a path in the server's file share, read by the SPA with its own credential. */
-export const A2UI_SHARE_PREFIX = 'ttk://share/';
+const A2UI_HTML_MAX_BYTES = 128 * 1024;
+const A2UI_SHARE_PREFIX = 'ttk://share/';
 const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
 const id = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
 
-/**
- * The MIME subtypes a `data:` URL may declare, per media kind. Fixed rather than a pattern: an `image/svg+xml` data
- * URL is a document that can carry script, and `text/html` is not media at all.
- */
-export const A2UI_MEDIA_TYPES = {
+/** Fixed MIME subtypes per media kind: an `image/svg+xml` data URL is a document that can carry script. */
+const A2UI_MEDIA_TYPES = {
 	image: ['png', 'jpeg', 'gif', 'webp'],
 	video: ['mp4', 'webm', 'ogg'],
 	audio: ['mpeg', 'mp4', 'ogg', 'wav', 'webm'],
 } as const;
 export type A2uiMediaKind = keyof typeof A2UI_MEDIA_TYPES;
-/** Where a media component's bytes come from, once its URL has passed {@linkcode parseA2uiMediaUrl}. */
+/** Where a media component's bytes come from. */
 export type A2uiMediaSource = { readonly kind: 'data'; readonly mime: string } | {
 	readonly kind: 'share';
 	readonly path: string;
 };
 
 /**
- * Checks a media URL against the D-111 rule and says where its bytes come from: a base64 `data:` URL of an allowed
- * type within {@linkcode A2UI_MEDIA_MAX_BYTES}, or `ttk://share/<path>` whose decoded segments are plain names (no
- * `.`/`..`, no separators or control characters). Throws for anything else, including every `http(s):` URL.
+ * A base64 `data:` URL of an allowed type within {@linkcode A2UI_MEDIA_MAX_BYTES}, or `ttk://share/<path>` whose
+ * decoded segments are plain names (no `.`/`..`, separators or control characters). Throws for anything else.
  */
 export function parseA2uiMediaUrl(url: string, kind: A2uiMediaKind): A2uiMediaSource {
 	if (url.startsWith(A2UI_SHARE_PREFIX)) {
@@ -73,22 +64,27 @@ export function parseA2uiMediaUrl(url: string, kind: A2uiMediaKind): A2uiMediaSo
 	return { kind: 'data', mime: `${match[1]}/${match[2]}` };
 }
 
-/** A media URL property: validated by {@linkcode parseA2uiMediaUrl}, never bound to the data model. */
+/** A media URL property: never bound to the data model. */
 function mediaUrl(kind: A2uiMediaKind) {
-	return z.string().min(1).max(A2UI_MEDIA_MAX_BYTES).refine((value) => {
+	return z.string().min(1).max(A2UI_MEDIA_MAX_BYTES).refine(
+		passes((value) => parseA2uiMediaUrl(value, kind)),
+		`${kind} URL must be a base64 data: URL of an allowed type or a ttk://share/ path`,
+	);
+}
+
+/** A refinement that holds when `check` does not throw. */
+function passes(check: (value: string) => unknown): (value: string) => boolean {
+	return (value) => {
 		try {
-			parseA2uiMediaUrl(value, kind);
+			check(value);
 			return true;
 		} catch {
 			return false;
 		}
-	}, `${kind} URL must be a base64 data: URL of an allowed type or a ttk://share/ path`);
+	};
 }
 
-/**
- * `createSurface.theme` (D-111): four presentation choices, mapped by the SPA onto the kit's tokens on the surface
- * root and nowhere else. Every value is closed or numeric so none can carry CSS of its own.
- */
+/** `createSurface.theme`: every value is closed or numeric so none can carry CSS of its own. */
 export const A2uiThemeSchema = z.strictObject({
 	primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
 	font: z.enum(['sans', 'serif', 'mono']).optional(),
@@ -132,24 +128,11 @@ export function validateA2uiJson(value: unknown): void {
 	if (new TextEncoder().encode(JSON.stringify(value)).length > A2UI_MAX_BYTES) throw new Error('A2UI size exceeded');
 }
 
-const pointer = z.string().refine((value) => {
-	try {
-		pointerSegments(value);
-		return true;
-	} catch {
-		return false;
-	}
-}, 'Invalid data pointer');
+const pointer = z.string().refine(passes(pointerSegments), 'Invalid data pointer');
 const binding = z.strictObject({ path: pointer });
 const dynamicNumber = z.union([z.number(), binding]);
 const dynamicBoolean = z.union([z.boolean(), binding]);
-/**
- * The v0.9 basic catalog's client-side string functions, the two a display needs: `formatString` interpolates
- * `${/pointer}` expressions (nested ones resolve innermost first, so `${/table/${/key}}` is a lookup), and
- * `formatNumber` formats a number. They compute on the page from the surface's own data model, so a bound input
- * (a Slider, a TextField) visibly drives other components without a round trip. Evaluated by
- * {@linkcode resolveA2uiValue}; nothing else in the catalog's function list is offered.
- */
+/** The only two catalog functions offered, evaluated on the page by {@linkcode resolveA2uiValue}. */
 const formatStringCall = z.strictObject({
 	call: z.literal('formatString'),
 	args: z.strictObject({ value: z.union([z.string().max(65536), binding]) }),
@@ -168,9 +151,9 @@ const dynamicText = z.union([z.string().max(65536), binding, formatStringCall, f
 const event = z.strictObject({ name: id, context: z.record(z.string(), z.unknown()).optional() });
 const base = { id };
 const children = z.array(id).max(256);
-/** A finite number inside a range no slider needs to leave; keeps `min < max` arithmetic exact. */
+/** Keeps `min < max` arithmetic exact. */
 const bounded = z.number().min(-1e9).max(1e9);
-/** An ISO 8601 date, time or date-time as `<input type=date|time|datetime-local>` reads one. */
+/** An ISO 8601 date, time or date-time. */
 const isoMoment = z.string().max(32).regex(/^[0-9T:.+-]{1,32}$/);
 export const A2uiComponentSchema = z.discriminatedUnion('component', [
 	z.strictObject({ ...base, component: z.literal('Column'), children }),
@@ -186,7 +169,6 @@ export const A2uiComponentSchema = z.discriminatedUnion('component', [
 	z.strictObject({ ...base, component: z.literal('Button'), text: dynamicText, action: z.strictObject({ event }) }),
 	z.strictObject({ ...base, component: z.literal('TextField'), label: dynamicText, value: binding }),
 	z.strictObject({ ...base, component: z.literal('CheckBox'), label: dynamicText, value: binding }),
-	// --- D-111: the rest of the v0.9 basic catalog ---------------------------------------------------------------
 	z.strictObject({
 		...base,
 		component: z.literal('Image'),
@@ -195,7 +177,6 @@ export const A2uiComponentSchema = z.discriminatedUnion('component', [
 		fit: z.enum(['contain', 'cover', 'fill', 'none', 'scaleDown']).optional(),
 		variant: z.enum(['icon', 'avatar', 'smallFeature', 'mediumFeature', 'largeFeature', 'header']).optional(),
 	}),
-	// The name is a glyph of the SPA's own sprite; the renderer draws a neutral glyph for one it does not have.
 	z.strictObject({ ...base, component: z.literal('Icon'), name: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }),
 	z.strictObject({
 		...base,
@@ -260,10 +241,7 @@ export const A2uiComponentSchema = z.discriminatedUnion('component', [
 ]);
 export type A2uiComponent = z.infer<typeof A2uiComponentSchema>;
 
-/**
- * The component ids a component places in the tree, in render order. The one definition of adjacency, shared by
- * the gateway's validation and the SPA's renderer so the bounds checked are the bounds rendered.
- */
+/** The component ids a component places in the tree, in render order: the one definition of adjacency. */
 export function a2uiChildren(component: A2uiComponent): readonly string[] {
 	switch (component.component) {
 		case 'Column':
@@ -287,10 +265,7 @@ export const A2uiMessageSchema = z.union([
 			surfaceId: id,
 			catalogId: z.literal(A2UI_CATALOG_ID),
 			theme: A2uiThemeSchema.optional(),
-			/**
-			 * TykoTech extension: the coding workspace (`sandbox_create`'s `workspace_id`) the surface belongs to. The
-			 * control plane shows a surface under its workspace; a surface without one waits there to be attached.
-			 */
+			/** TykoTech extension: the coding workspace the surface belongs to. */
 			workspaceId: z.uuid().optional(),
 		}),
 	}),
@@ -304,14 +279,8 @@ export const A2uiMessageSchema = z.union([
 	}),
 	z.strictObject({ version: z.literal('v0.9'), deleteSurface: z.strictObject({ surfaceId: id }) }),
 ]);
-export type A2uiMessage = z.infer<typeof A2uiMessageSchema>;
 
-/**
- * The A2UI project's own ids for the v0.9 basic catalog. The local catalog is that catalog plus `Html`, so a client
- * written against the specification — which names the basic catalog (`catalogs/basic/catalog.json` in the current
- * specification tree, `basic_catalog.json` before it) — means the local one; it is stored as
- * {@linkcode A2UI_CATALOG_ID} either way.
- */
+/** The specification's ids for the v0.9 basic catalog; the local catalog is it plus `Html`. */
 const BASIC_CATALOG_ID =
 	/^https:\/\/a2ui\.org\/specification\/v0_9\/(?:(?:basic|standard)_catalog(?:_definition)?\.json|catalogs\/basic\/catalog\.json)$/;
 
@@ -322,11 +291,9 @@ function plainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Maps the spellings of an A2UI v0.9 message that the specification's clients send onto the one
- * {@linkcode A2uiMessageSchema} admits, and changes nothing else: a message naming exactly one operation gains
- * `version: "v0.9"` when it has none (and `"0.9"` reads as `"v0.9"`), and a `createSurface` with no `catalogId` or
- * with the basic catalog's own id names {@linkcode A2UI_CATALOG_ID}. The schema still decides validity; anything
- * else, including a different version or catalog, is returned unchanged and refused there. Never throws.
+ * Maps the specification clients' spellings onto the one {@linkcode A2uiMessageSchema} admits: a single-operation
+ * message gains `version: "v0.9"` (or `"0.9"` becomes it), and a `createSurface` without a `catalogId` or naming the
+ * basic catalog names {@linkcode A2UI_CATALOG_ID}. Anything else is returned unchanged for the schema to refuse.
  */
 export function normalizeA2uiMessage(input: unknown): unknown {
 	if (!plainObject(input)) return input;
@@ -361,9 +328,7 @@ export interface A2uiSurface {
 	revision: number;
 	components: A2uiComponent[];
 	dataModel: unknown;
-	/** D-111: the `createSurface.theme` the surface was created with, when it had one. */
 	theme?: A2uiTheme;
-	/** The coding workspace the surface belongs to (`createSurface.workspaceId`, or attached later); absent: none. */
 	workspaceId?: string;
 	/** Trusted server registration keys; unregistered buttons remain disabled. */
 	availableActions?: string[];
@@ -379,21 +344,19 @@ export function readA2uiPointer(model: unknown, path: string): unknown {
 	return value;
 }
 
-/** How deep `${…}` expressions may nest in one `formatString`, and how long its result may grow. */
+/** How deep `${…}` may nest in one `formatString`, and how long its result may grow. */
 const INTERPOLATION_DEPTH = 8;
 const INTERPOLATION_LIMIT = 65536;
 
-/** A data-model value as interpolated text: strings as they are, other JSON as JSON, nothing as empty. */
+/** Strings as they are, other JSON as JSON, nothing as empty. */
 function interpolated(value: unknown): string {
 	if (value === undefined || value === null) return '';
 	return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
 /**
- * `formatString`'s interpolation. `${expression}` is replaced by the value at the pointer it names (a relative path
- * reads from the root: this catalog has no collection scopes), nested expressions first; `\${` is a literal `${`.
- * An expression that is not a pointer, or does not resolve, interpolates nothing. A substituted value is never
- * scanned again, so text a person typed into the model cannot inject expressions.
+ * `formatString`: `${pointer}` (a relative path reads from the root) is replaced by its value, nested expressions
+ * first; `\${` is a literal `${`. A substituted value is never scanned again, so typed text cannot inject expressions.
  */
 export function interpolateA2uiString(template: string, model: unknown): string {
 	let at = 0;
@@ -428,11 +391,7 @@ export function interpolateA2uiString(template: string, model: unknown): string 
 	return run(0, false);
 }
 
-/**
- * A dynamic value as the renderer shows it: a `{ path }` binding reads the model, a `formatString` or
- * `formatNumber` call computes its string (`locale` for the number format; the page's own by default), and a literal
- * is itself.
- */
+/** A dynamic value as rendered: a `{ path }` binding reads the model, a call computes, a literal is itself. */
 export function resolveA2uiValue(value: unknown, model: unknown, locale?: string): unknown {
 	if (typeof value !== 'object' || value === null) return value;
 	const record = value as Record<string, unknown>;
@@ -469,18 +428,19 @@ export function updateA2uiModel(model: unknown, path: string, value?: unknown): 
 	const parts = pointerSegments(path);
 	if (parts.length === 0) return value === undefined ? {} : structuredClone(value);
 	const result = typeof model === 'object' && model !== null ? structuredClone(model) : {};
-	let parent = result as Record<string, unknown>;
-	for (const key of parts.slice(0, -1)) {
+	const index = (parent: unknown, key: string): void => {
 		if (Array.isArray(parent) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) > 4096)) {
 			throw new Error('Invalid array pointer');
 		}
+	};
+	let parent = result as Record<string, unknown>;
+	for (const key of parts.slice(0, -1)) {
+		index(parent, key);
 		if (!Object.hasOwn(parent, key) || typeof parent[key] !== 'object' || parent[key] === null) parent[key] = {};
 		parent = parent[key] as Record<string, unknown>;
 	}
 	const key = parts.at(-1)!;
-	if (Array.isArray(parent) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) > 4096)) {
-		throw new Error('Invalid array pointer');
-	}
+	index(parent, key);
 	if (value === undefined) {
 		if (Array.isArray(parent)) parent[Number(key)] = null;
 		else delete parent[key];

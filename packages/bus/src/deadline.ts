@@ -1,6 +1,6 @@
 /**
  * Timer helpers. Every timer created here is cleared on the settling path so the op sanitizer stays
- * quiet (OBSERVABILITY §4.1.3) and so `FakeTime` can drive the clock in tests.
+ * quiet and so `FakeTime` can drive the clock in tests.
  */
 
 const TIMED_OUT = Symbol('bus.deadline');

@@ -1,9 +1,8 @@
 /**
  * The three-tree merge — `DOM` × `DOMSnapshot` × `Accessibility`, joined on `backendNodeId`.
  *
- * Contract: SPECS/DATA-MODEL.md §6.1 (field-by-field provenance of `EnhancedDomTreeNode`), §6.2.
- *
- * Parity risk R1 lives here. Every heuristic below is named, tested against a recorded fixture, and
+ * This is where every field of `EnhancedDomTreeNode` gets its provenance, so serialization parity
+ * with the recorded corpus is decided here. Every heuristic below is named, tested against a recorded fixture, and
  * listed in the module's test file — the LLM-visible text is downstream of these decisions, so silent
  * drift is indistinguishable from a behaviour change.
  */
@@ -29,14 +28,14 @@ const COMMENT_NODE = 8;
 const KNOWN_NODE_TYPES: ReadonlySet<number> = new Set([1, 3, 8, 9, 10, 11]);
 
 /**
- * Vertical slack on the frame-chain viewport test, in CSS px (DATA-MODEL §6.1).
+ * Vertical slack on the frame-chain viewport test, in CSS px.
  *
  * One viewport of pre-render on each side: content the user would reach with a single scroll counts as
  * visible, so the LLM can act on it without a scroll round trip, while content pages away does not.
  */
 export const VIEWPORT_VERTICAL_SLACK_PX = 1000;
 
-/** `hiddenElementsInfo` is capped at 10 entries, sorted by distance (DATA-MODEL §6.4). */
+/** `hiddenElementsInfo` is capped at 10 entries, sorted by distance. */
 export const MAX_HIDDEN_ELEMENT_HINTS = 10;
 
 /** Text carried in a hidden-element hint is truncated to this many chars. */
@@ -64,31 +63,30 @@ export interface MergedDomTree {
 	 *
 	 * The composite key is not decoration: `backendNodeId` restarts per session (verified — an OOPIF's
 	 * document root is `backendNodeId` 1 while its host page is well past that), so the pair is the
-	 * only globally unique handle. It is also exactly the identity R6.2's new-element marking and
-	 * R6.3's reverse map are defined over.
+	 * only globally unique handle. It is also exactly the identity the serializer's new-element
+	 * marking and reverse map are defined over.
 	 */
 	readonly byKey: ReadonlyMap<string, EnhancedDomTreeNode>;
 	readonly nodeCount: number;
 	readonly warnings: readonly string[];
 	/**
-	 * ERRATUM(E-40). One record per frame the merge walked, root first, in document order — the frame
+	 * One record per frame the merge walked, root first, in document order — the frame
 	 * list `browser_get_frames` and the state root's `frames[]` publish. Built here because this is the
 	 * one place that knows, per frame, whether the geometry composition of `#childFrameContext` was
 	 * established or silently fell back to the page origin (`composed`).
 	 */
 	readonly frames: readonly FrameRecord[];
 	/**
-	 * ERRATUM(E-40). True when the capture stopped at `MAX_CAPTURE_SESSIONS` and deeper OOPIFs are
-	 * absent from this tree. Before this flag the overrun was a warning string nothing merged into
-	 * `browserErrors`, so a missing element inside a deep frame was unexplainable from the wire.
+	 * True when the capture stopped at `MAX_CAPTURE_SESSIONS` and deeper OOPIFs are absent from this
+	 * tree, so a missing element inside a deep frame is explainable from the wire.
 	 */
 	readonly captureTruncated: boolean;
 }
 
 /**
- * ERRATUM(E-40). One frame of the merged tree, as the wire publishes it.
+ * One frame of the merged tree, as the wire publishes it.
  *
- * `composed` is architecture §5.5's honesty marker: `false` when this frame's snapshot document was
+ * `composed` is an honesty marker: `false` when this frame's snapshot document was
  * missing or its host had no `absolutePosition` — the two cases where `#childFrameContext` falls back
  * to a zero offset and the whole subtree stacks at the page origin. Elements inside such a frame still
  * carry geometry, and it is still what the action path uses, but a client is told the composition is
@@ -211,7 +209,7 @@ class TreeBuilder {
 	readonly #byKey: Map<string, EnhancedDomTreeNode>;
 	readonly #warnings: string[];
 	readonly #slack: number;
-	/** ERRATUM(E-40): appended to as frames are descended into, so the list is in document order. */
+	/** Appended to as frames are descended into, so the list is in document order. */
 	readonly #frames: FrameRecord[];
 
 	constructor(
@@ -342,7 +340,7 @@ class TreeBuilder {
 		// child context switches session index as well as coordinates.
 		const childIndex = this.#indicesByFrameId.get(frameId);
 		if (childIndex === undefined) {
-			// ERRATUM(E-40): a frame the capture did not reach (the session cap, or no session for it) is
+			// A frame the capture did not reach (the session cap, or no session for it) is
 			// still a frame the page has; it is listed so its absence from the tree is explicable.
 			this.#recordFrame(node, context, frameId, { url: '', isOopif: true, captured: false, composed: false });
 			return;
@@ -361,7 +359,7 @@ class TreeBuilder {
 		this.#annotateHiddenContent(node, childContext);
 	}
 
-	/** ERRATUM(E-40): one {@linkcode FrameRecord} per descended frame, host geometry included. */
+	/** One {@linkcode FrameRecord} per descended frame, host geometry included. */
 	#recordFrame(
 		host: EnhancedDomTreeNode,
 		context: FrameContext,
@@ -401,19 +399,18 @@ class TreeBuilder {
 	}
 
 	/**
-	 * `hiddenElementsInfo` / `hasHiddenContent` — §6.4's
+	 * `hiddenElementsInfo` / `hasHiddenContent` — the serializer's
 	 * `... (N more elements below - scroll to reveal)` hints, carried on the host iframe.
 	 *
-	 * ERRATUM(M1-dom-extract-9): §6.1 names the fields and §6.4 shows the rendering, but nothing
-	 * defines the candidate set. Implemented as: descendants of the frame that are CSS-visible, have
+	 * The candidate set: descendants of the frame that are CSS-visible, have
 	 * geometry, look interactive by {@linkcode isHiddenHintCandidate}, and sit outside the frame's own
 	 * visible rect. Capped at {@linkcode MAX_HIDDEN_ELEMENT_HINTS}, sorted by absolute distance.
 	 *
-	 * ERRATUM(M1-parity-15): an element the serializer already renders is not hidden content, so the
-	 * candidate set is additionally gated on `isVisible === false`. The frame's `visibleRect` carries no
-	 * vertical slack while `computeVisibility` does, so without this gate the same element was both
-	 * indexed in the tree *and* advertised as "scroll to reveal" — `iframe_inner_scroll` indexed all
-	 * twelve rows and then listed eight of them again as hidden, where the reference lists none.
+	 * An element the serializer already renders is not hidden content, so the candidate set is
+	 * additionally gated on `isVisible === false`. The frame's `visibleRect` carries no vertical slack
+	 * while `computeVisibility` does, so without this gate the same element would be both indexed in the
+	 * tree *and* advertised as "scroll to reveal" — `iframe_inner_scroll` would index all twelve rows and
+	 * then list eight of them again as hidden, where the reference lists none.
 	 */
 	#annotateHiddenContent(host: EnhancedDomTreeNode, childContext: FrameContext): void {
 		const content = host.contentDocument;
@@ -444,7 +441,7 @@ class TreeBuilder {
 	}
 
 	/**
-	 * ERRATUM(M1-dom-extract-5): the seam's `NodeType` union is closed over the six types extraction
+	 * The seam's `NodeType` union is closed over the six types extraction
 	 * observes. An unobserved type (CDATA, processing instruction) is mapped to `COMMENT_NODE`, which
 	 * every consumer already treats as inert, and a warning is recorded rather than the type widened.
 	 */
@@ -525,8 +522,7 @@ function appendFramePath(path: string, index: number): string {
  * and sized by `clientRects.width/height`. This is the exact origin the child document's own
  * coordinates are measured from, so frame geometry composes without an approximation.
  *
- * ERRATUM(M1-dom-extract-1): DATA-MODEL §6.2 calls `clientRects` "viewport-relative"; it is not. CDP
- * puts `[clientLeft, clientTop, clientWidth, clientHeight]` there — an inset and a size, not a
+ * `clientRects` is not viewport-relative: CDP puts `[clientLeft, clientTop, clientWidth, clientHeight]` there — an inset and a size, not a
  * position. Reading it as a viewport position would stack every iframe's content at the top-left of
  * the page.
  */
@@ -555,17 +551,15 @@ export function translateBounds(bounds: DomRect | null, context: FrameContext): 
 }
 
 /**
- * `isVisible` (DATA-MODEL §6.1) — a CSS gate, then the frame-chain viewport test with ±`slack` px of
- * vertical give. Exactly the two gates §6.1 names, and no third.
+ * `isVisible` — a CSS gate, then the frame-chain viewport test with ±`slack` px of vertical give.
+ * Exactly these two gates, and no third.
  *
  * `null` for node types with no visual presence of their own (documents, doctypes, comments, shadow
  * roots): "unknown", not "invisible", because a shadow root's *children* are perfectly visible.
  *
- * ERRATUM(M1-parity-12): an **area gate** (`width <= 0 || height <= 0`) used to sit between the two.
- * §6.1 specifies no such test and the reference indexes both `#v-zero-size` (a 0x0 button) and
- * `#l-empty` (an anchor with no content). A zero-area box still passes the viewport test below, because
- * the intersection is written on the rect's edges rather than on its area
- * (DECISION-REGISTER §9.6 (E-23) item 3).
+ * There is no **area gate** (`width <= 0 || height <= 0`): the reference indexes both `#v-zero-size`
+ * (a 0x0 button) and `#l-empty` (an anchor with no content). A zero-area box still passes the viewport
+ * test below, because the intersection is written on the rect's edges rather than on its area.
  */
 export function computeVisibility(
 	nodeType: NodeType,
@@ -583,12 +577,10 @@ export function computeVisibility(
 /**
  * `opacity: 0` on the node itself.
  *
- * ERRATUM(M1-dom-extract-6, WITHDRAWN by M1-parity-12): this used to be propagated down the tree so
- * that an `opacity: 0` wrapper hid its subtree, since `opacity` does not inherit and `DOMSnapshot`
- * reports `1` for every child of a transparent wrapper. The reference does not hide them: it indexes
- * `#v-opacity-zero` (a button under an `opacity: 0` div) and renders that div's text. Opacity is
- * therefore not part of the CSS gate at all, and this predicate survives only as a description of a
- * node — nothing consumes it for visibility.
+ * Not propagated down the tree, and not part of the CSS gate at all: the reference does not hide the
+ * children of an `opacity: 0` wrapper — it indexes `#v-opacity-zero` (a button under an `opacity: 0`
+ * div) and renders that div's text. This predicate only describes a node; nothing consumes it for
+ * visibility.
  */
 export function isFullyTransparent(snapshotNode: EnhancedSnapshotNode | null): boolean {
 	const opacity = snapshotNode?.computedStyles?.opacity;
@@ -647,7 +639,7 @@ export function pagesOutsideRect(target: DomRect | null, rect: DomRect): number 
 }
 
 /**
- * Deliberately NOT the serializer's `isInteractive` (DATA-MODEL §6.3): this is the narrower question
+ * Deliberately NOT the serializer's `isInteractive`: this is the narrower question
  * "would a user consider this worth scrolling to", used only for iframe hidden-element hints.
  */
 export function isHiddenHintCandidate(node: EnhancedDomTreeNode): boolean {
@@ -659,7 +651,7 @@ export function isHiddenHintCandidate(node: EnhancedDomTreeNode): boolean {
 	return node.snapshotNode?.cursorStyle === 'pointer';
 }
 
-/** CDP's flat `[k1, v1, k2, v2, …]` attribute list, folded to a record (DATA-MODEL §6.1). */
+/** CDP's flat `[k1, v1, k2, v2, …]` attribute list, folded to a record. */
 export function foldAttributes(flat: readonly string[] | undefined): Record<string, string> {
 	const out: Record<string, string> = {};
 	if (flat === undefined) return out;
@@ -693,6 +685,3 @@ export function walkTree(root: EnhancedDomTreeNode): EnhancedDomTreeNode[] {
 	visit(root);
 	return out;
 }
-
-// ERRATUM(G4-6): `NODE_TYPE_DOCUMENT` was an alias of `DOCUMENT_NODE` "exported so callers can
-// branch without re-declaring the DOM constants" — for callers that never existed.

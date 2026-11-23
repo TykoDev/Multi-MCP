@@ -9,39 +9,31 @@ import { LIMITS } from './limits.ts';
 import { defaultProxyDeps } from './proxy.ts';
 import { freeBytes, Sandbox } from './sandbox.ts';
 import { sandboxSettings } from './settings.ts';
-import { GENERATED_TOKEN_FILE, provisionServiceToken, readServiceToken, releaseTokenGrants } from './token.ts';
+import { readServiceToken, releaseTokenGrant } from './token.ts';
 import { WorkspaceService } from './workspaces.ts';
 
 /** The code volume, as the service holds it. */
 const WORK_DIR = '/work';
 /** The bwrap backend's proxy sockets: the container's own tmpfs, not the shared volume. */
 const RUNTIME_DIR = '/tmp/ttk-sandbox';
-/**
- * D-108: where the Docker backend's service holds the socket volume (docker-compose.sandbox-docker.yml mounts it
- * here and grants it); each workspace container sees its own subfolder of it at /run/harbour, read-only (E-90).
- */
-export const SOCK_DIR = '/run/ttk-sandbox-sock';
+/** The Docker backend's socket volume; each container sees its own subfolder at /run/harbour, read-only. */
+const SOCK_DIR = '/run/ttk-sandbox-sock';
 
 /** Starts the Linux-only private sandbox using file-backed credentials. */
 export async function startSandbox(): Promise<void> {
 	if (Deno.build.os !== 'linux') throw new Error('The coding sandbox service requires Linux.');
-	// Names outside the --allow-env grant read as unset, so the default image starts the bwrap backend (D-108).
+	// Names outside the --allow-env grant read as unset, so the default image starts the bwrap backend.
 	const settings = sandboxSettings();
 	const docker = settings.backend === 'docker' ? settings.docker : null;
-	// SB-5: read once; the grant to read the file is revoked before anything else runs. The folders (and, for the
+	// Read once; the grant to read the file is revoked before anything else runs. The folders (and, for the
 	// Docker backend, the Engine socket) the service still needs must stay readable after it.
 	const keep = docker ? [WORK_DIR, RUNTIME_DIR, SOCK_DIR, docker.socket] : [WORK_DIR, RUNTIME_DIR];
-	// D-151: docker-compose.yml points this service at GENERATED_TOKEN_FILE, on a volume only it and the gateway mount,
-	// so a fresh `up` needs no operator-made token. It is created on the first start and never replaced; any other path
-	// is the operator's file and is never created. The log names the path only — the value is not even guarded yet.
-	if (settings.tokenFile === GENERATED_TOKEN_FILE && await provisionServiceToken(GENERATED_TOKEN_FILE)) {
-		log('info', 'sandbox.token_generated', { path: GENERATED_TOKEN_FILE });
-	}
+	// The token is the `ttk_sandbox_token` secret `deno task setup` writes, mounted read-only here and in the gateway.
 	const token = await readServiceToken(settings.tokenFile, keep);
 	guardSecret(token);
-	// D-151: both token locations, and the write grant on the generated one, are given up before anything else runs.
-	await releaseTokenGrants(keep);
-	// R12 (D-132): the credentialed remotes, read once in the same way; their credentials are guarded as they are read.
+	// The image's default token location is given up too, whichever path was used, before anything else runs.
+	await releaseTokenGrant();
+	// The credentialed remotes, read once in the same way; their credentials are guarded as they are read.
 	// Unset, the grant to the remotes file is given up all the same: nothing in this process reads it again.
 	let remotes: GitRemote[] = [];
 	if (settings.git.remotesFile !== null) remotes = await loadGitRemotes(settings.git.remotesFile, keep);
@@ -50,7 +42,7 @@ export async function startSandbox(): Promise<void> {
 	const proxy = defaultProxyDeps((event, fields) => log('warn', event, fields));
 	let backend: Sandbox | DockerSandbox;
 	if (docker) {
-		// G1: opt-in and loud. The socket is root on the host; the warning says so on every start.
+		// Opt-in and loud. The socket is root on the host; the warning says so on every start.
 		log('warn', 'sandbox.docker_backend', {
 			message: 'TTK_SANDBOX_BACKEND=docker: this service holds the Docker Engine socket, which is root-equivalent ' +
 				'on the host. Workspaces run as containers it creates from a fixed, validated body. Prefer rootless Docker.',
@@ -70,7 +62,7 @@ export async function startSandbox(): Promise<void> {
 		const filter = userNamespaceFilter(Deno.build.arch);
 		if (!filter) throw new Error('No cage seccomp filter for this architecture.');
 		const bwrap = '/usr/bin/bwrap';
-		// D-064: commands receive only their own workspace mounts, never token files or service state.
+		// Commands receive only their own workspace mounts, never token files or service state.
 		backend = new Sandbox({
 			workDir: WORK_DIR,
 			runtimeDir: RUNTIME_DIR,
@@ -86,7 +78,7 @@ export async function startSandbox(): Promise<void> {
 	}
 	await service.initialize();
 	if (!(await service.health()).ok) throw new Error(`Sandbox readiness failed (${backend.kind} backend).`);
-	// SB-4: what a crash left behind is removed at start-up and then every LIMITS.sweepEveryMs.
+	// What a crash left behind is removed at start-up and then every LIMITS.sweepEveryMs.
 	const sweep = (): void => {
 		service.sweep().then(
 			(removed) => removed > 0 && log('info', 'sweep.removed', { removed }),

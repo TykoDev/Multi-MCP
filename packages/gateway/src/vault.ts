@@ -1,29 +1,13 @@
-/**
- * D-154 (owner-requested): secrets at rest, sealed in the database.
- *
- * Every secret the server keeps — a model provider key, a browser-typed credential, the generated link-signing key —
- * is stored only as AES-256-GCM ciphertext in the `secrets` table. Nothing secret is written to disk in plaintext.
- *
- * - **The key** is 32 random bytes from `TTK_DB_KEY_FILE` (`doctor --new-db-key` writes one), read once like every
- *   `*_FILE` secret and held only in a non-extractable `CryptoKey`. It must live outside the data volume: a backup of
- *   `/data` then holds ciphertext only.
- * - **Each value** gets a fresh 96-bit random nonce. The additional data binds the ciphertext to its row name and to a
- *   caller-chosen context (a provider key's host), so a row copied to another name, or a key moved to another host,
- *   fails authentication instead of decrypting.
- * - **A check row** sealed under the key at first use makes a wrong key refuse startup by name, before any secret is
- *   read. A database that holds sealed secrets refuses to open without a key at all.
- *
- * Errors name the variable and a fixed phrase, never a value.
- */
+/** Secrets at rest, sealed in the database. */
 import { decodeBase64Url, encodeBase64Url } from '@std/encoding/base64url';
 import { decodeBase64 } from '@std/encoding/base64';
 import { decodeHex, encodeHex } from '@std/encoding/hex';
-// deno-lint-ignore no-external-import -- node: builtin (the runtime's own crypto), not a dependency; D-154
+// deno-lint-ignore no-external-import -- node: builtin (the runtime's own crypto), not a dependency
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 import { type Database, now } from './database.ts';
 
 /** The variable that names the key file. */
-export const DB_KEY_ENV = 'TTK_DB_KEY_FILE';
+const DB_KEY_ENV = 'TTK_DB_KEY_FILE';
 
 /** The key's length in bytes (AES-256). */
 export const DB_KEY_BYTES = 32;
@@ -85,12 +69,7 @@ export class Vault {
 		this.#keyId = keyId;
 	}
 
-	/**
-	 * Opens the vault over `db` with `key` (the decoded `TTK_DB_KEY_FILE`), or locked with `null`.
-	 *
-	 * Refuses a wrong key (the check row does not open), and a missing key when the database already holds sealed
-	 * secrets — either would otherwise surface later as secrets that silently vanished.
-	 */
+	/** Opens the vault over `db` with `key` (the decoded `TTK_DB_KEY_FILE`), or locked with `null`. */
 	static async open(db: Database, key: Uint8Array | null): Promise<Vault> {
 		const check = db.get('SELECT nonce, sealed FROM secrets WHERE name = ?', CHECK_NAME);
 		if (key === null) {
@@ -212,10 +191,8 @@ function additionalData(name: string, context: string): Uint8Array<ArrayBuffer> 
 }
 
 /**
- * D-154: a synchronous sealer for a secret that must be written inside a synchronous document write — an A2A push
- * webhook's token in `agents/tasks.json`. AES-256-GCM under a subkey HKDF-derived from the vault key for `purpose`
- * (never the vault key itself), a fresh 96-bit nonce per value, `context` authenticated. Output:
- * `v1.<nonce b64url>.<ciphertext+tag b64url>`. `open` answers `null` for anything that does not open.
+ * A synchronous sealer for a secret that must be written inside a synchronous document write — an A2A push webhook's
+ * token in `agents/tasks.json`.
  */
 export function syncSealer(
 	key: Uint8Array,

@@ -1,10 +1,4 @@
-/**
- * Interaction handlers: the tools that put input into the page — clicks, typing, keys, scrolling.
- *
- * Every one is mutating and refused while a human holds the session. Handlers throw
- * {@linkcode ToolError} for anything the calling model should see; the dispatch seam turns those
- * into result-level errors.
- */
+/** Interaction handlers: the tools that put input into the page — clicks, typing, keys, scrolling. */
 import { inputRequired, inputResponse } from '@modelcontextprotocol/server';
 import {
 	ClickCoordinateEvent,
@@ -12,6 +6,7 @@ import {
 	HoverEvent,
 	keySpecForCharacter,
 	type KeyTarget,
+	markSecretFilled,
 	MODIFIER_ALIASES,
 	MODIFIER_BITS,
 	NAMED_KEYS,
@@ -26,8 +21,8 @@ import {
 import { expressionDigest } from '../audit.ts';
 import { originOf, ToolError } from '../errors.ts';
 import { fileInfoOf } from '../files.ts';
-import { focusedFrame } from '../focus_frame.ts';
-import { classifySensitiveText } from '../masking.ts';
+import { focusedFrame } from '../isolated_world.ts';
+
 import {
 	assertUnitViewportScale,
 	EVALUATE_TIMEOUT_MS_DEFAULT,
@@ -48,8 +43,8 @@ import {
 import { assertFillable, describeFillTarget, type SecretStore } from '../secrets.ts';
 import type { SessionRecord } from '../registry.ts';
 import { say, type ToolContext, type ToolResult } from '../types.ts';
-// The ONE cross-origin predicate (D-056). `browser_get_html`'s gate and this file's credential
-// confinement must not answer "same origin?" differently — SEC-FH-23 is what happened when they did.
+// The ONE cross-origin predicate. `browser_get_html`'s gate and this file's credential
+// confinement must not answer "same origin?" differently, or one of them confines a frame the other admits.
 import { isCrossOrigin } from './perception.ts';
 import { dispatch, heldToken, nodeAt, target } from './shared.ts';
 
@@ -69,13 +64,7 @@ export async function browserClick(args: PointerArgs, ctx: ToolContext): Promise
 	return await clickWith(args, ctx, { button: 'left', clickCount: 1, verb: 'Clicked' });
 }
 
-/**
- * `browser_double_click` — the same cascade, with E-48's click count.
- *
- * B2.4. The whole tool is one argument's difference from `browser_click`, which is the point: a
- * double click that took its own dispatch path would be a second click implementation, free to
- * disagree with the first about occlusion, geometry, download detection and the guard rails.
- */
+/** `browser_double_click` — the same cascade, with a click count of two. */
 export async function browserDoubleClick(args: PointerArgs, ctx: ToolContext): Promise<ToolResult> {
 	return await clickWith(args, ctx, { button: 'left', clickCount: 2, verb: 'Double-clicked' });
 }
@@ -121,14 +110,7 @@ async function clickWith(
 	});
 }
 
-/**
- * `browser_hover` — move the pointer without pressing (B2.4, AC-P1-12).
- *
- * The result reports where the pointer landed rather than merely that it moved, because a hover that
- * silently clamped to the viewport edge and a hover that landed on the element are indistinguishable
- * to a caller reading "ok". `occluded` is a fact about the page, not a failure: the pointer really is
- * over whatever is on top, and the menu that did not open is the caller's answer.
- */
+/** `browser_hover` — move the pointer without pressing. */
 export async function browserHover(args: PointerArgs, ctx: ToolContext): Promise<ToolResult> {
 	const record = await target(ctx, args, true);
 	const byIndex = args.index !== undefined;
@@ -144,22 +126,16 @@ export async function browserHover(args: PointerArgs, ctx: ToolContext): Promise
 		hover_x: numberOr(outcome?.hoverX, 0),
 		hover_y: numberOr(outcome?.hoverY, 0),
 		clamped: outcome?.clamped === true,
-		// Security review B2-SR4-13: omitted rather than `false` when no occlusion probe ran, which is
-		// every coordinate hover. `false` there would have been a claim about a check nobody made.
+		// Omitted rather than `false` when no occlusion probe ran, which is every coordinate hover.
+		// `false` there would be a claim about a check nobody made.
 		...(typeof outcome?.occluded === 'boolean' ? { occluded: outcome.occluded } : {}),
-		// B2-SR4-4: page-authored and therefore capped at the schema's own bound.
+		// Page-authored and therefore capped at the schema's own bound.
 		hit_tag: typeof outcome?.hitTag === 'string' ? outcome.hitTag.slice(0, MAX_HIT_TAG_CHARS) : null,
 		state_token: heldToken(record),
 	}, `Hovered ${where} in session ${record.id}.`);
 }
 
-/**
- * The cap on `hit_tag`, which is the one field in this slice the *page* writes (B2-SR4-4).
- *
- * A custom element's tag name is whatever the page called it, and a result field a caller reads as
- * server metadata must not be an unbounded channel out of the page. 64 characters is longer than any
- * real tag and shorter than a payload.
- */
+/** The cap on `hit_tag`, which is the one field in the hover result the *page* writes. */
 const MAX_HIT_TAG_CHARS = 64;
 
 /** A number from an untyped handler result, or the fallback. */
@@ -167,26 +143,15 @@ function numberOr(value: unknown, fallback: number): number {
 	return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-/**
- * The click's text result, plus the download it started when the action layer reports one (E-33).
- *
- * The text block is unchanged, so existing callers keep parsing what they parsed; the download is an
- * *additional* text block and the structured content. Only safe metadata is appended — never the
- * bytes and never a path — and the listing tool stays authoritative for downloads that start after
- * the click's own detection window has closed.
- */
+/** The click's text result, plus the download it started when the action layer reports one. */
 function clickResult(
 	message: string,
 	record: SessionRecord,
 	outcome: Record<string, unknown> | null,
 	where: Record<string, unknown>,
 ): ToolResult {
-	// The token names the table this action's `index` was RESOLVED AGAINST — the state as it was
-	// before the action ran, because that is the only table the index ever meant anything in. It is
-	// deliberately NOT a claim about the page afterwards: a click that navigates leaves this handler
-	// with the pre-click token, and a client that read it as "indices are still stable" would walk
-	// straight back into the defect E-36 exists to close. `browser_get_state` is the only tool whose
-	// token describes the page as it is now.
+	// The token names the table this action's `index` was RESOLVED AGAINST — the state as it was before the action
+	// ran, because that is the only table the index ever meant anything in.
 	const base = { ...where, state_token: heldToken(record) };
 	const download = outcome?.download as { guid?: unknown } | undefined;
 	const guid = typeof download?.guid === 'string' ? download.guid : null;
@@ -194,8 +159,7 @@ function clickResult(
 	const tracked = record.files.lookup(guid);
 	const info = tracked === undefined ? null : fileInfoOf(tracked);
 	if (info === null) return say(base, message);
-	// The second text block keeps the exact payload 0.1.0 emitted, byte for
-	// byte; the structured half is the one that grew (D-3, I-4).
+	// The second text block is a frozen payload, byte for byte; new fields go to the structured half only.
 	return {
 		content: [
 			{ type: 'text', text: message },
@@ -211,29 +175,10 @@ export async function browserType(
 ): Promise<ToolResult> {
 	const record = await target(ctx, args, true);
 
-	// R14. Two independent protections, in order.
-	//
-	// First, `<secret>name</secret>` placeholders are resolved server-side, so a
-	// configured credential can be typed by a model that has never seen it. The
-	// current page's URL decides which secrets are permitted — a model that has
-	// been steered onto an attacker's page cannot spend a secret pinned
-	// elsewhere.
-	//
-	// The origin is read *live* rather than from the cached state. A stale URL
-	// here is not a cosmetic bug: it is the difference between "this secret is
-	// pinned to your bank" and "this secret was typed into whatever the page
-	// navigated itself to while you were deciding". The read is paid for only
-	// when a placeholder is actually present.
-	//
-	// D-096 (A2): and it is the URL of the frame the keystrokes land in — the element's frame when an index
-	// names one, the focused element's frame when none does — never the top document's, which was the
-	// frameset hole SEC-07 closed for `browser_fill_secret` and left open here.
+	// `<secret>name</secret>` placeholders resolve server-side, pinned to the live URL of the frame the keystrokes land
+	// in (not a cached or top-document URL), so a steered page cannot spend a secret pinned elsewhere.
 	const wantsSecret = ctx.secrets !== undefined && !ctx.secrets.empty && args.text.includes('<secret>');
-	// SEC-24's guard, on the second of the two secret-bearing paths (B2.8). Under a visual viewport
-	// scale other than 1 the layout- and visual-viewport scroll sources diverge, so a click point is
-	// computed from mixed spaces and the value can land on an element other than the one named. It
-	// fires **only when a placeholder is actually present**: an ordinary `browser_type` paying a CDP
-	// round trip for a check with no security content would be a cost and not a control.
+	// The viewport-scale guard, on the second of the two secret-bearing paths.
 	if (wantsSecret) await assertUnitViewportScale(record);
 	const pin = wantsSecret ? await secretPin(record, args.index, args.state_token) : { frameId: '', url: '' };
 	const url = pin.url;
@@ -241,10 +186,8 @@ export async function browserType(
 		? (ctx.secrets as SecretStore).substitute(args.text, url)
 		: { text: args.text, used: [] as readonly string[], substituted: false };
 
-	// Second, whatever is left is classified: an operator typing a password by
-	// hand into a tool call gets it masked out of the result and the logs rather
-	// than echoed back. It cannot un-mask a placeholder substitution, which is
-	// already known to be sensitive.
+	// Second, whatever is left is classified: an operator typing a password by hand into a tool call gets it masked
+	// out of the result and the logs rather than echoed back.
 	const classified = classifySensitiveText(resolved.text);
 	const sensitive = resolved.substituted || classified.sensitive;
 	const echo = resolved.substituted
@@ -252,10 +195,14 @@ export async function browserType(
 		: classified.display;
 
 	if (args.index !== undefined) {
+		const node = nodeAt(record.session, args.index, args.state_token);
+		// A field that received a secret — substituted, or classified sensitive — is masked from now on
+		// exactly as a password field is, before the keystrokes go out (see `markSecretFilled`).
+		if (sensitive) markSecretFilled(node.sessionId, node.backendNodeId);
 		await dispatch(
 			record.session,
 			new TypeTextEvent({
-				node: nodeAt(record.session, args.index, args.state_token),
+				node,
 				text: resolved.text,
 				clear: args.clear ?? false,
 				isSensitive: sensitive,
@@ -273,13 +220,9 @@ export async function browserType(
 		}, typedMessage(echo, sensitive, `element ${args.index}`, record.id));
 	}
 
-	// ERRATUM(E-18). The schema has always advertised an index-less form ("or
-	// into the currently focused element") that could not work: `TypeTextEvent`
-	// takes a *required* node, and the base class sanitizes it through a
-	// WeakSet, so omitting it threw `Invalid value used in weak set` and the
-	// tool reported `browser-unavailable` for a perfectly valid call. Typing at
-	// the focus is a session-level gesture, not an element-targeted one, so it
-	// goes to the same vendored key synthesis the element path ends up using.
+	// The index-less form ("or into the currently focused element") cannot go through `TypeTextEvent`: it takes a
+	// *required* node, and the base class sanitizes it through a WeakSet, so omitting it throws
+	// `Invalid value used in weak set`.
 	await typeAtFocus(record, resolved.text, args.clear ?? false);
 	ctx.registry.touch(record.id);
 	auditSubstitution(record, ctx, resolved.used, pin, undefined);
@@ -291,20 +234,7 @@ export async function browserType(
 	}, typedMessage(echo, sensitive, 'the focused element', record.id));
 }
 
-/**
- * Records a `browser_type` placeholder substitution in the session's audit ledger (B2.8).
- *
- * **A deliberate widening of design §6.5's "two producers", and the argument is one sentence:**
- * SEC-08 exists so that there is a record a server-held credential was spent, and `browser_type`
- * spends them too — a ledger that recorded only `browser_fill_secret` would be a record with a hole
- * in exactly the shape of the older, less restricted surface. The entry is the same `secret-fill`
- * kind, so a reader sees one vocabulary rather than two.
- *
- * The origin and frame are the ones the pin was evaluated against: since D-096 (A2) that is the frame the
- * keystrokes land in, as `browser_fill_secret` records it — no longer the top document's, which this entry
- * used to name with an empty `frame_id`. An audit that claimed a frame origin the check never used would
- * be describing a control that did not run, and the two now describe the same one.
- */
+/** Records a `browser_type` placeholder substitution in the session's audit ledger. */
 function auditSubstitution(
 	record: SessionRecord,
 	ctx: ToolContext,
@@ -326,20 +256,7 @@ function auditSubstitution(
 	}
 }
 
-/**
- * The frame a `<secret>` placeholder is pinned to, and that frame's live URL (A2, D-096).
- *
- * With an `index`, the element's own frame, through **the resolver `browser_fill_secret` uses**:
- * `frameContext` from the element's `frameId`, then `liveFrameIdentity`, which reads the URL from the
- * browser's frame tree now and refuses a frame that is no longer attached. `nodeAt` runs first so a stale
- * token or an unknown index is refused here exactly as the dispatch below would refuse it. Without an
- * index, the frame that holds keyboard focus (`focus_frame.ts`), which is where `typeAtFocus` sends the
- * keystrokes. Either way the top document's URL is the pin only when the field is in the top document.
- *
- * Deliberately **not** `browser_fill_secret`'s other refusals (a pinned secret, a password/text input, a
- * same-origin frame): `browser_type` is the less restricted surface by design, and what changes here is
- * only which origin its domain pin is checked against.
- */
+/** The frame a `<secret>` placeholder is pinned to, and that frame's live URL. */
 async function secretPin(
 	record: SessionRecord,
 	index: number | undefined,
@@ -354,17 +271,7 @@ async function secretPin(
 	return { frameId: focused.frameId, url: await liveFrameUrl(record, focused) };
 }
 
-/**
- * `typed_length`, and only when it discloses nothing (E-38, security review).
- *
- * The frozen text block has always withheld the length on the sensitive branch — `typedMessage`
- * writes "Typed <secret>name</secret> into …" rather than a character count — precisely so a caller
- * that never learns a server-held credential does not learn its size either. The structured half
- * added by D-A2 re-added it unconditionally, alongside `sensitive: true` to say which value it was:
- * one `browser_type` per configured secret name would have enumerated the exact character length of
- * every credential the deployment holds. It is omitted rather than zeroed, because a zero would be a
- * length claim of its own and the schema's `.optional()` is the honest shape for "not disclosed".
- */
+/** `typed_length`, and only when it discloses nothing. */
 function typedLength(text: string, sensitive: boolean): { typed_length?: number } {
 	return sensitive ? {} : { typed_length: text.length };
 }
@@ -427,20 +334,7 @@ async function typeAtFocus(record: SessionRecord, value: string, clear: boolean)
 	}
 }
 
-/**
- * `browser_press_key` — a key or chord, optionally aimed at a named element (B2.4, AC-P1-15).
- *
- * Two additions over 0.1.0, both additive. `modifiers` is a **name array** rather than a second
- * spelling of the chord string: `{key: 'a', modifiers: ['ctrl']}` and `{key: 'ctrl+a'}` are the same
- * press, and the array is the form the Live View socket already accepts (E-42), so a client that
- * drives both does not need two encodings. `index` focuses the element with `DOM.focus` first
- * (E-50) — never with a click, which would fire the element's own handlers as a side effect of
- * pressing a key.
- *
- * The names are folded into the chord string rather than into a bitfield of our own, because
- * `parseKeyCombo` is the single parser both paths use and a second modifier fold is exactly the
- * duplicate-table defect E-42 closed.
- */
+/** `browser_press_key` — a key or chord, optionally aimed at a named element. */
 export async function browserPressKey(
 	args: { key: string; modifiers?: readonly string[]; index?: number; state_token?: string; session_id?: string },
 	ctx: ToolContext,
@@ -465,28 +359,14 @@ export async function browserPressKey(
 	);
 }
 
-/**
- * What the result says was pressed — security review B2-SR4-5.
- *
- * A single chord is echoed, because the echo carries a capability: it is how a caller learns which
- * chord the modifier fold actually produced. But `keys` is a **sequence** grammar — whitespace and
- * commas separate combos — so `'s e c r e t'` is six keystrokes, and echoing that verbatim would put
- * the whole string in the transcript twice with none of the protection `browser_type` applies to the
- * same characters. A multi-combo sequence is therefore summarised by its length instead of quoted,
- * which is exactly what `browser_type` does for text it will not echo.
- */
+/** What the result says was pressed. */
 function pressedEcho(keys: string): string {
 	const combos = keys.split(/[\s,]+/).filter((token) => token !== '');
 	if (combos.length <= 1) return keys;
 	return `a sequence of ${combos.length} keys`;
 }
 
-/**
- * Canonicalises modifier names against the vendored alias table, and reports the bitfield.
- *
- * An unknown name is refused rather than dropped: a caller that wrote `'controll'` and got an
- * unmodified keystroke would see a plausible-looking success and a page that did not react.
- */
+/** Canonicalises modifier names against the vendored alias table, and reports the bitfield. */
 function normalizeModifiers(names: readonly string[]): { names: string[]; bits: number } {
 	const canonical: string[] = [];
 	let bits = 0;
@@ -502,17 +382,7 @@ function normalizeModifiers(names: readonly string[]): { names: string[]; bits: 
 	return { names: canonical, bits };
 }
 
-/**
- * `browser_fill` — replace a field's contents (B2.5, AC-P1-14).
- *
- * `browser_type` appends, which is the whole reason this tool exists beside it: a replay into a
- * field a browser has remembered a value for must end holding only the new text. So `clear` defaults
- * to **true** here and to false there, and neither default moves.
- *
- * Everything else is `browser_type`'s behaviour deliberately unchanged, including the `<secret>`
- * substitution and the R14/E-38 disclosure rules: the two tools must not be able to disagree about
- * what a transcript keeps, so this delegates rather than reimplements.
- */
+/** `browser_fill` — replace a field's contents. */
 export async function browserFill(
 	args: { index: number; text: string; clear?: boolean; state_token?: string; session_id?: string },
 	ctx: ToolContext,
@@ -526,17 +396,7 @@ export async function browserFill(
 	} as ToolResult;
 }
 
-/**
- * `browser_scroll_to {x, y}` — put the document at an absolute position (B2.5, AC-P1-17).
- *
- * Absolute, where `browser_scroll` is relative. Neither replaces the other: a recording replays at
- * the position it was recorded at, which a direction cannot express, and a model reading a page
- * still wants "one screen further down".
- *
- * `state_token` is `null` by contract rather than the held token: a page scroll can reveal elements
- * that were never indexed, so the table the caller holds is not a description of the page any more
- * and saying otherwise would be worse than saying nothing.
- */
+/** `browser_scroll_to {x, y}` — put the document at an absolute position. */
 export async function browserScrollTo(
 	args: { x: number; y: number; session_id?: string },
 	ctx: ToolContext,
@@ -557,13 +417,7 @@ export async function browserScrollTo(
 	}, `Scrolled session ${record.id} to (${Math.round(args.x)}, ${Math.round(args.y)}).`);
 }
 
-/**
- * `browser_scroll_into_view {index}` — bring one element into the viewport (B2.5, AC-P1-17).
- *
- * The scroll is the browser's own `DOM.scrollIntoViewIfNeeded`, so a nested scroll container, a
- * sticky header and a frame are all handled by Chromium rather than by arithmetic here. The result
- * carries the element's live box afterwards, so a caller can see it actually arrived.
- */
+/** `browser_scroll_into_view {index}` — bring one element into the viewport. */
 export async function browserScrollIntoView(
 	args: { index: number; state_token?: string; session_id?: string },
 	ctx: ToolContext,
@@ -587,13 +441,7 @@ export async function browserScrollIntoView(
 	}, `Scrolled element ${args.index} into view in session ${record.id}.`);
 }
 
-/**
- * `browser_select_option` — set a native `<select>` by value, label or position (B2.5, AC-P1-13).
- *
- * Exactly one selector, enforced by the schema. `index_in_list` is the option's position in its own
- * `<select>`, which is a different number from the element `index` and is named so it cannot be
- * confused with it.
- */
+/** `browser_select_option` — set a native `<select>` by value, label or position. */
 export async function browserSelectOption(
 	args: {
 		index: number;
@@ -617,20 +465,7 @@ export async function browserSelectOption(
 	}, `Selected option ${selected.index_in_list} in element ${args.index} of session ${record.id}.`);
 }
 
-/**
- * `browser_upload_file {index, file_id}` — put one session file on a file input (B2.5, AC-P1-20).
- *
- * `file_id` only. The `bytes` arm is a non-goal (AD-15): it would be a new inbound-file trust
- * boundary nobody asked for, and its absence is why SEC-09's oversized-payload clause is not
- * applicable rather than unticked.
- *
- * The path comes from a **fresh** `SessionFiles.resolve`, called immediately before the dispatch and
- * never cached. That is what makes SEC-09's containment hold at upload time as well as at capture
- * time: `resolve` re-reads the real path and re-checks containment, so a symlink planted inside the
- * download directory after the download completed is refused here. A `file_id` from another session
- * is refused by construction — `SessionFiles` holds one session's directory and one session's
- * ledger, and there is no path from this handler to another session's.
- */
+/** `browser_upload_file {index, file_id}` — put one session file on a file input. */
 export async function browserUploadFile(
 	args: { index: number; file_id: string; state_token?: string; session_id?: string },
 	ctx: ToolContext,
@@ -638,8 +473,8 @@ export async function browserUploadFile(
 	const record = await target(ctx, args, true);
 	const node = nodeAt(record.session, args.index, args.state_token);
 	// Staged under the file's display name, because the page reads the basename of the path we hand
-	// `DOM.setFileInputFiles` as `File.name` and the download's on-disk name is its guid. Measured on
-	// the browser tier: without this the fixture's own change handler reported a GUID.
+	// `DOM.setFileInputFiles` as `File.name` and the download's on-disk name is its guid; staged
+	// under the guid, the page would see a GUID as the file's name.
 	const staged = await record.files.stageForUpload(args.file_id);
 	await dispatch(record.session, new UploadFileEvent({ node, filePath: staged.path }));
 	ctx.registry.touch(record.id);
@@ -653,29 +488,13 @@ export async function browserUploadFile(
 	}, `Uploaded ${staged.info.name} (${staged.size} bytes) to element ${args.index} in session ${record.id}.`);
 }
 
-/**
- * `browser_handle_dialog {dialog_id, accept, prompt_text?}` — answer a held JavaScript dialog
- * (B2.5, AC-P1-19).
- *
- * **A dialog is only answerable while something is subscribed to the `dialog` event kind.** The
- * watchdog has always answered every dialog immediately by a fixed policy — accept everything but a
- * `prompt`, dismiss that — because an unanswered dialog blocks the whole CDP channel for its target.
- * E-53 makes that policy *deferrable*: while a `dialog` subscriber exists the browser holds the
- * dialog open under an id for up to 20 s, and this tool is how a caller supplies the answer the
- * policy could not — dismissing a `confirm`, or typing into a `prompt`, neither of which was
- * reachable before. With no subscriber there is nothing held and this tool answers
- * `element-not-found`, which is the honest reply: the dialog it names is already closed.
- *
- * `prompt_text` is **never echoed**. It is caller-supplied, so echoing it is not a disclosure — it is
- * a second copy of possibly-sensitive text in a transcript, bought for no capability at all.
- */
+/** `browser_handle_dialog {dialog_id, accept, prompt_text?}` — answer a held JavaScript dialog. */
 export async function browserHandleDialog(
 	args: { dialog_id: string; accept: boolean; prompt_text?: string; session_id?: string },
 	ctx: ToolContext,
 ): Promise<ToolResult> {
-	// B3.2: exempt from the `dialog-open` refusal every other mutating tool now
-	// takes, because this tool is that refusal's remedy — without the exemption it
-	// would refuse itself and a held dialog would be unanswerable.
+	// Exempt from the `dialog-open` refusal every other mutating tool takes, because this tool is that refusal's
+	// remedy — without the exemption it would refuse itself and a held dialog would be unanswerable.
 	const record = await target(ctx, args, true, 'answer');
 	const popups = record.popups;
 	if (popups === null) {
@@ -703,15 +522,7 @@ export async function browserHandleDialog(
 	}, `${args.accept ? 'Accepted' : 'Dismissed'} dialog ${args.dialog_id} in session ${record.id}.`);
 }
 
-/**
- * `browser_drag {from, to, steps?}` — press, drag across, release (B2.5, AC-P1-21).
- *
- * Both endpoints are resolved through the click cascade's own geometry, by way of E-49's
- * `HoverEvent`, so a drag starts and ends exactly where a click on the same index would have landed
- * and no geometry is recomputed here. `to` is resolved **first** on purpose: resolving an element
- * endpoint moves the pointer to it, so resolving `from` last leaves the pointer where the press is
- * about to happen, which is the order a human's hand produces.
- */
+/** `browser_drag {from, to, steps?}` — press, drag across, release. */
 export async function browserDrag(
 	args: {
 		from: { index?: number; x?: number; y?: number };
@@ -770,11 +581,8 @@ export async function browserScroll(
 	const amount = Math.round(viewportHeight * (args.pages ?? DEFAULT_SCROLL_PAGES));
 	await dispatch(record.session, new ScrollEvent({ direction: args.direction, amount }));
 	ctx.registry.touch(record.id);
-	// The geometry AFTER the scroll, read live. This used to read `cachedBrowserState.pageInfo`, which
-	// no action refreshes, so `scroll.y` and `pixels_above/below` were the pre-scroll values (found by
-	// the E-38 security review, deferred to the slice that owns geometry). A DOM-less state request is
-	// the cheap read: it skips the DOM build and, by E-36, never touches the cached index table — so
-	// the `state_token` this result carries still names the table the caller is holding.
+	// The geometry AFTER the scroll, read live. `cachedBrowserState.pageInfo` is refreshed by no action, so it would
+	// report the pre-scroll `scroll.y` and `pixels_above/below`.
 	const after = await pageInfoAfter(record);
 	return say({
 		session_id: record.id,
@@ -790,35 +598,9 @@ export async function browserScroll(
 	}, `Scrolled ${args.direction} by ${amount}px in session ${record.id}.`);
 }
 
-// --- B2.7: arbitrary in-page JavaScript, behind the explicit grant ------------
+// --- arbitrary in-page JavaScript, behind the explicit grant ------------------
 
-/**
- * `browser_evaluate {expression}` — run JavaScript in a frame's own main world (B2.7, D-A4).
- *
- * **The sandbox is the scope grant, not the expression subset.** This tool holds
- * `scope: 'evaluate'`, the sole member of `EXPLICIT_SCOPES`, and `registerCatalog` skips
- * registration entirely for a scope the principal does not hold — so an ungranted client never sees
- * it in `tools/list`. That gate is the whole containment boundary, and this comment says so rather
- * than implying a second one that does not exist:
- *
- * - the expression runs in the **main world**, so it sees page globals — which is the stated use
- *   case, and why an isolated world was declined (AD-5, `report_architecture.md` §7.6);
- * - it reaches the DOM, non-`HttpOnly` cookies and the network with the browser's own credentials;
- * - **`TTK_ALLOWED_DOMAINS` does not constrain it.** An in-page `fetch()` is not a navigation and
- *   passes none of D-020's three enforcement points. `SPECS/SECURITY-AUTH.md` §1 and §8 state that
- *   exception in the same change as this handler (SEC-02), and the browser tier observed it.
- *
- * There is deliberately no expression parser: a "read-only subset" was rejected as new attack
- * surface that would read as a sandbox while being an incomplete one.
- *
- * The two caps are availability controls and are recorded as such (SEC-23). The 1 s deadline stops
- * one call holding the CDP channel every other tool and the screencast share; the result-size cap
- * bounds what comes back **through the tool result**, and bounds nothing about what left through the
- * page's own network.
- *
- * A page exception is `ok: false`, not a tool error: the caller asked what the page would do, and
- * the page throwing is the answer.
- */
+/** `browser_evaluate {expression}` — run JavaScript in a frame's own main world. */
 export async function browserEvaluate(
 	args: { expression: string; frame_id?: string; timeout_ms?: number; session_id?: string },
 	ctx: ToolContext,
@@ -834,10 +616,8 @@ export async function browserEvaluate(
 	});
 	ctx.registry.touch(record.id);
 
-	// One audit entry per call, written whether the expression succeeded or threw — "arbitrary code
-	// ran here" is the fact worth recording, and an expression that throws has still run. The body is
-	// never recorded, not even a prefix: an expression is attacker-influenced text and a prefix is
-	// where an exfiltrating one would put its payload (§6.5).
+	// One audit entry per call, written whether the expression succeeded or threw — "arbitrary code ran here" is the
+	// fact worth recording, and an expression that throws has still run.
 	const entry = record.audit.append({
 		session_id: record.id,
 		principal: ctx.principal,
@@ -868,14 +648,7 @@ export async function browserEvaluate(
 	return say(payload, message);
 }
 
-/**
- * The frame's live URL for the audit's `origin`, degrading to the empty string.
- *
- * A frame that detached between the evaluation and the ledger write must not cost the record: the
- * point of the ledger is that arbitrary code ran, and `origin: ''` says honestly that the server
- * could not name where. `browser_fill_secret` reads the URL for a *decision* and therefore refuses
- * instead — the two uses differ, and this is the one that must not fail closed.
- */
+/** The frame's live URL for the audit's `origin`, degrading to the empty string. */
 async function frameOriginFor(record: SessionRecord, frame: FrameContext): Promise<string> {
 	try {
 		return await liveFrameUrl(record, frame);
@@ -884,44 +657,9 @@ async function frameOriginFor(record: SessionRecord, frame: FrameContext): Promi
 	}
 }
 
-// --- B2.8: filling a server-held credential ----------------------------------
+// --- filling a server-held credential -----------------------------------------
 
-/**
- * `browser_fill_secret {index, secret, state_token}` — type a configured credential the model has
- * never seen (B2.8, SEC-07, SEC-24, AD-13).
- *
- * `browser_type` has accepted `<secret>name</secret>` since R14 and still does. This is the same
- * capability with the refusals SEC-07 says the older surface lacks, and it is **deliberately stricter
- * than the tool it sits beside**: once `type=text` is permitted the "is this a password field" check
- * carries no weight, so the domain pin is the only control left and an unpinned secret is refused
- * here even though `browser_type` allows one.
- *
- * Six refusals, and the order they run in is part of the contract:
- *
- * 1. **A stale or absent element table** — `element-not-found`, from `nodeAt` with the **required**
- *    `state_token`. Hard: no re-resolution, no best-effort match. `backendNodeId` is reused, so a
- *    stale index can resolve to a *different element in a new document* where the live-URL check
- *    passes because the page genuinely is the page (AD-13).
- * 2. **Not an `input` or `textarea`** — `element-not-interactable`.
- * 3. **Not a `password` or `text` input** — `element-not-interactable`.
- * 4. **An unpinned secret** (`domains: []`) — `navigation-blocked`. The narrowing above.
- * 5. **A scaled visual viewport** — `browser-unavailable`, `reason: 'viewport-scaled'` (SEC-24).
- * 6. **A frame whose own URL is cross-origin to the top document, or outside the secret's domains** —
- *    `navigation-blocked`. Read **live and per frame**, immediately before the dispatch and after the
- *    element is resolved, with no await in between beyond the dispatch itself. `SPECS/SECURITY-AUTH.md`
- *    §7.1 says "the page"; a frameset makes that ambiguous, and a page can put a same-origin `iframe`
- *    around a password field while the top URL still looks right. Both halves fail **closed** on an
- *    origin that cannot be named (SEC-FH-23): the confinement through {@linkcode isCrossOrigin}, and
- *    the pin through `urlMatch(…, 'secret')` inside `SecretStore`, which has no host to match on
- *    `about:blank`, `data:`, `blob:` or `javascript:` and refuses plaintext `http:` unless the
- *    operator pinned an explicit `http://` pattern.
- *
- * **Never a value and never a length** (DD-7, E-38). The result carries the secret's *name*, the
- * element index, the frame and the origin — nothing derived from the value, not its length, not a
- * prefix, not a hash. E-38 is the reason that sentence is here: a structured field once re-added the
- * character count the frozen text block had deliberately withheld, and one call per configured name
- * would have enumerated the exact length of every credential the deployment holds.
- */
+/** `browser_fill_secret {index, secret, state_token}` — type a configured credential the model has never seen. */
 export async function browserFillSecret(
 	args: { index: number; secret: string; state_token: string; session_id?: string },
 	ctx: ToolContext,
@@ -945,10 +683,7 @@ export async function browserFillSecret(
 		args.index,
 	);
 
-	// R5 (D-125): a form-capable client may have its human choose the secret when the named one cannot be used
-	// here. `offer` is true only on the first round of such a client; a retry carrying the human's choice spends
-	// that name instead, through every check below — so the choice is re-validated against the live origin and
-	// never trusted because it was offered. Every other client takes exactly the path it always took.
+	// A form-capable client may have its human choose the secret when the named one cannot be used here.
 	const chooses = ctx.client?.elicitForm === true && ctx.mcp !== undefined;
 	const chosen = chooses ? chosenSecret(ctx) : undefined;
 	const offer = chooses && chosen === undefined;
@@ -974,7 +709,7 @@ export async function browserFillSecret(
 		);
 	}
 
-	// (5) SEC-24, before the URL read so that the last await before the dispatch is the URL read.
+	// (5) The viewport-scale guard, before the URL read so that the last await before the dispatch is the URL read.
 	await assertUnitViewportScale(record);
 
 	// (6) The live, per-frame origin. Both URLs come from the browser now, not from a capture: the
@@ -982,10 +717,7 @@ export async function browserFillSecret(
 	const frame = await frameContext(record, node.frameId ?? undefined);
 	const identity = await liveFrameIdentity(record, frame);
 	const frameOrigin = originOf(identity.frameUrl);
-	// `isCrossOrigin`, not `originOf`-equality (SEC-FH-23). `originOf` answers the string `"null"` for
-	// EVERY opaque origin, so an `about:blank` top and a `data:` child — which cannot script each
-	// other — compared same-origin and the credential went in. "I cannot name this origin" and "it is
-	// the same origin" are different statements; only the second may let a credential through.
+	// `isCrossOrigin`, not `originOf`-equality.
 	if (isCrossOrigin(identity.frameUrl, identity.topUrl)) {
 		throw new ToolError(
 			'navigation-blocked',
@@ -995,9 +727,7 @@ export async function browserFillSecret(
 			{ index: args.index },
 		);
 	}
-	// R5 (D-125): the named secret is not permitted on this frame's live origin. A first-round, form-capable
-	// client is offered the names that are — the same `namesFor` predicate `substitute` decides with — and
-	// every other caller gets the refusal `substitute` raises below, unchanged.
+	// The named secret is not permitted on this frame's live origin.
 	if (offer && !store.namesFor(identity.frameUrl).includes(secret)) {
 		const choice = secretChoiceFor(
 			store,
@@ -1010,6 +740,10 @@ export async function browserFillSecret(
 	// The pin itself, through the ONE substitution implementation. A second permit check here would
 	// be a second answer to "may this secret be typed at this URL".
 	const resolved = store.substitute(`<secret>${secret}</secret>`, identity.frameUrl);
+
+	// From here on the field is a password field to every emission path — `input.value`, labels, the serialized page,
+	// the AX snapshot, the state token — whatever the page calls it.
+	markSecretFilled(node.sessionId, node.backendNodeId);
 
 	await dispatch(
 		record.session,
@@ -1050,18 +784,12 @@ export async function browserFillSecret(
 	);
 }
 
-// --- R5: the secret choice (D-125) --------------------------------------------------------------------------------
+// --- the secret choice ----------------------------------------------------------------------------------------------
 
 /** The `inputRequests` key the secret choice rides under, and the one its answer comes back under. */
 export const SECRET_CHOICE_KEY = 'ttk_secret';
 
-/**
- * The name a retried `browser_fill_secret` carries from its human, or `undefined` on a first round.
- *
- * Declined or cancelled is `user-declined` and nothing is typed. An accepted form that names nothing usable as a
- * name — absent, empty, or longer than any configured name can be — is the client's error. The name itself is not
- * checked here: it goes through every refusal of the normal path, which is the re-validation.
- */
+/** The name a retried `browser_fill_secret` carries from its human, or `undefined` on a first round. */
 function chosenSecret(ctx: ToolContext): string | undefined {
 	const answer = inputResponse(ctx.mcp?.mcpReq.inputResponses, SECRET_CHOICE_KEY);
 	if (answer.kind === 'missing') return undefined;
@@ -1083,8 +811,7 @@ function chosenSecret(ctx: ToolContext): string | undefined {
 
 /**
  * The choice for a name the store does not hold, which the check order reaches before the frame is read: the
- * element's frame is read here so the offer is made for the origin the credential would go to. A frame that is
- * cross-origin to the top document is never offered anything — the normal path refuses it whatever the name.
+ * element's frame is read here so the offer is made for the origin the credential would go to.
  */
 async function offerSecretChoice(
 	record: SessionRecord,
@@ -1099,10 +826,9 @@ async function offerSecretChoice(
 }
 
 /**
- * The `input_required` offering the secrets this tool would fill at `url` — permitted there by the pin predicate
- * and pinned at all, since an unpinned secret is refused here whatever the page — or `null` when there are none to
- * offer and the caller's refusal stands. Names only: the message and the enum carry configured names and an origin,
- * never a value, a length or anything derived from one.
+ * The `input_required` offering the secrets this tool would fill at `url` — permitted there by the pin predicate and
+ * pinned at all, since an unpinned secret is refused here whatever the page — or `null` when there are none to offer
+ * and the caller's refusal stands.
  */
 function secretChoiceFor(
 	store: SecretStore,
@@ -1124,4 +850,39 @@ function secretChoiceFor(
 			}),
 		},
 	}) as ToolResult;
+}
+
+// --- The `browser_type` sensitive-text heuristic. -----------------------------------------------------------------
+
+/** The minimum length — below it nothing is classified. */
+const SENSITIVE_MIN_LENGTH = 6;
+
+/** The threshold for the credential-shaped branch. */
+const CREDENTIAL_MIN_LENGTH = 16;
+
+/** Email shape. */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Alphanumerics plus the three punctuation characters `.`, `-` and `_`. */
+const CREDENTIAL_SHAPE = /^[A-Za-z0-9.\-_]+$/;
+
+/** What the classifier decided, and the name the mask and the type event both carry. */
+type SensitiveKind = 'email' | 'credential';
+
+interface MaskedText {
+	readonly sensitive: boolean;
+	/** `null` when not sensitive. Feeds `TypeTextEvent.sensitiveKeyName`. */
+	readonly kind: SensitiveKind | null;
+	/** What may be shown: the raw text when safe, `<email>` / `<credential>` when not. */
+	readonly display: string;
+}
+
+/** Classifies one `browser_type` input. Pure; never logs. */
+export function classifySensitiveText(text: string): MaskedText {
+	if (text.length < SENSITIVE_MIN_LENGTH) return { sensitive: false, kind: null, display: text };
+	if (EMAIL_SHAPE.test(text)) return { sensitive: true, kind: 'email', display: '<email>' };
+	if (text.length >= CREDENTIAL_MIN_LENGTH && CREDENTIAL_SHAPE.test(text)) {
+		return { sensitive: true, kind: 'credential', display: '<credential>' };
+	}
+	return { sensitive: false, kind: null, display: text };
 }

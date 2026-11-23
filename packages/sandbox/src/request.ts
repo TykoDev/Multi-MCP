@@ -1,21 +1,11 @@
-/**
- * What a request may ask for, checked before anything touches the disk. Everything here is pure, so
- * the tests run it on any machine.
- *
- * Unknown fields are refused rather than ignored: a caller that misspells `timeoutMs` should hear
- * about it, not get five minutes it did not ask for.
- */
+/** What a request may ask for, checked before anything touches the disk; unknown fields are refused, not ignored. */
 import { LIMITS } from './limits.ts';
 import type { OpenEgress } from './proxy.ts';
 
 /** A run id as the API writes it: a lowercase UUID, which is also its checkout's folder name. */
 export const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/**
- * `none` and `registries` are what a request may ask for. `git` is internal (R12, design §2.19): only the workspace
- * service's clone step uses it, with the egress it built (the git-host proxy or the credentialed forwarder);
- * `parseExec` never returns it, so no caller can reach a git host from a command.
- */
+/** A request may ask for `none` or `registries`; `git` is the clone step's alone and `parseExec` never returns it. */
 export type Network = 'none' | 'registries' | 'git';
 
 export interface ExecRequest {
@@ -28,7 +18,7 @@ export interface ExecRequest {
 	env: Record<string, string>;
 	/** Given to the command on its standard input; null means it reads nothing. */
 	stdin: string | null;
-	/** R12: with `network: 'git'` only, what serves the clone step's proxy socket. Never set from a request. */
+	/** With `network: 'git'` only, what serves the clone step's proxy socket. Never set from a request. */
 	egress?: OpenEgress;
 }
 
@@ -40,12 +30,7 @@ export class RequestError extends Error {
 	}
 }
 
-/**
- * Environment variables that describe the cage itself, which a request may not replace (compared
- * without regard to case). The proxy's are here whatever the network, so a command never meets one
- * pointing somewhere unexpected. The cage's other defaults — `CI`, `LANG`, `NO_COLOR` and the like —
- * may be overridden.
- */
+/** Variables describing the cage (the proxy's included, whatever the network) that a request may not replace. */
 export const RESERVED_ENV: ReadonlySet<string> = new Set([
 	'PATH',
 	'HOME',
@@ -98,11 +83,7 @@ export function parseRunId(value: unknown): string {
 	return value;
 }
 
-/**
- * A directory inside the workspace, as a relative path. Absolute paths, `..`, backslashes and the
- * `.git` directory are refused here; whether the directory exists, and that no part of it is a
- * symbolic link, is checked on disk before the command starts.
- */
+/** A relative directory in the workspace: no absolute path, `..`, backslash or `.git` (links are checked on disk). */
 export function parseCwd(value: unknown): string {
 	if (value === undefined || value === null) return '';
 	if (typeof value !== 'string' || value.length > LIMITS.cwdChars) {

@@ -1,10 +1,9 @@
 /**
- * `state_token` — the identity of the index table a client is addressing (report_design.md §4.1).
+ * `state_token` — the identity of the index table a client is addressing.
  *
- * An LLM index is only meaningful against the table that minted it. Before this module the product
- * had no way to say so: `nodeAt` resolved an index against whatever `#cachedBrowserState` happened
- * to hold, and a caller replaying an index against a page the browser had already left got an
- * element rather than a refusal. The token is the missing half of that contract.
+ * An LLM index is only meaningful against the table that minted it. Without a token, `nodeAt` would
+ * resolve an index against whatever `#cachedBrowserState` happens to hold, and a caller replaying an
+ * index against a page the browser has already left would get an element rather than a refusal.
  *
  * ## Two components, one string
  *
@@ -25,7 +24,7 @@
  * contract the token exists to serve.
  *
  * **Password values.** A password field contributes the literal `masked`, never a digest of its
- * value (DD-7). A `since_token` diff therefore cannot observe a password edit — that is the `input`
+ * value. A `since_token` diff therefore cannot observe a password edit — that is the `input`
  * event's job, and the documentation says so. A digest would be a 64-bit oracle over a secret an
  * attacker can guess against offline; the literal is not.
  *
@@ -33,8 +32,8 @@
  *
  * The element component is emitted in ascending index order and the frame component in ascending
  * `frameId` order, so the token does not depend on map iteration order or on the order Chrome
- * happened to attach OOPIF sessions. This is invariant I-1's testable half and is pinned over all 36
- * recorded captures in `state_token_test.ts` (U-1).
+ * happened to attach OOPIF sessions. This is pinned over all 36 recorded captures in
+ * `state_token_test.ts`.
  */
 
 import { crypto } from '@std/crypto';
@@ -59,11 +58,11 @@ const FIELD = '|';
 /**
  * Length-prefix a page-controlled field before it is joined into a preimage.
  *
- * ERRATUM(E-38, security review of E-36): `|` and newline are structural in these preimages, and
- * three inputs can contain both and are page-controlled — the top URL, an OOPIF's URL, and an
- * accessible name computed from page text. Chrome preserves an unencoded `|` in a URL query, so a
- * page could choose a URL or an AX name that shifted the field boundaries and made two materially
- * different states digest identically, collapsing the `indices_stable` / `stale-token` distinction
+ * `|` and newline are structural in these preimages, and three inputs can contain both and are
+ * page-controlled — the top URL, an OOPIF's URL, and an accessible name computed from page text.
+ * Chrome preserves an unencoded `|` in a URL query, so without the prefix a page could choose a URL or
+ * an AX name that shifts the field boundaries and makes two materially different states digest
+ * identically, collapsing the `indices_stable` / `stale-token` distinction
  * the module exists to provide. Length-prefixing makes the boundary structural rather than
  * conventional: no choice of content can move it.
  */
@@ -71,7 +70,7 @@ function field(value: string): string {
 	return `${value.length}:${value}`;
 }
 
-/** The literal a password field contributes to the content half instead of its value (DD-7). */
+/** The literal a password field contributes to the content half instead of its value. */
 export const MASKED_VALUE_COMPONENT = 'masked';
 
 /** One captured frame's identity, as `CapturedSession` records it. */
@@ -107,7 +106,7 @@ export interface StateToken {
 const TEXT_ENCODER = new TextEncoder();
 
 /**
- * SHA-256, hex, truncated — the same digest shape `hashes.ts` uses (D-DEP1 rung (a)).
+ * SHA-256, hex, truncated — the same digest shape `hashes.ts` uses.
  *
  * `@std/crypto`'s `digestSync` rather than WebCrypto's async `digest`: the serializer is synchronous
  * and minting the token must not turn `serializeDomState` into a promise, which would ripple through

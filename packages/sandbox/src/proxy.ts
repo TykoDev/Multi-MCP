@@ -1,33 +1,13 @@
 /**
- * The registry proxy: how a cage that asked for `network: "registries"` downloads packages.
- *
- * The cage still has no network interface of its own. For each such command the service opens a
- * unix socket, binds it into the cage, and a forwarder inside the cage (socat) turns it into
- * 127.0.0.1:3128, which the cage's proxy variables name. What arrives here is an HTTP proxy
- * request, and only one kind is served:
- *
- * - `CONNECT host:443`, a tunnel for https. Plain http, other ports, and IP addresses are refused.
- * - The host must be on REGISTRY_HOSTS, exactly.
- * - The proxy resolves the name itself and connects to an address it checked: private, loopback,
- *   link-local (and so cloud metadata), carrier-grade NAT, multicast and reserved addresses are
- *   refused, so a name that resolves inward leads nowhere.
- *
- * TLS runs end to end between the program in the cage and the registry; the proxy sees names, not
- * content. So it limits where a cage can connect, not what it sends there: a command holding a
- * registry token of its own could still publish to that registry. Nothing secret belongs in a
- * checkout.
- *
- * R12 (design §2.19, D-131): the same proxy serves a public git clone's one step, opened with the
- * operator's git hosts (`TTK_SANDBOX_GIT_HOSTS`) in place of the registries. That host set is chosen
- * by the service for the clone step alone (the internal `git` network, request.ts); no caller can
- * ask for it, and a registries-mode command never reaches a git host through it.
+ * The registry proxy for `network: "registries"`: the cage has no interface, only a unix socket socat turns into
+ * 127.0.0.1:3128. Only `CONNECT host:443` to an exact REGISTRY_HOSTS name is served; the proxy resolves it and dials
+ * only public addresses, and forwards nothing until the tunnel's ClientHello names that same host as SNI (else domain
+ * fronting would reach any site on the CDN). TLS is end to end: it bounds where a cage connects, not what it sends.
+ * A public clone's step gets the same proxy with the operator's git hosts instead; no caller can ask for that set.
  */
 import { LIMITS } from './limits.ts';
 
-/**
- * Where a cage may download from, and why each is here. Names match exactly: a subdomain of a
- * listed host is not listed.
- */
+/** Where a cage may download from, and why. Names match exactly: a subdomain is not listed. */
 export const REGISTRY_HOSTS: ReadonlyMap<string, string> = new Map([
 	['registry.npmjs.org', 'npm: package metadata and tarballs'],
 	['registry.yarnpkg.com', 'npm again, under the name yarn.lock files record'],
@@ -46,10 +26,7 @@ export const REGISTRY_HOSTS: ReadonlyMap<string, string> = new Map([
 
 export type Target = { host: string; port: number } | { refused: string };
 
-/**
- * The exact host names one proxy admits: REGISTRY_HOSTS for a registries-mode command, the operator's git hosts for
- * a public clone's step (R12). Only membership is read, so a `Map` of reasons and a plain `Set` both serve.
- */
+/** The exact host names one proxy admits; only membership is read. */
 export type HostSet = { has(host: string): boolean };
 
 /** The host and port a CONNECT names, or why it is refused; `hosts` is the set this proxy admits. */
@@ -172,32 +149,28 @@ export interface ProxyDeps {
 	connect(address: string, port: number): Promise<Deno.Conn>;
 	log(event: string, fields: Record<string, unknown>): void;
 	/**
-	 * R12 (M8): TLS over a connection already dialled to a checked literal, verifying the certificate for `hostname`
-	 * and sending it as SNI — the credentialed clone forwarder's upstream (git_forwarder.ts). `Deno.startTls` unless a
-	 * test names a client that trusts its own throwaway CA. The CONNECT proxy never terminates TLS and never calls it.
+	 * TLS over a connection dialled to a checked literal, verified for `hostname`: the credentialed clone forwarder's
+	 * upstream only (the CONNECT proxy never terminates TLS).
 	 */
 	startTls?(conn: Deno.Conn, hostname: string): Promise<Deno.Conn>;
 }
 
-/**
- * What a command's proxy socket is served by while the command runs: the registry proxy, or for a clone's step the
- * git-host proxy or the credentialed forwarder (git_forwarder.ts). Each records the hosts it reached and refused, for
- * the reply, and is closed when the command ends.
- */
+/** What serves a command's proxy socket while it runs; records the hosts reached and refused for the reply. */
 export interface ProxyHandle {
 	readonly reached: ReadonlySet<string>;
 	readonly refused: ReadonlySet<string>;
 	close(): Promise<void>;
 }
 
-/**
- * R12: opens what serves a clone step's proxy socket at `path` (the internal `git` network, request.ts), with the
- * backend's own proxy dependencies. Built by the workspace service for one clone, never from a request.
- */
+/** Opens a clone step's egress at `path`; built by the workspace service for one clone, never from a request. */
 export type OpenEgress = (path: string, deps: ProxyDeps, runId: string) => ProxyHandle;
 
 const HEAD_BYTES = 8 * 1024;
 const HEAD_TIMEOUT_MS = 10_000;
+/** The most a tunnel's first TLS flight may take before its ClientHello is whole (a real one is ≤ ~2 KiB). */
+const HELLO_BYTES = 32 * 1024;
+/** How long the client has, once told the tunnel is up, to send its ClientHello. */
+const HELLO_TIMEOUT_MS = 10_000;
 const CONNECT_TIMEOUT_MS = 10_000;
 const REFUSAL_TOTAL_EVERY_MS = 60_000;
 const encoder = new TextEncoder();
@@ -226,7 +199,7 @@ export const defaultProxyDeps = (log: ProxyDeps['log']): ProxyDeps => ({
 			clearTimeout(timer);
 		}
 	},
-	// M8 (measured on Deno 2.9.7): verifies the certificate for `hostname` and sends it as SNI over a literal dial.
+	// Verifies the certificate for `hostname` and sends it as SNI over a literal dial.
 	startTls: (conn, hostname) => Deno.startTls(conn as Deno.TcpConn, { hostname }),
 	log,
 });
@@ -241,7 +214,7 @@ export class RegistryProxy implements ProxyHandle {
 	readonly #conns = new Set<Deno.Conn>();
 	readonly #serving = new Set<Promise<void>>();
 	#clients = 0;
-	/** SB-9: refusals so far, and when a running total was last logged. */
+	/** Refusals so far, and when a running total was last logged. */
 	#refusals = 0;
 	#totalLoggedAt = 0;
 	readonly #deps: ProxyDeps;
@@ -249,10 +222,7 @@ export class RegistryProxy implements ProxyHandle {
 	readonly #hosts: HostSet;
 	readonly #accepting: Promise<void>;
 
-	/**
-	 * Serves proxy requests arriving on `listener`, a unix socket in use (a TCP one in tests), admitting `hosts`: the
-	 * registries, unless a clone's step opened it with the git hosts (R12).
-	 */
+	/** Serves proxy requests arriving on `listener` (a TCP one in tests), admitting `hosts`. */
 	constructor(listener: Deno.Listener, deps: ProxyDeps, runId: string, hosts: HostSet = REGISTRY_HOSTS) {
 		this.#listener = listener;
 		this.#deps = deps;
@@ -343,9 +313,25 @@ export class RegistryProxy implements ProxyHandle {
 				);
 			}
 			this.#conns.add(upstream);
-			this.reached.add(checked.host);
 			await writeAll(client, encoder.encode('HTTP/1.1 200 Connection established\r\n\r\n'));
-			if (head.rest.length > 0) await writeAll(upstream, head.rest);
+			// Nothing is forwarded until the ClientHello's server_name is exactly the checked host (no domain fronting).
+			const hello = await readClientHello(client, head.rest);
+			const sni = hello.bytes === null ? hello : clientHelloSni(hello.bytes);
+			const why = 'invalid' in sni
+				? sni.invalid
+				: 'need' in sni
+				? 'the tunnel carried no complete TLS ClientHello'
+				: sni.sni === null
+				? 'the TLS ClientHello names no server'
+				: sni.sni !== checked.host
+				? 'the TLS ClientHello names another server than the tunnel'
+				: null;
+			if (why !== null || hello.bytes === null) {
+				this.#note(checked.host, why ?? 'the tunnel carried no complete TLS ClientHello');
+				return;
+			}
+			this.reached.add(checked.host);
+			await writeAll(upstream, hello.bytes);
 			await Promise.all([pump(client, upstream), pump(upstream, client)]);
 		} catch {
 			// Either side went away; nothing to report.
@@ -360,8 +346,14 @@ export class RegistryProxy implements ProxyHandle {
 	}
 
 	async #refuse(client: Deno.Conn, host: string, why: string, status = 403): Promise<void> {
+		this.#note(host, why);
+		await reply(client, status, status === 403 ? 'Forbidden' : 'Bad Gateway', `${why}.`);
+	}
+
+	/** Records and logs a refusal; the caller answers it (an HTTP reply, or closing a tunnel already granted). */
+	#note(host: string, why: string): void {
 		if (this.refused.size < LIMITS.refusedHostsListed) this.refused.add(host.slice(0, 255));
-		// SB-9: a command can ask as often as it likes; the log gets the first few, then a total at most
+		// A command can ask as often as it likes; the log gets the first few, then a total at most
 		// once a minute and once more when the command ends.
 		this.#refusals++;
 		if (this.#refusals <= LIMITS.refusalsLogged) {
@@ -370,7 +362,154 @@ export class RegistryProxy implements ProxyHandle {
 			this.#totalLoggedAt = Date.now();
 			this.#deps.log('proxy.refused_total', { runId: this.#runId, refused: this.#refusals, final: false });
 		}
-		await reply(client, status, status === 403 ? 'Forbidden' : 'Bad Gateway', `${why}.`);
+	}
+}
+
+/** What a tunnel's first TLS flight said, as {@linkcode clientHelloSni} reads it. */
+export type HelloSni =
+	/** A whole ClientHello: the host_name it carries, lowercased and without a trailing dot, or null when none. */
+	| { sni: string | null }
+	/** Well-formed so far, but the ClientHello is not complete yet. */
+	| { need: true }
+	/** Not a TLS ClientHello, or one that breaks its own length fields. */
+	| { invalid: string };
+
+const TLS_HANDSHAKE = 0x16;
+const CLIENT_HELLO = 0x01;
+const SERVER_NAME = 0x0000;
+const HOST_NAME = 0x00;
+/** RFC 8446 §5.1: a plaintext record carries at most 2^14 bytes. */
+const RECORD_MAX = 16_384;
+/** An SNI host name as RFC 6066 has it: ASCII (A-labels), at most 255 bytes, no empty name. */
+const SNI_NAME = /^[a-z0-9._-]{1,255}$/;
+
+/**
+ * The server_name of the TLS ClientHello at the start of `bytes`, read strictly: every length must fit inside its
+ * parent or the flight is `invalid`; one still arriving is `need`. Records are joined until the first handshake
+ * message is whole (RFC 8446 §5.1); server_name must appear at most once and hold exactly one host_name.
+ */
+export function clientHelloSni(bytes: Uint8Array): HelloSni {
+	const handshake: Uint8Array[] = [];
+	let joined = 0;
+	let at = 0;
+	while (at + 5 <= bytes.length) {
+		if (bytes[at] !== TLS_HANDSHAKE) return { invalid: 'the tunnel did not start with a TLS handshake' };
+		if (bytes[at + 1] !== 0x03) return { invalid: 'the tunnel did not start with a TLS record' };
+		const length = (bytes[at + 3]! << 8) | bytes[at + 4]!;
+		if (length === 0 || length > RECORD_MAX) return { invalid: 'a TLS record has an impossible length' };
+		if (at + 5 + length > bytes.length) return { need: true };
+		handshake.push(bytes.subarray(at + 5, at + 5 + length));
+		joined += length;
+		at += 5 + length;
+		if (joined < 4) continue;
+		const message = concat(handshake, joined);
+		if (message[0] !== CLIENT_HELLO) return { invalid: 'the first TLS handshake message is not a ClientHello' };
+		const size = (message[1]! << 16) | (message[2]! << 8) | message[3]!;
+		if (4 + size > HELLO_BYTES) return { invalid: 'the TLS ClientHello is too large' };
+		if (joined >= 4 + size) return helloBody(message.subarray(4, 4 + size));
+	}
+	return { need: true };
+}
+
+/** The ClientHello body's server name (see {@linkcode clientHelloSni}). */
+function helloBody(body: Uint8Array): HelloSni {
+	const bad: HelloSni = { invalid: 'the TLS ClientHello is malformed' };
+	const u8 = (at: number): number => body[at]!;
+	const u16 = (at: number): number => (body[at]! << 8) | body[at + 1]!;
+	// legacy_version (2) and random (32).
+	let at = 34;
+	if (at + 1 > body.length) return bad;
+	const sessionId = u8(at);
+	if (sessionId > 32) return bad;
+	at += 1 + sessionId;
+	if (at + 2 > body.length) return bad;
+	const suites = u16(at);
+	if (suites < 2 || suites % 2 !== 0) return bad;
+	at += 2 + suites;
+	if (at + 1 > body.length) return bad;
+	const compression = u8(at);
+	if (compression < 1) return bad;
+	at += 1 + compression;
+	if (at > body.length) return bad;
+	// No extensions at all: a ClientHello without SNI.
+	if (at === body.length) return { sni: null };
+	if (at + 2 > body.length) return bad;
+	const extensionsEnd = at + 2 + u16(at);
+	if (extensionsEnd !== body.length) return bad;
+	at += 2;
+	let sni: string | null = null;
+	let seen = false;
+	while (at < extensionsEnd) {
+		if (at + 4 > extensionsEnd) return bad;
+		const type = u16(at);
+		const length = u16(at + 2);
+		const start = at + 4;
+		const end = start + length;
+		if (end > extensionsEnd) return bad;
+		if (type === SERVER_NAME) {
+			// RFC 8446 §4.2: an extension type appears at most once; two server_name lists could disagree.
+			if (seen) return bad;
+			seen = true;
+			if (start + 2 > end || start + 2 + u16(start) !== end) return bad;
+			let entry = start + 2;
+			while (entry < end) {
+				if (entry + 3 > end) return bad;
+				const nameType = u8(entry);
+				const nameEnd = entry + 3 + u16(entry + 1);
+				if (nameEnd > end) return bad;
+				if (nameType === HOST_NAME) {
+					// RFC 6066 §3: one name of each type; a second host_name is refused rather than one picked.
+					if (sni !== null) return bad;
+					const name = new TextDecoder('latin1').decode(body.subarray(entry + 3, nameEnd)).toLowerCase();
+					if (!SNI_NAME.test(name)) return bad;
+					sni = name.replace(/\.$/, '');
+					if (sni === '') return bad;
+				}
+				entry = nameEnd;
+			}
+		}
+		at = end;
+	}
+	return { sni };
+}
+
+function concat(parts: readonly Uint8Array[], size: number): Uint8Array {
+	if (parts.length === 1) return parts[0]!;
+	const out = new Uint8Array(size);
+	let at = 0;
+	for (const part of parts) {
+		out.set(part, at);
+		at += part.length;
+	}
+	return out;
+}
+
+/**
+ * Reads a granted tunnel's first bytes until they hold a whole ClientHello (or prove not to), bounded by
+ * {@linkcode HELLO_BYTES} and {@linkcode HELLO_TIMEOUT_MS}; answers the bytes, forwarded unchanged once checked.
+ */
+async function readClientHello(
+	conn: Deno.Conn,
+	first: Uint8Array,
+): Promise<{ bytes: Uint8Array } | { bytes: null; invalid: string }> {
+	const buffer = new Uint8Array(HELLO_BYTES);
+	if (first.length > buffer.length) return { bytes: null, invalid: 'the TLS ClientHello is too large' };
+	buffer.set(first);
+	let length = first.length;
+	const timer = setTimeout(() => closeQuietly(conn), HELLO_TIMEOUT_MS);
+	try {
+		for (;;) {
+			const seen = clientHelloSni(buffer.subarray(0, length));
+			if (!('need' in seen)) return { bytes: buffer.slice(0, length) };
+			if (length >= buffer.length) return { bytes: null, invalid: 'the TLS ClientHello is too large' };
+			const n = await conn.read(buffer.subarray(length));
+			if (n === null) return { bytes: null, invalid: 'the tunnel closed before a TLS ClientHello' };
+			length += n;
+		}
+	} catch {
+		return { bytes: null, invalid: 'the tunnel carried no TLS ClientHello in time' };
+	} finally {
+		clearTimeout(timer);
 	}
 }
 

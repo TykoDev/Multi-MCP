@@ -1,5 +1,5 @@
 /**
- * The live-view embed, `ui://tykotech/live-view` (R9, design §2.20, D-134/D-135).
+ * The live-view embed, `ui://tykotech/live-view`.
  *
  * A watch-first view of one browser session, framed by an MCP Apps host in its own sandbox origin. Kit-free: one
  * self-contained document, its script and style inline and pinned by hash in its meta CSP, and the only network it
@@ -13,7 +13,7 @@
  * ever reaches `meta` is not retried, because retrying a refused origin is a loop, not a recovery.
  *
  * `ui/resource-teardown` and `visibilitychange: hidden` close the socket, which also gives back the viewer slot and
- * any control the user held; coming back into view does not reconnect on its own (design §2.20: the socket opens on
+ * any control the user held; coming back into view does not reconnect on its own (the socket opens on
  * the Watch click only). **Take control** exists only when the deployment runs `TTK_MCP_APPS=control` and the
  * credential holds `view:control`: it mints a separate control ticket on its own click. **Open in the control plane**
  * sits in the corner once a ticket has named the control plane's address.
@@ -38,7 +38,7 @@ import {
 } from './embed_bridge.ts';
 import { LiveViewSocket } from './ws.ts';
 
-/** The control plane's reconnect policy (FRONTEND §2.3), restated because the viewer module brings the kit. */
+/** The control plane's reconnect policy, restated because the viewer module brings the kit. */
 const RECONNECT_BASE_MS = 750;
 const RECONNECT_MAX_MS = 15_000;
 const RECOVERY_WINDOW_MS = 600_000;
@@ -127,7 +127,7 @@ function main(): void {
 	const openButton = iconButton('external', 'Open in the control plane', 'corner');
 	const messageGlyph = el('span', { class: 'e-message-glyph', 'aria-hidden': 'true' });
 	const messageText = el('p', { class: 'e-message-text' });
-	// RV-10: what only the operator can act on (the origin, the variable to set) is folded under the sentence.
+	// What only the operator can act on (the origin, the variable to set) is folded under the sentence.
 	const messageDetailText = el('p', { class: 'e-detail-text' });
 	const messageDetail = el('details', { class: 'e-detail', hidden: true }, [
 		el('summary', { text: 'Details' }),
@@ -278,7 +278,7 @@ function main(): void {
 		phase = 'refused';
 		// An origin the server does not admit stays refused however often it is asked, so Watch is not offered again:
 		// a button that can only fail is an idle control. Any other refusal may pass on the next press. The person in
-		// the chat reads a sentence; the code, the origin and the variable to set are the operator's (RV-10).
+		// the chat reads a sentence; the code, the origin and the variable to set are the operator's.
 		const words = refusalWords(code, text);
 		retryable = words.retryable;
 		say('alert', words.user, words.detail);
@@ -426,7 +426,7 @@ function main(): void {
 			socket.send({ type: 'control.take' });
 			return;
 		}
-		// A watch ticket can never take control (B2.3): the press mints a control ticket of its own.
+		// A watch ticket can never take control: the press mints a control ticket of its own.
 		pendingTake = true;
 		wanted = true;
 		void open('control');

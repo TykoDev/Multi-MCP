@@ -1,4 +1,4 @@
-/** File-backed service configuration for D-064–D-067. */
+/** File-backed service configuration: the coding sandbox, A2A peers, A2UI actions and task bounds. */
 import * as z from 'zod';
 import { isForbiddenLiteralHost } from '@tykotech/mcp';
 import { NOT_TASKABLE } from './taskable.ts';
@@ -15,32 +15,28 @@ export interface AgentPeer {
 }
 
 export interface ExpansionConfig {
-	readonly mcpUrl?: string;
 	readonly sandbox: ServiceEndpoint | null;
-	readonly bridge: (ServiceEndpoint & { readonly agent: string; readonly authMethod?: string }) | null;
 	readonly peers: readonly AgentPeer[];
-	/** E-4: operator-configured A2UI tool actions (`TTK_A2UI_ACTIONS`); empty when none. */
+	/** Operator-configured A2UI tool actions (`TTK_A2UI_ACTIONS`); empty when none. */
 	readonly a2uiActions?: readonly A2uiToolAction[];
-	/** C4 / G10: `TTK_AGENT_TASK_TIMEOUT_S` — the bound on text (ACP) and delegation tasks; 600 s by default. */
+	/** `TTK_AGENT_TASK_TIMEOUT_S` — the bound on text and delegation tasks; 600 s by default. */
 	readonly taskTimeoutMs?: number;
-	/** B1: `TTK_AGENT_TASK_RETENTION_S` — how long finished tasks are kept, in memory and on disk; 24 h by default. */
+	/** `TTK_AGENT_TASK_RETENTION_S` — how long finished tasks are kept, in memory and on disk; 24 h by default. */
 	readonly taskRetentionMs?: number;
 	/**
-	 * A11 / N1: `TTK_A2A_PUSH_ALLOWED_HOSTS` — the exact hosts (`host` or `host:port`, lower case) an A2A push
-	 * webhook may target. **Empty means push is not offered at all**; non-empty offers it only where the process also
-	 * holds a proven outbound net grant for every listed host (`expansion.ts`).
+	 * `TTK_A2A_PUSH_ALLOWED_HOSTS` — the exact hosts (`host` or `host:port`, lower case) an A2A push webhook may
+	 * target.
 	 */
 	readonly pushAllowedHosts?: readonly string[];
 }
 
-/** C4 / G10 / B1: the defaults and ranges of the agent task settings (design §2.1). */
-export const AGENT_TASK_TIMEOUT_S = { default: 600, min: 10, max: 86_400 } as const;
-export const AGENT_TASK_RETENTION_S = { default: 86_400, min: 60, max: 2_592_000 } as const;
+/** The defaults and ranges of the agent task settings. */
+const AGENT_TASK_TIMEOUT_S = { default: 600, min: 10, max: 86_400 } as const;
+const AGENT_TASK_RETENTION_S = { default: 86_400, min: 60, max: 2_592_000 } as const;
 
 /**
- * A11: one `TTK_A2A_PUSH_ALLOWED_HOSTS` entry as the dispatcher compares it — lower case, IPv6 bracketed, a port
- * only when it is not the https default — or `null` when it is not a bare host. A private, loopback or link-local
- * literal is refused here rather than accepted and then refused on every delivery.
+ * One `TTK_A2A_PUSH_ALLOWED_HOSTS` entry as the dispatcher compares it — lower case, IPv6 bracketed, a port only when
+ * it is not the https default — or `null` when it is not a bare host.
  */
 function pushHost(entry: string): string | null {
 	if (/[/?#@\s]/.test(entry)) return null;
@@ -67,9 +63,7 @@ function seconds(
 }
 
 /**
- * E-4 (AGENT-EXPANSION §7): a button an agent may put on a surface that calls a tool the **operator** named, with
- * arguments the operator fixed. The surface's server-side state may fill only the argument names listed in
- * `context`, and only with scalars; a client event can never choose the tool or add an argument.
+ * A button an agent may put on a surface that calls a tool the **operator** named, with arguments the operator fixed.
  */
 export interface A2uiToolAction {
 	readonly name: string;
@@ -80,9 +74,11 @@ export interface A2uiToolAction {
 
 const A2uiToolActionsSchema = z.array(
 	z.object({
+		// `permissionDecision` answered the retired ACP agent's permission requests; the name stays reserved so a
+		// surface published before its removal can never reach an operator tool under it.
 		name: z.string().regex(/^[a-z][a-zA-Z0-9_]{0,63}$/).refine(
 			(name) => name !== 'cancelTask' && name !== 'permissionDecision',
-			'cancelTask and permissionDecision are built in',
+			'cancelTask is built in and permissionDecision is reserved',
 		),
 		tool: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
 		arguments: z.record(z.string(), z.unknown()).default({}),
@@ -103,6 +99,7 @@ export const PeerFileSchema = z.array(
 
 /** Validates an operator-fixed service URL; no request can supply one. */
 export function serviceUrl(raw: string): string {
+	if (raw.includes('?') || raw.includes('#')) throw new Error('expected an HTTP(S) URL without query or fragment');
 	const url = new URL(raw);
 	if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
 		throw new Error('expected an HTTP(S) URL without credentials, query, or fragment');
@@ -117,32 +114,24 @@ export function expansionConfig(
 	secrets: Readonly<Record<string, string>>,
 	fail: (variable: string, detail: string) => never,
 ): ExpansionConfig {
-	const endpoint = (name: string): ServiceEndpoint | null => {
-		const raw = env[`${name}_URL`]?.trim();
-		const token = secrets[`${name}_TOKEN`];
-		if (!raw && !token && !env[`${name}_TOKEN_FILE`]) return null;
+	const sandbox = ((): ServiceEndpoint | null => {
+		const raw = env.TTK_SANDBOX_URL?.trim();
+		const token = secrets.TTK_SANDBOX_TOKEN;
+		if (!raw && !token && !env.TTK_SANDBOX_TOKEN_FILE) return null;
 		if (!raw || !token || token.length < 32 || /\s/.test(token)) {
-			return fail(`${name}_URL`, `URL and a file-backed token of at least 32 non-whitespace characters are required`);
+			return fail(
+				'TTK_SANDBOX_URL',
+				`URL and a file-backed token of at least 32 non-whitespace characters are required`,
+			);
 		}
 		try {
 			const url = serviceUrl(raw);
-			if (name === 'TTK_SANDBOX' && new URL(url).pathname !== '/') throw new Error('sandbox origin required');
+			if (new URL(url).pathname !== '/') throw new Error('sandbox origin required');
 			return { url, token };
 		} catch {
-			return fail(`${name}_URL`, 'expected HTTP(S) URL without credentials, query, or fragment');
+			return fail('TTK_SANDBOX_URL', 'expected HTTP(S) URL without credentials, query, or fragment');
 		}
-	};
-	const sandbox = endpoint('TTK_SANDBOX');
-	const bridgeEndpoint = endpoint('TTK_AGENT_BRIDGE');
-	const agent = env.TTK_AGENT_DEFAULT?.trim() || 'default';
-	// E-2: the ACP auth method to use when the agent advertises it; the credentials stay with the agent in the runner.
-	const authMethod = env.TTK_AGENT_AUTH_METHOD?.trim() || undefined;
-	if (authMethod !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(authMethod)) {
-		return fail('TTK_AGENT_AUTH_METHOD', 'expected an ACP auth method identifier');
-	}
-	if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(agent)) {
-		return fail('TTK_AGENT_DEFAULT', 'expected a configured agent identifier');
-	}
+	})();
 	let peers: AgentPeer[] = [];
 	const rawPeers = secrets.TTK_AGENT_PEERS;
 	if (env.TTK_AGENT_PEERS_FILE && rawPeers === undefined) {
@@ -159,15 +148,6 @@ export function expansionConfig(
 			return fail('TTK_AGENT_PEERS_FILE', 'invalid peer list or URL');
 		}
 	}
-	let mcpUrl: string | undefined;
-	if (env.TTK_AGENT_MCP_URL) {
-		try {
-			mcpUrl = serviceUrl(env.TTK_AGENT_MCP_URL);
-			if (new URL(mcpUrl).pathname !== '/mcp') throw new Error('MCP path required');
-		} catch {
-			return fail('TTK_AGENT_MCP_URL', 'expected a fixed HTTP(S) /mcp endpoint without credentials');
-		}
-	}
 	let a2uiActions: A2uiToolAction[] = [];
 	const rawActions = env.TTK_A2UI_ACTIONS?.trim();
 	if (rawActions) {
@@ -178,10 +158,8 @@ export function expansionConfig(
 		} catch {
 			return fail('TTK_A2UI_ACTIONS', 'expected a JSON array of {name, tool, arguments?, context?} with unique names');
 		}
-		// X-1 (D-141; amends D-086, D-125, D-121): a button runs its tool indirectly, as a task does — no MCP context to
-		// ask a human through, no caller to hand a link or ticket to — so a tool that cannot run as a task cannot sit
-		// behind a button either. Refused at startup rather than on the first click. Outside the `try` above so this
-		// detail is not replaced by the generic one; both names are operator configuration and carry no secret.
+		// A button runs its tool indirectly, as a task does — no MCP context to ask a human through, no caller to hand
+		// a link or ticket to — so a tool that cannot run as a task cannot sit behind a button either.
 		const indirect = a2uiActions.find((action) => NOT_TASKABLE.has(action.tool));
 		if (indirect !== undefined) {
 			return fail('TTK_A2UI_ACTIONS', `action "${indirect.name}" names ${indirect.tool}, which cannot run indirectly`);
@@ -202,12 +180,8 @@ export function expansionConfig(
 	}
 	return {
 		sandbox,
-		bridge: bridgeEndpoint === null
-			? null
-			: { ...bridgeEndpoint, agent, ...(authMethod === undefined ? {} : { authMethod }) },
 		peers,
 		a2uiActions,
-		...(mcpUrl === undefined ? {} : { mcpUrl }),
 		taskTimeoutMs: seconds(env, 'TTK_AGENT_TASK_TIMEOUT_S', AGENT_TASK_TIMEOUT_S, fail) * 1000,
 		taskRetentionMs: seconds(env, 'TTK_AGENT_TASK_RETENTION_S', AGENT_TASK_RETENTION_S, fail) * 1000,
 		pushAllowedHosts,
